@@ -8,7 +8,7 @@ VS:=$(filter-out $(LIBVS) $(IGNORE:%=%.v),$(VS))
 
 .PHONY: coq clean
 
-ARGS := -R Kami Kami
+ARGS := -R CoqUp CoqUp
 
 coq: Makefile.coq.all
 	$(MAKE) -f Makefile.coq.all
