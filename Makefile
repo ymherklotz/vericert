@@ -10,13 +10,13 @@ VS:=$(filter-out $(LIBVS) $(IGNORE:%=%.v),$(VS))
 
 ARGS := -R CoqUp CoqUp
 
-coq: Makefile.coq.all
-	$(MAKE) -f Makefile.coq.all
+coq: Makefile.coq
+	$(MAKE) -f Makefile.coq
 
-Makefile.coq.all: Makefile $(LIBVS) $(VS)
-	$(COQBIN)coq_makefile $(ARGS) $(LIBVS) $(VS) -o Makefile.coq.all
+Makefile.coq: Makefile $(LIBVS) $(VS)
+	$(COQBIN)coq_makefile $(ARGS) $(LIBVS) $(VS) -o Makefile.coq
 
-clean:: Makefile.coq.all
-	$(MAKE) -f Makefile.coq.all clean
+clean:: Makefile.coq
+	$(MAKE) -f Makefile.coq clean
 	rm -f */*.v.d */*.glob */*.vo */*~ *~
-	rm -f Makefile.coq.all
+	rm -f Makefile.coq
