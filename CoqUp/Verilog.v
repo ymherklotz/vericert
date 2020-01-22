@@ -1,8 +1,19 @@
-From Coq Require Import Bool List String.
+From Coq Require Import Lists.List Strings.String.
+From Coq Require Import
+     Structures.OrderedTypeEx
+     FSets.FMapList.
+
+From bbv Require Word.
+
+From CoqUp Require Import Helper.
+
+Module Verilog.
 
 Import ListNotations.
 
-Module Verilog.
+Module Map := FMapList.Make String_as_OT.
+
+Definition state : Type := Map.t nat * Map.t nat.
 
 Inductive binop : Type :=
 | Plus
@@ -20,7 +31,7 @@ Inductive binop : Type :=
 
 Inductive expr : Type :=
 | Lit (n : nat)
-| Var (n : string)
+| Var (s : string)
 | Neg (a : expr)
 | BinOp (op : binop) (a1 a2 : expr)
 | Ternary (c t f : expr).
@@ -62,17 +73,33 @@ Notation "~ y" := (Neg y) (at level 75, right associativity) : verilog_scope.
 Notation "c ? t : f" := (Ternary c t f) (at level 20, right associativity) : verilog_scope.
 
 Notation "a '<=!' b" := (Nonblocking a b) (at level 80, no associativity) : verilog_scope.
-Notation "a '=! b" := (Blocking a b) (at level 80, no associativity) : verilog_scope.
+Notation "a '=!' b" := (Blocking a b) (at level 80, no associativity) : verilog_scope.
 Notation "'IF' c 'THEN' a 'ELSE' b 'FI'" := (Cond c a b) (at level 80, right associativity) : verilog_scope.
 
 End VerilogNotation.
 
 Module VerilogEval.
 
-Import VerilogNotation.
+Definition state_find (k : string) (s : state) : nat :=
+  opt_default 0 (Map.find k (fst s)).
 
-Fixpoint eval_expr (state, expr)
+Definition eval_binop (op : binop) (a1 a2 : nat) : nat :=
+  match op with
+  | Plus => a1 + a2
+  | Minus => a1 - a2
+  | Times => a1 * a2
+  end.
+
+Fixpoint eval_expr (s : state) (e : expr) : nat :=
+  match e with
+  | Lit n => n
+  | Var v => state_find v s
+  | Neg a => 0 - (eval_expr s a)
+  | BinOp op a1 a2 => eval_binop op a1 a2
+  | Ternary c t f => if eval_expr s c then eval_expr s t else eval_expr s f
+  end.
 
 End VerilogEval.
 
 End Verilog.
+Export Verilog.
