@@ -1,1 +1,2 @@
 -R CoqUp CoqUp
+-R lib/bbv/src/bbv bbv
