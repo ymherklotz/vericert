@@ -1,3 +1,0 @@
-[submodule "lib/bbv"]
-	path = lib/bbv
-	url = git@github.com:mit-plv/bbv.git
