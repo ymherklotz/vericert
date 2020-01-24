@@ -59,7 +59,7 @@ Module Verilog.
   | ValIsArray : forall v : list value, value_is_arrayP (VArray v).
 
   Inductive flat_valueP : value -> Prop :=
-  | FLV0 : forall b : value, value_is_boolP b -> flat_valueP b
+  | FLV0 : forall b : bool, flat_valueP (VBool b)
   | FLVA : forall l : list value,
       Forall (value_is_boolP) l -> flat_valueP (VArray l).
 
@@ -84,20 +84,24 @@ Module Verilog.
     forall v, flat_valueP v <-> flat_value v = true.
   Proof.
     split; intros.
-    - unfold flat_value. inversion H. subst.
-      destruct v.
-      + trivial.
-      + inversion H0.
-      + subst. rewrite Forall_forall in H0. rewrite forallb_forall.
-        intros. apply value_is_bool_equiv. apply H0. assumption.
-    - unfold flat_value in H. destruct v.
-      + repeat constructor.
-      + constructor. apply value_is_bool_equiv. rewrite forallb_forall in H. 
+    - unfold flat_value. inversion H. subst. trivial.
+      + rewrite Forall_forall in H0. rewrite forallb_forall. intros. subst.
+        apply value_is_bool_equiv. apply H0. assumption.
+    - destruct v. constructor. constructor. unfold flat_value in H.
+      rewrite Forall_forall. rewrite forallb_forall in H. intros. apply value_is_bool_equiv.
+      apply H. assumption.
+  Qed.
 
   Fixpoint value_to_nat (v : value) : option nat :=
     match v with
-    | VBool b => 0
-    | VArray (l :: ls) =>
+    | VBool b => Some 0
+    | VArray [] => None
+    | VArray (a :: l) =>
+      match a with
+      | VBool b => None
+      | VArray _ => None
+      end
+    end.
 
   Definition state : Type := Map.t value * Map.t value.
 
