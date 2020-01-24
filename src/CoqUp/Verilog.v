@@ -26,15 +26,18 @@ Module Verilog.
 
   (** * Conversion to and from value *)
 
-  Fixpoint nat_to_value (sz n : nat) : value :=
+  Fixpoint nat_to_value' (sz n : nat) : value :=
     match sz with
     | 0 => VArray []
     | S sz' =>
-      match Nat.modulo n 2 with
-      | 0 => cons_value (VBool false) (nat_to_value sz' (Nat.div n 2))
-      | S _ => cons_value (VBool true) (nat_to_value sz' (Nat.div n 2))
-      end
+      if Nat.even n then
+        cons_value (VBool false) (nat_to_value' sz' (Nat.div n 2))
+      else
+        cons_value (VBool true) (nat_to_value' sz' (Nat.div n 2))
     end.
+
+  Definition nat_to_value (n : nat) : value :=
+    nat_to_value' ((Nat.log2 n) + 1) n.
 
   Definition state : Type := Map.t value * Map.t value.
 
@@ -72,7 +75,6 @@ Module Verilog.
   Coercion VBool : bool >-> value.
   Coercion Lit : value >-> expr.
   Coercion Var : string >-> expr.
-  Coercion VArray : list >-> value.
 
   Definition value_is_bool (v : value) : bool :=
     match v with
@@ -139,13 +141,54 @@ Module Verilog.
 
   Definition value_length (v : value) : nat :=
     match v with
-    | VBool _ => 0
+    | VBool _ => 1
     | VArray l => Datatypes.length l
     end.
 
   Definition value_to_nat (v : value) : option nat :=
     value_to_nat' (value_length v) v.
 
+  Lemma empty_is_flat : flat_valueP (VArray []).
+  Proof.
+    constructor. apply Forall_forall. intros. inversion H.
+  Qed.
+
+  Search "mod" nat.
+  
+  Lemma nat_to_value_is_flat :
+    forall (sz n : nat) (v : value),
+      nat_to_value' sz n = v -> flat_valueP v.
+  Proof.
+    induction sz.
+    - intros. subst. apply empty_is_flat.
+    - intros a b H. Admitted.
+
+
+      (**destruct (Nat.even n) eqn:?.
+      + remember (fst (Nat.divmod n 1 0 1)) as n'.
+        destruct (nat_to_value' sz n') eqn:?.
+        * simpl. constructor. apply Forall_forall. intros.
+          inversion H0. subst. constructor.
+          inversion H1. subst. constructor.
+          inversion H2.
+        * apply IHsz with n. destruct*)
+
+  (** Lemma nat_to_value_is_flat :
+    forall (sz n : nat) (v : value),
+      nat_to_value' sz n = v -> flat_valueP v.
+  Proof.
+    intros. destruct sz.
+    - rewrite <- H. constructor. apply Forall_forall. intros.
+      apply in_nil in H0. inversion H0.
+    - destruct n. simpl in H. destruct (nat_to_value' sz 0).
+      + subst. constructor. apply Forall_forall. intros. apply in_inv in H. destruct H.
+        * subst. constructor.
+        * apply in_inv in H. destruct H. subst. constructor. inversion H.
+      + destruct v; constructor; apply Forall_forall; intros; subst.
+        * inversion H. subst. clear H. inversion H0; subst.
+          { constructor. }
+          {  } *) 
+  
   Module VerilogNotation.
 
     Declare Scope verilog_scope.
