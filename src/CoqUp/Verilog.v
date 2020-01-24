@@ -36,7 +36,42 @@ Module Verilog.
       end
     end.
 
+  Definition state : Type := Map.t value * Map.t value.
+
+  Inductive binop : Type :=
+  | Plus
+  | Minus
+  | Times
+  | Divide
+  | LT
+  | GT
+  | LE
+  | GE
+  | Eq
+  | And
+  | Or
+  | Xor.
+
+  Inductive expr : Type :=
+  | Lit (n : value)
+  | Var (s : string)
+  | Neg (a : expr)
+  | BinOp (op : binop) (a1 a2 : expr)
+  | Ternary (c t f : expr).
+
+  Inductive stmnt : Type :=
+  | Skip
+  | Block (s : list stmnt)
+  | Cond (c : expr) (st sf : stmnt)
+  | Case (c : expr) (b : list (expr * stmnt))
+  | Blocking (a b : expr)
+  | Nonblocking (a b : expr).
+
+  Inductive verilog : Type := Verilog (s : list stmnt).
+
   Coercion VBool : bool >-> value.
+  Coercion Lit : value >-> expr.
+  Coercion Var : string >-> expr.
 
   Definition value_is_bool (v : value) : bool :=
     match v with
@@ -102,43 +137,6 @@ Module Verilog.
       | VArray _ => None
       end
     end.
-
-  Definition state : Type := Map.t value * Map.t value.
-
-  Inductive binop : Type :=
-  | Plus
-  | Minus
-  | Times
-  | Divide
-  | LT
-  | GT
-  | LE
-  | GE
-  | Eq
-  | And
-  | Or
-  | Xor.
-
-  Inductive expr : Type :=
-  | Lit (n : value)
-  | Var (s : string)
-  | Neg (a : expr)
-  | BinOp (op : binop) (a1 a2 : expr)
-  | Ternary (c t f : expr).
-
-  Inductive stmnt : Type :=
-  | Skip
-  | Block (s : list stmnt)
-  | Cond (c : expr) (st sf : stmnt)
-  | Case (c : expr) (b : list (expr * stmnt))
-  | Blocking (a b : expr)
-  | Nonblocking (a b : expr).
-
-  Inductive verilog : Type := Verilog (s : list stmnt).
-
-  Coercion VBool : bool >-> value.
-  Coercion Lit : value >-> expr.
-  Coercion Var : string >-> expr.
 
   Module VerilogNotation.
 
