@@ -1,14 +1,14 @@
 IGNORE:=
 
-LIBVS:=$(wildcard CoqUp/Lib/*.v)
+LIBVS:=$(wildcard src/CoqUp/Lib/*.v)
 LIBVS:=$(filter-out $(IGNORE:%=%.v),$(LIBVS))
 
-VS:=$(wildcard CoqUp/*.v)
+VS:=$(wildcard src/CoqUp/*.v)
 VS:=$(filter-out $(LIBVS) $(IGNORE:%=%.v),$(VS))
 
 .PHONY: coq clean
 
-ARGS := -R CoqUp CoqUp
+ARGS := -R src/CoqUp CoqUp
 
 coq: Makefile.coq
 	$(MAKE) -f Makefile.coq

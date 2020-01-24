@@ -2,8 +2,8 @@ From Coq Require Import Lists.List Strings.String.
 From Coq Require Import
      Structures.OrderedTypeEx
      FSets.FMapList
-     Program.Basics.
-
+     Program.Basics
+     PeanoNat.
 From CoqUp Require Import Helper.
 
 Import ListNotations.
@@ -72,6 +72,7 @@ Module Verilog.
   Coercion VBool : bool >-> value.
   Coercion Lit : value >-> expr.
   Coercion Var : string >-> expr.
+  Coercion VArray : list >-> value.
 
   Definition value_is_bool (v : value) : bool :=
     match v with
@@ -127,16 +128,23 @@ Module Verilog.
       apply H. assumption.
   Qed.
 
-  Fixpoint value_to_nat (v : value) : option nat :=
-    match v with
-    | VBool b => Some 0
-    | VArray [] => None
-    | VArray (a :: l) =>
-      match a with
-      | VBool b => None
-      | VArray _ => None
-      end
+  Fixpoint value_to_nat' (i : nat) (v : value) : option nat :=
+    match i, v with
+    | _, VBool b => Some (Nat.b2n b)
+    | _, VArray [VBool b] => Some (Nat.b2n b)
+    | S i', VArray ((VBool b) :: l) =>
+      Option.map (compose (Nat.add (Nat.b2n b)) (Mult.tail_mult 2)) (value_to_nat' i' (VArray l))
+    | _, _ => None
     end.
+
+  Definition value_length (v : value) : nat :=
+    match v with
+    | VBool _ => 0
+    | VArray l => Datatypes.length l
+    end.
+
+  Definition value_to_nat (v : value) : option nat :=
+    value_to_nat' (value_length v) v.
 
   Module VerilogNotation.
 
@@ -170,7 +178,7 @@ Module Verilog.
   Module VerilogEval.
 
     Definition state_find (k : string) (s : state) : value :=
-      opt_default (VBool false) (Map.find k (fst s)).
+      Option.default (VBool false) (Map.find k (fst s)).
 
     Definition eval_binop (op : binop) (a1 a2 : value) : value :=
       match op with
