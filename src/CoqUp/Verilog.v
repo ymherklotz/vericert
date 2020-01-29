@@ -154,40 +154,39 @@ Module Verilog.
   Qed.
 
   Search "mod" nat.
+
+  Lemma check_5_is_101 :
+    value_to_nat (VArray [VBool true; VBool false; VBool true]) = Some 5.
+  Proof. reflexivity. Qed.
+
+  Lemma cons_value_flat :
+    forall (b : bool) (v : value),
+      flat_valueP v -> flat_valueP (cons_value (VBool b) v).
+  Proof.
+    intros. unfold cons_value. destruct v.
+    - constructor. apply Forall_forall. intros.
+      inversion H0; subst. constructor.
+      inversion H1; subst. constructor.
+      inversion H2.
+    - intros. inversion H. inversion H1; subst; constructor.
+      + apply Forall_forall. intros.
+        inversion H0; subst. constructor.
+        inversion H2.
+      + repeat constructor. assumption. assumption.
+  Qed.
   
   Lemma nat_to_value_is_flat :
-    forall (sz n : nat) (v : value),
-      nat_to_value' sz n = v -> flat_valueP v.
+    forall (sz n : nat),
+      flat_valueP (nat_to_value' sz n).
   Proof.
     induction sz.
     - intros. subst. apply empty_is_flat.
-    - intros a b H. Admitted.
-
-
-      (**destruct (Nat.even n) eqn:?.
-      + remember (fst (Nat.divmod n 1 0 1)) as n'.
-        destruct (nat_to_value' sz n') eqn:?.
-        * simpl. constructor. apply Forall_forall. intros.
-          inversion H0. subst. constructor.
-          inversion H1. subst. constructor.
-          inversion H2.
-        * apply IHsz with n. destruct*)
-
-  (** Lemma nat_to_value_is_flat :
-    forall (sz n : nat) (v : value),
-      nat_to_value' sz n = v -> flat_valueP v.
-  Proof.
-    intros. destruct sz.
-    - rewrite <- H. constructor. apply Forall_forall. intros.
-      apply in_nil in H0. inversion H0.
-    - destruct n. simpl in H. destruct (nat_to_value' sz 0).
-      + subst. constructor. apply Forall_forall. intros. apply in_inv in H. destruct H.
-        * subst. constructor.
-        * apply in_inv in H. destruct H. subst. constructor. inversion H.
-      + destruct v; constructor; apply Forall_forall; intros; subst.
-        * inversion H. subst. clear H. inversion H0; subst.
-          { constructor. }
-          {  } *) 
+    - intros.
+      unfold nat_to_value'. fold nat_to_value'.
+      destruct (Nat.even n) eqn:Heven.
+      + apply cons_value_flat. apply IHsz.
+      + apply cons_value_flat. apply IHsz.
+  Qed.
   
   Module VerilogNotation.
 
