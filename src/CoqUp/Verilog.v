@@ -4,7 +4,7 @@ From Coq Require Import
      FSets.FMapList
      Program.Basics
      PeanoNat.
-From CoqUp Require Import Helper.
+From CoqUp Require Import Helper Tactics.
 
 Import ListNotations.
 
@@ -165,7 +165,6 @@ Module Verilog.
   Proof.
     intros. unfold cons_value. destruct v.
     - constructor. apply Forall_forall. intros.
-      inversion H0; subst. constructor.
       inversion H1; subst. constructor.
       inversion H2.
     - intros. inversion H. inversion H1; subst; constructor.
@@ -174,20 +173,24 @@ Module Verilog.
         inversion H2.
       + repeat constructor. assumption. assumption.
   Qed.
-  
-  Lemma nat_to_value_is_flat :
+
+  Lemma nat_to_value'_is_flat :
     forall (sz n : nat),
       flat_valueP (nat_to_value' sz n).
   Proof.
-    induction sz.
-    - intros. subst. apply empty_is_flat.
-    - intros.
-      unfold nat_to_value'. fold nat_to_value'.
-      destruct (Nat.even n) eqn:Heven.
-      + apply cons_value_flat. apply IHsz.
-      + apply cons_value_flat. apply IHsz.
+    induction sz; intros.
+    - subst. apply empty_is_flat.
+    - unfold_rec nat_to_value'.
+      destruct (Nat.even n); apply cons_value_flat; apply IHsz.
   Qed.
-  
+
+  Lemma nat_to_value_is_flat :
+    forall (sz n : nat),
+      flat_valueP (nat_to_value n).
+  Proof.
+    intros. unfold nat_to_value. apply nat_to_value'_is_flat.
+  Qed.
+
   Module VerilogNotation.
 
     Declare Scope verilog_scope.
