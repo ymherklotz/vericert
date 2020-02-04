@@ -34,3 +34,8 @@ Makefile.coq.conf
 .coqdeps.d
 
 extraction/src/
+
+# Ocaml
+_build
+dune-project
+.merlin
