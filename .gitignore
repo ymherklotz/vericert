@@ -32,3 +32,5 @@ nra.cache
 Makefile.coq
 Makefile.coq.conf
 .coqdeps.d
+
+extraction/src/
