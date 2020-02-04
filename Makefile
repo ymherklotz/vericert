@@ -1,16 +1,15 @@
-IGNORE:=
+COQINCLUDES=-R src/CoqUp CoqUp
 
-LIBVS:=$(wildcard src/CoqUp/Lib/*.v)
-LIBVS:=$(filter-out $(IGNORE:%=%.v),$(LIBVS))
+COQEXEC=$(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
+COQMAKE="$(COQBIN)coq_makefile"
 
-VS:=$(wildcard src/CoqUp/*.v)
-VS:=$(filter-out $(LIBVS) $(IGNORE:%=%.v),$(VS))
+VS=$(wildcard src/CoqUp/*.v)
 
 .PHONY: all install coq clean
 
-ARGS := -R src/CoqUp CoqUp
-
-all: coq
+all:
+	$(MAKE) coq
+	$(MAKE) extraction
 
 install:
 	$(MAKE) -f Makefile.coq install
@@ -18,8 +17,15 @@ install:
 coq: Makefile.coq
 	$(MAKE) -f Makefile.coq
 
-Makefile.coq: Makefile $(LIBVS) $(VS)
-	$(COQBIN)coq_makefile $(ARGS) $(LIBVS) $(VS) -o Makefile.coq
+extraction: extraction/STAMP
+
+extraction/STAMP:
+	rm -f extraction/*.ml extraction/*.mli
+	$(COQEXEC) ./extraction/Extraction.v
+	touch $@
+
+Makefile.coq: Makefile
+	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
