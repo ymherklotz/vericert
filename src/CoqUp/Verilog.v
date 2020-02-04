@@ -153,8 +153,6 @@ Module Verilog.
     constructor. apply Forall_forall. intros. inversion H.
   Qed.
 
-  Search "mod" nat.
-
   Lemma check_5_is_101 :
     value_to_nat (VArray [VBool true; VBool false; VBool true]) = Some 5.
   Proof. reflexivity. Qed.
@@ -165,6 +163,7 @@ Module Verilog.
   Proof.
     intros. unfold cons_value. destruct v.
     - constructor. apply Forall_forall. intros.
+      inversion H0; subst. constructor.
       inversion H1; subst. constructor.
       inversion H2.
     - intros. inversion H. inversion H1; subst; constructor.
@@ -190,6 +189,18 @@ Module Verilog.
   Proof.
     intros. unfold nat_to_value. apply nat_to_value'_is_flat.
   Qed.
+
+  Lemma nat_to_value_idempotent :
+    forall (sz n : nat),
+      sz > 0 -> (value_to_nat' sz (nat_to_value' sz n)) = Some n.
+  Proof.
+    induction sz; intros.
+    - inversion H.
+    - unfold_rec value_to_nat'.
+      assert (flat_valueP (nat_to_value' (S sz) n)).
+      { apply nat_to_value'_is_flat. }
+      destruct (nat_to_value' (S sz) n) eqn:?.
+  Admitted.
 
   Module VerilogNotation.
 
