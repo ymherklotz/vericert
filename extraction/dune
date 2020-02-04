@@ -1,0 +1,3 @@
+(executable
+ (name main)
+ (flags (:standard -warn-error -A)))
