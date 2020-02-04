@@ -6,9 +6,14 @@ LIBVS:=$(filter-out $(IGNORE:%=%.v),$(LIBVS))
 VS:=$(wildcard src/CoqUp/*.v)
 VS:=$(filter-out $(LIBVS) $(IGNORE:%=%.v),$(VS))
 
-.PHONY: coq clean
+.PHONY: all install coq clean
 
 ARGS := -R src/CoqUp CoqUp
+
+all: coq
+
+install:
+	$(MAKE) -f Makefile.coq install
 
 coq: Makefile.coq
 	$(MAKE) -f Makefile.coq
