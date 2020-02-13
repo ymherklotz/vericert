@@ -1,10 +1,10 @@
 From Coq Require Import Lists.List Strings.String.
 From Coq Require Import
-     Structures.OrderedTypeEx
-     FSets.FMapList
-     Program.Basics
-     PeanoNat.
-From CoqUp Require Import Helper Tactics.
+Structures.OrderedTypeEx
+FSets.FMapList
+Program.Basics
+PeanoNat.
+From CoqUp Require Import Helper Tactics Show.
 
 Import ListNotations.
 
@@ -202,56 +202,32 @@ Module Verilog.
       destruct (nat_to_value' (S sz) n) eqn:?.
   Admitted.
 
-  Module VerilogNotation.
-
-    Declare Scope verilog_scope.
-    Bind Scope verilog_scope with expr.
-    Bind Scope verilog_scope with stmnt.
-    Bind Scope verilog_scope with verilog.
-    Delimit Scope verilog_scope with verilog.
-
-    Notation "x + y" := (BinOp Plus x y) (at level 50, left associativity) : verilog_scope.
-    Notation "x - y" := (BinOp Minus x y) (at level 50, left associativity) : verilog_scope.
-    Notation "x * y" := (BinOp Times x y) (at level 40, left associativity) : verilog_scope.
-    Notation "x / y" := (BinOp Divide x y) (at level 40, left associativity) : verilog_scope.
-    Notation "x < y" := (BinOp LT x y) (at level 70, no associativity) : verilog_scope.
-    Notation "x <= y" := (BinOp LE x y) (at level 70, no associativity) : verilog_scope.
-    Notation "x > y" := (BinOp GT x y) (at level 70, no associativity) : verilog_scope.
-    Notation "x >= y" := (BinOp GE x y) (at level 70, no associativity) : verilog_scope.
-    Notation "x == y" := (BinOp Eq x y) (at level 70, no associativity) : verilog_scope.
-    Notation "x & y" := (BinOp And x y) (at level 40, left associativity) : verilog_scope.
-    Notation "x | y" := (BinOp Eq x y) (at level 40, left associativity) : verilog_scope.
-    Notation "x ^ y" := (BinOp Eq x y) (at level 30, right associativity) : verilog_scope.
-    Notation "~ y" := (Neg y) (at level 75, right associativity) : verilog_scope.
-    Notation "c ? t : f" := (Ternary c t f) (at level 20, right associativity) : verilog_scope.
-
-    Notation "a '<=!' b" := (Nonblocking a b) (at level 80, no associativity) : verilog_scope.
-    Notation "a '=!' b" := (Blocking a b) (at level 80, no associativity) : verilog_scope.
-    Notation "'IF' c 'THEN' a 'ELSE' b 'FI'" := (Cond c a b) (at level 80, right associativity) : verilog_scope.
-
-  End VerilogNotation.
-
   Module VerilogEval.
 
-    Definition state_find (k : string) (s : state) : value :=
-      Option.default (VBool false) (Map.find k (fst s)).
+    Definition app (f : nat -> nat -> nat) (a : value) (b : value) : option value :=
+      Option.map nat_to_value (Option.liftA2 f (value_to_nat a) (value_to_nat b)).
 
-    Definition eval_binop (op : binop) (a1 a2 : value) : value :=
+    Definition state_find (k : string) (s : state) : option value :=
+      Map.find k (fst s).
+
+    Definition eval_binop (op : binop) (a1 a2 : value) : option value :=
       match op with
-      | Plus => a1 + a2
-      | Minus => a1 - a2
-      | Times => a1 * a2
+      | Plus => app Nat.add a1 a2
+      | Minus => app Nat.sub a1 a2
+      | Times => app Mult.tail_mult a1 a2
+      | Divide => app Nat.div a1 a2
+      | _ => Some a1
       end.
 
-    Fixpoint eval_expr (s : state) (e : expr) : nat :=
+(*    Fixpoint eval_expr (s : state) (e : expr) : option value :=
       match e with
-      | Lit n => n
+      | Lit n => Some n
       | Var v => state_find v s
       | Neg a => 0 - (eval_expr s a)
       | BinOp op a1 a2 => eval_binop op a1 a2
       | Ternary c t f => if eval_expr s c then eval_expr s t else eval_expr s f
       end.
-
+*)
   End VerilogEval.
 
 End Verilog.

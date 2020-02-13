@@ -6,4 +6,4 @@ let rec nat_to_int = function
   | S n -> 1 + nat_to_int n
 
 let () =
-  print_endline ("Result: " ^  (Verilog.value_to_nat (Verilog.VBool Coq_true) |> nat_to_int))
+  print_endline ("Result: ")

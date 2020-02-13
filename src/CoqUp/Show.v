@@ -40,3 +40,4 @@ Module Show.
     }.
 
 End Show.
+Export Show.

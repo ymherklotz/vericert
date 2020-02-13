@@ -9,7 +9,7 @@ VS=$(wildcard src/CoqUp/*.v)
 
 all:
 	$(MAKE) coq
-	$(MAKE) extraction
+	$(MAKE) compile
 
 install:
 	$(MAKE) -f Makefile.coq install
@@ -19,15 +19,24 @@ coq: Makefile.coq
 
 extraction: extraction/STAMP
 
-extraction/STAMP:
-	rm -f extraction/*.ml extraction/*.mli
-	$(COQEXEC) ./extraction/Extraction.v
-	touch $@
+compile: extraction/STAMP
+	@echo "OCaml bin/coqup"
+	@mkdir -p bin
+	@dune build extraction/main.exe
+	@cp _build/default/extraction/main.exe bin/coqup
 
-Makefile.coq: Makefile
-	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
+extraction/STAMP:
+	@echo "COQEXEC ./extraction/Extraction.v"
+	@$(COQEXEC) ./extraction/Extraction.v
+	@touch $@
+
+Makefile.coq:
+	@echo "COQMAKE Makefile.coq"
+	@$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
-	rm -f */*.v.d */*.glob */*.vo */*~ *~
 	rm -f Makefile.coq
+
+clean::
+	rm -f */*.v.d */*.glob */*.vo */*~ *~
