@@ -1,4 +1,9 @@
-COQINCLUDES=-R src/CoqUp CoqUp
+COMPCERTRECDIRS=lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
+  MenhirLib cparser
+
+COMPCERTCOQINCLUDES=$(foreach d, $(RECDIRS), -R lib/CompCert/$(d) compcert.$(d))
+
+COQINCLUDES=-R src/CoqUp CoqUp $(COMPCERTCOQINCLUDES)
 
 COQEXEC=$(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE="$(COQBIN)coq_makefile"
@@ -8,6 +13,8 @@ VS=$(wildcard src/CoqUp/*.v)
 .PHONY: all install coq clean
 
 all:
+	(cd lib/CompCert && ./configure x86_64-linux)
+	$(MAKE) -C lib/CompCert all
 	$(MAKE) coq
 	$(MAKE) compile
 
