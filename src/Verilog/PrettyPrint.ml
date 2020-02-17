@@ -1,3 +1,21 @@
+(* 
+ * CoqUp: Verified high-level synthesis.
+ * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *)
+
 open Extraction.VerilogAST
 
 let concat = String.concat ""
@@ -23,7 +41,7 @@ let pprint_binop = function
   | Eq -> " == "
   | And -> " & "
   | Or -> " | "
-  | Xor -> "^"
+  | Xor -> " ^ "
 
 let rec pprint_expr = function
   | Lit l -> pprint_value l
@@ -33,7 +51,7 @@ let rec pprint_expr = function
   | Ternary (c, t, f) -> concat ["("; pprint_expr c; " ? "; pprint_expr t; " : "; pprint_expr f; ")"]
 
 let rec pprint_stmnt i =
-  let pprint_case (e, s) = concat [indent (i + 1); pprint_expr e; ":\n"; pprint_stmnt (i+2) s]
+  let pprint_case (e, s) = concat [indent (i + 1); pprint_expr e; ":\n"; pprint_stmnt (i + 2) s]
   in function
   | Skip -> concat [indent i; ";\n"]
   | Block s -> concat [indent i; "begin\n"; fold_map (pprint_stmnt (i+1)) s; indent i; "end\n"]
@@ -41,7 +59,7 @@ let rec pprint_stmnt i =
                                 pprint_stmnt (i + 1) st; indent i; "else\n";
                                 pprint_stmnt (i + 1) sf]
   | Case (e, es) -> concat [indent i; "case ("; pprint_expr e; ")\n";
-                            fold_map pprint_case es; indent i; "endcase"]
+                            fold_map pprint_case es; indent i; "endcase\n"]
   | Blocking (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Nonblocking (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
 
