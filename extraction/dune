@@ -1,8 +1,0 @@
-(executables
- (flags (:standard -warn-error -A))
- (names driver)
- (libraries compcert))
-
-(install
- (section bin)
- (files (driver.exe as coqup)))

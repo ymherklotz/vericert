@@ -1,0 +1,3 @@
+(library
+ (name Common)
+ (public_name coqup.common))

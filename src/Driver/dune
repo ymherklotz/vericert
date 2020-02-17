@@ -1,0 +1,7 @@
+(executables
+ (names Driver)
+ (libraries compcert coqup.verilog coqup.extraction))
+
+(install
+ (section bin)
+ (files (Driver.exe as coqup)))

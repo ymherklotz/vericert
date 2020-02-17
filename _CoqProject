@@ -1,2 +1,16 @@
--R src/CoqUp CoqUp -R lib/CompCert/lib compcert.lib -R lib/CompCert/common compcert.common -R lib/CompCert/x86 compcert.x86 -R lib/CompCert/backend compcert.backend -R lib/CompCert/cfrontend compcert.cfrontend -R lib/CompCert/driver compcert.driver -R lib/CompCert/flocq compcert.flocq -R lib/CompCert/exportclight compcert.exportclight -R lib/CompCert/cparser compcert.cparser -R lib/CompCert/MenhirLib compcert.MenhirLib
+-R src/Common CoqUp.Common
+-R src/Verilog CoqUp.Verilog
+-R src/Driver CoqUp.Driver
+-R src/Extraction CoqUp.Extraction
+
+-R lib/CompCert/lib compcert.lib
+-R lib/CompCert/common compcert.common
+-R lib/CompCert/x86 compcert.x86
+-R lib/CompCert/backend compcert.backend
+-R lib/CompCert/cfrontend compcert.cfrontend
+-R lib/CompCert/driver compcert.driver
+-R lib/CompCert/flocq compcert.flocq
+-R lib/CompCert/exportclight compcert.exportclight
+-R lib/CompCert/cparser compcert.cparser
+-R lib/CompCert/MenhirLib compcert.MenhirLib
 -R lib/CompCert/x86_64 compcert.x86_64

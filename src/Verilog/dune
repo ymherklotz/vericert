@@ -1,0 +1,4 @@
+(library
+ (name Verilog)
+ (public_name coqup.verilog)
+ (libraries coqup.extraction))
