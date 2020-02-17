@@ -1,14 +1,15 @@
-COMPCERTRECDIRS=lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
+COMPCERTRECDIRS := lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
   MenhirLib cparser
 
-COMPCERTCOQINCLUDES=$(foreach d, $(RECDIRS), -R lib/CompCert/$(d) compcert.$(d))
+COMPCERTCOQINCLUDES := $(foreach d, $(RECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
-COQINCLUDES=-R src/Common CoqUp.Common -R src/Verilog CoqUp.Verilog -R src/Driver CoqUp.Driver -R src/Extraction CoqUp.Extraction $(COMPCERTCOQINCLUDES)
+COQINCLUDES := -R src/Common CoqUp.Common -R src/Verilog CoqUp.Verilog -R src/Driver CoqUp.Driver -R src/Extraction CoqUp.Extraction $(COMPCERTCOQINCLUDES)
 
-COQEXEC=$(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
-COQMAKE="$(COQBIN)coq_makefile"
+COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
+COQMAKE := "$(COQBIN)coq_makefile"
 
-VS=$(wildcard src/CoqUp/*.v)
+COQUPDIRS := Common Driver Verilog
+VS := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
 
 .PHONY: all install coq clean
 
