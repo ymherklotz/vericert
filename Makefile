@@ -1,28 +1,28 @@
 COMPCERTRECDIRS := lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
   MenhirLib cparser
 
-COMPCERTCOQINCLUDES := $(foreach d, $(RECDIRS), -R lib/CompCert/$(d) compcert.$(d))
+COMPCERTCOQINCLUDES := $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
 COQINCLUDES := -R src/Common CoqUp.Common -R src/Verilog CoqUp.Verilog -R src/Driver CoqUp.Driver -R src/Extraction CoqUp.Extraction $(COMPCERTCOQINCLUDES)
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := "$(COQBIN)coq_makefile"
 
-COQUPDIRS := Common Driver Verilog
+COQUPDIRS := SMTrans Common Driver Verilog
 VS := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
 
-.PHONY: all install coq clean
+.PHONY: all install proof clean
 
 all:
 	(cd lib/CompCert && ./configure x86_64-linux)
 	$(MAKE) -C lib/CompCert all
-	$(MAKE) coq
+	$(MAKE) proof
 	$(MAKE) compile
 
 install:
 	$(MAKE) -f Makefile.coq install
 
-coq: Makefile.coq
+proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
 
 extraction: src/Extraction/STAMP
@@ -40,7 +40,7 @@ src/Extraction/STAMP:
 
 Makefile.coq:
 	@echo "COQMAKE Makefile.coq"
-	@$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
+	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean

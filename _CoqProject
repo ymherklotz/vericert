@@ -2,6 +2,7 @@
 -R src/Verilog CoqUp.Verilog
 -R src/Driver CoqUp.Driver
 -R src/Extraction CoqUp.Extraction
+-R src/SMTrans CoqUp.SMTrans
 
 -R lib/CompCert/lib compcert.lib
 -R lib/CompCert/common compcert.common
