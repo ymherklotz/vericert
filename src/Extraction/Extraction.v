@@ -18,8 +18,12 @@
 
 Require CoqUp.Verilog.VerilogAST.
 
+(* Standard lib *)
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlString.
+
+(* Avoid name clashes *)
+Extraction Blacklist List String Int.
 
 Cd "src/Extraction".
 Separate Extraction

@@ -32,6 +32,9 @@ Inductive value : Type :=
 | VBool (b : bool)
 | VArray (l : list value).
 
+Inductive literal : Type :=
+| LitArray (l : list bool).
+
 Definition cons_value (a b : value) : value :=
   match a, b with
   | VBool _, VArray b' => VArray (a :: b')
