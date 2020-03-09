@@ -30,8 +30,8 @@ extraction: src/Extraction/STAMP
 compile: src/Extraction/STAMP
 	@echo "OCaml bin/coqup"
 	@mkdir -p bin
-	@dune build src/Extraction/Driver.exe
-	@cp _build/default/src/Extraction/Driver.exe bin/coqup
+	@dune build src/Driver/Driver.exe
+	@cp _build/default/src/Driver/Driver.exe bin/coqup
 
 src/Extraction/STAMP:
 	@echo "COQEXEC ./src/Extraction/Extraction.v"
