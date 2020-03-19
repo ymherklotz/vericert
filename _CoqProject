@@ -1,8 +1,8 @@
--R src/Common CoqUp.Common
--R src/Verilog CoqUp.Verilog
--R src/Driver CoqUp.Driver
--R src/Extraction CoqUp.Extraction
--R src/SMTrans CoqUp.SMTrans
+-R src/common coqup.common
+-R src/verilog coqup.verilog
+-R src/driver coqup.driver
+-R src/extraction coqup.extraction
+-R src/translation coqup.translation
 
 -R lib/CompCert/lib compcert.lib
 -R lib/CompCert/common compcert.common

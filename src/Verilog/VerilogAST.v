@@ -22,7 +22,8 @@ Structures.OrderedTypeEx
 FSets.FMapList
 Program.Basics
 PeanoNat.
-From CoqUp.Common Require Import Helper Tactics Show.
+
+From coqup.common Require Import Helper Tactics Show.
 
 Import ListNotations.
 
@@ -32,8 +33,7 @@ Inductive value : Type :=
 | VBool (b : bool)
 | VArray (l : list value).
 
-Inductive literal : Type :=
-| LitArray (l : list bool).
+Inductive literal : Type := LitArray (l : list bool).
 
 Definition cons_value (a b : value) : value :=
   match a, b with
