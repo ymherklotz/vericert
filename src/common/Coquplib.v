@@ -1,4 +1,4 @@
-(* 
+(*
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -15,6 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
+
+From Coq Require Export
+     String
+     ZArith
+     Znumtheory
+     List
+     Bool.
 
 Ltac unfold_rec c := unfold c; fold c.
 
