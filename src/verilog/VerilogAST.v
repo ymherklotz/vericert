@@ -16,14 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import Lists.List Strings.String.
 From Coq Require Import
 Structures.OrderedTypeEx
 FSets.FMapList
 Program.Basics
 PeanoNat.
 
-From coqup.common Require Import Helper Tactics Show.
+From compcert.backend Require Registers.
+
+From coqup.common Require Import Helper Coquplib Show.
 
 Import ListNotations.
 
@@ -47,7 +48,7 @@ Definition cons_value (a b : value) : value :=
 
 Fixpoint nat_to_value' (sz n : nat) : value :=
   match sz with
-  | 0 => VArray []
+  | 0%nat => VArray []
   | S sz' =>
     if Nat.even n then
       cons_value (VBool false) (nat_to_value' sz' (Nat.div n 2))
@@ -76,7 +77,7 @@ Inductive binop : Type :=
 
 Inductive expr : Type :=
 | Lit (n : value)
-| Var (s : string)
+| Var (s : Registers.reg)
 | Neg (a : expr)
 | BinOp (op : binop) (a1 a2 : expr)
 | Ternary (c t f : expr).
@@ -91,11 +92,11 @@ Inductive stmnt : Type :=
 
 Inductive verilog : Type := Verilog (s : list stmnt).
 
-Definition verilog_example := Verilog [Block [Nonblocking (Var "hello") (BinOp Plus (Lit (nat_to_value 40)) (Lit (nat_to_value 20))); Cond (BinOp LE (Lit (nat_to_value 2)) (Lit (nat_to_value 3))) (Blocking (Var "Another") (BinOp Times (Lit (nat_to_value 20)) (Lit (nat_to_value 500)))) Skip]; Block []].
+Definition verilog_example := Verilog [Block [Nonblocking (Var  2%positive) (BinOp Plus (Lit (nat_to_value 40)) (Lit (nat_to_value 20))); Cond (BinOp LE (Lit (nat_to_value 2)) (Lit (nat_to_value 3))) (Blocking (Var 2%positive) (BinOp Times (Lit (nat_to_value 20)) (Lit (nat_to_value 500)))) Skip]; Block []].
 
 Coercion VBool : bool >-> value.
 Coercion Lit : value >-> expr.
-Coercion Var : string >-> expr.
+Coercion Var : Registers.reg >-> expr.
 
 Definition value_is_bool (v : value) : bool :=
   match v with
@@ -175,7 +176,7 @@ Proof.
 Qed.
 
 Lemma check_5_is_101 :
-  value_to_nat (VArray [VBool true; VBool false; VBool true]) = Some 5.
+  value_to_nat (VArray [VBool true; VBool false; VBool true]) = Some 5%nat.
 Proof. reflexivity. Qed.
 
 Lemma cons_value_flat :
@@ -213,7 +214,7 @@ Qed.
 
 Lemma nat_to_value_idempotent :
   forall (sz n : nat),
-    sz > 0 -> (value_to_nat' sz (nat_to_value' sz n)) = Some n.
+    (sz > 0)%nat -> (value_to_nat' sz (nat_to_value' sz n)) = Some n.
 Proof.
   induction sz; intros.
   - inversion H.

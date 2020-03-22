@@ -23,6 +23,10 @@ From Coq Require Export
      List
      Bool.
 
+(* Depend on CompCert for the basic library, as they declare and prove some
+   useful theorems. *)
+From compcert.lib Require Export Coqlib.
+
 Ltac unfold_rec c := unfold c; fold c.
 
 Ltac solve_by_inverts n :=
