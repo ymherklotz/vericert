@@ -1,4 +1,0 @@
-(library
- (name Extraction)
- (public_name coqup.extraction)
- (flags (:standard -warn-error -A)))

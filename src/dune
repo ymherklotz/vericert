@@ -1,3 +1,6 @@
+(include_subdirs unqualified)
+
 (library
- (name CoqUp)
- (public_name coqup))
+ (public_name coqup)
+ (libraries compcert)
+ (flags (:standard -warn-error -A)))
