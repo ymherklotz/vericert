@@ -16,4 +16,4 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-val prettyprint : Extraction.VerilogAST.verilog -> string
+val prettyprint : VerilogAST.verilog -> string

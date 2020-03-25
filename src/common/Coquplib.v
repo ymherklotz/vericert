@@ -38,3 +38,7 @@ Ltac solve_by_inverts n :=
   end.
 
 Ltac solve_by_invert := solve_by_inverts 1.
+
+(* Definition const (A B : Type) (a : A) (b : B) : A := a.
+
+Definition compose (A B C : Type) (f : B -> C) (g : A -> B) (x : A) : C := f (g x). *)

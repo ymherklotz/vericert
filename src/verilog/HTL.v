@@ -1,7 +1,7 @@
 From coqup.common Require Import Coquplib.
 
-From compcert Require Op Maps.
-From compcert Require AST Memory Registers.
+From compcert Require Import Maps.
+From compcert Require Op AST Memory Registers.
 
 Definition node := positive.
 
@@ -10,46 +10,51 @@ Definition reg := Registers.reg.
 Definition ident := AST.ident.
 
 Inductive instruction : Type :=
-| Vnop : node -> instruction
-| Vnonblock : Op.operation -> list reg -> reg -> node -> instruction
-| Vload : AST.memory_chunk -> Op.addressing -> list reg -> reg -> node -> instruction
-| Vstore : AST.memory_chunk -> Op.addressing -> list reg -> reg -> node -> instruction
-| Vinst : AST.signature -> ident -> list reg -> reg -> node -> instruction
-| Vtailinst : AST.signature -> ident -> list reg -> instruction
-| Vcond : Op.condition -> list reg -> node -> node -> instruction
-| Vjumptable : reg -> list node -> instruction
-| Vfinish : option reg -> instruction.
+| Hnop : node -> instruction
+| Hnonblock : Op.operation -> list reg -> reg -> node -> instruction
+  (** [Hnonblock op args res next] Defines a nonblocking assignment to a
+      register, using the operation defined in Op.v. *)
+| Hload : AST.memory_chunk -> Op.addressing -> list reg -> reg -> node -> instruction
+| Hstore : AST.memory_chunk -> Op.addressing -> list reg -> reg -> node -> instruction
+| Hinst : AST.signature -> ident -> reg -> node -> instruction
+  (** [Hinst sig fun args rst strt end res next] Defines the start of a
+      module instantiation, meaning the function will run until the result is
+      returned. *)
+| Htailcall : AST.signature -> ident -> list reg -> instruction
+| Hcond : Op.condition -> list reg -> node -> node -> instruction
+| Hjumptable : reg -> list node -> instruction
+| Hfinish : option reg -> instruction.
 
 Record inst : Type :=
   mkinst {
-inst_start : reg;
-inst_finish : reg;
-inst_result : reg;
-inst_args : list reg
-}.
+    inst_moddecl : ident;
+    inst_args : list reg
+  }.
 
-Definition code : Type := Maps.PTree.t instruction.
+Definition code : Type := PTree.t instruction.
 
-Definition instantiations : Type := Maps.PTree.t inst.
+Definition instances : Type := PTree.t inst.
+
+Definition empty_instances : instances := PTree.empty inst.
 
 (** Function declaration for VTL also contain a construction which describes the
     functions that are called in the current function. This information is used
     to print out *)
 Record module : Type :=
   mkmodule {
-      mod_sig : AST.signature;
-      mod_params : list reg;
-      mod_stacksize : Z;
-      mod_code : code;
-      mod_insts : inst;
-      mod_entrypoint : node
-    }.
+    mod_sig : AST.signature;
+    mod_params : list reg;
+    mod_stacksize : Z;
+    mod_code : code;
+    mod_insts : instances;
+    mod_entrypoint : node
+  }.
 
-Definition moddef := AST.fundef module.
+Definition moddecl := AST.fundef module.
 
-Definition design := AST.program moddef unit.
+Definition design := AST.program moddecl unit.
 
-Definition modsig (md : moddef) :=
+Definition modsig (md : moddecl) :=
   match md with
   | AST.Internal m => mod_sig m
   | AST.External ef => AST.ef_sig ef
@@ -62,12 +67,13 @@ Section TRANSF.
 
   Variable transf : node -> instruction -> instruction.
 
-  Definition transf_function (f : function) : function :=
-    mkfunction
-      f.(fn_sig)
-      f.(fn_params)
-      f.(fn_stacksize)
-      (Maps.PTree.map transf f.(fn_code))
-      f.(fn_entrypoint).
+  Definition transf_function (m : module) : module :=
+    mkmodule
+      m.(mod_sig)
+      m.(mod_params)
+      m.(mod_stacksize)
+      (PTree.map transf m.(mod_code))
+      m.(mod_insts)
+      m.(mod_entrypoint).
 
 End TRANSF.

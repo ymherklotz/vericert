@@ -16,7 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-open Extraction.VerilogAST
+open VerilogAST
+open Registers
+open Datatypes
+
+open Compcert.Camlcoq
+
+open Printf
 
 let concat = String.concat ""
 
@@ -43,9 +49,11 @@ let pprint_binop = function
   | Or -> " | "
   | Xor -> " ^ "
 
+let register (a : positive) : int = P.to_int a
+
 let rec pprint_expr = function
   | Lit l -> pprint_value l
-  | Var s -> List.to_seq s |> String.of_seq
+  | Var s -> sprintf "reg_%d" (register s)
   | Neg e -> concat ["(-"; pprint_expr e; ")"]
   | BinOp (op, a, b) -> concat ["("; pprint_expr a; pprint_binop op; pprint_expr b; ")"]
   | Ternary (c, t, f) -> concat ["("; pprint_expr c; " ? "; pprint_expr t; " : "; pprint_expr f; ")"]
