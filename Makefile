@@ -1,14 +1,14 @@
-COMPCERTRECDIRS := lib common $(ARCHDIRS) backend cfrontend driver flocq exportclight \
+COMPCERTRECDIRS := lib common x86_64 x86 backend cfrontend driver flocq exportclight \
   MenhirLib cparser
 
 COMPCERTCOQINCLUDES := $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
-COQINCLUDES := -R src/Common CoqUp.Common -R src/Verilog CoqUp.Verilog -R src/Driver CoqUp.Driver -R src/Extraction CoqUp.Extraction $(COMPCERTCOQINCLUDES)
+COQINCLUDES := -R src/common coqup.common -R src/verilog coqup.verilog -R src/extraction coqup.extraction -R src/translation coqup.translation $(COMPCERTCOQINCLUDES)
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := "$(COQBIN)coq_makefile"
 
-COQUPDIRS := SMTrans Common Driver Verilog
+COQUPDIRS := translation common verilog
 VS := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
 
 .PHONY: all install proof clean
@@ -25,17 +25,17 @@ install:
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
 
-extraction: src/Extraction/STAMP
+extraction: src/extraction/STAMP
 
-compile: src/Extraction/STAMP
+compile: src/extraction/STAMP
 	@echo "OCaml bin/coqup"
 	@mkdir -p bin
 	@dune build src/Driver/Driver.exe
 	@cp _build/default/src/Driver/Driver.exe bin/coqup
 
-src/Extraction/STAMP:
-	@echo "COQEXEC ./src/Extraction/Extraction.v"
-	@$(COQEXEC) ./src/Extraction/Extraction.v
+src/extraction/STAMP:
+	@echo "COQEXEC ./src/extraction/Extraction.v"
+	@$(COQEXEC) ./src/extraction/Extraction.v
 	@touch $@
 
 Makefile.coq:
