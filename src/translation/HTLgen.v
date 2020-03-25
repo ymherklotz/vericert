@@ -179,6 +179,11 @@ Definition transf_function (f: function) : Errors.res module :=
   | Error err => Errors.Error err
   end.
 
+Definition example : mon HTL.code := PTree.traverse transf_instr
+  (PTree.set 2%positive (RTL.Icall sig ros args res n) (PTree.set 1%positive (RTL.Iop (Op.Omove) nil 1%positive 2%positive) (PTree.empty RTL.instruction))).
+
+Compute example.
+
 Definition transf_fundef (fd: fundef) : Errors.res moddecl :=
   transf_partial_fundef transf_function fd.
 
