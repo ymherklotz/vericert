@@ -1,6 +1,8 @@
+(include_subdirs no)
+
 (executables
  (names Driver)
- (libraries compcert coqup.verilog coqup.extraction))
+ (libraries coqup))
 
 (install
  (section bin)

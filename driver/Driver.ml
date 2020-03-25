@@ -16,7 +16,4 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-open Verilog
-open Extraction
-
-let _ = print_string (PrettyPrint.prettyprint VerilogAST.verilog_example)
+let _ = print_string (Coqup.PrettyPrint.prettyprint Coqup.VerilogAST.verilog_example)
