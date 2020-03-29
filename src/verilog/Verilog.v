@@ -27,6 +27,8 @@ From bbv Require Word.
 
 From coqup.common Require Import Helper Coquplib Show.
 
+From compcert Require Integers.
+
 Import ListNotations.
 
 Definition reg : Type := positive.
@@ -40,43 +42,55 @@ Definition posToValue (p : positive) : value :=
   let size := Z.to_nat (log_sup p) in
   mkvalue size (Word.posToWord size p).
 
+Definition intToValue (i : Integers.int) : value :=
+  mkvalue 32%nat (Word.natToWord 32%nat (Z.to_nat (Integers.Int.unsigned i))).
+
 Definition state : Type := PositiveMap.t value * PositiveMap.t value.
 
 Inductive binop : Type :=
-| Vconst (v : value)
-| Vmove
-| Vneg
-| Vadd
-| Vsub
-| Vmul
-| Vmulimm (v : value)
-| Vdiv
-| Vdivimm (v : value)
-| Vmod
-| Vlt
-| Vgt
-| Vle
-| Vge
-| Veq
-| Vand
-| Vor
-| Vxor.
+| Vadd : binop  (** addition (binary [+]) *)
+| Vsub : binop  (** subtraction (binary [-]) *)
+| Vmul : binop  (** multiplication (binary [*]) *)
+| Vdiv : binop  (** multiplication (binary [*]) *)
+| Vmod : binop  (** division ([/]) *)
+| Vlt : binop   (** less than ([<]) *)
+| Vgt : binop   (** greater than ([>]) *)
+| Vle : binop   (** less than or equal ([<=]) *)
+| Vge : binop   (** greater than or equal ([>=]) *)
+| Veq : binop   (** equal to ([==]) *)
+| Vne : binop   (** not equal to ([!=]) *)
+| Vand : binop  (** and (binary [&]) *)
+| Vor : binop   (** or (binary [|]) *)
+| Vxor : binop  (** xor (binary [^|]) *)
+| Vshl : binop  (** shift left ([<<]) *)
+| Vshr : binop. (** shift left ([<<]) *)
 
-Inductive expr : Type := Op (op : binop) (v : list expr).
+Inductive unop : Type :=
+| Vneg : unop. (** negation ([~]) *)
+
+Inductive expr : Type :=
+| Vlit : value -> expr
+| Vvar : reg -> expr
+| Vbinop : binop -> expr -> expr -> expr
+| Vunop : unop -> expr -> expr
+| Vternary : expr -> expr -> expr -> expr.
+
+Definition posToExpr (p : positive) : expr :=
+  Vlit (posToValue p).
 
 Inductive stmnt : Type :=
-| Skip
-| Block (s : list stmnt)
-| Cond (c : expr) (st sf : stmnt)
-| Case (c : expr) (b : list (expr * stmnt))
-| Blocking (a b : expr)
-| Nonblocking (a b : expr)
-| Decl (v : reg) (s : nat) (b : expr).
+| Vskip : stmnt
+| Vseq : list stmnt -> stmnt
+| Vcond : expr -> stmnt -> stmnt -> stmnt
+| Vcase : expr -> list (expr * stmnt) -> stmnt
+| Vblock : expr -> expr -> stmnt
+| Vnonblock : expr -> expr -> stmnt
+| Vdecl : reg -> nat -> expr -> stmnt.
 
 Definition posToLit (p : positive) : expr :=
-  Lit (posToValue p).
+  Vlit (posToValue p).
 
 Definition verilog : Type := list stmnt.
 
-Coercion Lit : value >-> expr.
-Coercion Var : reg >-> expr.
+Coercion Vlit : value >-> expr.
+Coercion Vvar : reg >-> expr.
