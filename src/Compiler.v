@@ -1,4 +1,4 @@
-(* 
+(*
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -45,10 +45,21 @@ From compcert.cfrontend Require
 From compcert.driver Require
     Compiler.
 
+From coqup Require
+     Verilog
+     Veriloggen
+     HTLgen.
+
 Notation "a @@@ b" :=
    (Compiler.apply_partial _ _ a b) (at level 50, left associativity).
 Notation "a @@ b" :=
-   (Compiler.apply_total _ _ a b) (at level 50, left associativity).
+  (Compiler.apply_total _ _ a b) (at level 50, left associativity).
+
+Definition transf_backend (r : RTL.program) : res Verilog.verilog :=
+  OK r
+  @@@ HTLgen.transf_program
+  @@@ Veriloggen.transf_program.
+
 
 Definition transf_frontend (p: Csyntax.program) : res RTL.program :=
   OK p
@@ -58,6 +69,11 @@ Definition transf_frontend (p: Csyntax.program) : res RTL.program :=
   @@@ Cminorgen.transl_program
   @@@ Selection.sel_program
   @@@ RTLgen.transl_program.
+
+Definition transf_hls (p : Csyntax.program) : res Verilog.verilog :=
+  OK p
+  @@@ transf_frontend
+  @@@ transf_backend.
 
 Local Open Scope linking_scope.
 
