@@ -211,7 +211,7 @@ Fixpoint main_module (main : ident) (flist : list (ident * AST.globdef moddecl u
   | nil => None
   end.
 
-Definition transf_function (d : design) : Errors.res verilog :=
+Definition transf_program (d : design) : Errors.res verilog :=
   match main_module d.(AST.prog_main) d.(AST.prog_defs) with
   | Some m => transf_module m
   | _ => Errors.Error (Errors.msg "Could not find main module")
