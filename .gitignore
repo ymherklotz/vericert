@@ -33,7 +33,9 @@ Makefile.coq
 Makefile.coq.conf
 .coqdeps.d
 
-extraction/src/
+src/extraction/*.ml
+src/extraction/*.mli
+src/extraction/STAMP
 
 # Ocaml
 _build
