@@ -60,19 +60,19 @@ Definition modsig (md : moddecl) :=
   | AST.External ef => AST.ef_sig ef
   end.
 
-(** Describes the transformation of VTL instruction by instruction. This applies
+(** Describes various transformations that can be applied to HTL. This applies
     the transformation to each instruction in the function and returns the new
     function with the modified instructions. *)
 Section TRANSF.
 
-  Variable transf : node -> instruction -> instruction.
+  Variable transf_instr : node -> instruction -> instruction.
 
-  Definition transf_function (m : module) : module :=
+  Definition transf_module (m : module) : module :=
     mkmodule
       m.(mod_sig)
       m.(mod_params)
       m.(mod_stacksize)
-      (PTree.map transf m.(mod_code))
+      (PTree.map transf_instr m.(mod_code))
       m.(mod_insts)
       m.(mod_entrypoint).
 
