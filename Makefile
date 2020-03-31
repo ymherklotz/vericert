@@ -14,27 +14,30 @@ COQUPDIRS := translation common verilog
 VSSUBDIR := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
 VS := src/Compiler.v $(VSSUBDIR)
 
-.PHONY: all install proof clean
+PREFIX ?= .
+
+.PHONY: all install proof clean extraction
 
 all:
-	(cd lib/CompCert && ./configure x86_64-linux)
-	$(MAKE) -C lib/CompCert all
 	$(MAKE) proof
 	$(MAKE) compile
 
 install:
-	$(MAKE) -f Makefile.coq install
+	install -d $(PREFIX)/bin
+	install -C _build/default/driver/compcert.ini $(PREFIX)/bin/.
+	install -C _build/default/driver/CoqupDriver.exe $(PREFIX)/bin/coqup
 
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
+	@rm -f src/extraction/STAMP
 
 extraction: src/extraction/STAMP
 
 compile: src/extraction/STAMP
 	@echo "OCaml bin/coqup"
 	@mkdir -p bin
-	@dune build src/Driver/Driver.exe
-	@cp _build/default/src/Driver/Driver.exe bin/coqup
+	@dune build driver/CoqupDriver.exe
+	@cp lib/CompCert/compcert.ini _build/default/driver/.
 
 src/extraction/STAMP:
 	@echo "COQEXEC ./src/extraction/Extraction.v"
