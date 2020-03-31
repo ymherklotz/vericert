@@ -20,7 +20,7 @@ From Coq Require Import FSets.FMapPositive.
 
 From coqup Require Import HTL Verilog Coquplib.
 
-From compcert Require Errors Op AST.
+From compcert Require Errors Op AST Integers.
 
 Definition node : Type := positive.
 Definition reg : Type := positive.
@@ -112,38 +112,66 @@ End PTree.
 
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
 
+Definition bop (op : binop) (r1 r2 : reg) : option expr :=
+  Some (Vbinop op (Vvar r1) (Vvar r2)).
+
+Definition boplit (op : binop) (r : reg) (l : Integers.int) : option expr :=
+  Some (Vbinop op (Vvar r) (Vlit (intToValue l))).
+
+Definition translate_comparison (c : Integers.comparison) (args : list reg) : option expr :=
+  match c, args with
+  | Integers.Ceq, r1::r2::nil => bop Veq r1 r2
+  | Integers.Cne, r1::r2::nil => bop Vne r1 r2
+  | Integers.Clt, r1::r2::nil => bop Vlt r1 r2
+  | Integers.Cgt, r1::r2::nil => bop Vgt r1 r2
+  | Integers.Cle, r1::r2::nil => bop Vle r1 r2
+  | Integers.Cge, r1::r2::nil => bop Vge r1 r2
+  | _, _ => None
+  end.
+
+Definition translate_condition (c : Op.condition) (args : list reg) : option expr :=
+  match c, args with
+  | Op.Ccomp c, _ => translate_comparison c args
+  | Op.Ccompu c, _ => None
+  | Op.Ccompimm c i, _ => None
+  | Op.Ccompuimm c i, _ => None
+  | Op.Cmaskzero n, _ => None
+  | Op.Cmasknotzero n, _ => None
+  | _, _ => None
+  end.
+
 (** Translate an instruction to a statement. *)
-Definition translate_instr (op : Op.operation) (args : list reg) (dst : reg) : option stmnt :=
-  let assign := nonblock dst in
+Definition translate_instr (op : Op.operation) (args : list reg) : option expr :=
   match op, args with
-  | Op.Omove, v::nil => Some (assign (Vvar v))
-  | Op.Ointconst n, _ => Some (assign (Vlit (intToValue n)))
-  | Op.Oneg, _ => None
-  | Op.Osub, _ => None
-  | Op.Omul, _ => None
-  | Op.Omulimm n, _ => None
+  | Op.Omove, r::nil => Some (Vvar r)
+  | Op.Ointconst n, _ => Some (Vlit (intToValue n))
+  | Op.Oneg, r::nil => Some (Vunop Vneg (Vvar r))
+  | Op.Osub, r1::r2::nil => bop Vsub r1 r2
+  | Op.Omul, r1::r2::nil => bop Vmul r1 r2
+  | Op.Omulimm n, r::nil => boplit Vmul r n
   | Op.Omulhs, _ => None
   | Op.Omulhu, _ => None
-  | Op.Odiv, _ => None
-  | Op.Odivu, _ => None
-  | Op.Omod, _ => None
-  | Op.Omodu, _ => None
-  | Op.Oand, _ => None
-  | Op.Oandimm n, _ => None
-  | Op.Oor, _ => None
-  | Op.Oorimm n, _ => None
-  | Op.Oxor, _ => None
-  | Op.Oxorimm n, _ => None
-  | Op.Onot, _ => None
-  | Op.Oshl, _ => None
-  | Op.Oshlimm n, _ => None
-  | Op.Oshr, _ => None
-  | Op.Oshrimm n, _ => None
-  | Op.Oshrximm n, _ => None
-  | Op.Oshru, _ => None
-  | Op.Oshruimm n, _ => None
-  | Op.Ororimm n, _ => None
-  | Op.Oshldimm n, _ => None
+  | Op.Odiv, r1::r2::nil => bop Vdiv r1 r2
+  | Op.Odivu, r1::r2::nil => bop Vdivu r1 r2
+  | Op.Omod, r1::r2::nil => bop Vmod r1 r2
+  | Op.Omodu, r1::r2::nil => bop Vmodu r1 r2
+  | Op.Oand, r1::r2::nil => bop Vand r1 r2
+  | Op.Oandimm n, r::nil => boplit Vand r n
+  | Op.Oor, r1::r2::nil => bop Vor r1 r2
+  | Op.Oorimm n, r::nil => boplit Vor r n
+  | Op.Oxor, r1::r2::nil => bop Vxor r1 r2
+  | Op.Oxorimm n, r::nil => boplit Vxor r n
+  | Op.Onot, r::nil => Some (Vunop Vnot (Vvar r))
+  | Op.Oshl, r1::r2::nil => bop Vshl r1 r2
+  | Op.Oshlimm n, r::nil => boplit Vshl r n
+  | Op.Oshr, r1::r2::nil => bop Vshr r1 r2
+  | Op.Oshrimm n, r::nil => boplit Vshr r n
+  | Op.Oshrximm n, r::nil => None
+  | Op.Oshru, r1::r2::nil => None
+  | Op.Oshruimm n, r::nil => None
+  | Op.Ororimm n, r::nil => None
+  | Op.Oshldimm n, r::nil => None
+  | Op.Ocmp c, _ => translate_condition c args
   | _, _ => None
   end.
 
@@ -163,17 +191,21 @@ Definition transf_instr (n : node) (i : instruction) (s : state) : mon node :=
   | Hnop n' =>
     add_instr n n' s Vskip
   | Hnonblock op args dst n' =>
-    match (translate_instr op args dst) with
-    | Some instr => add_instr n n' s instr
+    match translate_instr op args with
+    | Some instr => add_instr n n' s (nonblock dst instr)
     | _ => Error (Errors.msg "Instruction is not implemented.")
     end
-  | Hload _ _ _ _ _ => Error (Errors.msg "Load not implemented.")
-  | Hstore _ _ _ _ _ => Error (Errors.msg "Store not implemented.")
-  | Hinst _ _ _ _ => Error (Errors.msg "Call not implemented.")
-  | Htailcall _ _ _ => Error (Errors.msg "Tailcall not implemented.")
-  | Hcond _ _ _ _ => Error (Errors.msg "Cond not implemented.")
+  | Hload _ _ _ _ _ => Error (Errors.msg "Loads are not implemented.")
+  | Hstore _ _ _ _ _ => Error (Errors.msg "Stores are not implemented.")
+  | Hinst _ _ _ _ => Error (Errors.msg "Calls are not implemented.")
+  | Htailcall _ _ _ => Error (Errors.msg "Tailcalls are not implemented.")
+  | Hcond cond args n1 n2 => Error (Errors.msg "Condition not implemented.")
   | Hjumptable _ _ => Error (Errors.msg "Jumptable not implemented.")
-  | Hfinish _ => OK n s
+  | Hfinish r =>
+    match r with
+    | Some x => OK n s
+    | None => OK n s
+    end
   end.
 
 Definition make_stm_cases (s : positive * stmnt) : expr * stmnt :=

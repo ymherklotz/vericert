@@ -49,6 +49,10 @@ let pprint_binop = function
   | Vshl -> " << "
   | Vshr -> " >> "
 
+let unop = function
+  | Vneg -> " ~ "
+  | Vnot -> " ! "
+
 let register a = P.to_int a
 
 let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (valueToZ l))
@@ -56,7 +60,7 @@ let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (valueToZ l))
 let rec pprint_expr = function
   | Vlit l -> literal l
   | Vvar s -> sprintf "reg_%d" (register s)
-  | Vunop e -> concat ["(~"; pprint_expr e; ")"]
+  | Vunop (u, e) -> concat ["("; unop u; pprint_expr e; ")"]
   | Vbinop (op, a, b) -> concat ["("; pprint_expr a; pprint_binop op; pprint_expr b; ")"]
   | Vternary (c, t, f) -> concat ["("; pprint_expr c; " ? "; pprint_expr t; " : "; pprint_expr f; ")"]
 

@@ -54,12 +54,18 @@ Inductive binop : Type :=
 | Vadd : binop  (** addition (binary [+]) *)
 | Vsub : binop  (** subtraction (binary [-]) *)
 | Vmul : binop  (** multiplication (binary [*]) *)
-| Vdiv : binop  (** multiplication (binary [*]) *)
-| Vmod : binop  (** division ([/]) *)
+| Vdiv : binop  (** division (binary [/]) *)
+| Vdivu : binop  (** division unsigned (binary [/]) *)
+| Vmod : binop  (** remainder ([%]) *)
+| Vmodu : binop  (** remainder unsigned ([/]) *)
 | Vlt : binop   (** less than ([<]) *)
+| Vltu : binop   (** less than unsigned ([<]) *)
 | Vgt : binop   (** greater than ([>]) *)
+| Vgtu : binop   (** greater than unsigned ([>]) *)
 | Vle : binop   (** less than or equal ([<=]) *)
+| Vleu : binop   (** less than or equal unsigned ([<=]) *)
 | Vge : binop   (** greater than or equal ([>=]) *)
+| Vgeu : binop   (** greater than or equal unsigned ([>=]) *)
 | Veq : binop   (** equal to ([==]) *)
 | Vne : binop   (** not equal to ([!=]) *)
 | Vand : binop  (** and (binary [&]) *)
@@ -69,7 +75,8 @@ Inductive binop : Type :=
 | Vshr : binop. (** shift left ([<<]) *)
 
 Inductive unop : Type :=
-| Vneg : unop. (** negation ([~]) *)
+| Vneg  (** negation ([~]) *)
+| Vnot. (** not operation [!] *)
 
 Inductive expr : Type :=
 | Vlit : value -> expr
