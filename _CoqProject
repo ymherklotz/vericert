@@ -2,6 +2,7 @@
 -R src/extraction coqup.extraction
 -R src/translation coqup.translation
 -R src/verilog coqup.verilog
+-R src coqup
 
 -R lib/CompCert/MenhirLib compcert.MenhirLib
 -R lib/CompCert/backend compcert.backend

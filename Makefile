@@ -3,13 +3,16 @@ COMPCERTRECDIRS := lib common x86_64 x86 backend cfrontend driver flocq exportcl
 
 COMPCERTCOQINCLUDES := $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
-COQINCLUDES := -R src/common coqup.common -R src/verilog coqup.verilog -R src/extraction coqup.extraction -R src/translation coqup.translation $(COMPCERTCOQINCLUDES)
+COQINCLUDES := -R src/common coqup.common -R src/verilog coqup.verilog \
+               -R src/extraction coqup.extraction -R src/translation coqup.translation \
+               -R src coqup $(COMPCERTCOQINCLUDES)
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := "$(COQBIN)coq_makefile"
 
 COQUPDIRS := translation common verilog
-VS := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
+VSSUBDIR := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
+VS := src/Compiler.v $(VSSUBDIR)
 
 .PHONY: all install proof clean
 
