@@ -25,7 +25,7 @@ From Coq Require Import
 
 From bbv Require Word.
 
-From coqup.common Require Import Helper Coquplib Show.
+From coqup.common Require Import Coquplib Show.
 
 From compcert Require Integers.
 

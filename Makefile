@@ -18,9 +18,14 @@ PREFIX ?= .
 
 .PHONY: all install proof clean extraction
 
-all:
+all: lib/COMPCERTSTAMP
 	$(MAKE) proof
 	$(MAKE) compile
+
+lib/COMPCERTSTAMP:
+	(cd lib/CompCert && ./configure x86_64-linux)
+	$(MAKE) -C lib/CompCert
+	touch $@
 
 install:
 	install -d $(PREFIX)/bin
