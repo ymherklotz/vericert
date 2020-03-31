@@ -37,6 +37,10 @@ src/extraction/*.ml
 src/extraction/*.mli
 src/extraction/STAMP
 
+*.exe
+*.ini
+bin/coqup
+
 # Ocaml
 _build
 dune-project
