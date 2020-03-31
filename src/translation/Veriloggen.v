@@ -167,7 +167,13 @@ Definition transf_instr (n : node) (i : instruction) (s : state) : mon node :=
     | Some instr => add_instr n n' s instr
     | _ => Error (Errors.msg "Instruction is not implemented.")
     end
-  | _ => Error (Errors.msg "The other things were also not implemented")
+  | Hload _ _ _ _ _ => Error (Errors.msg "Load not implemented.")
+  | Hstore _ _ _ _ _ => Error (Errors.msg "Store not implemented.")
+  | Hinst _ _ _ _ => Error (Errors.msg "Call not implemented.")
+  | Htailcall _ _ _ => Error (Errors.msg "Tailcall not implemented.")
+  | Hcond _ _ _ _ => Error (Errors.msg "Cond not implemented.")
+  | Hjumptable _ _ => Error (Errors.msg "Jumptable not implemented.")
+  | Hfinish _ => OK n s
   end.
 
 Definition make_stm_cases (s : positive * stmnt) : expr * stmnt :=

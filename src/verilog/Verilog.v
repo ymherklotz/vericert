@@ -43,7 +43,10 @@ Definition posToValue (p : positive) : value :=
   mkvalue size (Word.posToWord size p).
 
 Definition intToValue (i : Integers.int) : value :=
-  mkvalue 32%nat (Word.natToWord 32%nat (Z.to_nat (Integers.Int.unsigned i))).
+  mkvalue 32%nat (Word.ZToWord 32%nat (Integers.Int.unsigned i)).
+
+Definition valueToZ (v : value) : Z :=
+  Word.uwordToZ v.(vword).
 
 Definition state : Type := PositiveMap.t value * PositiveMap.t value.
 
