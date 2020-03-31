@@ -1,9 +1,5 @@
 (include_subdirs no)
 
-(executables
- (names Driver)
+(executable
+ (name CoqupDriver)
  (libraries coqup))
-
-(install
- (section bin)
- (files (Driver.exe as coqup)))

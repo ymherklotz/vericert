@@ -1,0 +1,10 @@
+(dirs :standard \ "./lib/CompCert/x86_32" "./lib/CompCert/powerpc" "./lib/CompCert/riscV"
+      "./lib/CompCert/arm" "./lib/CompCert/aarch64" "./lib/CompCert/extraction")
+
+(include_subdirs unqualified)
+
+(library
+ (public_name coqup)
+ (modules_without_implementation c debugTypes dwarfTypes)
+ (libraries menhirLib str unix)
+ (flags (:standard -warn-error -A)))
