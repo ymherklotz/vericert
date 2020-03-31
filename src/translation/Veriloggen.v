@@ -18,9 +18,10 @@
 
 From Coq Require Import FSets.FMapPositive.
 
-From coqup Require Import HTL Verilog Coquplib.
+From coqup Require Import Verilog Coquplib.
 
 From compcert Require Errors Op AST Integers.
+From compcert Require Import RTL.
 
 Definition node : Type := positive.
 Definition reg : Type := positive.
@@ -188,20 +189,21 @@ Definition option_err {A : Type} (str : string) (v : option A) (s : state) : mon
 
 Definition transf_instr (n : node) (i : instruction) (s : state) : mon node :=
   match i with
-  | Hnop n' =>
+  | Inop n' =>
     add_instr n n' s Vskip
-  | Hnonblock op args dst n' =>
+  | Iop op args dst n' =>
     match translate_instr op args with
     | Some instr => add_instr n n' s (nonblock dst instr)
     | _ => Error (Errors.msg "Instruction is not implemented.")
     end
-  | Hload _ _ _ _ _ => Error (Errors.msg "Loads are not implemented.")
-  | Hstore _ _ _ _ _ => Error (Errors.msg "Stores are not implemented.")
-  | Hinst _ _ _ _ => Error (Errors.msg "Calls are not implemented.")
-  | Htailcall _ _ _ => Error (Errors.msg "Tailcalls are not implemented.")
-  | Hcond cond args n1 n2 => Error (Errors.msg "Condition not implemented.")
-  | Hjumptable _ _ => Error (Errors.msg "Jumptable not implemented.")
-  | Hfinish r =>
+  | Iload _ _ _ _ _ => Error (Errors.msg "Loads are not implemented.")
+  | Istore _ _ _ _ _ => Error (Errors.msg "Stores are not implemented.")
+  | Icall _ _ _ _ _ => Error (Errors.msg "Calls are not implemented.")
+  | Itailcall _ _ _ => Error (Errors.msg "Tailcalls are not implemented.")
+  | Ibuiltin _ _ _ _ => Error (Errors.msg "Builtin functions not implemented.")
+  | Icond cond args n1 n2 => Error (Errors.msg "Condition not implemented.")
+  | Ijumptable _ _ => Error (Errors.msg "Jumptable not implemented.")
+  | Ireturn r =>
     match r with
     | Some x => OK n s
     | None => OK n s
@@ -232,25 +234,25 @@ Definition make_verilog (s : state) : verilog :=
 
 (** To start out with, the assumption is made that there is only one
     function/module in the original code. *)
-Definition transf_module (m: module) : Errors.res verilog :=
-  match PTree.traverse transf_instr m.(mod_code) with
+Definition transf_module (m: function) : Errors.res verilog :=
+  match PTree.traverse transf_instr m.(fn_code) with
   | OK _ s => Errors.OK (make_verilog s)
   | Error err => Errors.Error err
   end.
 
-Fixpoint main_module (main : ident) (flist : list (ident * AST.globdef moddecl unit))
-         {struct flist} : option module :=
+Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef unit))
+         {struct flist} : option function :=
   match flist with
   | (i, AST.Gfun (AST.Internal f)) :: xs =>
     if Pos.eqb i main
     then Some f
-    else main_module main xs
-  | _ :: xs => main_module main xs
+    else main_function main xs
+  | _ :: xs => main_function main xs
   | nil => None
   end.
 
-Definition transf_program (d : design) : Errors.res verilog :=
-  match main_module d.(AST.prog_main) d.(AST.prog_defs) with
+Definition transf_program (d : program) : Errors.res verilog :=
+  match main_function d.(AST.prog_main) d.(AST.prog_defs) with
   | Some m => transf_module m
   | _ => Errors.Error (Errors.msg "Could not find main module")
   end.

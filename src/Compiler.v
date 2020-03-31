@@ -50,16 +50,33 @@ From coqup Require
      Veriloggen
      HTLgen.
 
+Parameter print_RTL: Z -> RTL.program -> unit.
+
+Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
+  let unused := printer prog in prog.
+
+Lemma print_identity:
+  forall (A: Type) (printer: A -> unit) (prog: A),
+  print printer prog = prog.
+Proof.
+  intros; unfold print. destruct (printer prog); auto.
+Qed.
+
 Notation "a @@@ b" :=
    (Compiler.apply_partial _ _ a b) (at level 50, left associativity).
 Notation "a @@ b" :=
   (Compiler.apply_total _ _ a b) (at level 50, left associativity).
 
+Lemma compose_print_identity:
+  forall (A: Type) (x: res A) (f: A -> unit),
+  x @@ print f = x.
+Proof.
+  intros. destruct x; simpl. rewrite print_identity. auto. auto.
+Qed.
+
 Definition transf_backend (r : RTL.program) : res Verilog.verilog :=
   OK r
-  @@@ HTLgen.transf_program
   @@@ Veriloggen.transf_program.
-
 
 Definition transf_frontend (p: Csyntax.program) : res RTL.program :=
   OK p
@@ -68,7 +85,8 @@ Definition transf_frontend (p: Csyntax.program) : res RTL.program :=
   @@@ Cshmgen.transl_program
   @@@ Cminorgen.transl_program
   @@@ Selection.sel_program
-  @@@ RTLgen.transl_program.
+  @@@ RTLgen.transl_program
+  @@ print (print_RTL 0).
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.verilog :=
   OK p
@@ -101,6 +119,7 @@ Proof.
   destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate.
   destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4; simpl in T; try discriminate.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
+  rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.

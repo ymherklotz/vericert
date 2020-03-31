@@ -126,11 +126,14 @@ Extract Constant Compopts.debug =>
 (* Compiler *)
 Extract Constant Compiler.print_Clight => "PrintClight.print_if".
 Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
+Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
 Extract Constant Compiler.time  => "Timing.time_coq".
+
+Extract Constant Coquplib.debug_print => "print_newline".
 
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 
