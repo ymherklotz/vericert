@@ -1,5 +1,5 @@
 with import <nixpkgs> {};
 
 mkShell {
-  buildInputs = (import ./.).buildInputs;
+  buildInputs = (import ./.).buildInputs ++ [ocamlPackages.ocp-indent verilog];
 }
