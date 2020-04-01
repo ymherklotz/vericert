@@ -16,4 +16,4 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-val print_program : out_channel -> Verilog.verilog -> unit
+val print_program : out_channel -> Verilog.coq_module -> unit

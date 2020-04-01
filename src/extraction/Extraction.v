@@ -166,7 +166,7 @@ Set Extraction AccessOpaque.
 
 Cd "src/Extraction".
 Separate Extraction
-         Verilog.verilog Verilog.valueToZ coqup.Compiler.transf_hls
+         Verilog.module Verilog.valueToZ coqup.Compiler.transf_hls
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

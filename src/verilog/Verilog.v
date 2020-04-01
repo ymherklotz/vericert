@@ -39,8 +39,11 @@ Record value : Type := mkvalue {
 }.
 
 Definition posToValue (p : positive) : value :=
-  let size := Z.to_nat (log_sup p) in
+  let size := Z.to_nat (Z.succ (log_inf p)) in
   mkvalue size (Word.posToWord size p).
+
+Definition ZToValue (s : nat) (z : Z) : value :=
+  mkvalue s (Word.ZToWord s z).
 
 Definition intToValue (i : Integers.int) : value :=
   mkvalue 32%nat (Word.ZToWord 32%nat (Integers.Int.unsigned i)).
@@ -94,13 +97,41 @@ Inductive stmnt : Type :=
 | Vcond : expr -> stmnt -> stmnt -> stmnt
 | Vcase : expr -> list (expr * stmnt) -> stmnt
 | Vblock : expr -> expr -> stmnt
-| Vnonblock : expr -> expr -> stmnt
-| Vdecl : reg -> nat -> expr -> stmnt.
+| Vnonblock : expr -> expr -> stmnt.
 
+(** [edge] is not part of [stmnt] in this formalisation because is closer to the
+    semantics that are used. *)
+Inductive edge : Type :=
+| Vposedge : reg -> edge
+| Vnegedge : reg -> edge
+| Valledge : edge
+| Voredge : edge -> edge -> edge.
+
+Inductive module_item : Type :=
+| Vdecl : reg -> nat -> expr -> module_item
+| Valways : edge -> stmnt -> module_item.
+
+(** [mod_start] If set, starts the computations in the module. *)
+(** [mod_reset] If set, reset the state in the module. *)
+(** [mod_clk] The clock that controls the computation in the module. *)
+(** [mod_args] The arguments to the module. *)
+(** [mod_finish] Bit that is set if the result is ready. *)
+(** [mod_return] The return value that was computed. *)
+(** [mod_body] The body of the module, including the state machine. *)
+Record module : Type := mkmodule {
+  mod_start : reg;
+  mod_reset : reg;
+  mod_clk : reg;
+  mod_finish : reg;
+  mod_return : reg;
+  mod_args : list reg;
+  mod_body : list module_item;
+}.
+
+(** Convert a [positive] to an expression directly, setting it to the right
+    size. *)
 Definition posToLit (p : positive) : expr :=
   Vlit (posToValue p).
-
-Definition verilog : Type := list stmnt.
 
 Coercion Vlit : value >-> expr.
 Coercion Vvar : reg >-> expr.

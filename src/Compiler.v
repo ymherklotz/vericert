@@ -74,7 +74,7 @@ Proof.
   intros. destruct x; simpl. rewrite print_identity. auto. auto.
 Qed.
 
-Definition transf_backend (r : RTL.program) : res Verilog.verilog :=
+Definition transf_backend (r : RTL.program) : res  Verilog.module :=
   OK r
   @@@ Veriloggen.transf_program.
 
@@ -88,7 +88,7 @@ Definition transf_frontend (p: Csyntax.program) : res RTL.program :=
   @@@ RTLgen.transl_program
   @@ print (print_RTL 0).
 
-Definition transf_hls (p : Csyntax.program) : res Verilog.verilog :=
+Definition transf_hls (p : Csyntax.program) : res Verilog.module :=
   OK p
   @@@ transf_frontend
   @@@ transf_backend.
