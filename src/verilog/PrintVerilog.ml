@@ -92,9 +92,13 @@ let pprint_edge_top i = function
   | Valledge -> "@*"
   | Voredge (e1, e2) -> concat ["@("; pprint_edge e1; " or "; pprint_edge e2; ")"]
 
+let declare i t =
+  function (r, sz) ->
+    concat [ indent i; t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
+             register r; ";\n" ]
+
 let pprint_module_item i = function
-  | Vdecl (r, n, e) ->
-    concat [indent i; "reg ["; sprintf "%d" (Nat.to_int n - 1); ":0] "; register r; " = "; pprint_expr e; ";\n"]
+  | Vdecl (r, sz) -> declare i "reg" (r, sz)
   | Valways (e, s) ->
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
 
@@ -105,12 +109,48 @@ let rec intersperse c = function
 
 let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
 
+let compose f g x = g x |> f
+
+let init_inputs i r = declare i "input" r
+
+let init_outputs i r = declare i "output reg" r
+
+let testbench = "module testbench;
+   reg start, reset, clk;
+   wire finish;
+   wire [31:0] return_val;
+
+   main m(start, reset, clk, finish, return_val);
+
+   initial begin
+      clk = 0;
+      start = 0;
+      reset = 0;
+      @(posedge clk) reset = 1;
+      @(posedge clk) reset = 0;
+   end
+
+   always #5 clk = ~clk;
+
+   always @(posedge clk) begin
+      if (finish == 1) begin
+         $display(\"finished: %d\", return_val);
+         $finish;
+      end
+   end
+endmodule
+"
+
 let pprint_module i n m =
   let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
   let outputs = [m.mod_finish; m.mod_return] in
-  concat [ indent i; "module "; n; "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-           fold_map (make_io (i+1) "input") inputs; fold_map (make_io (i+1) "output") outputs;
-           fold_map (pprint_module_item (i+1)) m.mod_body; indent i; "endmodule\n"
+  concat [ indent i; "module "; n;
+           "("; concat (intersperse ", " (List.map (compose register fst) (inputs @ outputs))); ");\n";
+           fold_map (init_inputs (i+1)) inputs;
+           fold_map (init_outputs (i+1)) outputs;
+           fold_map (pprint_module_item (i+1)) m.mod_body;
+           indent i; "endmodule\n\n";
+           testbench
          ]
 
 let print_program pp v = pstr pp (pprint_module 0 "main" v)

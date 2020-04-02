@@ -32,6 +32,7 @@ From compcert Require Integers.
 Import ListNotations.
 
 Definition reg : Type := positive.
+Definition szreg : Type := reg * nat.
 
 Record value : Type := mkvalue {
   vsize : nat;
@@ -108,7 +109,7 @@ Inductive edge : Type :=
 | Voredge : edge -> edge -> edge.
 
 Inductive module_item : Type :=
-| Vdecl : reg -> nat -> expr -> module_item
+| Vdecl : reg -> nat -> module_item
 | Valways : edge -> stmnt -> module_item.
 
 (** [mod_start] If set, starts the computations in the module. *)
@@ -119,12 +120,12 @@ Inductive module_item : Type :=
 (** [mod_return] The return value that was computed. *)
 (** [mod_body] The body of the module, including the state machine. *)
 Record module : Type := mkmodule {
-  mod_start : reg;
-  mod_reset : reg;
-  mod_clk : reg;
-  mod_finish : reg;
-  mod_return : reg;
-  mod_args : list reg;
+  mod_start : szreg;
+  mod_reset : szreg;
+  mod_clk : szreg;
+  mod_finish : szreg;
+  mod_return : szreg;
+  mod_args : list szreg;
   mod_body : list module_item;
 }.
 

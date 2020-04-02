@@ -36,9 +36,7 @@ Record state: Type := mkstate {
   st_freshstate : node;
   st_stm : PositiveMap.t stmnt;
   st_statetrans : PositiveMap.t statetrans;
-  st_decl : list (reg * nat);
-  st_fin : option reg;
-  st_ret : option reg;
+  st_decl : PositiveMap.t nat;
 }.
 
 (** Map from initial register allocations to new allocations. *)
@@ -49,9 +47,7 @@ Definition init_state : state :=
           1%positive
           (PositiveMap.empty stmnt)
           (PositiveMap.empty statetrans)
-          nil
-          None
-          None.
+          (PositiveMap.empty nat).
 
 Inductive res (A: Type) (s: state): Type :=
 | Error : Errors.errmsg -> res A s
@@ -118,67 +114,94 @@ Fixpoint traverselist {A B: Type} (f: A -> mon B) (l: list A) {struct l}: mon (l
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
 Definition block (dst : reg) (e : expr) := Vblock (Vvar dst) e.
 
-Definition bop (op : binop) (r1 r2 : reg) : option expr :=
-  Some (Vbinop op (Vvar r1) (Vvar r2)).
+Definition bop (op : binop) (r1 r2 : reg) : expr :=
+  Vbinop op (Vvar r1) (Vvar r2).
 
-Definition boplit (op : binop) (r : reg) (l : Integers.int) : option expr :=
-  Some (Vbinop op (Vvar r) (Vlit (intToValue l))).
+Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
+  Vbinop op (Vvar r) (Vlit (intToValue l)).
 
-Definition translate_comparison (c : Integers.comparison) (args : list reg) : option expr :=
+Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
+  Vbinop op (Vvar r) (Vlit (ZToValue 32%nat l)).
+
+Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
-  | Integers.Ceq, r1::r2::nil => bop Veq r1 r2
-  | Integers.Cne, r1::r2::nil => bop Vne r1 r2
-  | Integers.Clt, r1::r2::nil => bop Vlt r1 r2
-  | Integers.Cgt, r1::r2::nil => bop Vgt r1 r2
-  | Integers.Cle, r1::r2::nil => bop Vle r1 r2
-  | Integers.Cge, r1::r2::nil => bop Vge r1 r2
-  | _, _ => None
+  | Integers.Ceq, r1::r2::nil => ret (bop Veq r1 r2)
+  | Integers.Cne, r1::r2::nil => ret (bop Vne r1 r2)
+  | Integers.Clt, r1::r2::nil => ret (bop Vlt r1 r2)
+  | Integers.Cgt, r1::r2::nil => ret (bop Vgt r1 r2)
+  | Integers.Cle, r1::r2::nil => ret (bop Vle r1 r2)
+  | Integers.Cge, r1::r2::nil => ret (bop Vge r1 r2)
+  | _, _ => error (Errors.msg "Veriloggen: comparison instruction not implemented: other")
   end.
 
-Definition translate_condition (c : Op.condition) (args : list reg) : option expr :=
+Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) (i: Integers.int)
+  : mon expr :=
+  match c, args with
+  | Integers.Ceq, r1::nil => ret (boplit Veq r1 i)
+  | Integers.Cne, r1::nil => ret (boplit Vne r1 i)
+  | Integers.Clt, r1::nil => ret (boplit Vlt r1 i)
+  | Integers.Cgt, r1::nil => ret (boplit Vgt r1 i)
+  | Integers.Cle, r1::nil => ret (boplit Vle r1 i)
+  | Integers.Cge, r1::nil => ret (boplit Vge r1 i)
+  | _, _ => error (Errors.msg "Veriloggen: comparison_imm instruction not implemented: other")
+  end.
+
+Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :=
   match c, args with
   | Op.Ccomp c, _ => translate_comparison c args
-  | Op.Ccompu c, _ => None
-  | Op.Ccompimm c i, _ => None
-  | Op.Ccompuimm c i, _ => None
-  | Op.Cmaskzero n, _ => None
-  | Op.Cmasknotzero n, _ => None
-  | _, _ => None
+  | Op.Ccompu c, _ => translate_comparison c args
+  | Op.Ccompimm c i, _ => translate_comparison_imm c args i
+  | Op.Ccompuimm c i, _ => translate_comparison_imm c args i
+  | Op.Cmaskzero n, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: Cmaskzero")
+  | Op.Cmasknotzero n, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: Cmasknotzero")
+  | _, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: other")
+  end.
+
+Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
+  match a, args with
+  | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
+  | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
+  | Op.Ascaled scale offset, r1::nil =>
+    ret (Vbinop Vadd (boplitz Vadd r1 scale) (Vlit (ZToValue 32%nat offset)))
+  | Op.Aindexed2scaled scale offset, r1::r2::nil =>
+    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+  | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
   end.
 
 (** Translate an instruction to a statement. *)
-Definition translate_instr (op : Op.operation) (args : list reg) : option expr :=
+Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   match op, args with
-  | Op.Omove, r::nil => Some (Vvar r)
-  | Op.Ointconst n, _ => Some (Vlit (intToValue n))
-  | Op.Oneg, r::nil => Some (Vunop Vneg (Vvar r))
-  | Op.Osub, r1::r2::nil => bop Vsub r1 r2
-  | Op.Omul, r1::r2::nil => bop Vmul r1 r2
-  | Op.Omulimm n, r::nil => boplit Vmul r n
-  | Op.Omulhs, _ => None
-  | Op.Omulhu, _ => None
-  | Op.Odiv, r1::r2::nil => bop Vdiv r1 r2
-  | Op.Odivu, r1::r2::nil => bop Vdivu r1 r2
-  | Op.Omod, r1::r2::nil => bop Vmod r1 r2
-  | Op.Omodu, r1::r2::nil => bop Vmodu r1 r2
-  | Op.Oand, r1::r2::nil => bop Vand r1 r2
-  | Op.Oandimm n, r::nil => boplit Vand r n
-  | Op.Oor, r1::r2::nil => bop Vor r1 r2
-  | Op.Oorimm n, r::nil => boplit Vor r n
-  | Op.Oxor, r1::r2::nil => bop Vxor r1 r2
-  | Op.Oxorimm n, r::nil => boplit Vxor r n
-  | Op.Onot, r::nil => Some (Vunop Vnot (Vvar r))
-  | Op.Oshl, r1::r2::nil => bop Vshl r1 r2
-  | Op.Oshlimm n, r::nil => boplit Vshl r n
-  | Op.Oshr, r1::r2::nil => bop Vshr r1 r2
-  | Op.Oshrimm n, r::nil => boplit Vshr r n
-  | Op.Oshrximm n, r::nil => None
-  | Op.Oshru, r1::r2::nil => None
-  | Op.Oshruimm n, r::nil => None
-  | Op.Ororimm n, r::nil => None
-  | Op.Oshldimm n, r::nil => None
+  | Op.Omove, r::nil => ret (Vvar r)
+  | Op.Ointconst n, _ => ret (Vlit (intToValue n))
+  | Op.Oneg, r::nil => ret (Vunop Vneg (Vvar r))
+  | Op.Osub, r1::r2::nil => ret (bop Vsub r1 r2)
+  | Op.Omul, r1::r2::nil => ret (bop Vmul r1 r2)
+  | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
+  | Op.Omulhs, _ => error (Errors.msg "Veriloggen: Instruction not implemented: Omulhs")
+  | Op.Omulhu, _ => error (Errors.msg "Veriloggen: Instruction not implemented: Omulhu")
+  | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
+  | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
+  | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
+  | Op.Omodu, r1::r2::nil => ret (bop Vmodu r1 r2)
+  | Op.Oand, r1::r2::nil => ret (bop Vand r1 r2)
+  | Op.Oandimm n, r::nil => ret (boplit Vand r n)
+  | Op.Oor, r1::r2::nil => ret (bop Vor r1 r2)
+  | Op.Oorimm n, r::nil => ret (boplit Vor r n)
+  | Op.Oxor, r1::r2::nil => ret (bop Vxor r1 r2)
+  | Op.Oxorimm n, r::nil => ret (boplit Vxor r n)
+  | Op.Onot, r::nil => ret (Vunop Vnot (Vvar r))
+  | Op.Oshl, r1::r2::nil => ret (bop Vshl r1 r2)
+  | Op.Oshlimm n, r::nil => ret (boplit Vshl r n)
+  | Op.Oshr, r1::r2::nil => ret (bop Vshr r1 r2)
+  | Op.Oshrimm n, r::nil => ret (boplit Vshr r n)
+  | Op.Oshrximm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshrximm")
+  | Op.Oshru, r1::r2::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshru")
+  | Op.Oshruimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshruimm")
+  | Op.Ororimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Ororimm")
+  | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
-  | _, _ => None
+  | Op.Olea a, _ => translate_eff_addressing a args
+  | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
 Definition add_instr (n : node) (n' : node) (st : stmnt) : mon node :=
@@ -187,65 +210,54 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon node :=
                    (Pos.max (Pos.succ n) s.(st_freshstate))
                    (PositiveMap.add n st s.(st_stm))
                    (PositiveMap.add n (StateGoto n') s.(st_statetrans))
-                   s.(st_decl)
-                   s.(st_fin)
-                   s.(st_ret)).
+                   s.(st_decl)).
 
 Definition add_reg (r: reg) (s: state) : state :=
   mkstate (Pos.max (Pos.succ r) s.(st_freshreg))
           s.(st_freshstate)
           s.(st_stm)
           s.(st_statetrans)
-          ((r, 32%nat) :: s.(st_decl))
-          s.(st_fin)
-          s.(st_ret).
+          (PositiveMap.add r 32%nat s.(st_decl)).
 
 Definition add_instr_reg (r: reg) (n: node) (n': node) (st: stmnt) : mon node :=
   do _ <- map_state (add_reg r);
   add_instr n n' st.
 
-Definition decl_fresh_reg (sz : nat) : mon reg :=
+Definition decl_fresh_reg (sz : nat) : mon (reg * nat) :=
   fun s =>
     let r := s.(st_freshreg) in
-    OK r (mkstate
+    OK (r, sz) (mkstate
          (Pos.succ r)
          s.(st_freshstate)
          s.(st_stm)
          s.(st_statetrans)
-         ((r, sz) :: s.(st_decl))
-         s.(st_fin)
-         s.(st_ret)).
+         (PositiveMap.add r sz s.(st_decl))).
 
-Definition add_fin_ret (f r: reg) : mon unit :=
-  fun s => OK tt (mkstate
-    s.(st_freshreg)
-    s.(st_freshstate)
-    s.(st_stm)
-    s.(st_statetrans)
-    s.(st_decl)
-    (Some f) (Some r)).
-
-Definition transf_instr (ni: node * instruction) : mon node :=
+Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon node :=
   match ni with
     (n, i) =>
     match i with
     | Inop n' => add_instr n n' Vskip
     | Iop op args dst n' =>
-      match translate_instr op args with
-      | Some instr => add_instr_reg dst n n' (block dst instr)
-      | _ => error (Errors.msg "Instruction is not implemented.")
-      end
+      do instr <- translate_instr op args;
+      add_instr_reg dst n n' (block dst instr)
     | Iload _ _ _ _ _ => error (Errors.msg "Loads are not implemented.")
     | Istore _ _ _ _ _ => error (Errors.msg "Stores are not implemented.")
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
-    | Icond cond args n1 n2 => error (Errors.msg "Condition not implemented.")
-    | Ijumptable _ _ => error (Errors.msg "Jumptable not implemented.")
+    | Icond cond args n1 n2 =>
+      do e <- translate_condition cond args;
+      do st <- get;
+      do _ <- set (mkstate
+                 st.(st_freshreg)
+                 st.(st_freshstate)
+                 st.(st_stm)
+                 (PositiveMap.add n (StateCond e n1 n2) st.(st_statetrans))
+                 st.(st_decl));
+      ret n
+    | Ijumptable _ _ => error (Errors.msg "Jumptable not implemented")
     | Ireturn r =>
-      do fin <- decl_fresh_reg 1%nat;
-      do rtrn <- decl_fresh_reg 32%nat;
-      do _ <- add_fin_ret fin rtrn;
       match r with
       | Some r' =>
         add_instr n n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)) :: block rtrn (Vvar r') :: nil))
@@ -272,7 +284,7 @@ Definition make_statetrans (r : reg) (s : PositiveMap.t statetrans) : stmnt :=
 
 Fixpoint allocate_regs (e : list (reg * nat)) {struct e} : list module_item :=
   match e with
-  | (r, n)::es => Vdecl r n (Vlit (ZToValue n 0%Z)) :: allocate_regs es
+  | (r, n)::es => Vdecl r n :: allocate_regs es
   | nil => nil
   end.
 
@@ -282,24 +294,33 @@ Definition make_module_items (entry: node) (clk st rst: reg) (s: state) : list m
       (nonblock st (posToExpr entry))
       (make_statetrans st s.(st_statetrans))))
   :: (Valways Valledge (make_stm st s.(st_stm)))
-  :: (allocate_regs s.(st_decl)).
+  :: (allocate_regs (PositiveMap.elements s.(st_decl))).
 
 (** To start out with, the assumption is made that there is only one
     function/module in the original code. *)
 
+Definition decl_io (sz: nat): mon (reg * nat) :=
+  fun s => let r := s.(st_freshreg) in
+           OK (r, sz) (mkstate
+                     (Pos.succ r)
+                     s.(st_freshstate)
+                     s.(st_stm)
+                     s.(st_statetrans)
+                     s.(st_decl)).
+
+Definition set_int_size (r: reg) : reg * nat := (r, 32%nat).
+
 Definition transf_module (f: function) : mon module :=
-  do _ <- traverselist transf_instr (Maps.PTree.elements f.(fn_code));
-  do start <- decl_fresh_reg 1%nat;
-  do rst <- decl_fresh_reg 1%nat;
-  do clk <- decl_fresh_reg 1%nat;
+  do fin <- decl_io 1%nat;
+  do rtrn <- decl_io 32%nat;
+  do _ <- traverselist (transf_instr (fst fin) (fst rtrn)) (Maps.PTree.elements f.(fn_code));
+  do start <- decl_io 1%nat;
+  do rst <- decl_io 1%nat;
+  do clk <- decl_io 1%nat;
   do st <- decl_fresh_reg 32%nat;
   do current_state <- get;
-  let mi := make_module_items f.(fn_entrypoint) clk st rst current_state in
-  match current_state.(st_fin), current_state.(st_ret) with
-  | Some fin, Some rtrn =>
-    ret (mkmodule start rst clk fin rtrn f.(fn_params) mi)
-  | _, _ => error (Errors.msg "Veriloggen: finish and return signals not generated")
-  end.
+  let mi := make_module_items f.(fn_entrypoint) (fst clk) (fst st) (fst rst) current_state in
+  ret (mkmodule start rst clk fin rtrn (map set_int_size f.(fn_params)) mi).
 
 Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef unit))
 {struct flist} : option function :=
@@ -312,8 +333,15 @@ Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef 
   | nil => None
   end.
 
+Definition max_state (f: function) : state :=
+  mkstate (Pos.succ (max_reg_function f))
+          (Pos.succ (max_pc_function f))
+          init_state.(st_stm)
+          init_state.(st_statetrans)
+          init_state.(st_decl).
+
 Definition transf_program (d : program) : Errors.res module :=
   match main_function d.(AST.prog_main) d.(AST.prog_defs) with
-  | Some f => run_mon init_state (transf_module f)
-  | _ => Errors.Error (Errors.msg "Veriloggen: could not find main module")
+  | Some f => run_mon (max_state f) (transf_module f)
+  | _ => Errors.Error (Errors.msg "Veriloggen: could not find main function")
   end.

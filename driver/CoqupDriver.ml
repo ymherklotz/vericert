@@ -85,7 +85,7 @@ let compile_i_file sourcename preproname =
         ""
   end else if !option_S then begin
     compile_c_file sourcename preproname
-      (output_filename ~final:true sourcename ".c" ".s");
+      (output_filename ~final:true sourcename ".c" ".v");
     ""
   end else begin
     let asmname =
@@ -294,7 +294,7 @@ let cmdline_actions =
 (* Processing options *)
  [ Exact "-c", Set option_c;
   Exact "-E", Set option_E;
-  Exact "-S", Set option_S;
+  Exact "--hls", Set option_S;
   Exact "-o", String(fun s -> option_o := Some s);
   Prefix "-o", Self (fun s -> let s = String.sub s 2 ((String.length s) - 2) in
                               option_o := Some s);]
