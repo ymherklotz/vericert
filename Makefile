@@ -16,7 +16,7 @@ VS := src/Compiler.v $(VSSUBDIR)
 
 PREFIX ?= .
 
-.PHONY: all install proof clean extraction
+.PHONY: all install proof clean extraction test
 
 all: lib/COMPCERTSTAMP
 	$(MAKE) proof
@@ -37,6 +37,9 @@ proof: Makefile.coq
 	@rm -f src/extraction/STAMP
 
 extraction: src/extraction/STAMP
+
+test:
+	./test/test_all.sh ./test
 
 compile: src/extraction/STAMP
 	@echo "OCaml bin/coqup"
