@@ -164,7 +164,7 @@ Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
 
-Cd "src/Extraction".
+Cd "src/extraction".
 Separate Extraction
          Verilog.module Verilog.valueToZ coqup.Compiler.transf_hls
 
