@@ -29,7 +29,9 @@ stdenv.mkDerivation {
   src = ./.;
 
   buildInputs = [ ncoq ocamlPackages.menhir dune
-                  ocaml ocamlPackages.findlib bbv ];
+                  ocaml ocamlPackages.findlib bbv
+                  gcc
+                ];
 
   enableParallelBuilding = true;
 }
