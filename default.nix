@@ -30,4 +30,6 @@ stdenv.mkDerivation {
 
   buildInputs = [ ncoq ocamlPackages.menhir dune
                   ocaml ocamlPackages.findlib bbv ];
+
+  enableParallelBuilding = true;
 }
