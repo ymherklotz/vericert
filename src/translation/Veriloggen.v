@@ -23,6 +23,8 @@ From coqup Require Import Verilog Coquplib.
 From compcert Require Errors Op AST Integers Maps.
 From compcert Require Import RTL.
 
+Notation "a ! b" := (PositiveMap.find b a) (at level 1).
+
 Definition node : Type := positive.
 Definition reg : Type := positive.
 Definition ident : Type := positive.
@@ -31,27 +33,89 @@ Inductive statetrans : Type :=
 | StateGoto (p : node)
 | StateCond (c : expr) (t f : node).
 
+Definition valid_freshstate (stm: PositiveMap.t stmnt) (fs: node) :=
+  forall (n: node),
+    Plt n fs \/ stm!n = None.
+
+Definition states_have_transitions (stm: PositiveMap.t stmnt) (st: PositiveMap.t statetrans) :=
+  forall (n: node),
+      (forall x, stm!n = Some x -> exists y, st!n = Some y)
+      /\ (forall x, st!n = Some x -> exists y, stm!n = Some y).
+
 Record state: Type := mkstate {
-  st_freshreg : reg;
-  st_freshstate : node;
-  st_stm : PositiveMap.t stmnt;
-  st_statetrans : PositiveMap.t statetrans;
-  st_decl : PositiveMap.t nat;
+  st_freshreg: reg;
+  st_freshstate: node;
+  st_stm: PositiveMap.t stmnt;
+  st_statetrans: PositiveMap.t statetrans;
+  st_decl: PositiveMap.t nat;
+  st_wf: valid_freshstate st_stm st_freshstate
+         /\ states_have_transitions st_stm st_statetrans;
 }.
 
-(** Map from initial register allocations to new allocations. *)
-Definition mapping: Type := PositiveMap.t reg.
+Remark init_state_valid_freshstate:
+  valid_freshstate (PositiveMap.empty stmnt) 1%positive.
+Proof. intros. right. apply PositiveMap.gempty. Qed.
+
+Remark init_state_states_have_transitions:
+  states_have_transitions (PositiveMap.empty stmnt) (PositiveMap.empty statetrans).
+Proof.
+  unfold states_have_transitions.
+  split; intros; rewrite PositiveMap.gempty in H; discriminate.
+Qed.
+
+Remark init_state_wf:
+    valid_freshstate (PositiveMap.empty stmnt) 1%positive
+    /\ states_have_transitions (PositiveMap.empty stmnt) (PositiveMap.empty statetrans).
+Proof. split; intros. apply init_state_valid_freshstate. apply init_state_states_have_transitions. Qed.
 
 Definition init_state : state :=
   mkstate 1%positive
           1%positive
           (PositiveMap.empty stmnt)
           (PositiveMap.empty statetrans)
-          (PositiveMap.empty nat).
+          (PositiveMap.empty nat)
+          init_state_wf.
+
+Inductive state_incr: state -> state -> Prop :=
+  state_incr_intro:
+    forall (s1 s2: state),
+      Ple s1.(st_freshreg) s2.(st_freshreg) ->
+      Ple s1.(st_freshstate) s2.(st_freshstate) ->
+      (forall n,
+          s1.(st_stm)!n = None \/ s2.(st_stm)!n = s1.(st_stm)!n) ->
+      (forall n,
+          s1.(st_statetrans)!n = None
+          \/ s2.(st_statetrans)!n = s1.(st_statetrans)!n) ->
+      state_incr s1 s2.
+
+Lemma state_incr_refl:
+  forall s, state_incr s s.
+Proof. intros. apply state_incr_intro;
+                 try (apply Ple_refl);
+                 try (intros; right; reflexivity).
+Qed.
+
+Lemma state_incr_trans:
+  forall s1 s2 s3, state_incr s1 s2 -> state_incr s2 s3 -> state_incr s1 s3.
+Proof.
+  intros. inv H. inv H0. apply state_incr_intro.
+  - apply Ple_trans with (st_freshreg s2); assumption.
+  - apply Ple_trans with (st_freshstate s2); assumption.
+  - intros. destruct H3 with n.
+    + left. assumption.
+    + destruct H6 with n.
+      * rewrite <- H0. left. assumption.
+      * right. rewrite <- H0. apply H8.
+  - intros. destruct H4 with n.
+    + left. assumption.
+    + destruct H7 with n.
+      * rewrite <- H0. left. assumption.
+      * right. rewrite <- H0. apply H8.
+Qed.
 
 Inductive res (A: Type) (s: state): Type :=
 | Error : Errors.errmsg -> res A s
-| OK : A -> forall (_ : state), res A s.
+| OK : A -> forall (s' : state), state_incr s s' -> res A s.
 
 Arguments OK [A s].
 Arguments Error [A s].
@@ -59,16 +123,16 @@ Arguments Error [A s].
 Definition mon (A: Type) : Type := forall (s: state), res A s.
 
 Definition ret {A: Type} (x: A) : mon A :=
-  fun (s : state) => OK x s.
+  fun (s : state) => OK x s (state_incr_refl s).
 
 Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
   fun (s : state) =>
     match f s with
     | Error msg => Error msg
-    | OK a s' =>
+    | OK a s' i =>
       match g a s' with
       | Error msg => Error msg
-      | OK b s'' => OK b s''
+      | OK b s'' i' => OK b s'' (state_incr_trans s s' s'' i i')
       end
     end.
 
@@ -83,24 +147,25 @@ Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
 Definition handle_error {A: Type} (f g: mon A) : mon A :=
   fun (s : state) =>
     match f s with
-    | OK a s' => OK a s'
+    | OK a s' i => OK a s' i
     | Error _ => g s
     end.
 
 Definition error {A: Type} (err: Errors.errmsg) : mon A := fun (s: state) => Error err.
 
-Definition get : mon state := fun s => OK s s.
+Definition get : mon state := fun s => OK s s (state_incr_refl s).
 
-Definition set (s: state) : mon unit := fun _ => OK tt s.
+Definition set (s: state) (i: forall s', state_incr s' s) : mon unit :=
+  fun s' => OK tt s (i s').
 
 Definition run_mon {A: Type} (s: state) (m: mon A): Errors.res A :=
     match m s with
-    | OK a s' => Errors.OK a
+    | OK a s' i => Errors.OK a
     | Error err => Errors.Error err
     end.
 
-Definition map_state (f: state -> state): mon state :=
-  fun s => let s' := f s in OK s' s'.
+Definition map_state (f: state -> state) (i: forall s, state_incr s (f s)): mon state :=
+  fun s => let s' := f s in OK s' s' (i s).
 
 Fixpoint traverselist {A B: Type} (f: A -> mon B) (l: list A) {struct l}: mon (list B) :=
   match l with
@@ -204,13 +269,60 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
-Definition add_instr (n : node) (n' : node) (st : stmnt) : mon node :=
+Remark add_instr_valid_freshstate:
+  forall (s: state) (n: node) (st: stmnt),
+    Plt n (st_freshstate s) ->
+    valid_freshstate (PositiveMap.add n st s.(st_stm)) (st_freshstate s).
+Proof.
+  unfold valid_freshstate. intros.
+  case (peq n0 n); intro.
+  subst n0. left. assumption.
+  rewrite PositiveMap.gso.
+  apply (st_wf s). assumption.
+Qed.
+
+Remark add_instr_states_have_transitions:
+  forall (s: state) (n n': node) (st: stmnt),
+  states_have_transitions
+    (PositiveMap.add n st s.(st_stm))
+    (PositiveMap.add n (StateGoto n') s.(st_statetrans)).
+Proof.
+  unfold states_have_transitions. split; intros.
+  - case (peq n0 n); intro.
+    subst. exists (StateGoto n'). apply PositiveMap.gss.
+    rewrite PositiveMap.gso. rewrite PositiveMap.gso in H.
+    assert (H2 := st_wf s). inv H2. unfold states_have_transitions in H1.
+    destruct H1 with n0. apply H2 with x. assumption. assumption. assumption.
+  - case (peq n0 n); intro.
+    subst. exists st. apply PositiveMap.gss.
+    rewrite PositiveMap.gso. rewrite PositiveMap.gso in H.
+    assert (H2 := st_wf s). inv H2. unfold states_have_transitions in H1.
+    destruct H1 with n0. apply H3 with x. assumption. assumption. assumption.
+Qed.
+
+Remark add_instr_state_wf:
+  forall (s: state) (n n': node) (st: stmnt) (LT: Plt n (st_freshstate s)),
+    valid_freshstate (PositiveMap.add n st (st_stm s)) (st_freshstate s)
+    /\ states_have_transitions
+     (PositiveMap.add n st s.(st_stm))
+     (PositiveMap.add n (StateGoto n') s.(st_statetrans)).
+Proof.
+  split; intros. apply add_instr_valid_freshstate. assumption.
+  apply add_instr_states_have_transitions.
+Qed.
+
+Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
   fun s =>
-    OK n' (mkstate s.(st_freshreg)
-                   (Pos.max (Pos.succ n) s.(st_freshstate))
-                   (PositiveMap.add n st s.(st_stm))
-                   (PositiveMap.add n (StateGoto n') s.(st_statetrans))
-                   s.(st_decl)).
+    match plt n (st_freshstate s) with
+    | left LT =>
+      OK tt (mkstate s.(st_freshreg)
+                     (st_freshstate s)
+                     (PositiveMap.add n st s.(st_stm))
+                     (PositiveMap.add n (StateGoto n') s.(st_statetrans))
+                     s.(st_decl)
+                     (add_instr_state_wf s n n' st LT))
+    | _ => Error (Errors.msg "Veriloggen.add_instr")
+    end.
 
 Definition add_reg (r: reg) (s: state) : state :=
   mkstate (Pos.max (Pos.succ r) s.(st_freshreg))
