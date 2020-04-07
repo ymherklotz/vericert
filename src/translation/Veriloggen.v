@@ -311,41 +311,193 @@ Proof.
   apply add_instr_states_have_transitions.
 Qed.
 
+Lemma add_instr_state_incr :
+  forall s n n' st LT,
+    (st_stm s)!n = None ->
+    (st_statetrans s)!n = None ->
+    state_incr s
+    (mkstate s.(st_freshreg)
+             (st_freshstate s)
+             (PositiveMap.add n st s.(st_stm))
+             (PositiveMap.add n (StateGoto n') s.(st_statetrans))
+             s.(st_decl)
+             (add_instr_state_wf s n n' st LT)).
+Proof.
+  intros. apply state_incr_intro; intros; simpl; try reflexivity;
+            destruct (peq n n0); try (subst; left; assumption);
+              right; apply PositiveMap.gso; apply not_eq_sym; assumption.
+Qed.
+
+Definition check_empty_node_stm:
+  forall (s: state) (n: node), { s.(st_stm)!n = None } + { True }.
+Proof.
+  intros. case (s.(st_stm)!n); intros. right; auto. left; auto.
+Defined.
+
+Definition check_empty_node_statetrans:
+  forall (s: state) (n: node), { s.(st_statetrans)!n = None } + { True }.
+Proof.
+  intros. case (s.(st_statetrans)!n); intros. right; auto. left; auto.
+Defined.
+
 Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
   fun s =>
-    match plt n (st_freshstate s) with
-    | left LT =>
+    match plt n (st_freshstate s), check_empty_node_stm s n, check_empty_node_statetrans s n with
+    | left LT, left STM, left TRANS =>
       OK tt (mkstate s.(st_freshreg)
                      (st_freshstate s)
                      (PositiveMap.add n st s.(st_stm))
                      (PositiveMap.add n (StateGoto n') s.(st_statetrans))
                      s.(st_decl)
                      (add_instr_state_wf s n n' st LT))
-    | _ => Error (Errors.msg "Veriloggen.add_instr")
+         (add_instr_state_incr s n n' st LT STM TRANS)
+    | _, _, _ => Error (Errors.msg "Veriloggen.add_instr")
     end.
 
 Definition add_reg (r: reg) (s: state) : state :=
-  mkstate (Pos.max (Pos.succ r) s.(st_freshreg))
-          s.(st_freshstate)
-          s.(st_stm)
-          s.(st_statetrans)
-          (PositiveMap.add r 32%nat s.(st_decl)).
+  mkstate (st_freshreg s)
+          (st_freshstate s)
+          (st_stm s)
+          (st_statetrans s)
+          (PositiveMap.add r 32%nat (st_decl s))
+          (st_wf s).
 
-Definition add_instr_reg (r: reg) (n: node) (n': node) (st: stmnt) : mon node :=
-  do _ <- map_state (add_reg r);
+Lemma add_reg_state_incr:
+  forall r s,
+  state_incr s (add_reg r s).
+Proof.
+  intros. apply state_incr_intro; unfold add_reg; try right; reflexivity.
+Qed.
+
+Definition add_instr_reg (r: reg) (n: node) (n': node) (st: stmnt) : mon unit :=
+  do _ <- map_state (add_reg r) (add_reg_state_incr r);
   add_instr n n' st.
 
-Definition decl_fresh_reg (sz : nat) : mon (reg * nat) :=
-  fun s =>
-    let r := s.(st_freshreg) in
-    OK (r, sz) (mkstate
-         (Pos.succ r)
-         s.(st_freshstate)
-         s.(st_stm)
-         s.(st_statetrans)
-         (PositiveMap.add r sz s.(st_decl))).
+Lemma change_decl_state_incr:
+  forall s decl',
+    state_incr s (mkstate
+         (st_freshreg s)
+         (st_freshstate s)
+         (st_stm s)
+         (st_statetrans s)
+         decl'
+         (st_wf s)).
+Proof.
+  intros. apply state_incr_intro; simpl; try reflexivity; right; reflexivity.
+Qed.
 
-Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon node :=
+Lemma decl_io_state_incr:
+  forall s,
+    state_incr s (mkstate
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         (st_stm s)
+         (st_statetrans s)
+         (st_decl s)
+         (st_wf s)).
+Proof.
+  intros. apply state_incr_intro; try right; try reflexivity.
+  simpl. apply Ple_succ.
+Qed.
+
+Definition decl_io (sz: nat): mon (reg * nat) :=
+  fun s => let r := s.(st_freshreg) in
+           OK (r, sz) (mkstate
+                     (Pos.succ r)
+                     (st_freshstate s)
+                     (st_stm s)
+                     (st_statetrans s)
+                     (st_decl s)
+                     (st_wf s))
+              (decl_io_state_incr s).
+
+Definition declare_reg (r: reg) (sz: nat): mon (reg * nat) :=
+  fun s => OK (r, sz) (mkstate
+                      (st_freshreg s)
+                      (st_freshstate s)
+                      (st_stm s)
+                      (st_statetrans s)
+                      (PositiveMap.add r sz s.(st_decl))
+                      (st_wf s))
+              (change_decl_state_incr s (PositiveMap.add r sz s.(st_decl))).
+
+Definition decl_fresh_reg (sz : nat) : mon (reg * nat) :=
+  do (r, s) <- decl_io sz;
+  declare_reg r s.
+
+Lemma add_branch_instr_states_have_transitions:
+  forall s e n n1 n2,
+    states_have_transitions (PositiveMap.add n Vskip (st_stm s))
+                            (PositiveMap.add n (StateCond e n1 n2) (st_statetrans s)).
+Proof.
+  split; intros.
+  - destruct (peq n0 n).
+    + subst. exists (StateCond e n1 n2). apply PositiveMap.gss.
+    + rewrite PositiveMap.gso. rewrite PositiveMap.gso in H.
+      assert (H1 := (st_wf s)). inv H1. unfold states_have_transitions in H2.
+      destruct H2 with n0. apply H1 with x. assumption. assumption. assumption.
+  - destruct (peq n0 n).
+    + subst. exists Vskip. apply PositiveMap.gss.
+    + rewrite PositiveMap.gso. rewrite PositiveMap.gso in H.
+      assert (H1 := (st_wf s)). inv H1. unfold states_have_transitions in H2.
+      destruct H2 with n0. apply H3 with x. assumption. assumption. assumption.
+Qed.
+
+Lemma add_branch_valid_freshstate:
+  forall s n,
+  Plt n (st_freshstate s) ->
+  valid_freshstate (PositiveMap.add n Vskip (st_stm s)) (st_freshstate s).
+Proof.
+  unfold valid_freshstate. intros. destruct (peq n0 n).
+    - subst. left. assumption.
+    - assert (H1 := st_wf s). destruct H1.
+      unfold valid_freshstate in H0. rewrite PositiveMap.gso. apply H0.
+      assumption.
+Qed.
+
+Lemma add_branch_instr_st_wf:
+  forall s e n n1 n2,
+    Plt n (st_freshstate s) ->
+    valid_freshstate (PositiveMap.add n Vskip (st_stm s)) (st_freshstate s)
+    /\ states_have_transitions (PositiveMap.add n Vskip (st_stm s))
+                               (PositiveMap.add n (StateCond e n1 n2) (st_statetrans s)).
+Proof.
+  split; intros. apply add_branch_valid_freshstate. assumption.
+  apply add_branch_instr_states_have_transitions.
+Qed.
+
+Lemma add_branch_instr_state_incr:
+  forall s e n n1 n2 LT,
+    (st_stm s) ! n = None ->
+    (st_statetrans s) ! n = None ->
+    state_incr s (mkstate
+                (st_freshreg s)
+                (st_freshstate s)
+                (PositiveMap.add n Vskip (st_stm s))
+                (PositiveMap.add n (StateCond e n1 n2) (st_statetrans s))
+                (st_decl s)
+                (add_branch_instr_st_wf s e n n1 n2 LT)).
+Proof.
+  intros. apply state_incr_intro; simpl; try reflexivity; intros; destruct (peq n0 n);
+            try (subst; left; assumption); right; apply PositiveMap.gso; assumption.
+Qed.
+
+Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
+  fun s =>
+    match plt n (st_freshstate s), check_empty_node_stm s n, check_empty_node_statetrans s n with
+    | left LT, left NSTM, left NTRANS =>
+      OK tt (mkstate
+                (st_freshreg s)
+                (st_freshstate s)
+                (PositiveMap.add n Vskip (st_stm s))
+                (PositiveMap.add n (StateCond e n1 n2) (st_statetrans s))
+                (st_decl s)
+                (add_branch_instr_st_wf s e n n1 n2 LT))
+         (add_branch_instr_state_incr s e n n1 n2 LT NSTM NTRANS)
+    | _, _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
+    end.
+
+Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -360,14 +512,7 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon node :=
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
     | Icond cond args n1 n2 =>
       do e <- translate_condition cond args;
-      do st <- get;
-      do _ <- set (mkstate
-                 st.(st_freshreg)
-                 st.(st_freshstate)
-                 st.(st_stm)
-                 (PositiveMap.add n (StateCond e n1 n2) st.(st_statetrans))
-                 st.(st_decl));
-      ret n
+      add_branch_instr e n n1 n2
     | Ijumptable _ _ => error (Errors.msg "Jumptable not implemented")
     | Ireturn r =>
       match r with
@@ -411,15 +556,6 @@ Definition make_module_items (entry: node) (clk st rst: reg) (s: state) : list m
 (** To start out with, the assumption is made that there is only one
     function/module in the original code. *)
 
-Definition decl_io (sz: nat): mon (reg * nat) :=
-  fun s => let r := s.(st_freshreg) in
-           OK (r, sz) (mkstate
-                     (Pos.succ r)
-                     s.(st_freshstate)
-                     s.(st_stm)
-                     s.(st_statetrans)
-                     s.(st_decl)).
-
 Definition set_int_size (r: reg) : reg * nat := (r, 32%nat).
 
 Definition transf_module (f: function) : mon module :=
@@ -445,12 +581,29 @@ Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef 
   | nil => None
   end.
 
+Lemma max_state_valid_freshstate:
+  forall f,
+    valid_freshstate (st_stm init_state) (Pos.succ (max_pc_function f)).
+Proof.
+  unfold valid_freshstate. intros. right. simpl. apply PositiveMap.gempty.
+Qed.
+
+Lemma max_state_st_wf:
+  forall f,
+    valid_freshstate (st_stm init_state) (Pos.succ (max_pc_function f))
+    /\ states_have_transitions (st_stm init_state) (st_statetrans init_state).
+Proof.
+  split. apply max_state_valid_freshstate.
+  apply init_state_states_have_transitions.
+Qed.
+
 Definition max_state (f: function) : state :=
   mkstate (Pos.succ (max_reg_function f))
           (Pos.succ (max_pc_function f))
-          init_state.(st_stm)
-          init_state.(st_statetrans)
-          init_state.(st_decl).
+          (st_stm init_state)
+          (st_statetrans init_state)
+          (st_decl init_state)
+          (max_state_st_wf f).
 
 Definition transf_program (d : program) : Errors.res module :=
   match main_function d.(AST.prog_main) d.(AST.prog_defs) with
