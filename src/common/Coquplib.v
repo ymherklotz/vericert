@@ -65,6 +65,17 @@ Definition liftA2 {T : Type} (f : T -> T -> T) (a : option T) (b : option T) : o
   | _ => None
   end.
 
+Definition bind {A B : Type} (f : option A) (g : A -> option B) : option B :=
+  match f with
+  | Some a => g a
+  | _ => None
+  end.
+
+Module Notation.
+Notation "'do' X <- A ; B" := (bind A (fun X => B))
+   (at level 200, X ident, A at level 100, B at level 200).
+End Notation.
+
 End Option.
 
 Parameter debug_print : string -> unit.
