@@ -18,7 +18,7 @@
 
 From Coq Require Import FSets.FMapPositive.
 
-From coqup Require Import Verilog Coquplib.
+From coqup Require Import Verilog Coquplib Value.
 
 From compcert Require Errors Op AST Integers Maps.
 From compcert Require Import RTL.
@@ -29,6 +29,11 @@ Definition node : Type := positive.
 Definition reg : Type := positive.
 Definition ident : Type := positive.
 
+Hint Resolve PositiveMap.gempty : verilog_state.
+Hint Resolve PositiveMap.gso : verilog_state.
+Hint Resolve PositiveMap.gss : verilog_state.
+Hint Resolve Ple_refl : verilog_state.
+
 Inductive statetrans : Type :=
 | StateGoto (p : node)
 | StateCond (c : expr) (t f : node).
@@ -36,11 +41,13 @@ Inductive statetrans : Type :=
 Definition valid_freshstate (stm: PositiveMap.t stmnt) (fs: node) :=
   forall (n: node),
     Plt n fs \/ stm!n = None.
+Hint Unfold valid_freshstate : verilog_state.
 
 Definition states_have_transitions (stm: PositiveMap.t stmnt) (st: PositiveMap.t statetrans) :=
   forall (n: node),
       (forall x, stm!n = Some x -> exists y, st!n = Some y)
       /\ (forall x, st!n = Some x -> exists y, stm!n = Some y).
+Hint Unfold states_have_transitions : verilog_state.
 
 Record state: Type := mkstate {
   st_freshreg: reg;
@@ -54,7 +61,8 @@ Record state: Type := mkstate {
 
 Remark init_state_valid_freshstate:
   valid_freshstate (PositiveMap.empty stmnt) 1%positive.
-Proof. intros. right. apply PositiveMap.gempty. Qed.
+Proof. auto with verilog_state. Qed.
+Hint Resolve init_state_valid_freshstate : verilog_state.
 
 Remark init_state_states_have_transitions:
   states_have_transitions (PositiveMap.empty stmnt) (PositiveMap.empty statetrans).
@@ -62,11 +70,12 @@ Proof.
   unfold states_have_transitions.
   split; intros; rewrite PositiveMap.gempty in H; discriminate.
 Qed.
+Hint Resolve init_state_states_have_transitions : verilog_state.
 
 Remark init_state_wf:
     valid_freshstate (PositiveMap.empty stmnt) 1%positive
     /\ states_have_transitions (PositiveMap.empty stmnt) (PositiveMap.empty statetrans).
-Proof. split; intros. apply init_state_valid_freshstate. apply init_state_states_have_transitions. Qed.
+Proof. auto with verilog_state. Qed.
 
 Definition init_state : state :=
   mkstate 1%positive
@@ -87,27 +96,24 @@ Inductive state_incr: state -> state -> Prop :=
           s1.(st_statetrans)!n = None
           \/ s2.(st_statetrans)!n = s1.(st_statetrans)!n) ->
       state_incr s1 s2.
+Hint Constructors state_incr : verilog_state.
 
 Lemma state_incr_refl:
   forall s, state_incr s s.
-Proof. intros. apply state_incr_intro;
-                 try (apply Ple_refl);
-                 try (intros; right; reflexivity).
-Qed.
+Proof. auto with verilog_state. Qed.
 
 Lemma state_incr_trans:
   forall s1 s2 s3, state_incr s1 s2 -> state_incr s2 s3 -> state_incr s1 s3.
 Proof.
-  intros. inv H. inv H0. apply state_incr_intro.
-  - apply Ple_trans with (st_freshreg s2); assumption.
-  - apply Ple_trans with (st_freshstate s2); assumption.
+  intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans.
   - intros. destruct H3 with n.
-    + left. assumption.
-    + destruct H6 with n.
-      * rewrite <- H0. left. assumption.
-      * right. rewrite <- H0. apply H8.
+    + left; assumption.
+    + destruct H6 with n;
+      [ rewrite <- H0; left; assumption
+      | right; rewrite <- H0; apply H8
+      ].
   - intros. destruct H4 with n.
-    + left. assumption.
+    + left; assumption.
     + destruct H7 with n.
       * rewrite <- H0. left. assumption.
       * right. rewrite <- H0. apply H8.
@@ -280,6 +286,7 @@ Proof.
   rewrite PositiveMap.gso.
   apply (st_wf s). assumption.
 Qed.
+Hint Resolve add_instr_valid_freshstate : verilog_state.
 
 Remark add_instr_states_have_transitions:
   forall (s: state) (n n': node) (st: stmnt),
@@ -299,6 +306,7 @@ Proof.
     assert (H2 := st_wf s). inv H2. unfold states_have_transitions in H1.
     destruct H1 with n0. apply H3 with x. assumption. assumption. assumption.
 Qed.
+Hint Resolve add_instr_states_have_transitions : verilog_state.
 
 Remark add_instr_state_wf:
   forall (s: state) (n n': node) (st: stmnt) (LT: Plt n (st_freshstate s)),
@@ -306,10 +314,7 @@ Remark add_instr_state_wf:
     /\ states_have_transitions
      (PositiveMap.add n st s.(st_stm))
      (PositiveMap.add n (StateGoto n') s.(st_statetrans)).
-Proof.
-  split; intros. apply add_instr_valid_freshstate. assumption.
-  apply add_instr_states_have_transitions.
-Qed.
+Proof. auto with verilog_state. Qed.
 
 Lemma add_instr_state_incr :
   forall s n n' st LT,
@@ -323,9 +328,9 @@ Lemma add_instr_state_incr :
              s.(st_decl)
              (add_instr_state_wf s n n' st LT)).
 Proof.
-  intros. apply state_incr_intro; intros; simpl; try reflexivity;
-            destruct (peq n n0); try (subst; left; assumption);
-              right; apply PositiveMap.gso; apply not_eq_sym; assumption.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with verilog_state.
 Qed.
 
 Definition check_empty_node_stm:
@@ -365,9 +370,7 @@ Definition add_reg (r: reg) (s: state) : state :=
 Lemma add_reg_state_incr:
   forall r s,
   state_incr s (add_reg r s).
-Proof.
-  intros. apply state_incr_intro; unfold add_reg; try right; reflexivity.
-Qed.
+Proof. auto with verilog_state. Qed.
 
 Definition add_instr_reg (r: reg) (n: node) (n': node) (st: stmnt) : mon unit :=
   do _ <- map_state (add_reg r) (add_reg_state_incr r);
@@ -382,9 +385,7 @@ Lemma change_decl_state_incr:
          (st_statetrans s)
          decl'
          (st_wf s)).
-Proof.
-  intros. apply state_incr_intro; simpl; try reflexivity; right; reflexivity.
-Qed.
+Proof. info_auto with verilog_state. Qed.
 
 Lemma decl_io_state_incr:
   forall s,
@@ -395,10 +396,7 @@ Lemma decl_io_state_incr:
          (st_statetrans s)
          (st_decl s)
          (st_wf s)).
-Proof.
-  intros. apply state_incr_intro; try right; try reflexivity.
-  simpl. apply Ple_succ.
-Qed.
+Proof. constructor; simpl; auto using Ple_succ with verilog_state. Qed.
 
 Definition decl_io (sz: nat): mon (reg * nat) :=
   fun s => let r := s.(st_freshreg) in
@@ -430,17 +428,10 @@ Lemma add_branch_instr_states_have_transitions:
     states_have_transitions (PositiveMap.add n Vskip (st_stm s))
                             (PositiveMap.add n (StateCond e n1 n2) (st_statetrans s)).
 Proof.
-  split; intros.
-  - destruct (peq n0 n).
-    + subst. exists (StateCond e n1 n2). apply PositiveMap.gss.
-    + rewrite PositiveMap.gso. rewrite PositiveMap.gso in H.
-      assert (H1 := (st_wf s)). inv H1. unfold states_have_transitions in H2.
-      destruct H2 with n0. apply H1 with x. assumption. assumption. assumption.
-  - destruct (peq n0 n).
-    + subst. exists Vskip. apply PositiveMap.gss.
-    + rewrite PositiveMap.gso. rewrite PositiveMap.gso in H.
-      assert (H1 := (st_wf s)). inv H1. unfold states_have_transitions in H2.
-      destruct H2 with n0. apply H3 with x. assumption. assumption. assumption.
+  split; intros; destruct (peq n0 n); subst; eauto with verilog_state;
+    rewrite PositiveMap.gso in *;
+    assert (H1 := (st_wf s)); inv H1; unfold states_have_transitions in H2;
+    destruct H2 with n0; try (apply H1 with x); try (apply H3 with x); assumption.
 Qed.
 
 Lemma add_branch_valid_freshstate:
@@ -448,11 +439,10 @@ Lemma add_branch_valid_freshstate:
   Plt n (st_freshstate s) ->
   valid_freshstate (PositiveMap.add n Vskip (st_stm s)) (st_freshstate s).
 Proof.
-  unfold valid_freshstate. intros. destruct (peq n0 n).
-    - subst. left. assumption.
-    - assert (H1 := st_wf s). destruct H1.
-      unfold valid_freshstate in H0. rewrite PositiveMap.gso. apply H0.
-      assumption.
+  unfold valid_freshstate; intros; destruct (peq n0 n).
+    - subst; auto.
+    - assert (H1 := st_wf s); destruct H1;
+      unfold valid_freshstate in H0; rewrite PositiveMap.gso; auto.
 Qed.
 
 Lemma add_branch_instr_st_wf:
@@ -462,8 +452,7 @@ Lemma add_branch_instr_st_wf:
     /\ states_have_transitions (PositiveMap.add n Vskip (st_stm s))
                                (PositiveMap.add n (StateCond e n1 n2) (st_statetrans s)).
 Proof.
-  split; intros. apply add_branch_valid_freshstate. assumption.
-  apply add_branch_instr_states_have_transitions.
+  auto using add_branch_valid_freshstate, add_branch_instr_states_have_transitions.
 Qed.
 
 Lemma add_branch_instr_state_incr:
@@ -478,8 +467,9 @@ Lemma add_branch_instr_state_incr:
                 (st_decl s)
                 (add_branch_instr_st_wf s e n n1 n2 LT)).
 Proof.
-  intros. apply state_incr_intro; simpl; try reflexivity; intros; destruct (peq n0 n);
-            try (subst; left; assumption); right; apply PositiveMap.gso; assumption.
+  intros. apply state_incr_intro; simpl;
+            try (intros; destruct (peq n0 n); subst);
+            auto with verilog_state.
 Qed.
 
 Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
@@ -584,18 +574,14 @@ Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef 
 Lemma max_state_valid_freshstate:
   forall f,
     valid_freshstate (st_stm init_state) (Pos.succ (max_pc_function f)).
-Proof.
-  unfold valid_freshstate. intros. right. simpl. apply PositiveMap.gempty.
-Qed.
+Proof. unfold valid_freshstate; simpl; auto with verilog_state. Qed.
+Hint Resolve max_state_valid_freshstate : verilog_state.
 
 Lemma max_state_st_wf:
   forall f,
     valid_freshstate (st_stm init_state) (Pos.succ (max_pc_function f))
     /\ states_have_transitions (st_stm init_state) (st_statetrans init_state).
-Proof.
-  split. apply max_state_valid_freshstate.
-  apply init_state_states_have_transitions.
-Qed.
+Proof. auto with verilog_state. Qed.
 
 Definition max_state (f: function) : state :=
   mkstate (Pos.succ (max_reg_function f))
