@@ -1,4 +1,4 @@
-# Coqup
+# Coqup [![Build Status](https://travis-ci.com/ymherklotz/coqup.svg?token=qfBKKGwxeWkjDsy7e16x&branch=master)](https://travis-ci.com/ymherklotz/coqup)
 
 A formally verified HLS tool in Coq, building on top of [CompCert](https://github.com/AbsInt/CompCert).
 
