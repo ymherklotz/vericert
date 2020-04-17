@@ -1,5 +1,15 @@
-(* 
- * CoqUp: Verified high-level synthesis.
+(* *********************************************************************)
+(*                                                                     *)
+(*              The Compcert verified compiler                         *)
+(*                                                                     *)
+(*          Xavier Leroy, INRIA Paris-Rocquencourt                     *)
+(*                                                                     *)
+(*  Copyright Institut National de Recherche en Informatique et en     *)
+(*  Automatique.  All rights reserved.  This file is distributed       *)
+(*  under the terms of the INRIA Non-Commercial License Agreement.     *)
+(*                                                                     *)
+(* *********************************************************************)
+(* CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,6 +27,7 @@
  *)
 
 open Printf
+open Coqup.Camlcoq
 open Coqup.Commandline
 open Coqup.Clflags
 open Coqup.CommonOptions
@@ -28,6 +39,7 @@ open Coqup.Linker
 open Coqup.Diagnostics
 
 (* Coqup flags *)
+let option_simulate = ref false
 let option_hls = ref true
 
 (* Name used for version string etc. *)
@@ -37,7 +49,7 @@ let tool_name = "C verified high-level synthesis"
 let sdump_suffix = ref ".json"
 
 let nolink () =
-  !option_c || !option_S || !option_E || !option_interp
+  !option_c || !option_S || !option_E || !option_interp || !option_hls
 
 let object_filename sourcename suff =
   if nolink () then
@@ -63,17 +75,47 @@ let compile_c_file sourcename ifile ofile =
   set_dest Coqup.AsmToJSON.destination option_sdump !sdump_suffix;
   (* Parse the ast *)
   let csyntax = parse_c_file sourcename ifile in
-  (* Convert to Asm *)
-  let verilog =
-    match Coqup.Compiler0.transf_hls csyntax with
-    | Coqup.Errors.OK v ->
-        v
-    | Coqup.Errors.Error msg ->
-      let loc = file_loc sourcename in
+  if not !option_hls then begin
+    (* Convert to Asm *)
+    let asm =
+      match Coqup.Compiler.apply_partial
+              (Coqup.Compiler.transf_c_program csyntax)
+              Coqup.Asmexpand.expand_program with
+      | Coqup.Errors.OK asm ->
+        asm
+      | Coqup.Errors.Error msg ->
+        let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
-  let oc = open_out ofile in
-  Coqup.PrintVerilog.print_program oc verilog;
-  close_out oc
+    (* Dump Asm in binary and JSON format *)
+    Coqup.AsmToJSON.print_if asm sourcename;
+    (* Print Asm in text form *)
+    let oc = open_out ofile in
+    Coqup.PrintAsm.print_program oc asm;
+    close_out oc
+  end else begin
+    let verilog =
+      match Coqup.Compiler0.transf_hls csyntax with
+      | Coqup.Errors.OK v ->
+        v
+      | Coqup.Errors.Error msg ->
+        let loc = file_loc sourcename in
+        fatal_error loc "%a"  print_error msg in
+    if not !option_simulate then begin
+      let oc = open_out ofile in
+      Coqup.PrintVerilog.print_program oc verilog;
+      close_out oc
+    end else begin
+      print_endline "Simulating";
+      let result =
+        match Coqup.Simulator.simulate (Nat.of_int 100) verilog with
+        | Coqup.Errors.OK r -> r
+        | Coqup.Errors.Error msg ->
+          let loc = file_loc sourcename in
+          fatal_error loc "%a"  print_error msg in
+      printf "Length: %d\n" (List.length result);
+      Coqup.PrintVerilog.print_result result
+    end
+  end
 
 (* From C source to asm *)
 
@@ -83,7 +125,7 @@ let compile_i_file sourcename preproname =
     let csyntax = parse_c_file sourcename preproname in
     Coqup.Interp.execute csyntax;
         ""
-  end else if !option_S then begin
+  end else if !option_hls then begin
     compile_c_file sourcename preproname
       (output_filename ~final:true sourcename ".c" ".v");
     ""
@@ -183,6 +225,7 @@ Processing options:
   -S             Compile to assembler only, save result in <file>.s
   -o <file>      Generate output in <file>
   --no-hls       Do not use HLS and generate standard flow.
+  --simulate     Simulate the result with the Verilog semantics.
 |} ^
   prepro_help ^
   language_support_help ^
@@ -281,7 +324,9 @@ let cmdline_actions =
   Exact "-help", Unit print_usage_and_exit;
   Exact "--help", Unit print_usage_and_exit;] @
 (* Use HLS *)
-  [Exact "--no-hls", Unset option_hls;]
+  [Exact "--no-hls", Unset option_hls;
+   Exact "--simulate", Set option_simulate;
+  ]
 (* Getting version info *)
   @ version_options tool_name @
 (* Enforcing CompCert build numbers for QSKs and mnemonics dump *)
@@ -294,7 +339,7 @@ let cmdline_actions =
 (* Processing options *)
  [ Exact "-c", Set option_c;
   Exact "-E", Set option_E;
-  Exact "--hls", Set option_S;
+  Exact "-S", Set option_S;
   Exact "-o", String(fun s -> option_o := Some s);
   Prefix "-o", Self (fun s -> let s = String.sub s 2 ((String.length s) - 2) in
                               option_o := Some s);]
