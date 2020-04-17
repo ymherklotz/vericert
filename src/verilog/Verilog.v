@@ -419,7 +419,7 @@ Definition module_run (n : nat) (m : module) : res assoclist :=
 
 Local Close Scope error_monad_scope.
 
-Theorem value_eq_size_if_eq:
+(*Theorem value_eq_size_if_eq:
   forall lv rv EQ,
   vsize lv = vsize rv -> value_eq_size lv rv = left EQ.
 Proof. intros. unfold value_eq_size.
