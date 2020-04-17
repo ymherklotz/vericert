@@ -18,19 +18,19 @@ The project is written in Coq, a theorem prover, which is extracted to OCaml so 
 
 These dependencies can be installed manually, or automatically through Nix.
 
+### Building on OSX
+
+To build the project on OSX, currently the makefile has to be manually edited so that CompCert builds for the correct architecture. To do this, simply execute the following `sed` command to change the instance of `x86_64-linux` into `x86_64-macosx`.
+
+``` shell
+sed -i'' 's/x86_64-linux/x86_64-macosx/' Makefile
+```
+
 ### Setting up Nix
 
 Nix is a package manager that can create an isolated environment so that the builds are reproducible. Once nix is installed, it can be used in the following way.
 
-To just build the project once, the following command can be executed.
-
-``` shell
-nix-build
-```
-
-The output will then be in `results/bin/coqup`.
-
-To open a shell which includes all the necessary dependencies instead, one can use:
+To open a shell which includes all the necessary dependencies, one can use:
 
 ``` shell
 nix-shell
@@ -43,7 +43,13 @@ which will open a shell that has all the dependencies loaded.
 If the dependencies were installed manually, or if one is in the `nix-shell`, the project can be built by running:
 
 ``` shell
-make
+make -j8
+```
+
+and installed locally, or under the `PREFIX` location using:
+
+``` shell
+make install
 ```
 
 Which will install the binary in `./bin/coqup` by default. However, this can be changed by changing the `PREFIX` environment variable, in which case the binary will be installed in `$PREFIX/bin/coqup`.
