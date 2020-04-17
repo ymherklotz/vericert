@@ -17,3 +17,5 @@
  *)
 
 val print_program : out_channel -> Verilog.coq_module -> unit
+
+val print_result : (BinNums.positive * Value.value) list -> unit
