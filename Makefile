@@ -12,7 +12,7 @@ COQMAKE := "$(COQBIN)coq_makefile"
 
 COQUPDIRS := translation common verilog
 VSSUBDIR := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
-VS := src/Compiler.v $(VSSUBDIR)
+VS := src/Compiler.v src/Simulator.v $(VSSUBDIR)
 
 PREFIX ?= .
 
