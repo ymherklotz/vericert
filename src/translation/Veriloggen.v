@@ -1,4 +1,4 @@
-(*
+(* -*- mode: coq -*-
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -385,7 +385,7 @@ Lemma change_decl_state_incr:
          (st_statetrans s)
          decl'
          (st_wf s)).
-Proof. info_auto with verilog_state. Qed.
+Proof. auto with verilog_state. Qed.
 
 Lemma decl_io_state_incr:
   forall s,
@@ -507,27 +507,27 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
     | Ireturn r =>
       match r with
       | Some r' =>
-        add_instr n n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)) :: block rtrn (Vvar r') :: nil))
+        add_instr n n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r')))
       | None =>
-        add_instr n n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)) :: nil))
+        add_instr n n (block fin (Vlit (ZToValue 1%nat 1%Z)))
       end
     end
   end.
 
 Definition make_stm_cases (s : positive * stmnt) : expr * stmnt :=
-  match s with (a, b) => (posToExpr a, b) end.
+  match s with (a, b) => (posToExpr 32 a, b) end.
 
 Definition make_stm (r : reg) (s : PositiveMap.t stmnt) : stmnt :=
-  Vcase (Vvar r) (map make_stm_cases (PositiveMap.elements s)).
+  Vcase (Vvar r) (map make_stm_cases (PositiveMap.elements s)) (Some Vskip).
 
 Definition make_statetrans_cases (r : reg) (st : positive * statetrans) : expr * stmnt :=
   match st with
-  | (n, StateGoto n') => (posToExpr n, nonblock r (posToExpr n'))
-  | (n, StateCond c n1 n2) => (posToExpr n, nonblock r (Vternary c (posToExpr n1) (posToExpr n2)))
+  | (n, StateGoto n') => (posToExpr 32 n, nonblock r (posToExpr 32 n'))
+  | (n, StateCond c n1 n2) => (posToExpr 32 n, nonblock r (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)))
   end.
 
 Definition make_statetrans (r : reg) (s : PositiveMap.t statetrans) : stmnt :=
-  Vcase (Vvar r) (map (make_statetrans_cases r) (PositiveMap.elements s)).
+  Vcase (Vvar r) (map (make_statetrans_cases r) (PositiveMap.elements s)) (Some Vskip).
 
 Fixpoint allocate_regs (e : list (reg * nat)) {struct e} : list module_item :=
   match e with
@@ -536,11 +536,11 @@ Fixpoint allocate_regs (e : list (reg * nat)) {struct e} : list module_item :=
   end.
 
 Definition make_module_items (entry: node) (clk st rst: reg) (s: state) : list module_item :=
-  (Valways (Voredge (Vposedge clk) (Vposedge rst))
-    (Vcond (Vbinop Veq (Vvar rst) (Vlit (ZToValue 1%nat 1%Z)))
-      (nonblock st (posToExpr entry))
+  (Valways_ff (Vposedge clk)
+    (Vcond (Vbinop Veq (Vinputvar rst) (Vlit (ZToValue 1 1)))
+      (nonblock st (posToExpr 32 entry))
       (make_statetrans st s.(st_statetrans))))
-  :: (Valways Valledge (make_stm st s.(st_stm)))
+  :: (Valways_ff (Vposedge clk) (make_stm st s.(st_stm)))
   :: (allocate_regs (PositiveMap.elements s.(st_decl))).
 
 (** To start out with, the assumption is made that there is only one
