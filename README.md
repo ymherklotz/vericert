@@ -26,6 +26,20 @@ To build the project on OSX, currently the makefile has to be manually edited so
 sed -i'' 's/x86_64-linux/x86_64-macosx/' Makefile
 ```
 
+### Downloading CompCert
+
+CompCert is added as a submodule in the `lib/CompCert` directory. It is needed to run the build process below, as it is the one dependency that is not downloaded by nix, and has to be downloaded together with the repository. To clone CompCert together with this project, you can run:
+
+``` shell
+git clone --recursive https://github.com/ymherklotz/coqup
+```
+
+If the repository is already cloned, you can run the following command to make sure that CompCert is also downloaded:
+
+``` shell
+git submodule update --init
+```
+
 ### Setting up Nix
 
 Nix is a package manager that can create an isolated environment so that the builds are reproducible. Once nix is installed, it can be used in the following way.
@@ -53,3 +67,13 @@ make install
 ```
 
 Which will install the binary in `./bin/coqup` by default. However, this can be changed by changing the `PREFIX` environment variable, in which case the binary will be installed in `$PREFIX/bin/coqup`.
+
+## Running
+
+To test out `coqup` you can try the following examples which are in the test folder using the following:
+
+``` shell
+./bin/coqup test/loop.c -o loop.v
+./bin/coqup test/conditional.c -o conditional.v
+./bin/coqup test/add.c -o add.v
+```
