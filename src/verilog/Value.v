@@ -102,14 +102,6 @@ Proof.
   right; trivial.
 Defined.
 
-Definition value_eq_size_nat:
-  forall (sz : nat) (v : value), { sz = vsize v } + { True }.
-Proof.
-  intros; destruct (Nat.eqb sz (vsize v)) eqn:?.
-  left; apply Nat.eqb_eq in Heqb; assumption.
-  right; trivial.
-Defined.
-
 Definition map_any {A : Type} (v1 v2 : value) (f : word (vsize v1) -> word (vsize v1) -> A)
            (EQ : vsize v1 = vsize v2) : A :=
     let w2 := unify_word (vsize v1) (vsize v2) (vword v2) EQ in
@@ -153,6 +145,7 @@ be called over [Z] explicitly, which is where the bits are interpreted in a
 signed manner. *)
 
 Definition vplus v1 v2 := map_word2 wplus v1 v2.
+Definition vplus_opt v1 v2 := map_word2_opt wplus v1 v2.
 Definition vminus v1 v2 := map_word2 wminus v1 v2.
 Definition vmul v1 v2 := map_word2 wmult v1 v2.
 Definition vdiv v1 v2 := map_word2 wdiv v1 v2.
