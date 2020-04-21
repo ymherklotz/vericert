@@ -169,16 +169,16 @@ Definition posToLit (p : positive) : expr :=
 Coercion Vlit : value >-> expr.
 Coercion Vvar : reg >-> expr.
 
-Inductive state: Type :=
-| State:
-    forall (assoc: assoclist)
-           (nbassoc: assoclist),
-    state
-| Callstate: state
-| Returnstate: state.
-
-Definition fext := reg -> res value.
+Definition fext := PositiveMap.t value.
 Definition fextclk := nat -> fext.
+
+Inductive state: Type :=
+  State:
+    forall (assoc : assoclist)
+           (nbassoc : assoclist)
+           (f : fextclk)
+           (cycle : positive),
+    state.
 
 Definition binop_run (op : binop) : forall v1 v2 : value, vsize v1 = vsize v2 -> value :=
   match op with
@@ -212,37 +212,40 @@ Definition unop_run (op : unop) : value -> value :=
   | Vnot => vbitneg
   end.
 
-Inductive expr_runp : assoclist -> expr -> value -> Prop :=
+Inductive expr_runp : state -> expr -> value -> Prop :=
   | erun_Vlit :
-      forall a v,
-      expr_runp a (Vlit v) v
+      forall s v,
+      expr_runp s (Vlit v) v
   | erun_Vvar :
-      forall assoc v r,
+      forall assoc na f c v r,
       assoc!r = Some v ->
-      expr_runp assoc (Vvar r) v
+      expr_runp (State assoc na f c) (Vvar r) v
+  | erun_Vinputvar :
+      forall s r v,
+      expr_runp s (Vinputvar r) v
   | erun_Vbinop :
-      forall a op l r lv rv oper EQ,
-      expr_runp a l lv ->
-      expr_runp a r rv ->
+      forall s op l r lv rv oper EQ,
+      expr_runp s l lv ->
+      expr_runp s r rv ->
       oper = binop_run op ->
-      expr_runp a (Vbinop op l r) (oper lv rv EQ)
+      expr_runp s (Vbinop op l r) (oper lv rv EQ)
   | erun_Vunop :
-      forall a u vu op oper,
-      expr_runp a u vu ->
+      forall s u vu op oper,
+      expr_runp s u vu ->
       oper = unop_run op ->
-      expr_runp a (Vunop op u) (oper vu)
+      expr_runp s (Vunop op u) (oper vu)
   | erun_Vternary_true :
-      forall a c t f vc vt,
-      expr_runp a c vc ->
-      expr_runp a t vt ->
+      forall s c ts fs vc vt,
+      expr_runp s c vc ->
+      expr_runp s ts vt ->
       valueToBool vc = true ->
-      expr_runp a (Vternary c t f) vt
+      expr_runp s (Vternary c ts fs) vt
   | erun_Vternary_false :
-      forall a c t f vc vf,
-      expr_runp a c vc ->
-      expr_runp a f vf ->
+      forall s c ts fs vc vf,
+      expr_runp s c vc ->
+      expr_runp s fs vf ->
       valueToBool vc = false ->
-      expr_runp a (Vternary c t f) vf.
+      expr_runp s (Vternary c ts fs) vf.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
   : res A :=
@@ -260,16 +263,27 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
+Definition access_fext (s : state) (r : reg) : res value :=
+  match s with
+  | State _ _ f c =>
+    match PositiveMap.find r (f (Pos.to_nat c)) with
+    | Some v => OK v
+    | _ => OK (ZToValue 1 0)
+    end
+  end.
+
 (* TODO FIX Vvar case without default *)
-Fixpoint expr_run (f : fext) (assoc : assoclist) (e : expr)
-  {struct e} : res value :=
+Fixpoint expr_run (s : state) (e : expr)
+         {struct e} : res value :=
   match e with
   | Vlit v => OK v
-  | Vvar r => handle_def (ZToValue 32 0) assoc!r
-  | Vinputvar r => f r
+  | Vvar r => match s with
+              | State assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
+              end
+  | Vinputvar r => access_fext s r
   | Vbinop op l r =>
-    let lv := expr_run f assoc l in
-    let rv := expr_run f assoc r in
+    let lv := expr_run s l in
+    let rv := expr_run s r in
     let oper := binop_run op in
     do lv' <- lv;
     do rv' <- rv;
@@ -277,11 +291,11 @@ Fixpoint expr_run (f : fext) (assoc : assoclist) (e : expr)
                (eq_to_opt lv' rv' (oper lv' rv'))
   | Vunop op e =>
     let oper := unop_run op in
-    do ev <- expr_run f assoc e;
+    do ev <- expr_run s e;
     OK (oper ev)
   | Vternary c te fe =>
-    do cv <- expr_run f assoc c;
-    if valueToBool cv then expr_run f assoc te else expr_run f assoc fe
+    do cv <- expr_run s c;
+    if valueToBool cv then expr_run s te else expr_run s fe
   end.
 
 (** Return the name of the lhs of an assignment. For now, this function is quite
@@ -293,14 +307,14 @@ Definition assign_name (e : expr) : res reg :=
   | _ => Error (msg "Verilog: expression not supported on lhs of assignment")
   end.
 
-Fixpoint find_case_stmnt (f : fext) (a : assoclist) (v : value) (cl : list (expr * stmnt))
+Fixpoint find_case_stmnt (s : state) (v : value) (cl : list (expr * stmnt))
          {struct cl} : option (res stmnt) :=
   match cl with
-  | (e, s)::xs =>
-    match expr_run f a e with
+  | (e, st)::xs =>
+    match expr_run s e with
     | OK v' =>
       match eq_to_opt v v' (veq v v') with
-      | Some eq => if valueToBool eq then Some (OK s) else find_case_stmnt f a v xs
+      | Some eq => if valueToBool eq then Some (OK st) else find_case_stmnt s v xs
       | None => Some (Error (msg "Verilog: equality check sizes not equal"))
       end
     | Error msg => Some (Error msg)
@@ -308,50 +322,40 @@ Fixpoint find_case_stmnt (f : fext) (a : assoclist) (v : value) (cl : list (expr
   | _ => None
   end.
 
-Fixpoint stmnt_run' (f : fext) (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
+Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
   match n with
   | S n' =>
     match st with
     | Vskip => OK s
     | Vseq s1 s2 =>
-      do s' <- stmnt_run' f n' s s1;
-      stmnt_run' f n' s' s2
+      do s' <- stmnt_run' n' s s1;
+      stmnt_run' n' s' s2
     | Vcond c st sf =>
-      match s with
-      | State assoc _ =>
-        do cv <- expr_run f assoc c;
-        if valueToBool cv
-        then stmnt_run' f n' s st
-        else stmnt_run' f n' s sf
-      | _ => Error (msg "Verilog: stmnt execution in wrong state")
-      end
+      do cv <- expr_run s c;
+      if valueToBool cv
+      then stmnt_run' n' s st
+      else stmnt_run' n' s sf
     | Vcase e cl defst =>
-      match s with
-      | State a _ =>
-        do v <- expr_run f a e;
-        match find_case_stmnt f a v cl with
-        | Some (OK st') => stmnt_run' f n' s st'
-        | Some (Error msg) => Error msg
-        | None => do s' <- handle_opt (msg "Verilog: no case was matched")
-                                      (option_map (stmnt_run' f n' s) defst); s'
-        end
-      | _ => Error (msg "Verilog: stmnt execution in wrong state")
+      do v <- expr_run s e;
+      match find_case_stmnt s v cl with
+      | Some (OK st') => stmnt_run' n' s st'
+      | Some (Error msg) => Error msg
+      | None => do s' <- handle_opt (msg "Verilog: no case was matched")
+                                    (option_map (stmnt_run' n' s) defst); s'
       end
     | Vblock lhs rhs =>
       match s with
-      | State assoc nbassoc =>
+      | State assoc nbassoc f c =>
         do name <- assign_name lhs;
-        do rhse <- expr_run f assoc rhs;
-        OK (State (PositiveMap.add name rhse assoc) nbassoc)
-      | _ => Error (msg "Verilog: stmnt exectution in wrong state")
+        do rhse <- expr_run s rhs;
+        OK (State (PositiveMap.add name rhse assoc) nbassoc f c)
       end
     | Vnonblock lhs rhs =>
       match s with
-      | State assoc nbassoc =>
+      | State assoc nbassoc f c =>
         do name <- assign_name lhs;
-        do rhse <- expr_run f assoc rhs;
-        OK (State assoc (PositiveMap.add name rhse nbassoc))
-      | _ => Error (msg "Verilog: stmnt execution in wrong state")
+        do rhse <- expr_run s rhs;
+        OK (State assoc (PositiveMap.add name rhse nbassoc) f c)
       end
     end
   | _ => OK s
@@ -359,27 +363,26 @@ Fixpoint stmnt_run' (f : fext) (n : nat) (s : state) (st : stmnt) {struct n} : r
 
 Fixpoint stmnt_height (st : stmnt) {struct st} : nat :=
   match st with
-  | Vskip => 1
-  | Vseq s1 s2 => stmnt_height s1 + stmnt_height s2
-  | Vcond _ s1 s2 => Nat.max (stmnt_height s1) (stmnt_height s2)
+  | Vseq s1 s2 => S (stmnt_height s1 + stmnt_height s2)
+  | Vcond _ s1 s2 => S (Nat.max (stmnt_height s1) (stmnt_height s2))
   | Vcase _ ls (Some st) =>
-    fold_right (fun t acc => Nat.max acc (stmnt_height (snd t))) 0%nat ls
+    S (fold_right (fun t acc => Nat.max acc (stmnt_height (snd t))) 0%nat ls)
   | _ => 1
   end.
 
-Definition stmnt_run (f : fext) (s : state) (st : stmnt) : res state :=
-  stmnt_run' f (stmnt_height st) s st.
+Definition stmnt_run (s : state) (st : stmnt) : res state :=
+  stmnt_run' (stmnt_height st) s st.
 
-Fixpoint mi_step (f : fext) (s : state) (m : list module_item) {struct m} : res state :=
+Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
   let run := fun st ls =>
-              do s' <- stmnt_run f s st;
-              mi_step f s' ls
+              do s' <- stmnt_run s st;
+              mi_step s' ls
   in
   match m with
   | (Valways _ st)::ls => run st ls
   | (Valways_ff _ st)::ls => run st ls
   | (Valways_comb _ st)::ls => run st ls
-  | (Vdecl _ _)::ls => mi_step f s ls
+  | (Vdecl _ _)::ls => mi_step s ls
   | nil => OK s
   end.
 
@@ -391,30 +394,30 @@ Definition merge_assoclist (nbassoc assoc : assoclist) : assoclist :=
 
 Definition empty_assoclist : assoclist := PositiveMap.empty value.
 
-Definition mi_step_commit (f : fext) (assoc : assoclist) (m : list module_item) : res assoclist :=
-  match mi_step f (State assoc empty_assoclist) m with
-  | OK (State assoc' nbassoc) =>
-    OK (merge_assoclist nbassoc assoc')
+Definition mi_step_commit (s : state) (m : list module_item) : res state :=
+  match mi_step s m with
+  | OK (State assoc nbassoc f c) =>
+    OK (State (merge_assoclist nbassoc assoc) empty_assoclist f c)
   | Error msg => Error msg
-  | _ => Error (msg "Returned in the wrong state")
   end.
 
-Fixpoint mi_run (f : fextclk) (assoc : assoclist) (m : list module_item) (n : nat) 
+Fixpoint mi_run (f : fextclk) (assoc : assoclist) (m : list module_item) (n : nat)
          {struct n} : res assoclist :=
   match n with
   | S n' =>
-    do assoc' <- mi_step_commit (f n') assoc m;
-    mi_run f assoc' m n'
+    do assoc' <- mi_run f assoc m n';
+    match mi_step_commit (State assoc' empty_assoclist f (Pos.of_nat n')) m with
+    | OK (State assoc _ _ _) => OK assoc
+    | Error m => Error m
+    end
   | O => OK assoc
   end.
 
 Definition module_run (n : nat) (m : module) : res assoclist :=
-  let f :=
-      fun n =>
-      match n with
-      | 1%nat => fun r => if Pos.eqb r (fst (mod_reset m)) then OK (natToValue 1 1) else Error (msg "")
-      | _ => fun r => if Pos.eqb r (fst (mod_reset m)) then OK (natToValue 1 0) else Error (msg "")
-      end in
+  let f := fun x => match x with
+                    | S O => (add_assoclist (fst (mod_reset m)) (ZToValue 1 1) empty_assoclist)
+                    | _ => (add_assoclist (fst (mod_reset m)) (ZToValue 1 0) empty_assoclist)
+                    end in
   mi_run f empty_assoclist (mod_body m) n.
 
 Local Close Scope error_monad_scope.
