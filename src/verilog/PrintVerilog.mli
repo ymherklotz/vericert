@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+val print_value : out_channel -> Value.value -> unit
+
 val print_program : out_channel -> Verilog.coq_module -> unit
 
-val print_result : (BinNums.positive * Value.value) list -> unit
+val print_result : out_channel -> (BinNums.positive * Value.value) list -> unit

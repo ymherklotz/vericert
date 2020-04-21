@@ -174,9 +174,13 @@ let pprint_module i n m =
 
 let print_program pp v = pstr pp (pprint_module 0 "main" v)
 
-let rec print_result =
-  function
-  | [] -> ()
-  | (r, v) :: ls ->
-    printf "%s -> %s\n" (register r) (literal v);
-    print_result ls
+let print_result pp lst =
+  let rec print_result_in pp = function
+    | [] -> fprintf pp "]\n"
+    | (r, v) :: ls ->
+      fprintf pp "%s -> %s; " (register r) (literal v);
+      print_result_in pp ls in
+  fprintf pp "[ ";
+  print_result_in pp lst
+
+let print_value pp v = fprintf pp "%s" (literal v)
