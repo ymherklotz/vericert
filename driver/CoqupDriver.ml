@@ -105,15 +105,16 @@ let compile_c_file sourcename ifile ofile =
       Coqup.PrintVerilog.print_program oc verilog;
       close_out oc
     end else begin
-      print_endline "Simulating";
-      let result =
+      let result, state =
         match Coqup.Simulator.simulate (Nat.of_int 100) verilog with
         | Coqup.Errors.OK r -> r
         | Coqup.Errors.Error msg ->
           let loc = file_loc sourcename in
           fatal_error loc "%a"  print_error msg in
-      printf "Length: %d\n" (List.length result);
-      Coqup.PrintVerilog.print_result result
+      Coqup.PrintVerilog.print_result stdout state;
+      print_string "Result: ";
+      Coqup.PrintVerilog.print_value stdout result;
+      print_newline ()
     end
   end
 
