@@ -25,8 +25,11 @@ From coqup Require Import Coquplib.
 
 Local Open Scope error_monad_scope.
 
-Definition simulate (n : nat) (m : Verilog.module) : res (list (positive * Value.value)) :=
+Definition simulate (n : nat) (m : Verilog.module) : res (Value.value * list (positive * Value.value)) :=
   do map <- Verilog.module_run n m;
-  OK (PositiveMap.elements map).
+  match PositiveMap.find (fst (Verilog.mod_return m)) map with
+  | Some v => OK (v, (PositiveMap.elements map))
+  | None => Error (msg "Could not find result.")
+  end.
 
 Local Close Scope error_monad_scope.
