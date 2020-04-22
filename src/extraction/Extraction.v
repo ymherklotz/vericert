@@ -1,4 +1,4 @@
-(* 
+(* -*- mode: coq -*-
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Verilog Compiler.
+From coqup Require Verilog Value Compiler Simulator.
 
 From Coq Require DecidableClass.
 
@@ -166,7 +166,7 @@ Set Extraction AccessOpaque.
 
 Cd "src/extraction".
 Separate Extraction
-         Verilog.module Verilog.valueToZ coqup.Compiler.transf_hls
+         Verilog.module Value.uvalueToZ coqup.Compiler.transf_hls Simulator.simulate
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

@@ -1,4 +1,4 @@
-(* 
+(* -*- mode: tuareg -*-
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -17,6 +17,7 @@
  *)
 
 open Verilog
+open Value
 open Datatypes
 
 open Camlcoq
@@ -31,23 +32,32 @@ let fold_map f s = List.map f s |> concat
 
 let pstr pp = fprintf pp "%s"
 
-let pprint_binop = function
-  | Vadd -> " + "
-  | Vsub -> " - "
-  | Vmul -> " * "
-  | Vdiv -> " / "
-  | Vmod -> " % "
-  | Vlt -> " < "
-  | Vgt -> " > "
-  | Vle -> " <= "
-  | Vge -> " >= "
-  | Veq -> " == "
-  | Vne -> " != "
-  | Vand -> " & "
-  | Vor -> " | "
-  | Vxor -> " ^ "
-  | Vshl -> " << "
-  | Vshr -> " >> "
+let pprint_binop l r =
+  let unsigned op = sprintf "{%s %s %s}" l op r in
+  let signed op = sprintf "{$signed(%s) %s $signed(%s)}" l op r in
+  function
+  | Vadd -> unsigned "+"
+  | Vsub -> unsigned "-"
+  | Vmul -> unsigned "*"
+  | Vdiv -> signed "/"
+  | Vdivu -> unsigned "/"
+  | Vmod -> signed "%"
+  | Vmodu -> unsigned "%"
+  | Vlt -> signed "<"
+  | Vltu -> unsigned "<"
+  | Vgt -> signed ">"
+  | Vgtu -> unsigned ">"
+  | Vle -> signed "<="
+  | Vleu -> unsigned "<="
+  | Vge -> signed ">="
+  | Vgeu -> unsigned ">="
+  | Veq -> unsigned "=="
+  | Vne -> unsigned "!="
+  | Vand -> unsigned "&"
+  | Vor -> unsigned "|"
+  | Vxor -> unsigned "^"
+  | Vshl -> unsigned "<<"
+  | Vshr -> unsigned ">>"
 
 let unop = function
   | Vneg -> " ~ "
@@ -55,25 +65,29 @@ let unop = function
 
 let register a = sprintf "reg_%d" (P.to_int a)
 
-let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (valueToZ l))
+let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))
 
 let rec pprint_expr = function
   | Vlit l -> literal l
   | Vvar s -> register s
+  | Vinputvar s -> register s
   | Vunop (u, e) -> concat ["("; unop u; pprint_expr e; ")"]
-  | Vbinop (op, a, b) -> concat ["("; pprint_expr a; pprint_binop op; pprint_expr b; ")"]
+  | Vbinop (op, a, b) -> concat ["("; pprint_binop (pprint_expr a) (pprint_expr b) op; ")"]
   | Vternary (c, t, f) -> concat ["("; pprint_expr c; " ? "; pprint_expr t; " : "; pprint_expr f; ")"]
 
 let rec pprint_stmnt i =
-  let pprint_case (e, s) = concat [indent (i + 1); pprint_expr e; ":\n"; pprint_stmnt (i + 2) s]
+  let pprint_case (e, s) = concat [ indent (i + 1); pprint_expr e; ": begin\n"; pprint_stmnt (i + 2) s;
+                                    indent (i + 1); "end\n"
+                                  ]
   in function
   | Vskip -> concat [indent i; ";\n"]
-  | Vseq s -> concat [indent i; "begin\n"; fold_map (pprint_stmnt (i+1)) s; indent i; "end\n"]
-  | Vcond (e, st, sf) -> concat [ indent i; "if ("; pprint_expr e; ")\n";
-                                  pprint_stmnt (i + 1) st; indent i; "else\n";
-                                  pprint_stmnt (i + 1) sf
+  | Vseq (s1, s2) -> concat [ pprint_stmnt i s1; pprint_stmnt i s2]
+  | Vcond (e, st, sf) -> concat [ indent i; "if ("; pprint_expr e; ") begin\n";
+                                  pprint_stmnt (i + 1) st; indent i; "end else begin\n";
+                                  pprint_stmnt (i + 1) sf;
+                                  indent i; "end\n"
                                 ]
-  | Vcase (e, es) -> concat [ indent i; "case ("; pprint_expr e; ")\n";
+  | Vcase (e, es, d) -> concat [ indent i; "case ("; pprint_expr e; ")\n";
                               fold_map pprint_case es; indent (i+1); "default:;\n";
                               indent i; "endcase\n"
                             ]
@@ -97,9 +111,14 @@ let declare i t =
     concat [ indent i; t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r; ";\n" ]
 
+(* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function
   | Vdecl (r, sz) -> declare i "reg" (r, sz)
   | Valways (e, s) ->
+    concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
+  | Valways_ff (e, s) ->
+    concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
+  | Valways_comb (e, s) ->
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
 
 let rec intersperse c = function
@@ -154,3 +173,14 @@ let pprint_module i n m =
          ]
 
 let print_program pp v = pstr pp (pprint_module 0 "main" v)
+
+let print_result pp lst =
+  let rec print_result_in pp = function
+    | [] -> fprintf pp "]\n"
+    | (r, v) :: ls ->
+      fprintf pp "%s -> %s; " (register r) (literal v);
+      print_result_in pp ls in
+  fprintf pp "[ ";
+  print_result_in pp lst
+
+let print_value pp v = fprintf pp "%s" (literal v)

@@ -73,7 +73,7 @@ Which will install the binary in `./bin/coqup` by default. However, this can be 
 To test out `coqup` you can try the following examples which are in the test folder using the following:
 
 ``` shell
-./bin/coqup --hls test/loop.c -o loop.v
-./bin/coqup --hls test/conditional.c -o conditional.v
-./bin/coqup --hls test/add.c -o add.v
+./bin/coqup test/loop.c -o loop.v
+./bin/coqup test/conditional.c -o conditional.v
+./bin/coqup test/add.c -o add.v
 ```

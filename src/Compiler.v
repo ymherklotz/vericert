@@ -1,4 +1,4 @@
-(*
+(* -*- mode: coq -*-
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -74,7 +74,7 @@ Proof.
   intros. destruct x; simpl. rewrite print_identity. auto. auto.
 Qed.
 
-Definition transf_backend (r : RTL.program) : res  Verilog.module :=
+Definition transf_backend (r : RTL.program) : res Verilog.module :=
   OK r
   @@@ Veriloggen.transf_program.
 

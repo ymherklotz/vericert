@@ -1,6 +1,6 @@
-(* 
+(* -*- mode: coq -*-
  * CoqUp: Verified high-level synthesis.
- * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +16,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-val print_value : out_channel -> Value.value -> unit
+From Coq Require Import FSets.FMapPositive.
 
-val print_program : out_channel -> Verilog.coq_module -> unit
+From compcert Require Import Errors.
 
-val print_result : out_channel -> (BinNums.positive * Value.value) list -> unit
+From coqup Require Compiler Verilog Value.
+From coqup Require Import Coquplib.
+
+Local Open Scope error_monad_scope.
+
+Definition simulate (n : nat) (m : Verilog.module) : res (Value.value * list (positive * Value.value)) :=
+  do map <- Verilog.module_run n m;
+  match PositiveMap.find (fst (Verilog.mod_return m)) map with
+  | Some v => OK (v, (PositiveMap.elements map))
+  | None => Error (msg "Could not find result.")
+  end.
+
+Local Close Scope error_monad_scope.
