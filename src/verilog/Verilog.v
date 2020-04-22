@@ -173,7 +173,7 @@ Definition fext := PositiveMap.t value.
 Definition fextclk := nat -> fext.
 
 Inductive state: Type :=
-  State:
+  Runstate:
     forall (assoc : assoclist)
            (nbassoc : assoclist)
            (f : fextclk)
@@ -219,7 +219,7 @@ Inductive expr_runp : state -> expr -> value -> Prop :=
   | erun_Vvar :
       forall assoc na f c v r,
       assoc!r = Some v ->
-      expr_runp (State assoc na f c) (Vvar r) v
+      expr_runp (Runstate assoc na f c) (Vvar r) v
   | erun_Vinputvar :
       forall s r v,
       expr_runp s (Vinputvar r) v
@@ -265,7 +265,7 @@ Local Open Scope error_monad_scope.
 
 Definition access_fext (s : state) (r : reg) : res value :=
   match s with
-  | State _ _ f c =>
+  | Runstate _ _ f c =>
     match PositiveMap.find r (f (Pos.to_nat c)) with
     | Some v => OK v
     | _ => OK (ZToValue 1 0)
@@ -278,7 +278,7 @@ Fixpoint expr_run (s : state) (e : expr)
   match e with
   | Vlit v => OK v
   | Vvar r => match s with
-              | State assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
+              | Runstate assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
               end
   | Vinputvar r => access_fext s r
   | Vbinop op l r =>
@@ -305,6 +305,15 @@ Definition assign_name (e : expr) : res reg :=
   match e with
   | Vvar r => OK r
   | _ => Error (msg "Verilog: expression not supported on lhs of assignment")
+  end.
+
+Fixpoint stmnt_height (st : stmnt) {struct st} : nat :=
+  match st with
+  | Vseq s1 s2 => S (stmnt_height s1 + stmnt_height s2)
+  | Vcond _ s1 s2 => S (Nat.max (stmnt_height s1) (stmnt_height s2))
+  | Vcase _ ls (Some st) =>
+    S (fold_right (fun t acc => Nat.max acc (stmnt_height (snd t))) 0%nat ls)
+  | _ => 1
   end.
 
 Fixpoint find_case_stmnt (s : state) (v : value) (cl : list (expr * stmnt))
@@ -345,33 +354,82 @@ Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
       end
     | Vblock lhs rhs =>
       match s with
-      | State assoc nbassoc f c =>
+      | Runstate assoc nbassoc f c =>
         do name <- assign_name lhs;
         do rhse <- expr_run s rhs;
-        OK (State (PositiveMap.add name rhse assoc) nbassoc f c)
+        OK (Runstate (PositiveMap.add name rhse assoc) nbassoc f c)
       end
     | Vnonblock lhs rhs =>
       match s with
-      | State assoc nbassoc f c =>
+      | Runstate assoc nbassoc f c =>
         do name <- assign_name lhs;
         do rhse <- expr_run s rhs;
-        OK (State assoc (PositiveMap.add name rhse nbassoc) f c)
+        OK (Runstate assoc (PositiveMap.add name rhse nbassoc) f c)
       end
     end
   | _ => OK s
   end.
 
-Fixpoint stmnt_height (st : stmnt) {struct st} : nat :=
-  match st with
-  | Vseq s1 s2 => S (stmnt_height s1 + stmnt_height s2)
-  | Vcond _ s1 s2 => S (Nat.max (stmnt_height s1) (stmnt_height s2))
-  | Vcase _ ls (Some st) =>
-    S (fold_right (fun t acc => Nat.max acc (stmnt_height (snd t))) 0%nat ls)
-  | _ => 1
-  end.
-
 Definition stmnt_run (s : state) (st : stmnt) : res state :=
   stmnt_run' (stmnt_height st) s st.
+
+Inductive not_matched (s : state) (caseval : value) (curr : expr * stmnt) : Prop :=
+  not_in:
+    forall currval,
+    expr_runp s (fst curr) currval ->
+    caseval <> currval ->
+    not_matched s caseval curr.
+
+Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
+| stmnt_run_Vskip:
+    forall s, stmnt_runp s Vskip s
+| stmnt_run_Vseq:
+    forall st1 st2 s0 s1 s2,
+    stmnt_runp s0 st1 s1 ->
+    stmnt_runp s1 st2 s2 ->
+    stmnt_runp s0 (Vseq st1 st2) s2
+| stmnt_runp_Vcond_true:
+    forall s0 s1 c vc stt stf,
+    expr_runp s0 c vc ->
+    valueToBool vc = true ->
+    stmnt_runp s0 stt s1 ->
+    stmnt_runp s0 (Vcond c stt stf) s1
+| stmnt_runp_Vcond_false:
+    forall s0 s1 c vc stt stf,
+    expr_runp s0 c vc ->
+    valueToBool vc = false ->
+    stmnt_runp s0 stf s1 ->
+    stmnt_runp s0 (Vcond c stt stf) s1
+| stmnt_runp_Vcase:
+    forall e ve s0 s1 me mve sc clst def,
+    expr_runp s0 e ve ->
+    expr_runp s0 me mve ->
+    mve = ve ->
+    In (me, sc) clst ->
+    stmnt_runp s0 sc s1 ->
+    stmnt_runp s0 (Vcase e clst def) s1
+| stmnt_runp_Vcase_default:
+    forall s0 st s1 e ve clst,
+    expr_runp s0 e ve ->
+    Forall (not_matched s0 ve) clst ->
+    stmnt_runp s0 st s1 ->
+    stmnt_runp s0 (Vcase e clst (Some st)) s1
+| stmnt_runp_Vblock:
+    forall lhs name rhs rhsval s assoc assoc' nbassoc f cycle,
+    assign_name lhs = OK name ->
+    expr_runp s rhs rhsval ->
+    assoc' = (PositiveMap.add name rhsval assoc) ->
+    stmnt_runp (Runstate assoc nbassoc f cycle)
+               (Vblock lhs rhs)
+               (Runstate assoc' nbassoc f cycle)
+| stmnt_runp_Vnonblock:
+    forall lhs name rhs rhsval s assoc nbassoc nbassoc' f cycle,
+    assign_name lhs = OK name ->
+    expr_runp s rhs rhsval ->
+    nbassoc' = (PositiveMap.add name rhsval nbassoc) ->
+    stmnt_runp (Runstate assoc nbassoc f cycle)
+               (Vblock lhs rhs)
+               (Runstate assoc nbassoc' f cycle).
 
 Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
   let run := fun st ls =>
@@ -396,8 +454,8 @@ Definition empty_assoclist : assoclist := PositiveMap.empty value.
 
 Definition mi_step_commit (s : state) (m : list module_item) : res state :=
   match mi_step s m with
-  | OK (State assoc nbassoc f c) =>
-    OK (State (merge_assoclist nbassoc assoc) empty_assoclist f c)
+  | OK (Runstate assoc nbassoc f c) =>
+    OK (Runstate (merge_assoclist nbassoc assoc) empty_assoclist f c)
   | Error msg => Error msg
   end.
 
@@ -406,19 +464,25 @@ Fixpoint mi_run (f : fextclk) (assoc : assoclist) (m : list module_item) (n : na
   match n with
   | S n' =>
     do assoc' <- mi_run f assoc m n';
-    match mi_step_commit (State assoc' empty_assoclist f (Pos.of_nat n')) m with
-    | OK (State assoc _ _ _) => OK assoc
+    match mi_step_commit (Runstate assoc' empty_assoclist f (Pos.of_nat n')) m with
+    | OK (Runstate assoc _ _ _) => OK assoc
     | Error m => Error m
     end
   | O => OK assoc
   end.
 
+(** Resets the module into a known state, so that it can be executed.  This is
+assumed to be the starting state of the module, and may have to be changed if
+other arguments to the module are also to be supported. *)
+
+Definition initial_fextclk (m : module) : fextclk :=
+  fun x => match x with
+           | S O => (add_assoclist (fst (mod_reset m)) (ZToValue 1 1) empty_assoclist)
+           | _ => (add_assoclist (fst (mod_reset m)) (ZToValue 1 0) empty_assoclist)
+           end.
+
 Definition module_run (n : nat) (m : module) : res assoclist :=
-  let f := fun x => match x with
-                    | S O => (add_assoclist (fst (mod_reset m)) (ZToValue 1 1) empty_assoclist)
-                    | _ => (add_assoclist (fst (mod_reset m)) (ZToValue 1 0) empty_assoclist)
-                    end in
-  mi_run f empty_assoclist (mod_body m) n.
+  mi_run (initial_fextclk m) empty_assoclist (mod_body m) n.
 
 Local Close Scope error_monad_scope.
 
@@ -459,4 +523,19 @@ Proof.
       assumption.
 Qed.
 
-*)
+ *)
+
+Inductive initial_state (m: module): state -> Prop :=
+| initial_state_intro:
+    initial_state m (Runstate empty_assoclist empty_assoclist (initial_fextclk m) xH).
+
+(** A final state is a [Returnstate] with an empty call stack. *)
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall r m,
+      final_state (Returnstate nil (Vint r) m) r.
+
+(** The small-step semantics for a module. *)
+
+Definition semantics (p: module) :=
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
