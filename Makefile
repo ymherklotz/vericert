@@ -1,18 +1,23 @@
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+	ARCH := x86_64-linux
+endif
+ifeq ($(UNAME_S),Darwin)
+	ARCH := x86_64-macosx
+endif
+
 COMPCERTRECDIRS := lib common x86_64 x86 backend cfrontend driver flocq exportclight \
   MenhirLib cparser
 
-COMPCERTCOQINCLUDES := $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
-
 COQINCLUDES := -R src/common coqup.common -R src/verilog coqup.verilog \
                -R src/extraction coqup.extraction -R src/translation coqup.translation \
-               -R src coqup $(COMPCERTCOQINCLUDES)
+               -R src coqup \
+               $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
-COQMAKE := "$(COQBIN)coq_makefile"
+COQMAKE := $(COQBIN)coq_makefile
 
-COQUPDIRS := translation common verilog
-VSSUBDIR := $(foreach d, $(COQUPDIRS), src/$(d)/*.v)
-VS := src/Compiler.v src/Simulator.v $(VSSUBDIR)
+VS := src/Compiler.v src/Simulator.v $(foreach d, translation common verilog, src/$(d)/*.v)
 
 PREFIX ?= .
 
@@ -23,7 +28,7 @@ all: lib/COMPCERTSTAMP
 	$(MAKE) compile
 
 lib/COMPCERTSTAMP:
-	(cd lib/CompCert && ./configure x86_64-linux)
+	(cd lib/CompCert && ./configure $(ARCH))
 	$(MAKE) -C lib/CompCert
 	touch $@
 
