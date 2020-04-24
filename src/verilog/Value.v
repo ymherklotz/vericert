@@ -78,6 +78,9 @@ Definition uvalueToZ (v : value) : Z :=
 Definition intToValue (i : Integers.int) : value :=
   ZToValue Int.wordsize (Int.unsigned i).
 
+Definition valueToInt (i : value) : Integers.int :=
+  Int.repr (valueToZ i).
+
 (** Convert a [value] to a [bool], so that choices can be made based on the
 result. This is also because comparison operators will give back [value] instead
 of [bool], so if they are in a condition, they will have to be converted before
