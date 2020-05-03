@@ -38,6 +38,18 @@ Inductive statetrans : Type :=
 | StateGoto (p : node)
 | StateCond (c : expr) (t f : node).
 
+Definition state_goto (st : reg) (n : node) : stmnt :=
+  Vnonblock (Vvar st) (Vlit (posToValue 32 n)).
+
+Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
+  Vnonblock (Vvar st) (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)).
+
+Definition statetrans_transl (stvar : reg) (st : statetrans) : stmnt :=
+  match st with
+  | StateGoto p => state_goto stvar p
+  | StateCond c t f => state_cond stvar c t f
+  end.
+
 Definition valid_freshstate (stm: PositiveMap.t stmnt) (fs: node) :=
   forall (n: node),
     Plt n fs \/ stm!n = None.
@@ -535,8 +547,8 @@ Definition make_stm (r : reg) (s : PositiveMap.t stmnt) : stmnt :=
 
 Definition make_statetrans_cases (r : reg) (st : positive * statetrans) : expr * stmnt :=
   match st with
-  | (n, StateGoto n') => (posToExpr 32 n, nonblock r (posToExpr 32 n'))
-  | (n, StateCond c n1 n2) => (posToExpr 32 n, nonblock r (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)))
+  | (n, StateGoto n') => (posToExpr 32 n, state_goto r n')
+  | (n, StateCond c n1 n2) => (posToExpr 32 n, state_cond r c n1 n2)
   end.
 
 Definition make_statetrans (r : reg) (s : PositiveMap.t statetrans) : stmnt :=
