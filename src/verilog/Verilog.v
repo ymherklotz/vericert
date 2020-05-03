@@ -194,7 +194,7 @@ retrieved and set appropriately.
   of the Verilog that should match with the RTL. *)
 
 Inductive state : Type :=
-| Runstate:
+| State:
     forall (m : module)
            (mi : module_item)
            (mis : list module_item)
@@ -304,7 +304,7 @@ Definition access_fext (f : fext) (r : reg) : res value :=
   match e with
   | Vlit v => OK v
   | Vvar r => match s with
-              | Runstate _ assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
+              | State _ assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
               | _ => Error (msg "Verilog: Wrong state")
               end
   | Vinputvar r => access_fext s r
@@ -381,18 +381,18 @@ Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
       end
     | Vblock lhs rhs =>
       match s with
-      | Runstate m assoc nbassoc f c =>
+      | State m assoc nbassoc f c =>
         do name <- assign_name lhs;
         do rhse <- expr_run s rhs;
-        OK (Runstate m (PositiveMap.add name rhse assoc) nbassoc f c)
+        OK (State m (PositiveMap.add name rhse assoc) nbassoc f c)
       | _ => Error (msg "Verilog: Wrong state")
       end
     | Vnonblock lhs rhs =>
       match s with
-      | Runstate m assoc nbassoc f c =>
+      | State m assoc nbassoc f c =>
         do name <- assign_name lhs;
         do rhse <- expr_run s rhs;
-        OK (Runstate m assoc (PositiveMap.add name rhse nbassoc) f c)
+        OK (State m assoc (PositiveMap.add name rhse nbassoc) f c)
       | _ => Error (msg "Verilog: Wrong state")
       end
     end
@@ -407,12 +407,12 @@ Inductive not_matched : state -> value -> expr * stmnt -> Prop :=
     forall caseval curr currval m mi c assoc nbassoc f cycle pc,
     expr_runp (f cycle) assoc (fst curr) currval ->
     caseval <> currval ->
-    not_matched (Runstate m mi c assoc nbassoc f cycle pc) caseval curr.
+    not_matched (State m mi c assoc nbassoc f cycle pc) caseval curr.
 
 Inductive state_fext_assoc : state -> fext * assoclist -> Prop :=
 | get_state_fext_assoc :
   forall m mi c assoc nbassoc f cycle pc,
-  state_fext_assoc (Runstate m mi c assoc nbassoc f cycle pc) (f cycle, assoc).
+  state_fext_assoc (State m mi c assoc nbassoc f cycle pc) (f cycle, assoc).
 
 Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
 | stmnt_run_Vskip:
@@ -457,17 +457,17 @@ Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
     assign_name lhs = OK name ->
     expr_runp (f cycle) assoc rhs rhsval ->
     assoc' = (PositiveMap.add name rhsval assoc) ->
-    stmnt_runp (Runstate m mi c assoc nbassoc f cycle pc)
+    stmnt_runp (State m mi c assoc nbassoc f cycle pc)
                (Vblock lhs rhs)
-               (Runstate m mi c assoc' nbassoc f cycle pc)
+               (State m mi c assoc' nbassoc f cycle pc)
 | stmnt_runp_Vnonblock:
     forall lhs name rhs rhsval m mi c assoc nbassoc nbassoc' f cycle pc,
     assign_name lhs = OK name ->
     expr_runp (f cycle) assoc rhs rhsval ->
     nbassoc' = (PositiveMap.add name rhsval nbassoc) ->
-    stmnt_runp (Runstate m mi c assoc nbassoc f cycle pc)
+    stmnt_runp (State m mi c assoc nbassoc f cycle pc)
                (Vblock lhs rhs)
-               (Runstate m mi c assoc nbassoc' f cycle pc).
+               (State m mi c assoc nbassoc' f cycle pc).
 
 (*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
   let run := fun st ls =>
@@ -509,8 +509,8 @@ Definition empty_assoclist : assoclist := PositiveMap.empty value.
 
 (*Definition mi_step_commit (s : state) (m : list module_item) : res state :=
   match mi_step s m with
-  | OK (Runstate m assoc nbassoc f c) =>
-    OK (Runstate m (merge_assoclist nbassoc assoc) empty_assoclist f c)
+  | OK (State m assoc nbassoc f c) =>
+    OK (State m (merge_assoclist nbassoc assoc) empty_assoclist f c)
   | Error msg => Error msg
   | _ => Error (msg "Verilog: Wrong state")
   end.*)
@@ -520,8 +520,8 @@ Definition empty_assoclist : assoclist := PositiveMap.empty value.
   match n with
   | S n' =>
     do assoc' <- mi_run f assoc m n';
-    match mi_step_commit (Runstate assoc' empty_assoclist f (Pos.of_nat n')) m with
-    | OK (Runstate assoc _ _ _) => OK assoc
+    match mi_step_commit (State assoc' empty_assoclist f (Pos.of_nat n')) m with
+    | OK (State assoc _ _ _) => OK assoc
     | Error m => Error m
     end
   | O => OK assoc
@@ -583,22 +583,23 @@ Qed.
 
 Definition genv := Genv.t unit unit.
 
+
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
     forall g m mi hmi tmi assoc nbassoc f cycle pc e,
-    step g (Runstate m mi (hmi::tmi) assoc nbassoc f cycle pc) e
-           (Runstate m hmi tmi assoc nbassoc f cycle pc)
+    step_cc g (State m mi (hmi::tmi) assoc nbassoc f cycle pc) e
+            (State m hmi tmi assoc nbassoc f cycle pc)
 | step_module_empty :
     forall g tmi hmi m mi assoc nbassoc f cycle pc e,
     hmi::tmi = mod_body m ->
-    step g (Runstate m mi nil assoc nbassoc f cycle pc) e
-           (Runstate m hmi tmi assoc nbassoc f (S cycle) pc).
+    step_cc g (State m mi nil assoc nbassoc f cycle pc) e
+            (State m hmi tmi assoc nbassoc f (S cycle) pc).
 
 Inductive initial_state (m: module): state -> Prop :=
 | initial_state_intro:
     forall hmi tmi,
     hmi::tmi = mod_body m ->
-    initial_state m (Runstate m hmi tmi empty_assoclist empty_assoclist (initial_fextclk m) O xH).
+    initial_state m (State m hmi tmi empty_assoclist empty_assoclist (initial_fextclk m) O xH).
 
 (** A final state is a [Returnstate] with an empty call stack. *)
 
