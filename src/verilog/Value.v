@@ -18,6 +18,7 @@
 
 (* begin hide *)
 From bbv Require Import Word.
+From bbv Require HexNotation WordScope.
 From Coq Require Import ZArith.ZArith.
 From compcert Require Import lib.Integers.
 (* end hide *)
@@ -211,3 +212,11 @@ Definition shift_map (sz : nat) (f : word sz -> nat -> word sz) (w1 w2 : word sz
 
 Definition vshl v1 v2 := map_word2 (fun sz => shift_map sz (@wlshift sz)) v1 v2.
 Definition vshr v1 v2 := map_word2 (fun sz => shift_map sz (@wrshift sz)) v1 v2.
+
+Module HexNotationValue.
+  Export HexNotation.
+  Import WordScope.
+
+  Notation "sz ''h' a" := (NToValue sz (hex a)) (at level 50).
+
+End HexNotationValue.
