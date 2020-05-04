@@ -1,4 +1,4 @@
-(* -*- mode: coq -*-
+(*
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -149,24 +149,30 @@ Definition eq_to_opt (v1 v2 : value) (f : vsize v1 = vsize v2 -> value)
   | _ => None
   end.
 
-Lemma eqvalue {sz : nat} (x y : word sz) : x = y -> (mkvalue sz x = mkvalue sz y).
-Proof. intros. subst. reflexivity. Qed.
 
-Lemma nevalue {sz : nat} (x y : word sz) : x <> y -> (mkvalue sz x <> mkvalue sz y).
-Proof. Admitted.
+Lemma eqvalue {sz : nat} (x y : word sz) : x = y <-> mkvalue sz x = mkvalue sz y.
+Proof.
+  split; intros.
+  subst. reflexivity. inversion H. apply existT_wordToZ in H1.
+  apply wordToZ_inj. assumption.
+Qed.
 
-Definition valueEqCheck (sz : nat) (x y : word sz) :
+Lemma eqvaluef {sz : nat} (x y : word sz) : x = y -> mkvalue sz x = mkvalue sz y.
+Proof. apply eqvalue. Qed.
+
+Lemma nevalue {sz : nat} (x y : word sz) : x <> y <-> mkvalue sz x <> mkvalue sz y.
+Proof. split; intros; intuition. apply H. apply eqvalue. assumption.
+       apply H. rewrite H0. trivial.
+Qed.
+
+Lemma nevaluef {sz : nat} (x y : word sz) : x <> y -> mkvalue sz x <> mkvalue sz y.
+Proof. apply nevalue. Qed.
+
+Definition valueEq (sz : nat) (x y : word sz) :
   {mkvalue sz x = mkvalue sz y} + {mkvalue sz x <> mkvalue sz y} :=
   match weq x y with
-  | left eq => left (eqvalue x y eq)
-  | right ne => right (nevalue x y ne)
-  end.
-
-Definition valueEq (x y : value) (EQ : vsize x = vsize y): {x = y} + {x <> y} :=
-  let unif_y := unify_word (vsize x) (vsize y) (vword y) EQ in
-  match weq (vword x) unif_y with
-  | left _ => left _
-  | right _ => right _
+  | left eq => left (eqvaluef x y eq)
+  | right ne => right (nevaluef x y ne)
   end.
 
 (** Arithmetic operations over [value], interpreting them as signed or unsigned

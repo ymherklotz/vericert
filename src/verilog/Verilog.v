@@ -1,4 +1,4 @@
-(* -*- mode: coq -*-
+(*
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
