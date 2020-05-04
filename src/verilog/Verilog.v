@@ -281,6 +281,7 @@ Inductive expr_runp : fext -> assoclist -> expr -> value -> Prop :=
       expr_runp fext assoc fs vf ->
       valueToBool vc = false ->
       expr_runp fext assoc (Vternary c ts fs) vf.
+Hint Constructors expr_runp : verilog.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
   : res A :=
@@ -412,11 +413,12 @@ Inductive state_fext_assoc : state -> fext * assoclist -> Prop :=
 | get_state_fext_assoc :
   forall c assoc nbassoc f cycle pc,
   state_fext_assoc (State c assoc nbassoc f cycle pc) (f cycle, assoc).
+Hint Constructors state_fext_assoc : verilog.
 
 Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
-| stmnt_run_Vskip:
+| stmnt_runp_Vskip:
     forall s, stmnt_runp s Vskip s
-| stmnt_run_Vseq:
+| stmnt_runp_Vseq:
     forall st1 st2 s0 s1 s2,
     stmnt_runp s0 st1 s1 ->
     stmnt_runp s1 st2 s2 ->
@@ -473,6 +475,7 @@ Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
     stmnt_runp (State c assoc nbassoc f cycle pc)
                (Vnonblock lhs rhs)
                (State c assoc nbassoc' f cycle pc).
+Hint Constructors stmnt_runp : verilog.
 
 (*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
   let run := fun st ls =>
@@ -503,6 +506,7 @@ Inductive mi_stepp : state -> module_item -> state -> Prop :=
 | mi_stepp_Vdecl :
     forall s lhs rhs,
     mi_stepp s (Vdecl lhs rhs) s.
+Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : state -> list module_item -> state -> Prop :=
 | mis_stepp_Cons :
@@ -513,6 +517,7 @@ Inductive mis_stepp : state -> list module_item -> state -> Prop :=
 | mis_stepp_Nil :
     forall s,
     mis_stepp s nil s.
+Hint Constructors mis_stepp : verilog.
 
 Definition add_assoclist (r : reg) (v : value) (assoc : assoclist) : assoclist :=
   PositiveMap.add r v assoc.
@@ -614,6 +619,7 @@ Inductive step : state -> state -> Prop :=
     assoc!(fst m.(mod_return)) = Some result ->
     step (State m assoc empty_assoclist f cycle stvar)
          (Finishstate result).
+Hint Constructors step : verilog.
 
 (*Inductive initial_state (m: module): state -> Prop :=
 | initial_state_intro:

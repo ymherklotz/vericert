@@ -95,20 +95,14 @@ Lemma manual_simulation :
        (State test_output_module (add_assoclist 7%positive (32'h"3") empty_assoclist)
               empty_assoclist test_fextclk 2 (32'h"3")).
 Proof.
-  apply step_module with (assoc1 := empty_assoclist)
-                         (nbassoc := (add_assoclist 7%positive (32'h"3") empty_assoclist)); auto.
-  apply mis_stepp_Cons with (s1 := State test_output_module empty_assoclist (add_assoclist 7%positive (32'h"3") empty_assoclist) test_fextclk 1%nat (32'h"1")).
+  eapply step_module; auto.
+  eapply mis_stepp_Cons; auto.
   apply mi_stepp_Valways_ff.
-  apply stmnt_runp_Vcond_true with (f := test_fextclk 1%nat)
-                                   (assoc := empty_assoclist)
-                                   (vc := 1'h"1"); auto.
+  eapply stmnt_runp_Vcond_true; auto.
   apply get_state_fext_assoc.
-  apply erun_Vbinop with (lv := 1'h"1")
-                         (rv := 1'h"1")
-                         (oper := veq)
-                         (EQ := EQ_trivial (1'h"1")); auto.
-  apply erun_Vinputvar; auto.
-  apply erun_Vlit.
+  eapply erun_Vbinop; auto.
+  apply erun_Vinputvar; simpl. auto.
+  apply erun_Vlit. simpl. unfold ZToValue. simpl. instantiate (1 := eq_refl (vsize (1'h"1"))). auto.
   eapply stmnt_runp_Vnonblock. simpl. auto.
   apply erun_Vlit.
   auto.
@@ -135,6 +129,5 @@ Proof.
   eapply mis_stepp_Cons.
   apply mi_stepp_Vdecl.
   apply mis_stepp_Nil.
-  Unshelve.
-  exact 0%nat.
+  auto. Unshelve. exact 0%nat.
 Qed.

@@ -101,8 +101,6 @@ Definition boolToValue (sz : nat) (b : bool) : value :=
 
 (** ** Arithmetic operations *)
 
-Definition EQ_trivial : forall x, vsize x = vsize x. trivial. Defined.
-
 Definition unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
 intros; subst; assumption. Defined.
 
