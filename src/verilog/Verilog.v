@@ -31,6 +31,8 @@ From coqup Require Import common.Coquplib common.Show verilog.Value.
 From compcert Require Integers Events.
 From compcert Require Import Errors Smallstep Globalenvs.
 
+Import HexNotationValue.
+
 Notation "a ! b" := (PositiveMap.find b a) (at level 1).
 
 Definition reg : Type := positive.
@@ -196,13 +198,11 @@ retrieved and set appropriately.
 Inductive state : Type :=
 | State:
     forall (m : module)
-           (mi : module_item)
-           (mis : list module_item)
            (assoc : assoclist)
            (nbassoc : assoclist)
            (f : fextclk)
            (cycle : nat)
-           (pc : positive),
+           (stvar : value),
     state
 | Finishstate:
     forall v : value,
@@ -248,21 +248,27 @@ Inductive expr_runp : fext -> assoclist -> expr -> value -> Prop :=
       forall fext assoc v r,
       assoc!r = Some v ->
       expr_runp fext assoc (Vvar r) v
+  | erun_Vvar_empty :
+      forall fext assoc r sz,
+      assoc!r = None ->
+      expr_runp fext assoc (Vvar r) (ZToValue sz 0)
   | erun_Vinputvar :
       forall fext assoc r v,
       fext!r = Some v ->
       expr_runp fext assoc (Vinputvar r) v
   | erun_Vbinop :
-      forall fext assoc op l r lv rv oper EQ,
+      forall fext assoc op l r lv rv oper EQ resv,
       expr_runp fext assoc l lv ->
       expr_runp fext assoc r rv ->
       oper = binop_run op ->
-      expr_runp fext assoc (Vbinop op l r) (oper lv rv EQ)
+      resv = oper lv rv EQ ->
+      expr_runp fext assoc (Vbinop op l r) resv
   | erun_Vunop :
-      forall fext assoc u vu op oper,
+      forall fext assoc u vu op oper resv,
       expr_runp fext assoc u vu ->
       oper = unop_run op ->
-      expr_runp fext assoc (Vunop op u) (oper vu)
+      resv = oper vu ->
+      expr_runp fext assoc (Vunop op u) resv
   | erun_Vternary_true :
       forall fext assoc c ts fs vc vt,
       expr_runp fext assoc c vc ->
@@ -402,17 +408,10 @@ Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
 Definition stmnt_run (s : state) (st : stmnt) : res state :=
   stmnt_run' (stmnt_height st) s st. *)
 
-Inductive not_matched : state -> value -> expr * stmnt -> Prop :=
-  not_in:
-    forall caseval curr currval m mi c assoc nbassoc f cycle pc,
-    expr_runp (f cycle) assoc (fst curr) currval ->
-    caseval <> currval ->
-    not_matched (State m mi c assoc nbassoc f cycle pc) caseval curr.
-
 Inductive state_fext_assoc : state -> fext * assoclist -> Prop :=
 | get_state_fext_assoc :
-  forall m mi c assoc nbassoc f cycle pc,
-  state_fext_assoc (State m mi c assoc nbassoc f cycle pc) (f cycle, assoc).
+  forall c assoc nbassoc f cycle pc,
+  state_fext_assoc (State c assoc nbassoc f cycle pc) (f cycle, assoc).
 
 Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
 | stmnt_run_Vskip:
@@ -436,38 +435,44 @@ Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
     valueToBool vc = false ->
     stmnt_runp s0 stf s1 ->
     stmnt_runp s0 (Vcond c stt stf) s1
-| stmnt_runp_Vcase:
-    forall e ve s0 f assoc s1 me mve sc clst def,
+| stmnt_runp_Vcase_match:
+    forall e ve s0 f assoc s1 me mve sc cs def,
     state_fext_assoc s0 (f, assoc) ->
     expr_runp f assoc e ve ->
     expr_runp f assoc me mve ->
     mve = ve ->
-    In (me, sc) clst ->
     stmnt_runp s0 sc s1 ->
-    stmnt_runp s0 (Vcase e clst def) s1
-| stmnt_runp_Vcase_default:
-    forall s0 f assoc st s1 e ve clst,
+    stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
+| stmnt_runp_Vcase_nomatch:
+    forall e ve s0 f assoc s1 me mve sc cs def,
     state_fext_assoc s0 (f, assoc) ->
     expr_runp f assoc e ve ->
-    Forall (not_matched s0 ve) clst ->
+    expr_runp f assoc me mve ->
+    mve <> ve ->
+    stmnt_runp s0 (Vcase e cs def) s1 ->
+    stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
+| stmnt_runp_Vcase_default:
+    forall s0 f assoc st s1 e ve,
+    state_fext_assoc s0 (f, assoc) ->
+    expr_runp f assoc e ve ->
     stmnt_runp s0 st s1 ->
-    stmnt_runp s0 (Vcase e clst (Some st)) s1
+    stmnt_runp s0 (Vcase e nil (Some st)) s1
 | stmnt_runp_Vblock:
-    forall lhs name rhs rhsval m mi c assoc assoc' nbassoc f cycle pc,
+    forall lhs name rhs rhsval c assoc assoc' nbassoc f cycle pc,
     assign_name lhs = OK name ->
     expr_runp (f cycle) assoc rhs rhsval ->
     assoc' = (PositiveMap.add name rhsval assoc) ->
-    stmnt_runp (State m mi c assoc nbassoc f cycle pc)
+    stmnt_runp (State c assoc nbassoc f cycle pc)
                (Vblock lhs rhs)
-               (State m mi c assoc' nbassoc f cycle pc)
+               (State c assoc' nbassoc f cycle pc)
 | stmnt_runp_Vnonblock:
-    forall lhs name rhs rhsval m mi c assoc nbassoc nbassoc' f cycle pc,
+    forall lhs name rhs rhsval c assoc nbassoc nbassoc' f cycle pc,
     assign_name lhs = OK name ->
     expr_runp (f cycle) assoc rhs rhsval ->
     nbassoc' = (PositiveMap.add name rhsval nbassoc) ->
-    stmnt_runp (State m mi c assoc nbassoc f cycle pc)
-               (Vblock lhs rhs)
-               (State m mi c assoc nbassoc' f cycle pc).
+    stmnt_runp (State c assoc nbassoc f cycle pc)
+               (Vnonblock lhs rhs)
+               (State c assoc nbassoc' f cycle pc).
 
 (*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
   let run := fun st ls =>
@@ -498,6 +503,16 @@ Inductive mi_stepp : state -> module_item -> state -> Prop :=
 | mi_stepp_Vdecl :
     forall s lhs rhs,
     mi_stepp s (Vdecl lhs rhs) s.
+
+Inductive mis_stepp : state -> list module_item -> state -> Prop :=
+| mis_stepp_Cons :
+    forall mi mis s0 s1 s2,
+    mi_stepp s0 mi s1 ->
+    mis_stepp s1 mis s2 ->
+    mis_stepp s0 (mi :: mis) s2
+| mis_stepp_Nil :
+    forall s,
+    mis_stepp s nil s.
 
 Definition add_assoclist (r : reg) (v : value) (assoc : assoclist) : assoclist :=
   PositiveMap.add r v assoc.
@@ -583,19 +598,24 @@ Qed.
 
 Definition genv := Genv.t unit unit.
 
-
-Inductive step : genv -> state -> Events.trace -> state -> Prop :=
+Inductive step : state -> state -> Prop :=
 | step_module :
-    forall g m mi hmi tmi assoc nbassoc f cycle pc e,
-    step_cc g (State m mi (hmi::tmi) assoc nbassoc f cycle pc) e
-            (State m hmi tmi assoc nbassoc f cycle pc)
-| step_module_empty :
-    forall g tmi hmi m mi assoc nbassoc f cycle pc e,
-    hmi::tmi = mod_body m ->
-    step_cc g (State m mi nil assoc nbassoc f cycle pc) e
-            (State m hmi tmi assoc nbassoc f (S cycle) pc).
+    forall m stvar stvar' cycle f assoc0 assoc1 assoc2 nbassoc,
+    mis_stepp (State m assoc0 empty_assoclist f cycle stvar)
+              m.(mod_body)
+              (State m assoc1 nbassoc f cycle stvar) ->
+    assoc2 = merge_assoclist nbassoc assoc1 ->
+    Some stvar' = assoc2!(fst m.(mod_state)) ->
+    step (State m assoc0 empty_assoclist f cycle stvar)
+         (State m assoc2 empty_assoclist f (S cycle) stvar')
+| step_finish :
+    forall m assoc f cycle stvar result,
+    assoc!(fst m.(mod_finish)) = Some (1'h"1") ->
+    assoc!(fst m.(mod_return)) = Some result ->
+    step (State m assoc empty_assoclist f cycle stvar)
+         (Finishstate result).
 
-Inductive initial_state (m: module): state -> Prop :=
+(*Inductive initial_state (m: module): state -> Prop :=
 | initial_state_intro:
     forall hmi tmi,
     hmi::tmi = mod_body m ->
@@ -611,3 +631,4 @@ Inductive final_state: state -> Integers.int -> Prop :=
 
 Definition semantics (p: module) :=
   Semantics step (initial_state p) final_state (Genv.empty_genv unit unit nil).
+*)

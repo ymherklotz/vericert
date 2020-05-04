@@ -60,13 +60,6 @@ Definition valueToN (v : value) : N :=
 Definition NToValue sz (n : N) : value :=
   mkvalue sz (NToWord sz n).
 
-Definition posToValue sz (p : positive) : value :=
-  mkvalue sz (posToWord sz p).
-
-Definition posToValueAuto (p : positive) : value :=
-  let size := Z.to_nat (Z.succ (log_inf p)) in
-  mkvalue size (Word.posToWord size p).
-
 Definition ZToValue (s : nat) (z : Z) : value :=
   mkvalue s (ZToWord s z).
 
@@ -75,6 +68,19 @@ Definition valueToZ (v : value) : Z :=
 
 Definition uvalueToZ (v : value) : Z :=
   uwordToZ (vword v).
+
+Definition posToValue sz (p : positive) : value :=
+  mkvalue sz (posToWord sz p).
+
+Definition posToValueAuto (p : positive) : value :=
+  let size := Z.to_nat (Z.succ (log_inf p)) in
+  mkvalue size (Word.posToWord size p).
+
+Definition valueToPos (v : value) : positive :=
+  match valueToZ v with
+  | Zpos p => p
+  | _ => 1
+  end.
 
 Definition intToValue (i : Integers.int) : value :=
   ZToValue Int.wordsize (Int.unsigned i).
@@ -95,8 +101,10 @@ Definition boolToValue (sz : nat) (b : bool) : value :=
 
 (** ** Arithmetic operations *)
 
+Definition EQ_trivial : forall x, vsize x = vsize x. trivial. Defined.
+
 Lemma unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
-Proof. intros; subst; assumption. Qed.
+Proof. intros; subst; assumption. Defined.
 
 Definition value_eq_size:
   forall v1 v2 : value, { vsize v1 = vsize v2 } + { True }.
@@ -139,6 +147,26 @@ Definition eq_to_opt (v1 v2 : value) (f : vsize v1 = vsize v2 -> value)
   match value_eq_size v1 v2 with
   | left EQ => Some (f EQ)
   | _ => None
+  end.
+
+Lemma eqvalue {sz : nat} (x y : word sz) : x = y -> (mkvalue sz x = mkvalue sz y).
+Proof. intros. subst. reflexivity. Qed.
+
+Lemma nevalue {sz : nat} (x y : word sz) : x <> y -> (mkvalue sz x <> mkvalue sz y).
+Proof. Admitted.
+
+Definition valueEqCheck (sz : nat) (x y : word sz) :
+  {mkvalue sz x = mkvalue sz y} + {mkvalue sz x <> mkvalue sz y} :=
+  match weq x y with
+  | left eq => left (eqvalue x y eq)
+  | right ne => right (nevalue x y ne)
+  end.
+
+Definition valueEq (x y : value) (EQ : vsize x = vsize y): {x = y} + {x <> y} :=
+  let unif_y := unify_word (vsize x) (vsize y) (vword y) EQ in
+  match weq (vword x) unif_y with
+  | left _ => left _
+  | right _ => right _
   end.
 
 (** Arithmetic operations over [value], interpreting them as signed or unsigned

@@ -64,10 +64,35 @@ Lemma valid_test_output :
   transf_program test_input_program = OK test_output_module.
 Proof. trivial. Qed.
 
+Definition test_fextclk := initial_fextclk test_output_module.
+
 Lemma manual_simulation :
-  forall f,
-  step (State test_output_module empty_assoclist
-              (initial_fextclk test_output_module)
-              1%nat 1%positive)
-       (State test_output_module test_output_module (add_assoclist 7 (32'h"3") empty_assoclist)
-              2%nat 3%positive).
+  step (State test_output_module empty_assoclist empty_assoclist
+              test_fextclk 1 (32'h"1"))
+       (State test_output_module (add_assoclist 7%positive (32'h"3") empty_assoclist)
+              empty_assoclist test_fextclk 2 (32'h"3")).
+Proof.
+  apply step_module with (assoc1 := empty_assoclist)
+                         (nbassoc := (add_assoclist 7%positive (32'h"3") empty_assoclist)); auto.
+  apply mis_stepp_Cons with (s1 := State test_output_module empty_assoclist (add_assoclist 7%positive (32'h"3") empty_assoclist) test_fextclk 1%nat (32'h"1")).
+  apply mi_stepp_Valways_ff.
+  apply stmnt_runp_Vcond_true with (f := test_fextclk 1%nat)
+                                   (assoc := empty_assoclist)
+                                   (vc := 1'h"1"); auto.
+  apply get_state_fext_assoc.
+  apply erun_Vbinop with (lv := 1'h"1")
+                         (rv := 1'h"1")
+                         (oper := veq)
+                         (EQ := EQ_trivial (1'h"1")); auto.
+  apply erun_Vinputvar; auto.
+  apply erun_Vlit.
+  eapply stmnt_runp_Vnonblock. simpl. auto.
+  apply erun_Vlit.
+  auto.
+  eapply mis_stepp_Cons.
+  apply mi_stepp_Valways_ff.
+  eapply stmnt_runp_Vcase_nomatch.
+  apply get_state_fext_assoc.
+  apply erun_Vvar_empty. auto.
+  apply erun_Vlit.
+  unfold ZToValue. instantiate (1 := 32%nat). simpl.
