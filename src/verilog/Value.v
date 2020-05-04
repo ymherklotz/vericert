@@ -103,8 +103,8 @@ Definition boolToValue (sz : nat) (b : bool) : value :=
 
 Definition EQ_trivial : forall x, vsize x = vsize x. trivial. Defined.
 
-Lemma unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
-Proof. intros; subst; assumption. Defined.
+Definition unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
+intros; subst; assumption. Defined.
 
 Definition value_eq_size:
   forall v1 v2 : value, { vsize v1 = vsize v2 } + { True }.
@@ -149,7 +149,6 @@ Definition eq_to_opt (v1 v2 : value) (f : vsize v1 = vsize v2 -> value)
   | _ => None
   end.
 
-
 Lemma eqvalue {sz : nat} (x y : word sz) : x = y <-> mkvalue sz x = mkvalue sz y.
 Proof.
   split; intros.
@@ -168,12 +167,34 @@ Qed.
 Lemma nevaluef {sz : nat} (x y : word sz) : x <> y -> mkvalue sz x <> mkvalue sz y.
 Proof. apply nevalue. Qed.
 
-Definition valueEq (sz : nat) (x y : word sz) :
+(*Definition rewrite_word_size (initsz finalsz : nat) (w : word initsz)
+  : option (word finalsz) :=
+  match Nat.eqb initsz finalsz return option (word finalsz) with
+  | true => Some _
+  | false => None
+  end.*)
+
+Definition valueeq (sz : nat) (x y : word sz) :
   {mkvalue sz x = mkvalue sz y} + {mkvalue sz x <> mkvalue sz y} :=
   match weq x y with
   | left eq => left (eqvaluef x y eq)
   | right ne => right (nevaluef x y ne)
   end.
+
+Definition valueeqb (x y : value) : bool :=
+  match value_eq_size x y with
+  | left EQ =>
+    weqb (vword x) (unify_word (vsize x) (vsize y) (vword y) EQ)
+  | right _ => false
+  end.
+
+Theorem valueeqb_true_iff :
+  forall v1 v2,
+  valueeqb v1 v2 = true <-> v1 = v2.
+Proof.
+  split; intros.
+  unfold valueeqb in H. destruct (value_eq_size v1 v2).
+  Admitted.
 
 (** Arithmetic operations over [value], interpreting them as signed or unsigned
 depending on the operation.

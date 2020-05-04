@@ -1,9 +1,30 @@
+(*
+ * CoqUp: Verified high-level synthesis.
+ * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *)
+
 From coqup Require Import Verilog Veriloggen Coquplib Value.
 From compcert Require Import AST Errors Maps Op Integers.
 From compcert Require RTL.
 From Coq Require Import FSets.FMapPositive.
+From bbv Require Import Word.
 Import ListNotations.
 Import HexNotationValue.
+Import WordScope.
+
 Local Open Scope word_scope.
 
 Definition test_module : module :=
@@ -60,6 +81,8 @@ Definition test_output_module : module :=
                          (Some Vskip));
        Vdecl 1%positive 32; Vdecl 7%positive 32] |}.
 
+Search (_ <> _ -> _ = _).
+
 Lemma valid_test_output :
   transf_program test_input_program = OK test_output_module.
 Proof. trivial. Qed.
@@ -95,4 +118,23 @@ Proof.
   apply get_state_fext_assoc.
   apply erun_Vvar_empty. auto.
   apply erun_Vlit.
-  unfold ZToValue. instantiate (1 := 32%nat). simpl.
+  unfold ZToValue. instantiate (1 := 32%nat). simpl. apply nevalue. simpl.
+  apply weqb_false. simpl. trivial.
+  eapply stmnt_runp_Vcase_nomatch.
+  apply get_state_fext_assoc.
+  apply erun_Vvar_empty. auto.
+  apply erun_Vlit.
+  unfold ZToValue. instantiate (1 := 32%nat). simpl. apply nevalue. simpl.
+  apply weqb_false. simpl. trivial.
+  eapply stmnt_runp_Vcase_default.
+  apply get_state_fext_assoc.
+  apply erun_Vvar_empty. auto.
+  apply stmnt_run_Vskip.
+  eapply mis_stepp_Cons.
+  apply mi_stepp_Vdecl.
+  eapply mis_stepp_Cons.
+  apply mi_stepp_Vdecl.
+  apply mis_stepp_Nil.
+  Unshelve.
+  exact 0%nat.
+Qed.
