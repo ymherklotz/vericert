@@ -1,6 +1,4 @@
-// -*- mode: verilog -*-
-
-module main(input start, reset, clk, 
+module main(input start, reset, clk,
             output finished, output [31:0] return_val);
 
    reg [31:0]      x;
