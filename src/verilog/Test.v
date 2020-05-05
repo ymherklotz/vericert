@@ -81,8 +81,6 @@ Definition test_output_module : module :=
                          (Some Vskip));
        Vdecl 1%positive 32; Vdecl 7%positive 32] |}.
 
-Search (_ <> _ -> _ = _).
-
 Lemma valid_test_output :
   transf_program test_input_program = OK test_output_module.
 Proof. trivial. Qed.
@@ -96,7 +94,6 @@ Lemma manual_simulation :
               empty_assoclist test_fextclk 2 (32'h"3")).
 Proof.
   repeat (econstructor; eauto);
-  try (simpl; unfold ZToValue; simpl; instantiate (1 := eq_refl (vsize (1'h"1"))); auto);
-  apply nevalue; apply weqb_false; trivial.
-  Unshelve. exact 0%nat.
+  try (unfold ZToValue; instantiate (1 := eq_refl (vsize (1'h"1"))); auto);
+  apply nevalue; apply weqb_false; trivial. Unshelve. exact 0%nat.
 Qed.
