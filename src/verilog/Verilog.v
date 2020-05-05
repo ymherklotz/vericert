@@ -244,14 +244,14 @@ Inductive expr_runp : fext -> assoclist -> expr -> value -> Prop :=
   | erun_Vlit :
       forall fext assoc v,
       expr_runp fext assoc (Vlit v) v
-  | erun_Vvar :
-      forall fext assoc v r,
-      assoc!r = Some v ->
-      expr_runp fext assoc (Vvar r) v
   | erun_Vvar_empty :
       forall fext assoc r sz,
       assoc!r = None ->
       expr_runp fext assoc (Vvar r) (ZToValue sz 0)
+  | erun_Vvar :
+      forall fext assoc v r,
+      assoc!r = Some v ->
+      expr_runp fext assoc (Vvar r) v
   | erun_Vinputvar :
       forall fext assoc r v,
       fext!r = Some v ->
@@ -437,14 +437,6 @@ Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
     valueToBool vc = false ->
     stmnt_runp s0 stf s1 ->
     stmnt_runp s0 (Vcond c stt stf) s1
-| stmnt_runp_Vcase_match:
-    forall e ve s0 f assoc s1 me mve sc cs def,
-    state_fext_assoc s0 (f, assoc) ->
-    expr_runp f assoc e ve ->
-    expr_runp f assoc me mve ->
-    mve = ve ->
-    stmnt_runp s0 sc s1 ->
-    stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
 | stmnt_runp_Vcase_nomatch:
     forall e ve s0 f assoc s1 me mve sc cs def,
     state_fext_assoc s0 (f, assoc) ->
@@ -452,6 +444,14 @@ Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
     expr_runp f assoc me mve ->
     mve <> ve ->
     stmnt_runp s0 (Vcase e cs def) s1 ->
+    stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
+| stmnt_runp_Vcase_match:
+    forall e ve s0 f assoc s1 me mve sc cs def,
+    state_fext_assoc s0 (f, assoc) ->
+    expr_runp f assoc e ve ->
+    expr_runp f assoc me mve ->
+    mve = ve ->
+    stmnt_runp s0 sc s1 ->
     stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
 | stmnt_runp_Vcase_default:
     forall s0 f assoc st s1 e ve,
