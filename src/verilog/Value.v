@@ -186,13 +186,20 @@ Definition valueeqb (x y : value) : bool :=
   | right _ => false
   end.
 
+Definition value_projZ_eqb (v1 v2 : value) : bool := Z.eqb (valueToZ v1) (valueToZ v2).
+
+Theorem value_projZ_eqb_true :
+  forall v1 v2,
+  v1 = v2 -> value_projZ_eqb v1 v2 = true.
+Proof. intros. subst. unfold value_projZ_eqb. apply Z.eqb_eq. trivial. Qed.
+
 Theorem valueeqb_true_iff :
   forall v1 v2,
   valueeqb v1 v2 = true <-> v1 = v2.
 Proof.
   split; intros.
-  unfold valueeqb in H. destruct (value_eq_size v1 v2).
-  Admitted.
+  unfold valueeqb in H. destruct (value_eq_size v1 v2) eqn:?.
+  - destruct v1, v2. simpl in H.
 
 (** Arithmetic operations over [value], interpreting them as signed or unsigned
 depending on the operation.
