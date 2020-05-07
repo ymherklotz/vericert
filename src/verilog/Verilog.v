@@ -39,7 +39,7 @@ Definition reg : Type := positive.
 Definition node : Type := positive.
 Definition szreg : Type := reg * nat.
 
-Definition assoclist : Type := PositiveMap.t value.
+Definition assocset : Type := PositiveMap.t value.
 
 (** * Verilog AST
 
@@ -52,7 +52,7 @@ The Verilog [value] is a bitvector containg a size and the actual bitvector. In
 this case, the [Word.word] type is used as many theorems about that bitvector
 have already been proven. *)
 
-Definition estate : Type := assoclist * assoclist.
+Definition estate : Type := assocset * assocset.
 
 (** ** Binary Operators
 
@@ -198,8 +198,8 @@ retrieved and set appropriately.
 Inductive state : Type :=
 | State:
     forall (m : module)
-           (assoc : assoclist)
-           (nbassoc : assoclist)
+           (assoc : assocset)
+           (nbassoc : assocset)
            (f : fextclk)
            (cycle : nat)
            (stvar : value),
@@ -240,7 +240,7 @@ Definition unop_run (op : unop) : value -> value :=
   | Vnot => vbitneg
   end.
 
-Inductive expr_runp : fext -> assoclist -> expr -> value -> Prop :=
+Inductive expr_runp : fext -> assocset -> expr -> value -> Prop :=
   | erun_Vlit :
       forall fext assoc v,
       expr_runp fext assoc (Vlit v) v
@@ -306,7 +306,7 @@ Definition access_fext (f : fext) (r : reg) : res value :=
   end.
 
 (* TODO FIX Vvar case without default *)
-(*Fixpoint expr_run (assoc : assoclist) (e : expr)
+(*Fixpoint expr_run (assoc : assocset) (e : expr)
          {struct e} : res value :=
   match e with
   | Vlit v => OK v
@@ -409,7 +409,7 @@ Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
 Definition stmnt_run (s : state) (st : stmnt) : res state :=
   stmnt_run' (stmnt_height st) s st. *)
 
-Inductive state_fext_assoc : state -> fext * assoclist -> Prop :=
+Inductive state_fext_assoc : state -> fext * assocset -> Prop :=
 | get_state_fext_assoc :
   forall c assoc nbassoc f cycle pc,
   state_fext_assoc (State c assoc nbassoc f cycle pc) (f cycle, assoc).
@@ -519,28 +519,28 @@ Inductive mis_stepp : state -> list module_item -> state -> Prop :=
     mis_stepp s nil s.
 Hint Constructors mis_stepp : verilog.
 
-Definition add_assoclist (r : reg) (v : value) (assoc : assoclist) : assoclist :=
+Definition add_assocset (r : reg) (v : value) (assoc : assocset) : assocset :=
   PositiveMap.add r v assoc.
 
-Definition merge_assoclist (nbassoc assoc : assoclist) : assoclist :=
-  PositiveMap.fold add_assoclist nbassoc assoc.
+Definition merge_assocset (nbassoc assoc : assocset) : assocset :=
+  PositiveMap.fold add_assocset nbassoc assoc.
 
-Definition empty_assoclist : assoclist := PositiveMap.empty value.
+Definition empty_assocset : assocset := PositiveMap.empty value.
 
 (*Definition mi_step_commit (s : state) (m : list module_item) : res state :=
   match mi_step s m with
   | OK (State m assoc nbassoc f c) =>
-    OK (State m (merge_assoclist nbassoc assoc) empty_assoclist f c)
+    OK (State m (merge_assocset nbassoc assoc) empty_assocset f c)
   | Error msg => Error msg
   | _ => Error (msg "Verilog: Wrong state")
   end.*)
 
-(*Fixpoint mi_run (f : fextclk) (assoc : assoclist) (m : list module_item) (n : nat)
-         {struct n} : res assoclist :=
+(*Fixpoint mi_run (f : fextclk) (assoc : assocset) (m : list module_item) (n : nat)
+         {struct n} : res assocset :=
   match n with
   | S n' =>
     do assoc' <- mi_run f assoc m n';
-    match mi_step_commit (State assoc' empty_assoclist f (Pos.of_nat n')) m with
+    match mi_step_commit (State assoc' empty_assocset f (Pos.of_nat n')) m with
     | OK (State assoc _ _ _) => OK assoc
     | Error m => Error m
     end
@@ -553,12 +553,12 @@ other arguments to the module are also to be supported. *)
 
 Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
-           | S O => (add_assoclist (fst (mod_reset m)) (ZToValue 1 1) empty_assoclist)
-           | _ => (add_assoclist (fst (mod_reset m)) (ZToValue 1 0) empty_assoclist)
+           | S O => (add_assocset (fst (mod_reset m)) (ZToValue 1 1) empty_assocset)
+           | _ => (add_assocset (fst (mod_reset m)) (ZToValue 1 0) empty_assocset)
            end.
 
-(*Definition module_run (n : nat) (m : module) : res assoclist :=
-  mi_run (initial_fextclk m) empty_assoclist (mod_body m) n.*)
+(*Definition module_run (n : nat) (m : module) : res assocset :=
+  mi_run (initial_fextclk m) empty_assocset (mod_body m) n.*)
 
 Local Close Scope error_monad_scope.
 
@@ -606,18 +606,18 @@ Definition genv := Genv.t unit unit.
 Inductive step : state -> state -> Prop :=
 | step_module :
     forall m stvar stvar' cycle f assoc0 assoc1 assoc2 nbassoc,
-    mis_stepp (State m assoc0 empty_assoclist f cycle stvar)
+    mis_stepp (State m assoc0 empty_assocset f cycle stvar)
               m.(mod_body)
               (State m assoc1 nbassoc f cycle stvar) ->
-    assoc2 = merge_assoclist nbassoc assoc1 ->
+    assoc2 = merge_assocset nbassoc assoc1 ->
     Some stvar' = assoc2!(fst m.(mod_state)) ->
-    step (State m assoc0 empty_assoclist f cycle stvar)
-         (State m assoc2 empty_assoclist f (S cycle) stvar')
+    step (State m assoc0 empty_assocset f cycle stvar)
+         (State m assoc2 empty_assocset f (S cycle) stvar')
 | step_finish :
     forall m assoc f cycle stvar result,
     assoc!(fst m.(mod_finish)) = Some (1'h"1") ->
     assoc!(fst m.(mod_return)) = Some result ->
-    step (State m assoc empty_assoclist f cycle stvar)
+    step (State m assoc empty_assocset f cycle stvar)
          (Finishstate result).
 Hint Constructors step : verilog.
 
@@ -625,7 +625,7 @@ Hint Constructors step : verilog.
 | initial_state_intro:
     forall hmi tmi,
     hmi::tmi = mod_body m ->
-    initial_state m (State m hmi tmi empty_assoclist empty_assoclist (initial_fextclk m) O xH).
+    initial_state m (State m hmi tmi empty_assocset empty_assocset (initial_fextclk m) O xH).
 
 (** A final state is a [Returnstate] with an empty call stack. *)
 
