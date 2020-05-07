@@ -200,6 +200,10 @@ Proof.
   split; intros.
   unfold valueeqb in H. destruct (value_eq_size v1 v2) eqn:?.
   - destruct v1, v2. simpl in H.
+Abort.
+
+Definition value_int_eqb (v : value) (i : int) : bool :=
+  Z.eqb (valueToZ v) (Int.unsigned i).
 
 (** Arithmetic operations over [value], interpreting them as signed or unsigned
 depending on the operation.

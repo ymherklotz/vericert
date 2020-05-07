@@ -41,6 +41,12 @@ Definition szreg : Type := reg * nat.
 
 Definition assocset : Type := PositiveMap.t value.
 
+Record associations : Type :=
+  mkassociations {
+    assoc_blocking : assocset;
+    assoc_nonblocking : assocset
+  }.
+
 (** * Verilog AST
 
 The Verilog AST is defined here, which is the target language of the
@@ -409,72 +415,61 @@ Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
 Definition stmnt_run (s : state) (st : stmnt) : res state :=
   stmnt_run' (stmnt_height st) s st. *)
 
-Inductive state_fext_assoc : state -> fext * assocset -> Prop :=
-| get_state_fext_assoc :
-  forall c assoc nbassoc f cycle pc,
-  state_fext_assoc (State c assoc nbassoc f cycle pc) (f cycle, assoc).
-Hint Constructors state_fext_assoc : verilog.
-
-Inductive stmnt_runp: state -> stmnt -> state -> Prop :=
+Inductive stmnt_runp: fext -> associations -> stmnt -> associations -> Prop :=
 | stmnt_runp_Vskip:
-    forall s, stmnt_runp s Vskip s
+    forall f a, stmnt_runp f a Vskip a
 | stmnt_runp_Vseq:
-    forall st1 st2 s0 s1 s2,
-    stmnt_runp s0 st1 s1 ->
-    stmnt_runp s1 st2 s2 ->
-    stmnt_runp s0 (Vseq st1 st2) s2
+    forall f st1 st2 as0 as1 as2,
+    stmnt_runp f as0 st1 as1 ->
+    stmnt_runp f as1 st2 as2 ->
+    stmnt_runp f as0 (Vseq st1 st2) as2
 | stmnt_runp_Vcond_true:
-    forall s0 f assoc s1 c vc stt stf,
-    state_fext_assoc s0 (f, assoc) ->
-    expr_runp f assoc c vc ->
+    forall as0 as1 f c vc stt stf,
+    expr_runp f as0.(assoc_blocking) c vc ->
     valueToBool vc = true ->
-    stmnt_runp s0 stt s1 ->
-    stmnt_runp s0 (Vcond c stt stf) s1
+    stmnt_runp f as0 stt as1 ->
+    stmnt_runp f as0 (Vcond c stt stf) as1
 | stmnt_runp_Vcond_false:
-    forall s0 f assoc s1 c vc stt stf,
-    state_fext_assoc s0 (f, assoc) ->
-    expr_runp f assoc c vc ->
+    forall as0 as1 f c vc stt stf,
+    expr_runp f as0.(assoc_blocking) c vc ->
     valueToBool vc = false ->
-    stmnt_runp s0 stf s1 ->
-    stmnt_runp s0 (Vcond c stt stf) s1
+    stmnt_runp f as0 stf as1 ->
+    stmnt_runp f as0 (Vcond c stt stf) as1
 | stmnt_runp_Vcase_nomatch:
-    forall e ve s0 f assoc s1 me mve sc cs def,
-    state_fext_assoc s0 (f, assoc) ->
-    expr_runp f assoc e ve ->
-    expr_runp f assoc me mve ->
+    forall e ve as0 f as1 me mve sc cs def,
+    expr_runp f as0.(assoc_blocking) e ve ->
+    expr_runp f as0.(assoc_blocking) me mve ->
     mve <> ve ->
-    stmnt_runp s0 (Vcase e cs def) s1 ->
-    stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
+    stmnt_runp f as0 (Vcase e cs def) as1 ->
+    stmnt_runp f as0 (Vcase e ((me, sc)::cs) def) as1
 | stmnt_runp_Vcase_match:
-    forall e ve s0 f assoc s1 me mve sc cs def,
-    state_fext_assoc s0 (f, assoc) ->
-    expr_runp f assoc e ve ->
-    expr_runp f assoc me mve ->
+    forall e ve as0 f as1 me mve sc cs def,
+    expr_runp f as0.(assoc_blocking) e ve ->
+    expr_runp f as0.(assoc_blocking) me mve ->
     mve = ve ->
-    stmnt_runp s0 sc s1 ->
-    stmnt_runp s0 (Vcase e ((me, sc)::cs) def) s1
+    stmnt_runp f as0 sc as1 ->
+    stmnt_runp f as0 (Vcase e ((me, sc)::cs) def) as1
 | stmnt_runp_Vcase_default:
-    forall s0 f assoc st s1 e ve,
-    state_fext_assoc s0 (f, assoc) ->
-    expr_runp f assoc e ve ->
-    stmnt_runp s0 st s1 ->
-    stmnt_runp s0 (Vcase e nil (Some st)) s1
+    forall as0 as1 f st e ve,
+    expr_runp f as0.(assoc_blocking) e ve ->
+    stmnt_runp f as0 st as1 ->
+    stmnt_runp f as0 (Vcase e nil (Some st)) as1
 | stmnt_runp_Vblock:
-    forall lhs name rhs rhsval c assoc assoc' nbassoc f cycle pc,
+    forall lhs name rhs rhsval assoc assoc' nbassoc f,
     assign_name lhs = OK name ->
-    expr_runp (f cycle) assoc rhs rhsval ->
+    expr_runp f assoc rhs rhsval ->
     assoc' = (PositiveMap.add name rhsval assoc) ->
-    stmnt_runp (State c assoc nbassoc f cycle pc)
-               (Vblock lhs rhs)
-               (State c assoc' nbassoc f cycle pc)
+    stmnt_runp f (mkassociations assoc nbassoc)
+                 (Vblock lhs rhs)
+                 (mkassociations assoc nbassoc)
 | stmnt_runp_Vnonblock:
-    forall lhs name rhs rhsval c assoc nbassoc nbassoc' f cycle pc,
+    forall lhs name rhs rhsval assoc nbassoc nbassoc' f,
     assign_name lhs = OK name ->
-    expr_runp (f cycle) assoc rhs rhsval ->
+    expr_runp f assoc rhs rhsval ->
     nbassoc' = (PositiveMap.add name rhsval nbassoc) ->
-    stmnt_runp (State c assoc nbassoc f cycle pc)
-               (Vnonblock lhs rhs)
-               (State c assoc nbassoc' f cycle pc).
+    stmnt_runp f (mkassociations assoc nbassoc)
+                 (Vnonblock lhs rhs)
+                 (mkassociations assoc nbassoc').
 Hint Constructors stmnt_runp : verilog.
 
 (*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
@@ -490,33 +485,33 @@ Hint Constructors stmnt_runp : verilog.
   | nil => OK s
   end.*)
 
-Inductive mi_stepp : state -> module_item -> state -> Prop :=
+Inductive mi_stepp : fext -> associations -> module_item -> associations -> Prop :=
 | mi_stepp_Valways :
-    forall s0 st s1 c,
-    stmnt_runp s0 st s1 ->
-    mi_stepp s0 (Valways c st) s1
+    forall f s0 st s1 c,
+    stmnt_runp f s0 st s1 ->
+    mi_stepp f s0 (Valways c st) s1
 | mi_stepp_Valways_ff :
-    forall s0 st s1 c,
-    stmnt_runp s0 st s1 ->
-    mi_stepp s0 (Valways_ff c st) s1
+    forall f s0 st s1 c,
+    stmnt_runp f s0 st s1 ->
+    mi_stepp f s0 (Valways_ff c st) s1
 | mi_stepp_Valways_comb :
-    forall s0 st s1 c,
-    stmnt_runp s0 st s1 ->
-    mi_stepp s0 (Valways_comb c st) s1
+    forall f s0 st s1 c,
+    stmnt_runp f s0 st s1 ->
+    mi_stepp f s0 (Valways_comb c st) s1
 | mi_stepp_Vdecl :
-    forall s lhs rhs,
-    mi_stepp s (Vdecl lhs rhs) s.
+    forall f s lhs rhs,
+    mi_stepp f s (Vdecl lhs rhs) s.
 Hint Constructors mi_stepp : verilog.
 
-Inductive mis_stepp : state -> list module_item -> state -> Prop :=
+Inductive mis_stepp : fext -> associations -> list module_item -> associations -> Prop :=
 | mis_stepp_Cons :
-    forall mi mis s0 s1 s2,
-    mi_stepp s0 mi s1 ->
-    mis_stepp s1 mis s2 ->
-    mis_stepp s0 (mi :: mis) s2
+    forall f mi mis s0 s1 s2,
+    mi_stepp f s0 mi s1 ->
+    mis_stepp f s1 mis s2 ->
+    mis_stepp f s0 (mi :: mis) s2
 | mis_stepp_Nil :
-    forall s,
-    mis_stepp s nil s.
+    forall f s,
+    mis_stepp f s nil s.
 Hint Constructors mis_stepp : verilog.
 
 Definition add_assocset (r : reg) (v : value) (assoc : assocset) : assocset :=
@@ -606,9 +601,9 @@ Definition genv := Genv.t unit unit.
 Inductive step : state -> state -> Prop :=
 | step_module :
     forall m stvar stvar' cycle f assoc0 assoc1 assoc2 nbassoc,
-    mis_stepp (State m assoc0 empty_assocset f cycle stvar)
+    mis_stepp (f cycle) (mkassociations assoc0 empty_assocset)
               m.(mod_body)
-              (State m assoc1 nbassoc f cycle stvar) ->
+              (mkassociations assoc1 nbassoc) ->
     assoc2 = merge_assocset nbassoc assoc1 ->
     Some stvar' = assoc2!(fst m.(mod_state)) ->
     step (State m assoc0 empty_assocset f cycle stvar)
