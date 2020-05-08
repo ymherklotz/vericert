@@ -17,7 +17,7 @@
  *)
 
 From Coq Require Import FSets.FMapPositive.
-From coqup Require Import Coquplib Value.
+From coqup Require Import Coquplib Value AssocMap.
 From coqup Require Verilog.
 From compcert Require Events Globalenvs Smallstep Integers.
 
@@ -57,7 +57,7 @@ Inductive state : Type :=
 | State :
     forall (m : module)
            (st : node)
-           (assoc : Verilog.assocset),
+           (assoc : assocmap),
   state
 | Returnstate : forall v : value, state.
 
@@ -67,14 +67,14 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
-        (Verilog.mkassociations assoc0 Verilog.empty_assocset)
+        (Verilog.mkassociations assoc0 empty_assocmap)
         ctrl
         (Verilog.mkassociations assoc1 nbassoc0) ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations assoc1 nbassoc0)
         data
         (Verilog.mkassociations assoc2 nbassoc1) ->
-      assoc3 = Verilog.merge_assocset nbassoc1 assoc2 ->
+      assoc3 = merge_assocmap nbassoc1 assoc2 ->
       step g (State m st assoc0) t (State m st assoc3)
 | step_finish :
     forall g t m st assoc retval,
@@ -86,7 +86,7 @@ Hint Constructors step : htl.
 Inductive initial_state (m : module) : state -> Prop :=
 | initial_state_intro : forall st,
     st = m.(mod_entrypoint) ->
-    initial_state m (State m st Verilog.empty_assocset).
+    initial_state m (State m st empty_assocmap).
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,

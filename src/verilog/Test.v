@@ -88,10 +88,10 @@ Proof. trivial. Qed.
 Definition test_fextclk := initial_fextclk test_output_module.
 
 Lemma manual_simulation :
-  step (State test_output_module empty_assocset empty_assocset
+  step (State test_output_module empty_assocmap empty_assocmap
               test_fextclk 1 (32'h"1"))
-       (State test_output_module (add_assocset 7%positive (32'h"3") empty_assocset)
-              empty_assocset test_fextclk 2 (32'h"3")).
+       (State test_output_module (add_assocmap 7%positive (32'h"3") empty_assocmap)
+              empty_assocmap test_fextclk 2 (32'h"3")).
 Proof.
   repeat (econstructor; eauto);
   try (unfold ZToValue; instantiate (1 := eq_refl (vsize (1'h"1"))); auto);
