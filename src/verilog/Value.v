@@ -19,8 +19,8 @@
 (* begin hide *)
 From bbv Require Import Word.
 From bbv Require HexNotation WordScope.
-From Coq Require Import ZArith.ZArith.
-From compcert Require Import lib.Integers.
+From Coq Require Import ZArith.ZArith FSets.FMapPositive.
+From compcert Require Import lib.Integers common.Values.
 (* end hide *)
 
 (** * Value
@@ -48,7 +48,7 @@ Definition wordToValue : forall sz : nat, word sz -> value := mkvalue.
 
 Definition valueToWord : forall v : value, word (vsize v) := vword.
 
-Definition valueToNat (v : value) : nat :=
+Definition valueToNat (v :value) : nat :=
   wordToNat (vword v).
 
 Definition natToValue sz (n : nat) : value :=
@@ -284,3 +284,10 @@ Module HexNotationValue.
   Notation "sz ''h' a" := (NToValue sz (hex a)) (at level 50).
 
 End HexNotationValue.
+
+Inductive val_value_lessdef: val -> value -> Prop :=
+| val_value_lessdef_int:
+    forall i v',
+    Integers.Int.unsigned i = valueToZ v' ->
+    val_value_lessdef (Vint i) v'
+| lessdef_undef: forall v, val_value_lessdef Vundef v.
