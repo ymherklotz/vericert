@@ -1,8 +1,8 @@
 with import <nixpkgs> {};
 
 let
-  ncoq = coq_8_10;
-  ncoqPackages = coqPackages_8_10;
+  ncoq = coq_8_11;
+  ncoqPackages = coqPackages_8_11;
   bbv = ncoqPackages.callPackage
     ( { coq, stdenv, fetchFromGitHub }:
       stdenv.mkDerivation {
