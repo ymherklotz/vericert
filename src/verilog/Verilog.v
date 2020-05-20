@@ -244,14 +244,14 @@ Inductive expr_runp : fext -> assocmap -> expr -> value -> Prop :=
   | erun_Vlit :
       forall fext assoc v,
       expr_runp fext assoc (Vlit v) v
-  | erun_Vvar_empty :
-      forall fext assoc r sz,
-      assoc!r = None ->
-      expr_runp fext assoc (Vvar r) (ZToValue sz 0)
   | erun_Vvar :
       forall fext assoc v r,
       assoc!r = Some v ->
       expr_runp fext assoc (Vvar r) v
+  | erun_Vvar_empty :
+      forall fext assoc r sz,
+      assoc!r = None ->
+      expr_runp fext assoc (Vvar r) (ZToValue sz 0)
   | erun_Vinputvar :
       forall fext assoc r v,
       fext!r = Some v ->
