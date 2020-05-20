@@ -70,20 +70,20 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
       tr_instr fin rtrn st (RTL.Ireturn (Some r))
                (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip.
 
-Inductive tr_code (c : RTL.code) (stmnts trans : PositiveMap.t stmnt)
+Inductive tr_code (c : RTL.code) (pc : RTL.node) (stmnts trans : PositiveMap.t stmnt)
           (fin rtrn st : reg) : Prop :=
   tr_code_intro :
-    forall i s t n,
-      Maps.PTree.get n c = Some i ->
-      stmnts!n = Some s ->
-      trans!n = Some t ->
+    forall i s t,
+      Maps.PTree.get pc c = Some i ->
+      stmnts!pc = Some s ->
+      trans!pc = Some t ->
       tr_instr fin rtrn st i s t ->
-      tr_code c stmnts trans fin rtrn st.
+      tr_code c pc stmnts trans fin rtrn st.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall c data control fin rtrn st,
-      tr_code c data control fin rtrn st ->
+    forall data control fin rtrn st,
+      (forall pc, tr_code f.(RTL.fn_code) pc data control fin rtrn st) ->
       tr_module f (mkmodule
                      f.(RTL.fn_params)
                      data
