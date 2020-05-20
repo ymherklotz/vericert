@@ -63,7 +63,7 @@ Inductive state : Type :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g t m st ctrl data assoc0 assoc1 assoc2 assoc3 nbassoc0 nbassoc1 f,
+    forall g t m st ctrl data assoc0 assoc1 assoc2 assoc3 nbassoc0 nbassoc1 f stval pstval,
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
@@ -75,7 +75,9 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         data
         (Verilog.mkassociations assoc2 nbassoc1) ->
       assoc3 = merge_assocmap nbassoc1 assoc2 ->
-      step g (State m st assoc0) t (State m st assoc3)
+      assoc3!(m.(mod_st)) = Some stval ->
+      valueToPos stval = pstval ->
+      step g (State m st assoc0) t (State m pstval assoc3)
 | step_finish :
     forall g t m st assoc retval,
     assoc!(m.(mod_finish)) = Some (1'h"1") ->
