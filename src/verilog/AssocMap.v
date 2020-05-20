@@ -30,13 +30,23 @@ Module AssocMapExt.
 
     Variable elt : Type.
 
-    Definition merge : t elt -> t elt -> t elt := fold (@add elt).
-
     Definition find_default (a : elt) (k : reg) (m : t elt) : elt :=
       match find k m with
       | None => a
       | Some v => v
       end.
+
+    Definition merge : t elt -> t elt -> t elt := fold (@add elt).
+
+    Lemma merge_add_assoc :
+      forall am am' r v x,
+        find x (merge (add r v am) am') = find x (add r v (merge am am')).
+    Admitted.
+
+    Lemma merge_base :
+      forall am,
+        merge (empty elt) am = am.
+    Proof. intros. unfold merge. apply fold_1. Qed.
 
   End Operations.
 
