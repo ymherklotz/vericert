@@ -70,23 +70,26 @@ Definition uvalueToZ (v : value) : Z :=
   uwordToZ (vword v).
 
 Definition posToValue sz (p : positive) : value :=
-  mkvalue sz (posToWord sz p).
+  ZToValue sz (Zpos p).
 
 Definition posToValueAuto (p : positive) : value :=
-  let size := Z.to_nat (Z.succ (log_inf p)) in
-  mkvalue size (Word.posToWord size p).
+  let size := Pos.to_nat (Pos.size p) in
+  ZToValue size (Zpos p).
 
 Definition valueToPos (v : value) : positive :=
-  match valueToZ v with
-  | Zpos p => p
-  | _ => 1
-  end.
+  Z.to_pos (uvalueToZ v).
 
 Definition intToValue (i : Integers.int) : value :=
   ZToValue Int.wordsize (Int.unsigned i).
 
 Definition valueToInt (i : value) : Integers.int :=
   Int.repr (valueToZ i).
+
+Definition valToValue (v : Values.val) :=
+  match v with
+  | Values.Vint i => intToValue i
+  | _ => ZToValue 32 0%Z
+  end.
 
 (** Convert a [value] to a [bool], so that choices can be made based on the
 result. This is also because comparison operators will give back [value] instead
@@ -291,3 +294,28 @@ Inductive val_value_lessdef: val -> value -> Prop :=
     Integers.Int.unsigned i = valueToZ v' ->
     val_value_lessdef (Vint i) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
+
+Search Z positive.
+
+Search "wordToZ".
+
+Lemma uvalueToZ_ZToValue :
+  forall n z,
+  (0 <= z < 2 ^ Z.of_nat n)%Z ->
+  uvalueToZ (ZToValue n z) = z.
+Proof.
+  intros. unfold uvalueToZ, ZToValue. simpl.
+  apply uwordToZ_ZToWord. apply H.
+Qed.
+
+Lemma valueToPos_posToValueAuto :
+  forall p, valueToPos (posToValueAuto p) = p.
+Proof.
+  intros. unfold valueToPos, posToValueAuto.
+  rewrite uvalueToZ_ZToValue. auto. rewrite positive_nat_Z.
+  split. apply Zle_0_pos.
+
+  assert (p < 2 ^ (Pos.size p))%positive. apply Pos.size_gt.
+  inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
+  simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
+Qed.
