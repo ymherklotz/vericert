@@ -64,7 +64,7 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
       translate_condition cond args s = OK c s' i ->
       tr_instr fin rtrn st (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-      tr_instr fin rtrn st (RTL.Ireturn None) (block fin (Vlit (ZToValue 1%nat 1%Z))) Vskip
+      tr_instr fin rtrn st (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
 | tr_instr_Ireturn_Some :
     forall r,
       tr_instr fin rtrn st (RTL.Ireturn (Some r))

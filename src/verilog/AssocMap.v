@@ -36,12 +36,17 @@ Module AssocMapExt.
       | Some v => v
       end.
 
-    Definition merge : t elt -> t elt -> t elt := fold (@add elt).
+    Definition merge (m1 m2 : t elt) : t elt :=
+      fold_right (fun el m => match el with (k, v) => add k v m end) m2 (elements m1).
 
-    Lemma merge_add_assoc :
-      forall am am' r v x,
-        find x (merge (add r v am) am') = find x (add r v (merge am am')).
-    Admitted.
+    Lemma merge_add_assoc2 :
+      forall am am' r v,
+        merge (add r v am) am' = add r v (merge am am').
+    Proof.
+      intros.
+      unfold merge.
+      Search fold_right.
+      apply SetoidList.fold_right_add2.
 
     Lemma merge_base :
       forall am,
