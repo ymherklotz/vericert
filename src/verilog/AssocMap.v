@@ -43,15 +43,14 @@ Module AssocMapExt.
       forall am am' r v,
         merge (add r v am) am' = add r v (merge am am').
     Proof.
-      intros.
-      unfold merge.
-      Search fold_right.
-      apply SetoidList.fold_right_add2.
+      induction am; intros.
+      unfold merge. simpl. unfold fold_right. simpl. Search MapsTo.
+      Abort.
 
     Lemma merge_base :
       forall am,
         merge (empty elt) am = am.
-    Proof. intros. unfold merge. apply fold_1. Qed.
+    Proof. auto. Qed.
 
   End Operations.
 
