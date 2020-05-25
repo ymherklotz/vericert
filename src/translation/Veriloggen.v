@@ -236,6 +236,8 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
     ret (Vbinop Vadd (boplitz Vadd r1 scale) (Vlit (ZToValue 32%nat offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil =>
     ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+  (* Stack arrays/referenced variables *)
+  | Op.Ainstack a, nil => ret (Vlit (ZToValue 32%nat (Integers.Ptrofs.unsigned a))) (* TODO: Assuming stack offsets are +ve; is this ok? *)
   | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
   end.
 
@@ -272,6 +274,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Olea a, _ => translate_eff_addressing a args
+  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; this _could_ fail. *)
+  | Op.Ocast32signed, _ => ret (Vlit (NToValue 32%nat 0%N)) (* FIXME: Completely broken *)
   | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
@@ -487,7 +491,15 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
     | _, _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
     end.
 
-Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
+Definition translate_load (mem : AST.memory_chunk) (addr : Op.addressing)
+           (args : list reg) (stack : reg) : mon expr :=
+  ret (Vlit (NToValue 32%nat 0%N)). (* FIXME *)
+
+Definition translate_store (mem : AST.memory_chunk) (addr : Op.addressing)
+           (args : list reg) (stack : reg) : mon expr :=
+  ret (Vlit (NToValue 32%nat 0%N)). (* FIXME *)
+
+Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -495,8 +507,12 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
     | Iop op args dst n' =>
       do instr <- translate_instr op args;
       add_instr_reg dst n n' (block dst instr)
-    | Iload _ _ _ _ _ => error (Errors.msg "Loads are not implemented.")
-    | Istore _ _ _ _ _ => error (Errors.msg "Stores are not implemented.")
+    | Iload mem addr args dst n' =>
+      do instr <- translate_load mem addr args stack;
+      add_instr_reg dst n n' (block dst instr)
+    | Istore mem addr args src n' =>
+      do instr <- translate_store mem addr args stack;
+      add_instr_reg src n n' (Vblock instr (Vvar src)) (* TODO: Could juse use add_instr? *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -551,8 +567,8 @@ Definition set_int_size (r: reg) : reg * nat := (r, 32%nat).
 Definition transf_module (f: function) : mon module :=
   do fin <- decl_io 1%nat;
   do rtrn <- decl_io 32%nat;
-  do _ <- decl_fresh_reg ((Z.to_nat f.(fn_stacksize)) * 8%nat);
-  do _ <- traverselist (transf_instr (fst fin) (fst rtrn)) (Maps.PTree.elements f.(fn_code));
+  do stack <- decl_fresh_reg ((Z.to_nat f.(fn_stacksize)) * 8%nat);
+  do _ <- traverselist (transf_instr (fst fin) (fst rtrn) (fst stack)) (Maps.PTree.elements f.(fn_code));
   do start <- decl_io 1%nat;
   do rst <- decl_io 1%nat;
   do clk <- decl_io 1%nat;
