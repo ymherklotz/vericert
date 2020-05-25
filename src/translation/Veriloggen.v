@@ -551,6 +551,7 @@ Definition set_int_size (r: reg) : reg * nat := (r, 32%nat).
 Definition transf_module (f: function) : mon module :=
   do fin <- decl_io 1%nat;
   do rtrn <- decl_io 32%nat;
+  do _ <- decl_fresh_reg ((Z.to_nat f.(fn_stacksize)) * 8%nat);
   do _ <- traverselist (transf_instr (fst fin) (fst rtrn)) (Maps.PTree.elements f.(fn_code));
   do start <- decl_io 1%nat;
   do rst <- decl_io 1%nat;
