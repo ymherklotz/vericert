@@ -235,7 +235,7 @@ Proof.
     destruct (peq pc pc1).
 
     + subst.
-      destruct instr1.
+      destruct instr1 eqn:?.
       econstructor.
       unfold add_instr in EQ.
       destruct (check_empty_node_datapath s1 pc1); try discriminate.
@@ -251,9 +251,14 @@ Proof.
       destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
         [ discriminate | apply H7 ].
 
+      inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
+      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+
     + eapply IHl. apply EQ0. assumption.
       destruct H1. inversion H1. subst. contradiction.
       assumption.
+
+      
 
 Qed.
 
