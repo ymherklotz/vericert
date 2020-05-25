@@ -17,8 +17,92 @@
  *)
 
 From Coq Require Import FSets.FMapPositive.
-From compcert Require RTL Op Maps.
-From coqup Require Import Coquplib Verilog Veriloggen Value HTL.
+From compcert Require RTL Op Maps Errors.
+From coqup Require Import Coquplib Verilog Value HTL HTLgen AssocMap.
+
+Remark bind_inversion:
+  forall (A B: Type) (f: mon A) (g: A -> mon B)
+         (y: B) (s1 s3: st) (i: st_incr s1 s3),
+    bind f g s1 = OK y s3 i ->
+    exists x, exists s2, exists i1, exists i2,
+            f s1 = OK x s2 i1 /\ g x s2 = OK y s3 i2.
+Proof.
+  intros until i. unfold bind. destruct (f s1); intros.
+  discriminate.
+  exists a; exists s'; exists s.
+  destruct (g a s'); inv H.
+  exists s0; auto.
+Qed.
+
+Remark bind2_inversion:
+  forall (A B C: Type) (f: mon (A*B)) (g: A -> B -> mon C)
+         (z: C) (s1 s3: st) (i: st_incr s1 s3),
+    bind2 f g s1 = OK z s3 i ->
+    exists x, exists y, exists s2, exists i1, exists i2,
+              f s1 = OK (x, y) s2 i1 /\ g x y s2 = OK z s3 i2.
+Proof.
+  unfold bind2; intros.
+  exploit bind_inversion; eauto.
+  intros [[x y] [s2 [i1 [i2 [P Q]]]]]. simpl in Q.
+  exists x; exists y; exists s2; exists i1; exists i2; auto.
+Qed.
+
+Ltac monadInv1 H :=
+  match type of H with
+  | (OK _ _ _ = OK _ _ _) =>
+    inversion H; clear H; try subst
+  | (Error _ _ = OK _ _ _) =>
+    discriminate
+  | (ret _ _ = OK _ _ _) =>
+    inversion H; clear H; try subst
+  | (error _ _ = OK _ _ _) =>
+    discriminate
+  | (bind ?F ?G ?S = OK ?X ?S' ?I) =>
+    let x := fresh "x" in (
+      let s := fresh "s" in (
+        let i1 := fresh "INCR" in (
+          let i2 := fresh "INCR" in (
+            let EQ1 := fresh "EQ" in (
+              let EQ2 := fresh "EQ" in (
+                destruct (bind_inversion _ _ F G X S S' I H) as [x [s [i1 [i2 [EQ1 EQ2]]]]];
+                clear H;
+                try (monadInv1 EQ2)))))))
+  | (bind2 ?F ?G ?S = OK ?X ?S' ?I) =>
+    let x1 := fresh "x" in (
+      let x2 := fresh "x" in (
+        let s := fresh "s" in (
+          let i1 := fresh "INCR" in (
+            let i2 := fresh "INCR" in (
+              let EQ1 := fresh "EQ" in (
+                let EQ2 := fresh "EQ" in (
+                  destruct (bind2_inversion _ _ _ F G X S S' I H) as [x1 [x2 [s [i1 [i2 [EQ1 EQ2]]]]]];
+                  clear H;
+                  try (monadInv1 EQ2))))))))
+  end.
+
+Ltac monadInv H :=
+  match type of H with
+  | (ret _ _ = OK _ _ _) => monadInv1 H
+  | (error _ _ = OK _ _ _) => monadInv1 H
+  | (bind ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
+  | (bind2 ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
+  | (?F _ _ _ _ _ _ _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ = OK _ _ _) =>
+    ((progress simpl in H) || unfold F in H); monadInv1 H
+  end.
 
 (** * Relational specification of the translation *)
 
@@ -64,29 +148,142 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
       translate_condition cond args s = OK c s' i ->
       tr_instr fin rtrn st (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-      tr_instr fin rtrn st (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
+    tr_instr fin rtrn st (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
 | tr_instr_Ireturn_Some :
     forall r,
       tr_instr fin rtrn st (RTL.Ireturn (Some r))
                (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip.
 
-Inductive tr_code (c : RTL.code) (pc : RTL.node) (stmnts trans : PositiveMap.t stmnt)
+Inductive tr_code (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PositiveMap.t stmnt)
           (fin rtrn st : reg) : Prop :=
   tr_code_intro :
-    forall i s t,
-      Maps.PTree.get pc c = Some i ->
+    forall s t,
       stmnts!pc = Some s ->
       trans!pc = Some t ->
       tr_instr fin rtrn st i s t ->
-      tr_code c pc stmnts trans fin rtrn st.
+      tr_code pc i stmnts trans fin rtrn st.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st,
-      (forall pc, tr_code f.(RTL.fn_code) pc data control fin rtrn st) ->
-      tr_module f (mkmodule
-                     f.(RTL.fn_params)
-                     data
-                     control
-                     f.(RTL.fn_entrypoint)
-                     st fin rtrn).
+    forall data control fin rtrn st m,
+      (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
+                    tr_code pc i data control fin rtrn st) ->
+      m = (mkmodule f.(RTL.fn_params)
+                        data
+                        control
+                        f.(RTL.fn_entrypoint)
+                            st fin rtrn) ->
+      tr_module f m.
+
+Lemma create_reg_datapath_trans :
+  forall s s' x i,
+    create_reg s = OK x s' i ->
+    s.(st_datapath) = s'.(st_datapath).
+Proof. intros. monadInv H. trivial. Qed.
+
+Lemma create_reg_controllogic_trans :
+  forall s s' x i,
+    create_reg s = OK x s' i ->
+    s.(st_controllogic) = s'.(st_controllogic).
+Proof. intros. monadInv H. trivial. Qed.
+
+Lemma get_refl_x :
+  forall s s' x i,
+    get s = OK x s' i ->
+    s = x.
+Proof. inversion 1. trivial. Qed.
+
+Lemma get_refl_s :
+  forall s s' x i,
+    get s = OK x s' i ->
+    s = s'.
+Proof. inversion 1. trivial. Qed.
+
+Ltac inv_incr :=
+  match goal with
+  | [ H: create_reg ?s = OK _ ?s' _ |- _ ] =>
+    let H1 := fresh "H" in
+    assert (H1 := H); eapply create_reg_datapath_trans in H;
+    eapply create_reg_controllogic_trans in H1; inv_incr
+  | [ H: get ?s = OK _ _ _ |- _ ] =>
+    let H1 := fresh "H" in
+    assert (H1 := H); apply get_refl_x in H; apply get_refl_s in H1;
+    subst; inv_incr
+  | [ H: st_prop _ _ |- _ ] => unfold st_prop in H; destruct H; inv_incr
+  | [ H: st_incr _ _ |- _ ] => destruct st_incr; inv_incr
+  | _ => idtac
+  end.
+
+Ltac rewrite_states :=
+  match goal with
+  | [ H: ?x ?s = ?x ?s' |- _ ] =>
+    let c1 := fresh "c" in
+    let c2 := fresh "c" in
+    remember (?x ?s) as c1; remember (?x ?s') as c2; try subst
+  end.
+
+Lemma iter_expand_instr_spec :
+  forall l fin rtrn s s' i x,
+    HTLMonadExtra.collectlist (transf_instr fin rtrn) l s = OK x s' i ->
+    list_norepet (List.map fst l) ->
+    (forall pc instr, In (pc, instr) l ->
+                      tr_code pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st)).
+Proof.
+  induction l; simpl; intros.
+  - contradiction.
+  - destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
+    destruct (peq pc pc1).
+
+    + subst.
+      destruct instr1.
+      econstructor.
+      unfold add_instr in EQ.
+      destruct (check_empty_node_datapath s1 pc1); try discriminate.
+      destruct (check_empty_node_controllogic s1 pc1); try discriminate.
+      inversion EQ.
+      destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+
+      unfold add_instr in EQ.
+      destruct (check_empty_node_datapath s1 pc1); try discriminate.
+      destruct (check_empty_node_controllogic s1 pc1); try discriminate.
+      inversion EQ.
+      destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+
+    + eapply IHl. apply EQ0. assumption.
+      destruct H1. inversion H1. subst. contradiction.
+      assumption.
+
+Qed.
+
+Theorem transl_module_correct :
+  forall f m,
+    transl_module f = Errors.OK m -> tr_module f m.
+Proof.
+  intros until m.
+  unfold transl_module.
+  unfold run_mon.
+  destruct (transf_module f (max_state f)) eqn:?; try discriminate.
+  intros. inv H.
+  inversion s; subst.
+
+  unfold transf_module in *.
+  monadInv Heqr.
+  econstructor; simpl; trivial.
+  intros.
+  inv_incr.
+  assert (st_controllogic s8 = st_controllogic s2).
+  { rewrite <- H5. rewrite <- H6. rewrite <- H7. trivial. }
+  rewrite <- H10.
+  assert (st_datapath s8 = st_datapath s2).
+  { rewrite <- EQ4. rewrite <- EQ3. rewrite <- EQ2. trivial. }
+  assert (st_st s5 = st_st s2).
+  { rewrite H10. rewrite <- H50. trivial. }
+  rewrite H80. rewrite H81. rewrite H82.
+  eapply iter_expand_instr_spec.
+  apply EQ0.
+  apply Maps.PTree.elements_keys_norepet.
+  apply Maps.PTree.elements_correct.
+  assumption.
+Qed.

@@ -39,4 +39,10 @@ Module MonadExtra(M : Monad).
       ret (r::rs)
     end.
 
+  Fixpoint collectlist {A : Type} (f : A -> mon unit) (l : list A) {struct l} : mon unit :=
+    match l with
+    | nil => ret tt
+    | x::xs => do _ <- f x; collectlist f xs
+    end.
+
 End MonadExtra.

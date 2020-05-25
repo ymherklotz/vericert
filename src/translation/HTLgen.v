@@ -63,8 +63,7 @@ Module HTLState <: State.
   Definition st_prop := st_incr.
   Hint Unfold st_prop : htlh.
 
-  Lemma st_refl : forall s, st_prop s s.
-  Proof. auto with htlh. Qed.
+  Lemma st_refl : forall s, st_prop s s. Proof. auto with htlh. Qed.
 
   Lemma st_trans :
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
@@ -85,14 +84,14 @@ Module HTLState <: State.
   Qed.
 
 End HTLState.
-Import HTLState.
+Export HTLState.
 
 Module HTLMonad := Statemonad(HTLState).
-Import HTLMonad.
+Export HTLMonad.
 
 Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
-Import MonadNotation.
+Export MonadNotation.
 
 Definition state_goto (st : reg) (n : node) : stmnt :=
   Vnonblock (Vvar st) (Vlit (posToValue 32 n)).
@@ -316,7 +315,7 @@ Definition create_reg: mon reg :=
 Definition transf_module (f: function) : mon module :=
   do fin <- create_reg;
   do rtrn <- create_reg;
-  do _ <- traverselist (transf_instr fin rtrn) (Maps.PTree.elements f.(RTL.fn_code));
+  do _ <- collectlist (transf_instr fin rtrn) (Maps.PTree.elements f.(RTL.fn_code));
   do start <- create_reg;
   do rst <- create_reg;
   do clk <- create_reg;
@@ -354,6 +353,6 @@ Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef 
 
 Definition transf_program (d : program) : Errors.res module :=
   match main_function d.(AST.prog_main) d.(AST.prog_defs) with
-  | Some f => run_mon (max_state f) (transf_module f)
+  | Some f => transl_module f
   | _ => Errors.Error (Errors.msg "HTL: could not find main function")
   end.
