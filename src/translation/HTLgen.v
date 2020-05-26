@@ -272,7 +272,7 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
     | Inop n' => add_instr n n' Vskip
     | Iop op args dst n' =>
       do instr <- translate_instr op args;
-      add_instr n n' (block dst instr)
+      add_instr n n' (nonblock dst instr)
     | Iload _ _ _ _ _ => error (Errors.msg "Loads are not implemented.")
     | Istore _ _ _ _ _ => error (Errors.msg "Stores are not implemented.")
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")

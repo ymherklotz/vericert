@@ -222,6 +222,12 @@ Ltac rewrite_states :=
     remember (?x ?s) as c1; remember (?x ?s') as c2; try subst
   end.
 
+Lemma translate_instr_tr_op :
+  forall op args s s' e i,
+    translate_instr op args s = OK e s' i ->
+    tr_op op args e.
+Admitted.
+
 Lemma iter_expand_instr_spec :
   forall l fin rtrn s s' i x,
     HTLMonadExtra.collectlist (transf_instr fin rtrn) l s = OK x s' i ->
@@ -236,29 +242,42 @@ Proof.
 
     + subst.
       destruct instr1 eqn:?.
-      econstructor.
-      unfold add_instr in EQ.
-      destruct (check_empty_node_datapath s1 pc1); try discriminate.
-      destruct (check_empty_node_controllogic s1 pc1); try discriminate.
-      inversion EQ.
-      destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
 
-      unfold add_instr in EQ.
-      destruct (check_empty_node_datapath s1 pc1); try discriminate.
-      destruct (check_empty_node_controllogic s1 pc1); try discriminate.
-      inversion EQ.
-      destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
+      * unfold add_instr in EQ.
+        destruct (check_empty_node_datapath s1 pc1); try discriminate.
+        destruct (check_empty_node_controllogic s1 pc1); try discriminate.
+        inversion EQ.
+        econstructor.
+        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
 
-      inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
-      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+
+        inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
+        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+
+      * monadInv EQ.
+        inv_incr.
+        unfold add_instr in EQ2.
+        destruct (check_empty_node_datapath s0 pc1); try discriminate.
+        destruct (check_empty_node_controllogic s0 pc1); try discriminate.
+        inversion EQ2.
+        econstructor.
+        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+
+        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+
+        inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
+        eapply translate_instr_tr_op. apply EQ1.
+
+        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
     + eapply IHl. apply EQ0. assumption.
       destruct H1. inversion H1. subst. contradiction.
       assumption.
-
-      
 
 Qed.
 
