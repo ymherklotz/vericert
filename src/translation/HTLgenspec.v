@@ -148,7 +148,8 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
       translate_condition cond args s = OK c s' i ->
       tr_instr fin rtrn st (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-    tr_instr fin rtrn st (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
+    tr_instr fin rtrn st (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)))
+                                                  (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
 | tr_instr_Ireturn_Some :
     forall r,
       tr_instr fin rtrn st (RTL.Ireturn (Some r))
@@ -226,7 +227,15 @@ Lemma translate_instr_tr_op :
   forall op args s s' e i,
     translate_instr op args s = OK e s' i ->
     tr_op op args e.
-Admitted.
+Proof.
+  intros.
+  destruct op eqn:?; try (econstructor; apply H); try discriminate; simpl in *;
+    try (match goal with
+           [ H: match ?args with _ => _ end _ = _ _ _ |- _ ] =>
+           repeat (destruct args; try discriminate)
+         end);
+    monadInv H; constructor.
+Qed.
 
 Lemma iter_expand_instr_spec :
   forall l fin rtrn s s' i x,
@@ -241,7 +250,7 @@ Proof.
     destruct (peq pc pc1).
 
     + subst.
-      destruct instr1 eqn:?.
+      destruct instr1 eqn:?; try discriminate.
 
       * unfold add_instr in EQ.
         destruct (check_empty_node_datapath s1 pc1); try discriminate.
@@ -272,6 +281,55 @@ Proof.
 
         inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
         eapply translate_instr_tr_op. apply EQ1.
+
+        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+
+      * monadInv EQ.
+        inv_incr.
+        unfold add_branch_instr in EQ2.
+        destruct (check_empty_node_datapath s0 pc1); try discriminate.
+        destruct (check_empty_node_controllogic s0 pc1); try discriminate.
+        inversion EQ2.
+
+        econstructor.
+        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+
+        inversion H1. inversion H7. rewrite <- e2. rewrite H. econstructor.
+        apply EQ1.
+
+        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+
+      * destruct o3 eqn:?.
+        unfold add_instr_skip in EQ.
+        destruct (check_empty_node_datapath s1 pc1); try discriminate.
+        destruct (check_empty_node_controllogic s1 pc1); try discriminate.
+        inversion EQ.
+
+        econstructor.
+        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+
+        inversion H1. inversion H7. constructor.
+
+        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+
+        unfold add_instr_skip in EQ.
+        destruct (check_empty_node_datapath s1 pc1); try discriminate.
+        destruct (check_empty_node_controllogic s1 pc1); try discriminate.
+        inversion EQ.
+
+        econstructor.
+        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+          [ discriminate | apply H7 ].
+
+        inversion H1. inversion H7. apply constructor.
 
         eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 

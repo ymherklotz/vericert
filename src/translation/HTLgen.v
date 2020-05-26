@@ -142,6 +142,37 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
 
+Lemma add_instr_skip_state_incr :
+  forall s n st,
+    (st_datapath s)!n = None ->
+    (st_controllogic s)!n = None ->
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       (AssocMap.add n st s.(st_datapath))
+       (AssocMap.add n Vskip s.(st_controllogic))).
+Proof.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
+
+Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
+    | left STM, left TRANS =>
+      OK tt (mkstate
+               s.(st_st)
+               s.(st_freshreg)
+               (st_freshstate s)
+               (AssocMap.add n st s.(st_datapath))
+               (AssocMap.add n Vskip s.(st_controllogic)))
+         (add_instr_skip_state_incr s n st STM TRANS)
+    | _, _ => Error (Errors.msg "HTL.add_instr")
+    end.
+
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
 Definition block (dst : reg) (e : expr) := Vblock (Vvar dst) e.
 
@@ -285,9 +316,9 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
     | Ireturn r =>
       match r with
       | Some r' =>
-        add_instr n n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r')))
+        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r')))
       | None =>
-        add_instr n n (block fin (Vlit (ZToValue 1%nat 1%Z)))
+        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z))))
       end
     end
   end.
