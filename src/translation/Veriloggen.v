@@ -54,7 +54,7 @@ Record state: Type := mkstate {
   st_freshstate: node;
   st_stm: PositiveMap.t stmnt;
   st_statetrans: PositiveMap.t statetrans;
-  st_decl: PositiveMap.t nat;
+  st_decl: PositiveMap.t (nat * nat);
   st_wf: valid_freshstate st_stm st_freshstate
          /\ states_have_transitions st_stm st_statetrans;
 }.
@@ -82,7 +82,7 @@ Definition init_state : state :=
           1%positive
           (PositiveMap.empty stmnt)
           (PositiveMap.empty statetrans)
-          (PositiveMap.empty nat)
+          (PositiveMap.empty (nat * nat))
           init_state_wf.
 
 Inductive state_incr: state -> state -> Prop :=
@@ -145,10 +145,16 @@ Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
 Definition bind2 {A B C: Type} (f: mon (A * B)) (g: A -> B -> mon C) : mon C :=
   bind f (fun xy => g (fst xy) (snd xy)).
 
+(* FIXME: This is disgusting and probably unecessary *)
+Definition bind3 {A B C D: Type} (f: mon (A * B * C)) (g: A -> B -> C -> mon D) : mon D :=
+  bind f (fun xyz => g (fst (fst xyz)) (snd (fst xyz)) (snd xyz)).
+
 Notation "'do' X <- A ; B" := (bind A (fun X => B))
 (at level 200, X ident, A at level 100, B at level 200).
 Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
 (at level 200, X ident, Y ident, A at level 100, B at level 200).
+Notation "'do' ( X , Y , Z ) <- A ; B" := (bind3 A (fun X Y Z => B))
+(at level 200, X ident, Y ident, Z ident, A at level 100, B at level 200).
 
 Definition handle_error {A: Type} (f g: mon A) : mon A :=
   fun (s : state) =>
@@ -237,7 +243,10 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Aindexed2scaled scale offset, r1::r2::nil =>
     ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
   (* Stack arrays/referenced variables *)
-  | Op.Ainstack a, nil => ret (Vlit (ZToValue 32%nat (Integers.Ptrofs.unsigned a))) (* TODO: Assuming stack offsets are +ve; is this ok? *)
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vlit (ZToValue 32%nat a))
+    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
   | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
   end.
 
@@ -274,8 +283,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Olea a, _ => translate_eff_addressing a args
-  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; this _could_ fail. *)
-  | Op.Ocast32signed, _ => ret (Vlit (NToValue 32%nat 0%N)) (* FIXME: Completely broken *)
+  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
+  | Op.Ocast32signed, r::nill => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
   | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
@@ -368,7 +377,7 @@ Definition add_reg (r: reg) (s: state) : state :=
           (st_freshstate s)
           (st_stm s)
           (st_statetrans s)
-          (PositiveMap.add r 32%nat (st_decl s))
+          (PositiveMap.add r (32%nat, 1%nat) (st_decl s))
           (st_wf s).
 
 Lemma add_reg_state_incr:
@@ -402,9 +411,9 @@ Lemma decl_io_state_incr:
          (st_wf s)).
 Proof. constructor; simpl; auto using Ple_succ with verilog_state. Qed.
 
-Definition decl_io (sz: nat): mon (reg * nat) :=
+Definition decl_io (sz: nat) (ln: nat): mon (reg * nat * nat) :=
   fun s => let r := s.(st_freshreg) in
-           OK (r, sz) (mkstate
+           OK (r, sz, ln) (mkstate
                      (Pos.succ r)
                      (st_freshstate s)
                      (st_stm s)
@@ -413,19 +422,19 @@ Definition decl_io (sz: nat): mon (reg * nat) :=
                      (st_wf s))
               (decl_io_state_incr s).
 
-Definition declare_reg (r: reg) (sz: nat): mon (reg * nat) :=
-  fun s => OK (r, sz) (mkstate
+Definition declare_reg (r: reg) (sz: nat) (ln: nat): mon (reg * nat * nat) :=
+  fun s => OK (r, sz, ln) (mkstate
                       (st_freshreg s)
                       (st_freshstate s)
                       (st_stm s)
                       (st_statetrans s)
-                      (PositiveMap.add r sz s.(st_decl))
+                      (PositiveMap.add r (sz, ln) s.(st_decl))
                       (st_wf s))
-              (change_decl_state_incr s (PositiveMap.add r sz s.(st_decl))).
+              (change_decl_state_incr s (PositiveMap.add r (sz, ln) s.(st_decl))).
 
-Definition decl_fresh_reg (sz : nat) : mon (reg * nat) :=
-  do (r, s) <- decl_io sz;
-  declare_reg r s.
+Definition decl_fresh_reg (sz : nat) (ln : nat) : mon (reg * nat * nat) :=
+  do (r, s, l) <- decl_io sz ln;
+  declare_reg r s l.
 
 Lemma add_branch_instr_states_have_transitions:
   forall s e n n1 n2,
@@ -491,13 +500,15 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
     | _, _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
     end.
 
-Definition translate_load (mem : AST.memory_chunk) (addr : Op.addressing)
+Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
-  ret (Vlit (NToValue 32%nat 0%N)). (* FIXME *)
-
-Definition translate_store (mem : AST.memory_chunk) (addr : Op.addressing)
-           (args : list reg) (stack : reg) : mon expr :=
-  ret (Vlit (NToValue 32%nat 0%N)). (* FIXME *)
+  match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Op.Aindexed2scaled scale offset, r1::r2::nil =>
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vadd r1 (offset / 4)) (boplitz Vmul r2 (scale / 4))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
+  end.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
@@ -508,11 +519,11 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       do instr <- translate_instr op args;
       add_instr_reg dst n n' (block dst instr)
     | Iload mem addr args dst n' =>
-      do instr <- translate_load mem addr args stack;
-      add_instr_reg dst n n' (block dst instr)
+      do src <- translate_arr_access mem addr args stack;
+      add_instr_reg dst n n' (block dst src)
     | Istore mem addr args src n' =>
-      do instr <- translate_store mem addr args stack;
-      add_instr_reg src n n' (Vblock instr (Vvar src)) (* TODO: Could juse use add_instr? *)
+      do dst <- translate_arr_access mem addr args stack;
+      add_instr_reg src n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -545,9 +556,10 @@ Definition make_statetrans_cases (r : reg) (st : positive * statetrans) : expr *
 Definition make_statetrans (r : reg) (s : PositiveMap.t statetrans) : stmnt :=
   Vcase (Vvar r) (map (make_statetrans_cases r) (PositiveMap.elements s)) (Some Vskip).
 
-Fixpoint allocate_regs (e : list (reg * nat)) {struct e} : list module_item :=
+Fixpoint allocate_regs (e : list (reg * (nat * nat))) {struct e} : list module_item :=
   match e with
-  | (r, n)::es => Vdecl r n :: allocate_regs es
+  | (r, (n, 1%nat))::es => Vdecl r n :: allocate_regs es
+  | (r, (n, l))::es => Vdeclarr r n l :: allocate_regs es
   | nil => nil
   end.
 
@@ -564,18 +576,19 @@ Definition make_module_items (entry: node) (clk st rst: reg) (s: state) : list m
 
 Definition set_int_size (r: reg) : reg * nat := (r, 32%nat).
 
+(* FIXME: Tuple nesting madness everywhere. *)
 Definition transf_module (f: function) : mon module :=
-  do fin <- decl_io 1%nat;
-  do rtrn <- decl_io 32%nat;
-  do stack <- decl_fresh_reg ((Z.to_nat f.(fn_stacksize)) * 8%nat);
-  do _ <- traverselist (transf_instr (fst fin) (fst rtrn) (fst stack)) (Maps.PTree.elements f.(fn_code));
-  do start <- decl_io 1%nat;
-  do rst <- decl_io 1%nat;
-  do clk <- decl_io 1%nat;
-  do st <- decl_fresh_reg 32%nat;
+  do fin <- decl_io 1%nat 1%nat;
+  do rtrn <- decl_io 32%nat 1%nat;
+  do stack <- decl_fresh_reg 32%nat (Z.to_nat (f.(fn_stacksize) / 4));
+  do _ <- traverselist (transf_instr (fst (fst fin)) (fst (fst rtrn)) (fst (fst stack))) (Maps.PTree.elements f.(fn_code));
+  do start <- decl_io 1%nat 1%nat;
+  do rst <- decl_io 1%nat 1%nat;
+  do clk <- decl_io 1%nat 1%nat;
+  do st <- decl_fresh_reg 32%nat 1%nat;
   do current_state <- get;
-  let mi := make_module_items f.(fn_entrypoint) (fst clk) (fst st) (fst rst) current_state in
-  ret (mkmodule start rst clk fin rtrn (map set_int_size f.(fn_params)) mi).
+  let mi := make_module_items f.(fn_entrypoint) (fst (fst clk)) (fst (fst st)) (fst (fst rst)) current_state in
+  ret (mkmodule (fst start) (fst rst) (fst clk) (fst fin) (fst rtrn) (map set_int_size f.(fn_params)) mi).
 
 Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef unit))
 {struct flist} : option function :=

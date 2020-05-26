@@ -95,6 +95,7 @@ Inductive unop : Type :=
 Inductive expr : Type :=
 | Vlit : value -> expr
 | Vvar : reg -> expr
+| Vvari : reg -> expr -> expr
 | Vinputvar : reg -> expr
 | Vbinop : binop -> expr -> expr -> expr
 | Vunop : unop -> expr -> expr
@@ -136,6 +137,7 @@ done using combinational always block instead of continuous assignments. *)
 
 Inductive module_item : Type :=
 | Vdecl : reg -> nat -> module_item
+| Vdeclarr : reg -> nat -> nat -> module_item
 | Valways : edge -> stmnt -> module_item
 | Valways_ff : edge -> stmnt -> module_item
 | Valways_comb : edge -> stmnt -> module_item.
@@ -280,6 +282,7 @@ Fixpoint expr_run (s : state) (e : expr)
   | Vvar r => match s with
               | State assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
               end
+  | Vvari _ _ => Error (msg "Verilog: variable indexing not modelled")
   | Vinputvar r => access_fext s r
   | Vbinop op l r =>
     let lv := expr_run s l in
@@ -383,6 +386,7 @@ Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
   | (Valways_ff _ st)::ls => run st ls
   | (Valways_comb _ st)::ls => run st ls
   | (Vdecl _ _)::ls => mi_step s ls
+  | (Vdeclarr _ _ _)::ls => mi_step s ls
   | nil => OK s
   end.
 
