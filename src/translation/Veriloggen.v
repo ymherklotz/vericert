@@ -245,7 +245,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   (* Stack arrays/referenced variables *)
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
-    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vlit (ZToValue 32%nat a))
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vlit (ZToValue 32%nat (a / 4)))
     else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
   | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
   end.
