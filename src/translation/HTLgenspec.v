@@ -237,6 +237,37 @@ Proof.
     monadInv H; constructor.
 Qed.
 
+Ltac unfold_match H :=
+  match type of H with
+  | context[match ?g with _ => _ end] => destruct g; try discriminate
+  end.
+
+Ltac inv_add_instr' H :=
+  match type of H with
+  | ?f _ _ _ = OK _ _ _ => unfold f in H
+  | ?f _ _ _ _ = OK _ _ _ => unfold f in H
+  | ?f _ _ _ _ _ = OK _ _ _ => unfold f in H
+  end; repeat unfold_match H; inversion H.
+
+Ltac inv_add_instr :=
+  match goal with
+  | H: context[add_instr_skip _ _ _] |- _ =>
+    inv_add_instr' H
+  | H: context[add_instr_skip _ _] |- _ =>
+    monadInv H; inv_incr; inv_add_instr
+  | H: context[add_instr _ _ _ _] |- _ =>
+    inv_add_instr' H
+  | H: context[add_instr _ _ _] |- _ =>
+    monadInv H; inv_incr; inv_add_instr
+  | H: context[add_branch_instr _ _ _ _ _] |- _ =>
+    inv_add_instr' H
+  | H: context[add_branch_instr _ _ _ _] |- _ =>
+    monadInv H; inv_incr; inv_add_instr
+  end.
+
+Ltac destruct_optional :=
+  match goal with H: option ?r |- _ => destruct H end.
+
 Lemma iter_expand_instr_spec :
   forall l fin rtrn s s' i x,
     HTLMonadExtra.collectlist (transf_instr fin rtrn) l s = OK x s' i ->
@@ -250,87 +281,42 @@ Proof.
     destruct (peq pc pc1).
 
     + subst.
-      destruct instr1 eqn:?; try discriminate.
+      destruct instr1 eqn:?; try discriminate; try destruct_optional; inv_add_instr; econstructor.
 
-      * unfold add_instr in EQ.
-        destruct (check_empty_node_datapath s1 pc1); try discriminate.
-        destruct (check_empty_node_controllogic s1 pc1); try discriminate.
-        inversion EQ.
-        econstructor.
-        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o0 with pc1; destruct  H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
+      * inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
         eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * monadInv EQ.
-        inv_incr.
-        unfold add_instr in EQ2.
-        destruct (check_empty_node_datapath s0 pc1); try discriminate.
-        destruct (check_empty_node_controllogic s0 pc1); try discriminate.
-        inversion EQ2.
-        econstructor.
-        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
+      * inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
         eapply translate_instr_tr_op. apply EQ1.
-
         eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * monadInv EQ.
-        inv_incr.
-        unfold add_branch_instr in EQ2.
-        destruct (check_empty_node_datapath s0 pc1); try discriminate.
-        destruct (check_empty_node_controllogic s0 pc1); try discriminate.
-        inversion EQ2.
-
-        econstructor.
-        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        inversion H1. inversion H7. rewrite <- e2. rewrite H. econstructor.
-        apply EQ1.
-
+      * inversion H1. inversion H7. rewrite <- e2. rewrite H. econstructor. apply EQ1.
         eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * destruct o3 eqn:?.
-        unfold add_instr_skip in EQ.
-        destruct (check_empty_node_datapath s1 pc1); try discriminate.
-        destruct (check_empty_node_controllogic s1 pc1); try discriminate.
-        inversion EQ.
-
-        econstructor.
-        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        inversion H1. inversion H7. constructor.
-
+      * inversion H1. inversion H7. constructor.
         eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-        unfold add_instr_skip in EQ.
-        destruct (check_empty_node_datapath s1 pc1); try discriminate.
-        destruct (check_empty_node_controllogic s1 pc1); try discriminate.
-        inversion EQ.
-
-        econstructor.
-        destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-        destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
           [ discriminate | apply H7 ].
-
-        inversion H1. inversion H7. apply constructor.
-
+      * inversion H1. inversion H7. constructor.
         eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
     + eapply IHl. apply EQ0. assumption.
