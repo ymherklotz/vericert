@@ -85,10 +85,11 @@ Definition intToValue (i : Integers.int) : value :=
 Definition valueToInt (i : value) : Integers.int :=
   Int.repr (valueToZ i).
 
-Definition valToValue (v : Values.val) :=
+Definition valToValue (v : Values.val) : option value :=
   match v with
-  | Values.Vint i => intToValue i
-  | _ => ZToValue 32 0%Z
+  | Values.Vint i => Some (intToValue i)
+  | Values.Vundef => Some (ZToValue 32 0%Z)
+  | _ => None
   end.
 
 (** Convert a [value] to a [bool], so that choices can be made based on the
@@ -295,17 +296,22 @@ Inductive val_value_lessdef: val -> value -> Prop :=
     val_value_lessdef (Vint i) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
 
-Search Z positive.
-
-Search "wordToZ".
+Lemma valueToZ_ZToValue :
+  forall n z,
+  (- Z.of_nat (2 ^ n) <= z < Z.of_nat (2 ^ n))%Z ->
+  valueToZ (ZToValue (S n) z) = z.
+Proof.
+  unfold valueToZ, ZToValue. simpl.
+  auto using wordToZ_ZToWord.
+Qed.
 
 Lemma uvalueToZ_ZToValue :
   forall n z,
   (0 <= z < 2 ^ Z.of_nat n)%Z ->
   uvalueToZ (ZToValue n z) = z.
 Proof.
-  intros. unfold uvalueToZ, ZToValue. simpl.
-  apply uwordToZ_ZToWord. apply H.
+  unfold uvalueToZ, ZToValue. simpl.
+  auto using uwordToZ_ZToWord.
 Qed.
 
 Lemma valueToPos_posToValueAuto :

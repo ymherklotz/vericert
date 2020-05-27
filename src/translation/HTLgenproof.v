@@ -26,10 +26,11 @@ Hint Resolve Smallstep.forward_simulation_plus : htlproof.
 Hint Resolve AssocMap.gss : htlproof.
 Hint Resolve AssocMap.gso : htlproof.
 
-Inductive match_assocmaps : RTL.regset -> assocmap -> Prop :=
-| match_assocmap : forall rs am,
-    (forall r, val_value_lessdef (Registers.Regmap.get r rs) am#r) ->
-    match_assocmaps rs am.
+Inductive match_assocmaps : RTL.function -> RTL.regset -> assocmap -> Prop :=
+  match_assocmap : forall f rs am,
+    (forall r, Ple r (RTL.max_reg_function f) ->
+               val_value_lessdef (Registers.Regmap.get r rs) am#r) ->
+    match_assocmaps f rs am.
 Hint Constructors match_assocmaps : htlproof.
 
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
@@ -40,7 +41,7 @@ Hint Unfold state_st_wf : htlproof.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall (rs : RTL.regset) assoc sf f sp rs mem m st
-    (MASSOC : match_assocmaps rs assoc)
+    (MASSOC : match_assocmaps f rs assoc)
     (TF : tr_module f m)
     (WF : state_st_wf m (HTL.State m st assoc)),
     match_states (RTL.State sf f sp st rs mem)
@@ -61,27 +62,45 @@ Inductive match_program : RTL.program -> HTL.module -> Prop :=
 Hint Constructors match_program : htlproof.
 
 Lemma regs_lessdef_regs :
-  forall rs1 rs2 n v,
-    match_assocmaps rs1 rs2 ->
-    match_assocmaps rs1 (AssocMap.add n v rs2).
-Admitted.
+  forall f rs1 rs2 n v,
+    Plt (RTL.max_reg_function f) n ->
+    match_assocmaps f rs1 rs2 ->
+    match_assocmaps f rs1 (AssocMap.add n v rs2).
+Proof.
+  inversion 2; subst.
+  intros. constructor.
+  intros. unfold find_assocmap. unfold AssocMapExt.find_default.
+  rewrite AssocMap.gso. eauto.
+  apply Pos.le_lt_trans with _ _ n in H2.
+  unfold not. intros. subst. eapply Pos.lt_irrefl. eassumption. assumption.
+Qed.
 
 Lemma regs_add_match :
-  forall rs am r v v',
-    match_assocmaps rs am ->
+  forall f rs am r v v',
     val_value_lessdef v v' ->
-    match_assocmaps (Registers.Regmap.set r v rs) (AssocMap.add r v' am).
-Admitted.
+    match_assocmaps f rs am ->
+    match_assocmaps f (Registers.Regmap.set r v rs) (AssocMap.add r v' am).
+Proof.
+  inversion 2; subst.
+  constructor. intros.
+  destruct (peq r0 r); subst.
+  rewrite Registers.Regmap.gss.
+  unfold find_assocmap. unfold AssocMapExt.find_default.
+  rewrite AssocMap.gss. assumption.
 
-Lemma merge_inj :
-  forall am am' r v,
-    merge_assocmap (AssocMap.add r v am) am' = AssocMap.add r v (merge_assocmap am am').
-Admitted.
+  rewrite Registers.Regmap.gso; try assumption.
+  unfold find_assocmap. unfold AssocMapExt.find_default.
+  rewrite AssocMap.gso; eauto.
+Qed.
 
 Lemma valToValue_lessdef :
-  forall v,
-    val_value_lessdef v (valToValue v).
-Admitted.
+  forall v v',
+    valToValue v = Some v' <->
+    val_value_lessdef v v'.
+Proof.
+  split; intros.
+  destruct v; try discriminate; constructor.
+  unfold valToValue in H. inversion H. unfold intToValue
 
 (* Need to eventually move posToValue 32 to posToValueAuto, as that has this proof. *)
 Lemma assumption_32bit :
@@ -92,28 +111,6 @@ Admitted.
 Lemma assumption_32bit_bool :
   forall b,
     valueToBool (boolToValue 32 b) = b.
-Admitted.
-
-Lemma regset_assocmap_get :
-  forall r rs am v v',
-    match_assocmaps rs am ->
-    v = Registers.Regmap.get r rs ->
-    v' = am#r ->
-    val_value_lessdef v v'.
-Proof. inversion 1. intros. subst. apply H0. Qed.
-
-Lemma regset_assocmap_wf :
-  forall r rs am i,
-    match_assocmaps rs am ->
-    Values.Vint i <> Registers.Regmap.get r rs ->
-    am!r = None.
-Admitted.
-
-Lemma regset_assocmap_wf2 :
-  forall r rs am i,
-    match_assocmaps rs am ->
-    Values.Vint i = Registers.Regmap.get r rs ->
-    am!r = Some (intToValue i).
 Admitted.
 
 Lemma st_greater_than_res :
@@ -130,9 +127,6 @@ Lemma finish_not_res :
   forall f r : positive,
     f <> r.
 Admitted.
-
-Ltac unfold_merge :=
-  try (repeat (rewrite merge_inj)); unfold merge_assocmap; rewrite AssocMapExt.merge_base.
 
 Ltac inv_state :=
   match goal with
@@ -222,12 +216,12 @@ Section CORRECTNESS.
       econstructor.
 
       (* prove stval *)
-      unfold_merge; simpl.
-      apply AssocMap.gss.
+      unfold merge_assocmap. apply AssocMapExt.merge_add. simpl. apply AssocMap.gss.
 
       (* prove match_state *)
-      unfold_merge. rewrite assumption_32bit.
+      rewrite assumption_32bit.
       constructor; auto.
+      unfold merge_assocmap. rewrite AssocMapExt.merge_add. simpl. apply AssocMap.gss.
       apply regs_lessdef_regs. assumption.
       unfold state_st_wf. inversion 1. subst. apply AssocMap.gss.
     - (* Iop *)

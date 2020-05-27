@@ -26,6 +26,11 @@ Module AssocMap := PositiveMap.
 Module AssocMapExt.
   Import AssocMap.
 
+  Hint Resolve elements_3w : assocmap.
+  Hint Resolve elements_correct : assocmap.
+  Hint Resolve gss : assocmap.
+  Hint Resolve gso : assocmap.
+
   Section Operations.
 
     Variable elt : Type.
@@ -36,16 +41,40 @@ Module AssocMapExt.
       | Some v => v
       end.
 
-    Definition merge (m1 m2 : t elt) : t elt :=
-      fold_right (fun el m => match el with (k, v) => add k v m end) m2 (elements m1).
+    Definition merge (am bm : t elt) : t elt :=
+      fold_right (fun p a => add (fst p) (snd p) a) bm (elements am).
 
-    Lemma merge_add_assoc2 :
-      forall am am' r v,
-        merge (add r v am) am' = add r v (merge am am').
+    Lemma add_assoc :
+      forall k v l bm,
+      List.In (k, v) l ->
+      SetoidList.NoDupA (@eq_key elt) l ->
+      @find elt k (fold_right (fun p a => add (fst p) (snd p) a) bm l) = Some v.
     Proof.
-      induction am; intros.
-      unfold merge. simpl. unfold fold_right. simpl. Search MapsTo.
-      Abort.
+      Hint Resolve SetoidList.InA_alt : assocmap.
+      Hint Extern 1 (exists _, _) => apply list_in_map_inv : assocmap.
+
+      induction l; intros.
+      - contradiction.
+      - destruct a as [k' v'].
+        destruct (peq k k').
+        + inversion H. inversion H1. inversion H0. subst.
+          simpl. auto with assocmap.
+
+          subst. inversion H0. subst. apply in_map with (f := fst) in H1. simpl in *.
+          unfold not in H4. exfalso. apply H4. apply SetoidList.InA_alt.
+          auto with assocmap.
+
+        + inversion H. inversion H1. inversion H0. subst. simpl. rewrite gso; try assumption.
+          apply IHl. contradiction. contradiction.
+          simpl. rewrite gso; try assumption. apply IHl. assumption. inversion H0. subst. assumption.
+    Qed.
+    Hint Resolve add_assoc : assocmap.
+
+    Lemma merge_add :
+      forall k v am bm,
+      find k am = Some v ->
+      find k (merge am bm) = Some v.
+    Proof. unfold merge. auto with assocmap. Qed.
 
     Lemma merge_base :
       forall am,
