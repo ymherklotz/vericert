@@ -239,7 +239,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
   | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
   | Op.Ascaled scale offset, r1::nil =>
-    ret (Vbinop Vadd (boplitz Vadd r1 scale) (Vlit (ZToValue 32%nat offset)))
+    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32%nat offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil =>
     ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
   (* Stack arrays/referenced variables *)
@@ -377,7 +377,7 @@ Definition add_reg (r: reg) (s: state) : state :=
           (st_freshstate s)
           (st_stm s)
           (st_statetrans s)
-          (PositiveMap.add r (32%nat, 1%nat) (st_decl s))
+          (PositiveMap.add r (32%nat, 0%nat) (st_decl s))
           (st_wf s).
 
 Lemma add_reg_state_incr:
@@ -503,10 +503,19 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
   match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Op.Aindexed2scaled scale offset, r1::r2::nil =>
+  | Op.Aindexed off, r1::nil => ret (Vvari stack (boplitz Vadd r1 off)) (* FIXME: Cannot guarantee alignment *)
+  | Op.Ascaled scale offset, r1::nil =>
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32%nat (offset / 4)))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack (Vbinop Vadd (boplitz Vadd r1 (offset / 4)) (boplitz Vmul r2 (scale / 4))))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32%nat (a / 4))))
+    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
   | _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
   end.
 
@@ -558,7 +567,7 @@ Definition make_statetrans (r : reg) (s : PositiveMap.t statetrans) : stmnt :=
 
 Fixpoint allocate_regs (e : list (reg * (nat * nat))) {struct e} : list module_item :=
   match e with
-  | (r, (n, 1%nat))::es => Vdecl r n :: allocate_regs es
+  | (r, (n, 0%nat))::es => Vdecl r n :: allocate_regs es
   | (r, (n, l))::es => Vdeclarr r n l :: allocate_regs es
   | nil => nil
   end.
@@ -578,14 +587,14 @@ Definition set_int_size (r: reg) : reg * nat := (r, 32%nat).
 
 (* FIXME: Tuple nesting madness everywhere. *)
 Definition transf_module (f: function) : mon module :=
-  do fin <- decl_io 1%nat 1%nat;
-  do rtrn <- decl_io 32%nat 1%nat;
+  do fin <- decl_io 1%nat 0%nat;
+  do rtrn <- decl_io 32%nat 0%nat;
   do stack <- decl_fresh_reg 32%nat (Z.to_nat (f.(fn_stacksize) / 4));
   do _ <- traverselist (transf_instr (fst (fst fin)) (fst (fst rtrn)) (fst (fst stack))) (Maps.PTree.elements f.(fn_code));
-  do start <- decl_io 1%nat 1%nat;
-  do rst <- decl_io 1%nat 1%nat;
-  do clk <- decl_io 1%nat 1%nat;
-  do st <- decl_fresh_reg 32%nat 1%nat;
+  do start <- decl_io 1%nat 0%nat;
+  do rst <- decl_io 1%nat 0%nat;
+  do clk <- decl_io 1%nat 0%nat;
+  do st <- decl_fresh_reg 32%nat 0%nat;
   do current_state <- get;
   let mi := make_module_items f.(fn_entrypoint) (fst (fst clk)) (fst (fst st)) (fst (fst rst)) current_state in
   ret (mkmodule (fst start) (fst rst) (fst clk) (fst fin) (fst rtrn) (map set_int_size f.(fn_params)) mi).
