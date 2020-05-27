@@ -16,34 +16,39 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Import HTLgenspec Value AssocMap.
+From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap.
 From coqup Require HTL Verilog.
 From compcert Require RTL Registers Globalenvs AST.
 
 Import AssocMapNotation.
 
+Hint Resolve Smallstep.forward_simulation_plus : htlproof.
+Hint Resolve AssocMap.gss : htlproof.
+Hint Resolve AssocMap.gso : htlproof.
+
 Inductive match_assocmaps : RTL.regset -> assocmap -> Prop :=
 | match_assocmap : forall rs am,
     (forall r, val_value_lessdef (Registers.Regmap.get r rs) am#r) ->
     match_assocmaps rs am.
+Hint Constructors match_assocmaps : htlproof.
 
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
   forall st assoc,
   s = HTL.State m st assoc ->
   assoc!(m.(HTL.mod_st)) = Some (posToValue 32 st).
+Hint Unfold state_st_wf : htlproof.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall (rs : RTL.regset) assoc sf f sp rs mem m st
     (MASSOC : match_assocmaps rs assoc)
     (TF : tr_module f m)
-    (TC : tr_code f.(RTL.fn_code) st m.(HTL.mod_datapath) m.(HTL.mod_controllogic)
-                  m.(HTL.mod_finish) m.(HTL.mod_return) m.(HTL.mod_st))
     (WF : state_st_wf m (HTL.State m st assoc)),
     match_states (RTL.State sf f sp st rs mem)
                  (HTL.State m st assoc)
 | match_returnstate : forall v v' stack m,
     val_value_lessdef v v' ->
     match_states (RTL.Returnstate stack v m) (HTL.Returnstate v').
+Hint Constructors match_states : htlproof.
 
 Inductive match_program : RTL.program -> HTL.module -> Prop :=
   match_program_intro :
@@ -53,6 +58,7 @@ Inductive match_program : RTL.program -> HTL.module -> Prop :=
     Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
     tr_module f m ->
     match_program p m.
+Hint Constructors match_program : htlproof.
 
 Lemma regs_lessdef_regs :
   forall rs1 rs2 n v,
@@ -75,11 +81,6 @@ Admitted.
 Lemma valToValue_lessdef :
   forall v,
     val_value_lessdef v (valToValue v).
-Admitted.
-
-Lemma assocmap_merge_add :
-  forall k v assoc,
-    AssocMap.add k v assoc = merge_assocmap (AssocMap.add k v empty_assocmap) assoc.
 Admitted.
 
 (* Need to eventually move posToValue 32 to posToValueAuto, as that has this proof. *)
@@ -116,29 +117,42 @@ Lemma regset_assocmap_wf2 :
 Admitted.
 
 Lemma st_greater_than_res :
-  forall m res,
-    HTL.mod_st m <> res.
+  forall m res : positive,
+    m <> res.
 Admitted.
 
 Lemma finish_not_return :
-  forall m,
-    HTL.mod_finish m <> HTL.mod_return m.
+  forall r f : positive,
+    r <> f.
 Admitted.
 
 Lemma finish_not_res :
-  forall m r,
-    HTL.mod_finish m <> r.
+  forall f r : positive,
+    f <> r.
 Admitted.
-
-Ltac subst_eq_hyp :=
-  match goal with
-    H1: ?x = Some ?i, H2: ?x = Some ?j |- _ =>
-    let H := fresh "H" in
-    rewrite H1 in H2; injection H2; intro H; clear H2; subst
-  end.
 
 Ltac unfold_merge :=
   try (repeat (rewrite merge_inj)); unfold merge_assocmap; rewrite AssocMapExt.merge_base.
+
+Ltac inv_state :=
+  match goal with
+    MSTATE : match_states _ _ |- _ =>
+    inversion MSTATE;
+    match goal with
+      TF : tr_module _ _ |- _ =>
+      inversion TF;
+      match goal with
+        TC : forall _ _,
+          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _,
+        H : Maps.PTree.get _ _ = Some _ |- _ =>
+        apply TC in H; inversion H;
+        match goal with
+          TI : tr_instr _ _ _ _ _ _ |- _ =>
+          inversion TI
+        end
+      end
+    end
+  end; subst.
 
 Section CORRECTNESS.
 
@@ -160,7 +174,7 @@ Section CORRECTNESS.
 
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f assoc,
-    Veriloggen.translate_condition cond args s1 = Veriloggen.OK c s' i ->
+    translate_condition cond args s1 = OK c s' i ->
     Op.eval_condition cond (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some b ->
     Verilog.expr_runp f assoc c (boolToValue 32 b).
   Admitted.
@@ -195,56 +209,37 @@ Section CORRECTNESS.
         match_states S1 R1 ->
         exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1; intros R1 MSTATE;
-      try (inversion MSTATE; inversion TC; inversion H12; subst_eq_hyp; discriminate).
+    induction 1; intros R1 MSTATE; try inv_state.
     - (* Inop *)
-      inversion MSTATE. subst.
       econstructor.
       split.
       apply Smallstep.plus_one.
-      inversion TC.
-      eapply HTL.step_module; subst_eq_hyp; inversion H3; subst.
-      apply H2.
-      apply H1.
+      eapply HTL.step_module; eauto.
       (* processing of state *)
       econstructor.
       simpl. trivial.
       econstructor. trivial.
-      inversion H3. subst.
       econstructor.
 
-      (* prove merge *)
-      apply assocmap_merge_add.
-
       (* prove stval *)
+      unfold_merge; simpl.
       apply AssocMap.gss.
-      apply assumption_32bit.
 
       (* prove match_state *)
-      constructor.
-      apply rs.
-      apply regs_lessdef_regs.
-      assumption.
-      assumption.
-      inversion TF. simpl. apply H0.
-      unfold state_st_wf. intros. inversion H0. subst.
-      apply AssocMap.gss.
+      unfold_merge. rewrite assumption_32bit.
+      constructor; auto.
+      apply regs_lessdef_regs. assumption.
+      unfold state_st_wf. inversion 1. subst. apply AssocMap.gss.
     - (* Iop *)
-      inversion MSTATE. subst.
       econstructor.
       split.
       apply Smallstep.plus_one.
-      inversion TC.
-      eapply HTL.step_module; subst_eq_hyp; inversion H4; subst.
-      apply H3.
-      apply H2.
-      econstructor.
-      simpl. trivial.
-      constructor. trivial.
-      econstructor.
-      simpl. trivial.
-      eapply eval_correct. apply H0. apply H10. trivial. trivial.
-      unfold_merge.
+      eapply HTL.step_module; eauto.
+      econstructor; simpl; trivial.
+      constructor; trivial.
+      econstructor; simpl; eauto.
+      eapply eval_correct; eauto.
+      unfold_merge. simpl.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
       apply st_greater_than_res.
@@ -260,30 +255,24 @@ Section CORRECTNESS.
       assumption.
       apply valToValue_lessdef.
       assumption.
-      inversion TF. simpl. apply H2.
 
       unfold state_st_wf. intros. inversion H2. subst.
       unfold_merge.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
       apply st_greater_than_res.
-    - inversion MSTATE; inversion TC;
-        inversion H12; subst_eq_hyp; inversion H13.
-    - inversion MSTATE. inversion TC. subst_eq_hyp. inversion H12. subst.
-      econstructor. split. apply Smallstep.plus_one.
-      eapply HTL.step_module. subst. apply H11. apply H10.
+    - econstructor. split. apply Smallstep.plus_one.
+      eapply HTL.step_module; eauto.
       eapply Verilog.stmnt_runp_Vnonblock with
           (rhsval := if b then posToValue 32 ifso else posToValue 32 ifnot).
       simpl. trivial.
       destruct b.
       eapply Verilog.erun_Vternary_true.
-      eapply eval_cond_correct. apply args.
-      apply H7. apply H0.
+      eapply eval_cond_correct; eauto.
       constructor.
       apply assumption_32bit_bool.
       eapply Verilog.erun_Vternary_false.
-      eapply eval_cond_correct. apply args.
-      apply H7. apply H0.
+      eapply eval_cond_correct; eauto.
       constructor.
       apply assumption_32bit_bool.
       trivial.
@@ -299,8 +288,6 @@ Section CORRECTNESS.
       unfold_merge.
       apply regs_lessdef_regs. assumption.
       assumption.
-
-      inversion TF. simpl. apply H1.
 
       unfold state_st_wf. intros. inversion H1.
       subst. unfold_merge.
@@ -310,22 +297,16 @@ Section CORRECTNESS.
       unfold_merge.
       apply regs_lessdef_regs. assumption.
       assumption.
-
-      inversion TF. simpl. apply H1.
 
       unfold state_st_wf. intros. inversion H1.
       subst. unfold_merge.
       apply AssocMap.gss.
 
     - (* Return *)
-      inversion MSTATE. inversion TC. subst_eq_hyp.
-      inversion H11. subst.
       econstructor. split.
       eapply Smallstep.plus_two.
       
-      eapply HTL.step_module.
-      apply H10.
-      apply H9.
+      eapply HTL.step_module; eauto.
       constructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
@@ -340,6 +321,7 @@ Section CORRECTNESS.
       apply st_greater_than_res. apply st_greater_than_res. trivial.
 
       apply HTL.step_finish.
+      unfold_merge; simpl.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
       apply finish_not_return.
@@ -347,13 +329,11 @@ Section CORRECTNESS.
       rewrite Events.E0_left. trivial.
 
       constructor. constructor.
-      destruct (assoc!r) eqn:?.
+    - destruct (assoc!r) eqn:?.
       inversion H11. subst.
       econstructor. split.
       eapply Smallstep.plus_two.
-      eapply HTL.step_module.
-      apply H10.
-      apply H9.
+      eapply HTL.step_module; eauto.
       constructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
@@ -370,12 +350,42 @@ Section CORRECTNESS.
       apply st_greater_than_res. apply st_greater_than_res. trivial.
 
       apply HTL.step_finish.
+      unfold_merge.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
       apply finish_not_return.
       apply AssocMap.gss.
       rewrite Events.E0_left. trivial.
 
-      constructor. simpl. Search Registers.Regmap.get.
+      constructor. simpl.
+      Admitted.
+  Hint Resolve transl_step_correct : htlproof.
+
+  Lemma senv_preserved :
+    forall id : AST.ident,
+      Globalenvs.Senv.public_symbol (Smallstep.symbolenv (HTL.semantics tprog)) id =
+      Globalenvs.Senv.public_symbol (Smallstep.symbolenv (RTL.semantics prog)) id.
+  Proof. Admitted.
+  Hint Resolve senv_preserved : htlproof.
+
+  Lemma transl_initial_states :
+    forall s1 : Smallstep.state (RTL.semantics prog),
+      Smallstep.initial_state (RTL.semantics prog) s1 ->
+      exists s2 : Smallstep.state (HTL.semantics tprog),
+        Smallstep.initial_state (HTL.semantics tprog) s2 /\ match_states s1 s2.
+  Proof. Admitted.
+  Hint Resolve transl_initial_states : htlproof.
+
+  Lemma transl_final_states :
+    forall (s1 : Smallstep.state (RTL.semantics prog)) (s2 : Smallstep.state (HTL.semantics tprog))
+           (r : Integers.Int.int),
+      match_states s1 s2 ->
+      Smallstep.final_state (RTL.semantics prog) s1 r -> Smallstep.final_state (HTL.semantics tprog) s2 r.
+  Proof. Admitted.
+  Hint Resolve transl_final_states : htlproof.
+
+  Theorem transf_program_correct:
+    Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
+  Proof. eauto with htlproof. Qed.
 
 End CORRECTNESS.

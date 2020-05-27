@@ -20,6 +20,9 @@ From Coq Require Import FSets.FMapPositive.
 From compcert Require RTL Op Maps Errors.
 From coqup Require Import Coquplib Verilog Value HTL HTLgen AssocMap.
 
+Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
+Hint Resolve Maps.PTree.elements_correct : htlspec.
+
 Remark bind_inversion:
   forall (A B: Type) (f: mon A) (g: A -> mon B)
          (y: B) (s1 s3: st) (i: st_incr s1 s3),
@@ -134,6 +137,7 @@ Inductive tr_op : Op.operation -> list reg -> expr -> Prop :=
 | tr_op_Oshrimm : forall n r, tr_op (Op.Oshrimm n) (r::nil) (boplit Vshr r n)
 | tr_op_Ocmp : forall c l e s s' i, translate_condition c l s = OK e s' i -> tr_op (Op.Ocmp c) l e
 | tr_op_Olea : forall a l e s s' i, translate_eff_addressing a l s = OK e s' i -> tr_op (Op.Olea a) l e.
+Hint Constructors tr_op : htlspec.
 
 Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Prop :=
 | tr_instr_Inop :
@@ -154,6 +158,7 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
     forall r,
       tr_instr fin rtrn st (RTL.Ireturn (Some r))
                (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip.
+Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PositiveMap.t stmnt)
           (fin rtrn st : reg) : Prop :=
@@ -163,6 +168,7 @@ Inductive tr_code (pc : RTL.node) (i : RTL.instruction) (stmnts trans : Positive
       trans!pc = Some t ->
       tr_instr fin rtrn st i s t ->
       tr_code pc i stmnts trans fin rtrn st.
+Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
@@ -175,44 +181,48 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
                         f.(RTL.fn_entrypoint)
                             st fin rtrn) ->
       tr_module f m.
+Hint Constructors tr_module : htlspec.
 
 Lemma create_reg_datapath_trans :
   forall s s' x i,
     create_reg s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
+Hint Resolve create_reg_datapath_trans : htlspec.
 
 Lemma create_reg_controllogic_trans :
   forall s s' x i,
     create_reg s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
+Hint Resolve create_reg_controllogic_trans : htlspec.
 
 Lemma get_refl_x :
   forall s s' x i,
     get s = OK x s' i ->
     s = x.
 Proof. inversion 1. trivial. Qed.
+Hint Resolve get_refl_x : htlspec.
 
 Lemma get_refl_s :
   forall s s' x i,
     get s = OK x s' i ->
     s = s'.
 Proof. inversion 1. trivial. Qed.
+Hint Resolve get_refl_s : htlspec.
 
 Ltac inv_incr :=
-  match goal with
+  repeat match goal with
   | [ H: create_reg ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); eapply create_reg_datapath_trans in H;
-    eapply create_reg_controllogic_trans in H1; inv_incr
+    eapply create_reg_controllogic_trans in H1
   | [ H: get ?s = OK _ _ _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); apply get_refl_x in H; apply get_refl_s in H1;
-    subst; inv_incr
-  | [ H: st_prop _ _ |- _ ] => unfold st_prop in H; destruct H; inv_incr
-  | [ H: st_incr _ _ |- _ ] => destruct st_incr; inv_incr
-  | _ => idtac
+    subst
+  | [ H: st_prop _ _ |- _ ] => unfold st_prop in H; destruct H
+  | [ H: st_incr _ _ |- _ ] => destruct st_incr
   end.
 
 Ltac rewrite_states :=
@@ -229,13 +239,14 @@ Lemma translate_instr_tr_op :
     tr_op op args e.
 Proof.
   intros.
-  destruct op eqn:?; try (econstructor; apply H); try discriminate; simpl in *;
+  destruct op eqn:?; eauto with htlspec; try discriminate; simpl in *;
     try (match goal with
            [ H: match ?args with _ => _ end _ = _ _ _ |- _ ] =>
            repeat (destruct args; try discriminate)
          end);
     monadInv H; constructor.
 Qed.
+Hint Resolve translate_instr_tr_op : htlspec.
 
 Ltac unfold_match H :=
   match type of H with
@@ -275,55 +286,53 @@ Lemma iter_expand_instr_spec :
     (forall pc instr, In (pc, instr) l ->
                       tr_code pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st)).
 Proof.
-  induction l; simpl; intros.
-  - contradiction.
-  - destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
-    destruct (peq pc pc1).
+  induction l; simpl; intros; try contradiction.
+  destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
+  destruct (peq pc pc1).
+  + subst.
+    destruct instr1 eqn:?; try discriminate; try destruct_optional; inv_add_instr; econstructor.
 
-    + subst.
-      destruct instr1 eqn:?; try discriminate; try destruct_optional; inv_add_instr; econstructor.
+    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * destruct o0 with pc1; destruct  H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
+      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * destruct o0 with pc1; destruct  H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
-        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
+      eapply translate_instr_tr_op. apply EQ1.
+      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
-        eapply translate_instr_tr_op. apply EQ1.
-        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * inversion H1. inversion H7. rewrite <- e2. rewrite H. econstructor. apply EQ1.
+      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * inversion H1. inversion H7. rewrite <- e2. rewrite H. econstructor. apply EQ1.
-        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * inversion H1. inversion H7. constructor.
+      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * inversion H1. inversion H7. constructor.
-        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
+        [ discriminate | apply H7 ].
+    * inversion H1. inversion H7. constructor.
+      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
-      * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-          [ discriminate | apply H7 ].
-      * inversion H1. inversion H7. constructor.
-        eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
-
-    + eapply IHl. apply EQ0. assumption.
-      destruct H1. inversion H1. subst. contradiction.
-      assumption.
-
+  + eapply IHl. apply EQ0. assumption.
+    destruct H1. inversion H1. subst. contradiction.
+    assumption.
 Qed.
+Hint Resolve iter_expand_instr_spec : htlspec.
 
 Theorem transl_module_correct :
   forall f m,
@@ -349,9 +358,5 @@ Proof.
   assert (st_st s5 = st_st s2).
   { rewrite H10. rewrite <- H50. trivial. }
   rewrite H80. rewrite H81. rewrite H82.
-  eapply iter_expand_instr_spec.
-  apply EQ0.
-  apply Maps.PTree.elements_keys_norepet.
-  apply Maps.PTree.elements_correct.
-  assumption.
+  eauto with htlspec.
 Qed.
