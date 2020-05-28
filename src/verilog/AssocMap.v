@@ -19,6 +19,10 @@
 From coqup Require Import Coquplib Value.
 From Coq Require Import FSets.FMapPositive.
 
+From compcert Require Import Maps.
+
+Search Maps.PTree.get not List.In.
+
 Definition reg := positive.
 
 Module AssocMap := PositiveMap.
@@ -70,16 +74,71 @@ Module AssocMapExt.
     Qed.
     Hint Resolve add_assoc : assocmap.
 
+    Lemma not_in_assoc :
+      forall k v l bm,
+      ~ List.In k (List.map (@fst key elt) l) ->
+      @find elt k bm = Some v ->
+      @find elt k (fold_right (fun p a => add (fst p) (snd p) a) bm l) = Some v.
+    Proof.
+      induction l; intros.
+      - assumption.
+      - destruct a as [k' v'].
+        destruct (peq k k'); subst;
+        simpl in *; apply Decidable.not_or in H; destruct H. contradiction.
+        rewrite AssocMap.gso; auto.
+    Qed.
+    Hint Resolve not_in_assoc : assocmap.
+
+    Lemma elements_iff :
+      forall am k,
+      (exists v, find k am = Some v) <->
+      List.In k (List.map (@fst _ elt) (elements am)).
+    Proof.
+      split; intros.
+      destruct H. apply elements_correct in H. apply in_map with (f := fst) in H. apply H.
+      apply list_in_map_inv in H. destruct H. destruct H. subst.
+      exists (snd x). apply elements_complete. assert (x = (fst x, snd x)) by apply surjective_pairing.
+      rewrite H in H0; assumption.
+    Qed.
+    Hint Resolve elements_iff : assocmap.
+
+    Lemma elements_correct' :
+      forall am k,
+      ~ (exists v, find k am = Some v) <->
+      ~ List.In k (List.map (@fst _ elt) (elements am)).
+    Proof. auto using not_iff_compat with assocmap. Qed.
+    Hint Resolve elements_correct' : assocmap.
+
+    Lemma elements_correct_none :
+      forall am k,
+      find k am = None ->
+      ~ List.In k (List.map (@fst _ elt) (elements am)).
+    Proof.
+      intros. apply elements_correct'. unfold not. intros.
+      destruct H0. rewrite H in H0. discriminate.
+    Qed.
+    Hint Resolve elements_correct_none : assocmap.
+
     Lemma merge_add :
       forall k v am bm,
       find k am = Some v ->
       find k (merge am bm) = Some v.
     Proof. unfold merge. auto with assocmap. Qed.
+    Hint Resolve merge_add : assocmap.
+
+    Lemma merge_not_in :
+      forall k v am bm,
+      find k am = None ->
+      find k bm = Some v ->
+      find k (merge am bm) = Some v.
+    Proof. intros. apply not_in_assoc; auto with assocmap. Qed.
+    Hint Resolve merge_not_in : assocmap.
 
     Lemma merge_base :
       forall am,
         merge (empty elt) am = am.
     Proof. auto. Qed.
+    Hint Resolve merge_base : assocmap.
 
   End Operations.
 
