@@ -48,13 +48,13 @@ Module AssocMapExt.
       | _, _ => m1
       end.
 
-    Lemma merge_base :
+    Lemma merge_base_1 :
       forall am,
         merge (empty A) am = am.
     Proof. auto. Qed.
-    Hint Resolve merge_base : assocmap.
+    Hint Resolve merge_base_1 : assocmap.
 
-    Lemma merge_base2 :
+    Lemma merge_base_2 :
       forall am,
         merge am (empty A) = am.
     Proof.
@@ -62,12 +62,37 @@ Module AssocMapExt.
       destruct am; trivial.
       destruct o; trivial.
       Qed.
-    Hint Resolve merge_base2 : assocmap.
+    Hint Resolve merge_base_2 : assocmap.
 
-    Lemma merge_assoc :
+    Lemma merge_add_assoc :
+      forall r am am' v,
+        merge (set r v am) am' = set r v (merge am am').
+    Proof.
+      induction r; intros; destruct am; destruct am'; try (destruct o); simpl;
+        try rewrite IHr; try reflexivity.
+    Qed.
+    Hint Resolve merge_add_assoc : assocmap.
+
+    Lemma merge_correct_1 :
       forall am bm k v,
-      (merge (set k v am) bm) = (set k v (merge am bm)).
-    Proof. Admitted.
+      get k am = Some v ->
+      get k (merge am bm) = Some v.
+    Proof.
+      induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
+        try rewrite gempty in H; try discriminate; try assumption; auto.
+    Qed.
+    Hint Resolve merge_correct_1 : assocmap.
+
+    Lemma merge_correct_2 :
+      forall am bm k v,
+      get k am = None ->
+      get k bm = Some v ->
+      get k (merge am bm) = Some v.
+    Proof.
+      induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
+        try rewrite gempty in H; try discriminate; try assumption; auto.
+    Qed.
+    Hint Resolve merge_correct_2 : assocmap.
 
     Definition merge_fold (am bm : t A) : t A :=
       fold_right (fun p a => set (fst p) (snd p) a) bm (elements am).
