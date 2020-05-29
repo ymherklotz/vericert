@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import FSets.FMapPositive.
 From compcert Require RTL Op Maps Errors.
+From compcert Require Import Maps.
 From coqup Require Import Coquplib Verilog Value HTL HTLgen AssocMap.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
@@ -160,7 +160,7 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
                (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip.
 Hint Constructors tr_instr : htlspec.
 
-Inductive tr_code (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PositiveMap.t stmnt)
+Inductive tr_code (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
           (fin rtrn st : reg) : Prop :=
   tr_code_intro :
     forall s t,

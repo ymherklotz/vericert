@@ -20,6 +20,7 @@ From Coq Require Import FSets.FMapPositive.
 From coqup Require Import Coquplib Value AssocMap.
 From coqup Require Verilog.
 From compcert Require Events Globalenvs Smallstep Integers.
+From compcert Require Import Maps.
 
 Import HexNotationValue.
 
@@ -29,13 +30,11 @@ hardware-like layout that is still similar to the register transfer language
 instantiations and that we now describe a state machine instead of a
 control-flow graph. *)
 
-Notation "a ! b" := (PositiveMap.find b a) (at level 1).
-
 Definition reg := positive.
 Definition node := positive.
 
-Definition datapath := PositiveMap.t Verilog.stmnt.
-Definition controllogic := PositiveMap.t Verilog.stmnt.
+Definition datapath := PTree.t Verilog.stmnt.
+Definition controllogic := PTree.t Verilog.stmnt.
 
 Record module: Type :=
   mkmodule {

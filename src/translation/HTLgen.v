@@ -120,8 +120,8 @@ Lemma add_instr_state_incr :
        s.(st_st)
        s.(st_freshreg)
        (st_freshstate s)
-       (AssocMap.add n st s.(st_datapath))
-       (AssocMap.add n (state_goto s.(st_st) n') s.(st_controllogic))).
+       (AssocMap.set n st s.(st_datapath))
+       (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
 Proof.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
@@ -136,8 +136,8 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
                s.(st_st)
                s.(st_freshreg)
                (st_freshstate s)
-               (AssocMap.add n st s.(st_datapath))
-               (AssocMap.add n (state_goto s.(st_st) n') s.(st_controllogic)))
+               (AssocMap.set n st s.(st_datapath))
+               (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
          (add_instr_state_incr s n n' st STM TRANS)
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
@@ -151,8 +151,8 @@ Lemma add_instr_skip_state_incr :
        s.(st_st)
        s.(st_freshreg)
        (st_freshstate s)
-       (AssocMap.add n st s.(st_datapath))
-       (AssocMap.add n Vskip s.(st_controllogic))).
+       (AssocMap.set n st s.(st_datapath))
+       (AssocMap.set n Vskip s.(st_controllogic))).
 Proof.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
@@ -167,8 +167,8 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
                s.(st_st)
                s.(st_freshreg)
                (st_freshstate s)
-               (AssocMap.add n st s.(st_datapath))
-               (AssocMap.add n Vskip s.(st_controllogic)))
+               (AssocMap.set n st s.(st_datapath))
+               (AssocMap.set n Vskip s.(st_controllogic)))
          (add_instr_skip_state_incr s n st STM TRANS)
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
@@ -274,8 +274,8 @@ Lemma add_branch_instr_state_incr:
                  s.(st_st)
                 (st_freshreg s)
                 (st_freshstate s)
-                (AssocMap.add n Vskip (st_datapath s))
-                (AssocMap.add n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
+                (AssocMap.set n Vskip (st_datapath s))
+                (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
 Proof.
   intros. apply state_incr_intro; simpl;
             try (intros; destruct (peq n0 n); subst);
@@ -290,8 +290,8 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                s.(st_st)
                 (st_freshreg s)
                 (st_freshstate s)
-                (AssocMap.add n Vskip (st_datapath s))
-                (AssocMap.add n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
+                (AssocMap.set n Vskip (st_datapath s))
+                (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
     | _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
     end.

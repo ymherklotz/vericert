@@ -26,6 +26,8 @@ Hint Resolve Smallstep.forward_simulation_plus : htlproof.
 Hint Resolve AssocMap.gss : htlproof.
 Hint Resolve AssocMap.gso : htlproof.
 
+Hint Unfold find_assocmap AssocMapExt.get_default : htlproof.
+
 Inductive match_assocmaps : RTL.function -> RTL.regset -> assocmap -> Prop :=
   match_assocmap : forall f rs am,
     (forall r, Ple r (RTL.max_reg_function f) ->
@@ -61,37 +63,39 @@ Inductive match_program : RTL.program -> HTL.module -> Prop :=
     match_program p m.
 Hint Constructors match_program : htlproof.
 
-Lemma regs_lessdef_regs :
+Lemma regs_lessdef_add_greater :
   forall f rs1 rs2 n v,
     Plt (RTL.max_reg_function f) n ->
     match_assocmaps f rs1 rs2 ->
-    match_assocmaps f rs1 (AssocMap.add n v rs2).
+    match_assocmaps f rs1 (AssocMap.set n v rs2).
 Proof.
   inversion 2; subst.
   intros. constructor.
-  intros. unfold find_assocmap. unfold AssocMapExt.find_default.
+  intros. unfold find_assocmap. unfold AssocMapExt.get_default.
   rewrite AssocMap.gso. eauto.
   apply Pos.le_lt_trans with _ _ n in H2.
   unfold not. intros. subst. eapply Pos.lt_irrefl. eassumption. assumption.
 Qed.
+Hint Resolve regs_lessdef_add_greater : htlproof.
 
-Lemma regs_add_match :
+Lemma regs_lessdef_add_match :
   forall f rs am r v v',
     val_value_lessdef v v' ->
     match_assocmaps f rs am ->
-    match_assocmaps f (Registers.Regmap.set r v rs) (AssocMap.add r v' am).
+    match_assocmaps f (Registers.Regmap.set r v rs) (AssocMap.set r v' am).
 Proof.
   inversion 2; subst.
   constructor. intros.
   destruct (peq r0 r); subst.
   rewrite Registers.Regmap.gss.
-  unfold find_assocmap. unfold AssocMapExt.find_default.
+  unfold find_assocmap. unfold AssocMapExt.get_default.
   rewrite AssocMap.gss. assumption.
 
   rewrite Registers.Regmap.gso; try assumption.
-  unfold find_assocmap. unfold AssocMapExt.find_default.
+  unfold find_assocmap. unfold AssocMapExt.get_default.
   rewrite AssocMap.gso; eauto.
 Qed.
+Hint Resolve regs_lessdef_add_match : htlproof.
 
 Lemma valToValue_lessdef :
   forall v v',
@@ -198,6 +202,11 @@ Section CORRECTNESS.
       exists assoc',
         HTL.step tge (HTL.State m st assoc) Events.E0 (HTL.State m st assoc').
 
+  Lemma greater_than_max_func :
+    forall f st,
+      Plt (RTL.max_reg_function f) st.
+  Proof. Admitted.
+
   Theorem transl_step_correct:
     forall (S1 : RTL.state) t S2,
       RTL.step ge S1 t S2 ->
@@ -218,14 +227,14 @@ Section CORRECTNESS.
       econstructor.
 
       (* prove stval *)
-      unfold merge_assocmap. apply AssocMapExt.merge_add. simpl. apply AssocMap.gss.
+      unfold_merge. simpl. apply AssocMap.gss.
 
       (* prove match_state *)
       rewrite assumption_32bit.
       constructor; auto.
-      unfold merge_assocmap. rewrite AssocMapExt.merge_add. simpl. apply AssocMap.gss.
-      apply regs_lessdef_regs. assumption.
-      unfold state_st_wf. inversion 1. subst. apply AssocMap.gss.
+      unfold_merge. simpl. apply regs_lessdef_regs. apply greater_than_max_func.
+      assumption.
+      unfold state_st_wf. inversion 1. subst. unfold_merge. apply AssocMap.gss.
     - (* Iop *)
       econstructor.
       split.

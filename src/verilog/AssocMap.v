@@ -198,6 +198,10 @@ Definition empty_assocmap : assocmap := AssocMap.empty value.
 
 Definition merge_assocmap : assocmap -> assocmap -> assocmap := merge value.
 
+Ltac unfold_merge :=
+  unfold merge_assocmap; try (repeat (rewrite merge_add_assoc));
+  rewrite AssocMapExt.merge_base_1.
+
 Module AssocMapNotation.
   Notation "a ! b" := (AssocMap.get b a) (at level 1).
   Notation "a # ( b , c )" := (find_assocmap c b a) (at level 1).

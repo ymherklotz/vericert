@@ -171,13 +171,13 @@ Definition posToLit (p : positive) : expr :=
 Coercion Vlit : value >-> expr.
 Coercion Vvar : reg >-> expr.
 
-Definition fext := PositiveMap.t value.
+Definition fext := AssocMap.t value.
 Definition fextclk := nat -> fext.
 
 (** ** State
 
 The [state] contains the following items:
-
+n
 - Current [module] that is being worked on, so that the state variable can be
 retrieved and set appropriately.
 - Current [module_item] which is being worked on.
@@ -300,7 +300,7 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 Local Open Scope error_monad_scope.
 
 Definition access_fext (f : fext) (r : reg) : res value :=
-  match PositiveMap.find r f with
+  match AssocMap.get r f with
   | Some v => OK v
   | _ => OK (ZToValue 1 0)
   end.
@@ -452,7 +452,7 @@ Inductive stmnt_runp: fext -> associations -> stmnt -> associations -> Prop :=
     forall lhs name rhs rhsval assoc assoc' nbassoc f,
     assign_name lhs = OK name ->
     expr_runp f assoc rhs rhsval ->
-    assoc' = (PositiveMap.add name rhsval assoc) ->
+    assoc' = (AssocMap.set name rhsval assoc) ->
     stmnt_runp f (mkassociations assoc nbassoc)
                  (Vblock lhs rhs)
                  (mkassociations assoc' nbassoc)
@@ -460,7 +460,7 @@ Inductive stmnt_runp: fext -> associations -> stmnt -> associations -> Prop :=
     forall lhs name rhs rhsval assoc nbassoc nbassoc' f,
     assign_name lhs = OK name ->
     expr_runp f assoc rhs rhsval ->
-    nbassoc' = (PositiveMap.add name rhsval nbassoc) ->
+    nbassoc' = (AssocMap.set name rhsval nbassoc) ->
     stmnt_runp f (mkassociations assoc nbassoc)
                  (Vnonblock lhs rhs)
                  (mkassociations assoc nbassoc').
@@ -534,8 +534,8 @@ other arguments to the module are also to be supported. *)
 
 Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
-           | S O => (AssocMap.add (fst (mod_reset m)) (ZToValue 1 1) empty_assocmap)
-           | _ => (AssocMap.add (fst (mod_reset m)) (ZToValue 1 0) empty_assocmap)
+           | S O => (AssocMap.set (fst (mod_reset m)) (ZToValue 1 1) empty_assocmap)
+           | _ => (AssocMap.set (fst (mod_reset m)) (ZToValue 1 0) empty_assocmap)
            end.
 
 (*Definition module_run (n : nat) (m : module) : res assocmap :=
