@@ -50,23 +50,23 @@ Module AssocMapExt.
 
     Lemma merge_base_1 :
       forall am,
-        merge (empty A) am = am.
+      merge (empty A) am = am.
     Proof. auto. Qed.
     Hint Resolve merge_base_1 : assocmap.
 
     Lemma merge_base_2 :
       forall am,
-        merge am (empty A) = am.
+      merge am (empty A) = am.
     Proof.
       unfold merge.
       destruct am; trivial.
       destruct o; trivial.
-      Qed.
+    Qed.
     Hint Resolve merge_base_2 : assocmap.
 
     Lemma merge_add_assoc :
       forall r am am' v,
-        merge (set r v am) am' = set r v (merge am am').
+      merge (set r v am) am' = set r v (merge am am').
     Proof.
       induction r; intros; destruct am; destruct am'; try (destruct o); simpl;
         try rewrite IHr; try reflexivity.
@@ -128,7 +128,7 @@ Module AssocMapExt.
       - assumption.
       - destruct a as [k' v'].
         destruct (peq k k'); subst;
-        simpl in *; apply Decidable.not_or in H; destruct H. contradiction.
+          simpl in *; apply Decidable.not_or in H; destruct H. contradiction.
         rewrite AssocMap.gso; auto.
     Qed.
     Hint Resolve not_in_assoc : assocmap.
@@ -180,7 +180,7 @@ Module AssocMapExt.
 
     Lemma merge_fold_base :
       forall am,
-        merge_fold (empty A) am = am.
+      merge_fold (empty A) am = am.
     Proof. auto. Qed.
     Hint Resolve merge_fold_base : assocmap.
 
