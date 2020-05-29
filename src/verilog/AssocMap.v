@@ -17,46 +17,67 @@
  *)
 
 From coqup Require Import Coquplib Value.
-From Coq Require Import FSets.FMapPositive.
-
 From compcert Require Import Maps.
-
-Search Maps.PTree.get not List.In.
 
 Definition reg := positive.
 
-Module AssocMap := PositiveMap.
+Module AssocMap := Maps.PTree.
 
 Module AssocMapExt.
   Import AssocMap.
 
-  Hint Resolve elements_3w : assocmap.
-  Hint Resolve elements_correct : assocmap.
-  Hint Resolve gss : assocmap.
-  Hint Resolve gso : assocmap.
+  Hint Resolve elements_correct elements_complete
+       elements_keys_norepet : assocmap.
+  Hint Resolve gso gss : assocmap.
 
   Section Operations.
 
-    Variable elt : Type.
+    Variable A : Type.
 
-    Definition find_default (a : elt) (k : reg) (m : t elt) : elt :=
-      match find k m with
+    Definition get_default (a : A) (k : reg) (m : t A) : A :=
+      match get k m with
       | None => a
       | Some v => v
       end.
 
-    Definition merge (am bm : t elt) : t elt :=
-      fold_right (fun p a => add (fst p) (snd p) a) bm (elements am).
+    Fixpoint merge (m1 m2 : t A) : t A :=
+      match m1, m2 with
+      | Node l1 (Some a) r1, Node l2 _ r2 => Node (merge l1 l2) (Some a) (merge r1 r2)
+      | Node l1 None r1, Node l2 o r2 => Node (merge l1 l2) o (merge r1 r2)
+      | Leaf, _ => m2
+      | _, _ => m1
+      end.
+
+    Lemma merge_base :
+      forall am,
+        merge (empty A) am = am.
+    Proof. auto. Qed.
+    Hint Resolve merge_base : assocmap.
+
+    Lemma merge_base2 :
+      forall am,
+        merge am (empty A) = am.
+    Proof.
+      unfold merge.
+      destruct am; trivial.
+      destruct o; trivial.
+      Qed.
+    Hint Resolve merge_base2 : assocmap.
+
+    Lemma merge_assoc :
+      forall am bm k v,
+      (merge (set k v am) bm) = (set k v (merge am bm)).
+    Proof. Admitted.
+
+    Definition merge_fold (am bm : t A) : t A :=
+      fold_right (fun p a => set (fst p) (snd p) a) bm (elements am).
 
     Lemma add_assoc :
-      forall k v l bm,
+      forall (k : elt) (v : A) l bm,
       List.In (k, v) l ->
-      SetoidList.NoDupA (@eq_key elt) l ->
-      @find elt k (fold_right (fun p a => add (fst p) (snd p) a) bm l) = Some v.
+      list_norepet (List.map fst l) ->
+      @get A k (fold_right (fun p a => set (fst p) (snd p) a) bm l) = Some v.
     Proof.
-      Hint Resolve SetoidList.InA_alt : assocmap.
-      Hint Extern 1 (exists _, _) => apply list_in_map_inv : assocmap.
-
       induction l; intros.
       - contradiction.
       - destruct a as [k' v'].
@@ -64,9 +85,7 @@ Module AssocMapExt.
         + inversion H. inversion H1. inversion H0. subst.
           simpl. auto with assocmap.
 
-          subst. inversion H0. subst. apply in_map with (f := fst) in H1. simpl in *.
-          unfold not in H4. exfalso. apply H4. apply SetoidList.InA_alt.
-          auto with assocmap.
+          inversion H0; subst. apply in_map with (f:=fst) in H1. contradiction.
 
         + inversion H. inversion H1. inversion H0. subst. simpl. rewrite gso; try assumption.
           apply IHl. contradiction. contradiction.
@@ -76,9 +95,9 @@ Module AssocMapExt.
 
     Lemma not_in_assoc :
       forall k v l bm,
-      ~ List.In k (List.map (@fst key elt) l) ->
-      @find elt k bm = Some v ->
-      @find elt k (fold_right (fun p a => add (fst p) (snd p) a) bm l) = Some v.
+      ~ List.In k (List.map (@fst elt A) l) ->
+      @get A k bm = Some v ->
+      get k (fold_right (fun p a => set (fst p) (snd p) a) bm l) = Some v.
     Proof.
       induction l; intros.
       - assumption.
@@ -91,8 +110,8 @@ Module AssocMapExt.
 
     Lemma elements_iff :
       forall am k,
-      (exists v, find k am = Some v) <->
-      List.In k (List.map (@fst _ elt) (elements am)).
+      (exists v, get k am = Some v) <->
+      List.In k (List.map (@fst _ A) (elements am)).
     Proof.
       split; intros.
       destruct H. apply elements_correct in H. apply in_map with (f := fst) in H. apply H.
@@ -104,41 +123,41 @@ Module AssocMapExt.
 
     Lemma elements_correct' :
       forall am k,
-      ~ (exists v, find k am = Some v) <->
-      ~ List.In k (List.map (@fst _ elt) (elements am)).
+      ~ (exists v, get k am = Some v) <->
+      ~ List.In k (List.map (@fst _ A) (elements am)).
     Proof. auto using not_iff_compat with assocmap. Qed.
     Hint Resolve elements_correct' : assocmap.
 
     Lemma elements_correct_none :
       forall am k,
-      find k am = None ->
-      ~ List.In k (List.map (@fst _ elt) (elements am)).
+      get k am = None ->
+      ~ List.In k (List.map (@fst _ A) (elements am)).
     Proof.
       intros. apply elements_correct'. unfold not. intros.
       destruct H0. rewrite H in H0. discriminate.
     Qed.
     Hint Resolve elements_correct_none : assocmap.
 
-    Lemma merge_add :
+    Lemma merge_fold_add :
       forall k v am bm,
-      find k am = Some v ->
-      find k (merge am bm) = Some v.
-    Proof. unfold merge. auto with assocmap. Qed.
-    Hint Resolve merge_add : assocmap.
+      am ! k = Some v ->
+      (merge_fold am bm) ! k = Some v.
+    Proof. unfold merge_fold; auto with assocmap. Qed.
+    Hint Resolve merge_fold_add : assocmap.
 
-    Lemma merge_not_in :
+    Lemma merge_fold_not_in :
       forall k v am bm,
-      find k am = None ->
-      find k bm = Some v ->
-      find k (merge am bm) = Some v.
+      get k am = None ->
+      get k bm = Some v ->
+      get k (merge_fold am bm) = Some v.
     Proof. intros. apply not_in_assoc; auto with assocmap. Qed.
-    Hint Resolve merge_not_in : assocmap.
+    Hint Resolve merge_fold_not_in : assocmap.
 
-    Lemma merge_base :
+    Lemma merge_fold_base :
       forall am,
-        merge (empty elt) am = am.
+        merge_fold (empty A) am = am.
     Proof. auto. Qed.
-    Hint Resolve merge_base : assocmap.
+    Hint Resolve merge_fold_base : assocmap.
 
   End Operations.
 
@@ -148,14 +167,14 @@ Import AssocMapExt.
 Definition assocmap := AssocMap.t value.
 
 Definition find_assocmap (n : nat) : reg -> assocmap -> value :=
-  find_default value (ZToValue n 0).
+  get_default value (ZToValue n 0).
 
 Definition empty_assocmap : assocmap := AssocMap.empty value.
 
 Definition merge_assocmap : assocmap -> assocmap -> assocmap := merge value.
 
 Module AssocMapNotation.
-  Notation "a ! b" := (AssocMap.find b a) (at level 1).
+  Notation "a ! b" := (AssocMap.get b a) (at level 1).
   Notation "a # ( b , c )" := (find_assocmap c b a) (at level 1).
   Notation "a # b" := (find_assocmap 32 b a) (at level 1).
   Notation "a ## b" := (List.map (fun c => find_assocmap 32 c a) b) (at level 1).

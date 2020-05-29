@@ -100,7 +100,8 @@ Lemma valToValue_lessdef :
 Proof.
   split; intros.
   destruct v; try discriminate; constructor.
-  unfold valToValue in H. inversion H. unfold intToValue
+  unfold valToValue in H. inversion H.
+  Admitted.
 
 (* Need to eventually move posToValue 32 to posToValueAuto, as that has this proof. *)
 Lemma assumption_32bit :
@@ -159,11 +160,12 @@ Section CORRECTNESS.
   Let tge : HTL.genv := HTL.genv_empty.
 
   Lemma eval_correct :
-    forall sp op rs args m v e assoc f,
+    forall sp op rs args m v v' e assoc f,
       Op.eval_operation ge sp op
 (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
       tr_op op args e ->
-      Verilog.expr_runp f assoc e (valToValue v).
+      valToValue v = Some v' ->
+      Verilog.expr_runp f assoc e v'.
   Admitted.
 
   Lemma eval_cond_correct :
