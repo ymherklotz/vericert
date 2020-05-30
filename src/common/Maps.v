@@ -40,10 +40,4 @@ Definition traverse (A B : Type) (f : positive -> A -> res B) m := xtraverse f m
 
 Definition traverse1 (A B : Type) (f : A -> res B) := traverse (fun _ => f).
 
-Lemma traverse1_inversion:
-  forall (A B : Type) (f : A -> res B) (i j : positive) (m : t A) (m' : t B),
-    traverse1 f m = OK m' ->
-    list_forall2 (fun x y => f (snd x) = OK (snd y) /\ fst x = fst y) (elements m) (elements m').
-Proof. Admitted.
-
 End PTree.

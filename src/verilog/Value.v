@@ -1,4 +1,4 @@
-(* -*- mode: coq -*-
+(*
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -18,8 +18,9 @@
 
 (* begin hide *)
 From bbv Require Import Word.
-From Coq Require Import ZArith.ZArith.
-From compcert Require Import lib.Integers.
+From bbv Require HexNotation WordScope.
+From Coq Require Import ZArith.ZArith FSets.FMapPositive.
+From compcert Require Import lib.Integers common.Values.
 (* end hide *)
 
 (** * Value
@@ -47,7 +48,7 @@ Definition wordToValue : forall sz : nat, word sz -> value := mkvalue.
 
 Definition valueToWord : forall v : value, word (vsize v) := vword.
 
-Definition valueToNat (v : value) : nat :=
+Definition valueToNat (v :value) : nat :=
   wordToNat (vword v).
 
 Definition natToValue sz (n : nat) : value :=
@@ -59,13 +60,6 @@ Definition valueToN (v : value) : N :=
 Definition NToValue sz (n : N) : value :=
   mkvalue sz (NToWord sz n).
 
-Definition posToValue sz (p : positive) : value :=
-  mkvalue sz (posToWord sz p).
-
-Definition posToValueAuto (p : positive) : value :=
-  let size := Z.to_nat (Z.succ (log_inf p)) in
-  mkvalue size (Word.posToWord size p).
-
 Definition ZToValue (s : nat) (z : Z) : value :=
   mkvalue s (ZToWord s z).
 
@@ -75,8 +69,28 @@ Definition valueToZ (v : value) : Z :=
 Definition uvalueToZ (v : value) : Z :=
   uwordToZ (vword v).
 
+Definition posToValue sz (p : positive) : value :=
+  ZToValue sz (Zpos p).
+
+Definition posToValueAuto (p : positive) : value :=
+  let size := Pos.to_nat (Pos.size p) in
+  ZToValue size (Zpos p).
+
+Definition valueToPos (v : value) : positive :=
+  Z.to_pos (uvalueToZ v).
+
 Definition intToValue (i : Integers.int) : value :=
   ZToValue Int.wordsize (Int.unsigned i).
+
+Definition valueToInt (i : value) : Integers.int :=
+  Int.repr (valueToZ i).
+
+Definition valToValue (v : Values.val) : option value :=
+  match v with
+  | Values.Vint i => Some (intToValue i)
+  | Values.Vundef => Some (ZToValue 32 0%Z)
+  | _ => None
+  end.
 
 (** Convert a [value] to a [bool], so that choices can be made based on the
 result. This is also because comparison operators will give back [value] instead
@@ -91,8 +105,8 @@ Definition boolToValue (sz : nat) (b : bool) : value :=
 
 (** ** Arithmetic operations *)
 
-Lemma unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
-Proof. intros; subst; assumption. Qed.
+Definition unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
+intros; subst; assumption. Defined.
 
 Definition value_eq_size:
   forall v1 v2 : value, { vsize v1 = vsize v2 } + { True }.
@@ -136,6 +150,64 @@ Definition eq_to_opt (v1 v2 : value) (f : vsize v1 = vsize v2 -> value)
   | left EQ => Some (f EQ)
   | _ => None
   end.
+
+Lemma eqvalue {sz : nat} (x y : word sz) : x = y <-> mkvalue sz x = mkvalue sz y.
+Proof.
+  split; intros.
+  subst. reflexivity. inversion H. apply existT_wordToZ in H1.
+  apply wordToZ_inj. assumption.
+Qed.
+
+Lemma eqvaluef {sz : nat} (x y : word sz) : x = y -> mkvalue sz x = mkvalue sz y.
+Proof. apply eqvalue. Qed.
+
+Lemma nevalue {sz : nat} (x y : word sz) : x <> y <-> mkvalue sz x <> mkvalue sz y.
+Proof. split; intros; intuition. apply H. apply eqvalue. assumption.
+       apply H. rewrite H0. trivial.
+Qed.
+
+Lemma nevaluef {sz : nat} (x y : word sz) : x <> y -> mkvalue sz x <> mkvalue sz y.
+Proof. apply nevalue. Qed.
+
+(*Definition rewrite_word_size (initsz finalsz : nat) (w : word initsz)
+  : option (word finalsz) :=
+  match Nat.eqb initsz finalsz return option (word finalsz) with
+  | true => Some _
+  | false => None
+  end.*)
+
+Definition valueeq (sz : nat) (x y : word sz) :
+  {mkvalue sz x = mkvalue sz y} + {mkvalue sz x <> mkvalue sz y} :=
+  match weq x y with
+  | left eq => left (eqvaluef x y eq)
+  | right ne => right (nevaluef x y ne)
+  end.
+
+Definition valueeqb (x y : value) : bool :=
+  match value_eq_size x y with
+  | left EQ =>
+    weqb (vword x) (unify_word (vsize x) (vsize y) (vword y) EQ)
+  | right _ => false
+  end.
+
+Definition value_projZ_eqb (v1 v2 : value) : bool := Z.eqb (valueToZ v1) (valueToZ v2).
+
+Theorem value_projZ_eqb_true :
+  forall v1 v2,
+  v1 = v2 -> value_projZ_eqb v1 v2 = true.
+Proof. intros. subst. unfold value_projZ_eqb. apply Z.eqb_eq. trivial. Qed.
+
+Theorem valueeqb_true_iff :
+  forall v1 v2,
+  valueeqb v1 v2 = true <-> v1 = v2.
+Proof.
+  split; intros.
+  unfold valueeqb in H. destruct (value_eq_size v1 v2) eqn:?.
+  - destruct v1, v2. simpl in H.
+Abort.
+
+Definition value_int_eqb (v : value) (i : int) : bool :=
+  Z.eqb (valueToZ v) (Int.unsigned i).
 
 (** Arithmetic operations over [value], interpreting them as signed or unsigned
 depending on the operation.
@@ -208,3 +280,48 @@ Definition shift_map (sz : nat) (f : word sz -> nat -> word sz) (w1 w2 : word sz
 
 Definition vshl v1 v2 := map_word2 (fun sz => shift_map sz (@wlshift sz)) v1 v2.
 Definition vshr v1 v2 := map_word2 (fun sz => shift_map sz (@wrshift sz)) v1 v2.
+
+Module HexNotationValue.
+  Export HexNotation.
+  Import WordScope.
+
+  Notation "sz ''h' a" := (NToValue sz (hex a)) (at level 50).
+
+End HexNotationValue.
+
+Inductive val_value_lessdef: val -> value -> Prop :=
+| val_value_lessdef_int:
+    forall i v',
+    Integers.Int.unsigned i = valueToZ v' ->
+    val_value_lessdef (Vint i) v'
+| lessdef_undef: forall v, val_value_lessdef Vundef v.
+
+Lemma valueToZ_ZToValue :
+  forall n z,
+  (- Z.of_nat (2 ^ n) <= z < Z.of_nat (2 ^ n))%Z ->
+  valueToZ (ZToValue (S n) z) = z.
+Proof.
+  unfold valueToZ, ZToValue. simpl.
+  auto using wordToZ_ZToWord.
+Qed.
+
+Lemma uvalueToZ_ZToValue :
+  forall n z,
+  (0 <= z < 2 ^ Z.of_nat n)%Z ->
+  uvalueToZ (ZToValue n z) = z.
+Proof.
+  unfold uvalueToZ, ZToValue. simpl.
+  auto using uwordToZ_ZToWord.
+Qed.
+
+Lemma valueToPos_posToValueAuto :
+  forall p, valueToPos (posToValueAuto p) = p.
+Proof.
+  intros. unfold valueToPos, posToValueAuto.
+  rewrite uvalueToZ_ZToValue. auto. rewrite positive_nat_Z.
+  split. apply Zle_0_pos.
+
+  assert (p < 2 ^ (Pos.size p))%positive. apply Pos.size_gt.
+  inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
+  simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
+Qed.

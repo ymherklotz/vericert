@@ -16,89 +16,83 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(** The purpose of the hardware transfer language (HTL) is to create a more
-  * hardware-like layout that is still similar to the register transfer language
-  * (RTL) that it came from. The main change is that function calls become
-  * module instantiations and that we now describe a state machine instead of a
-  * control-flow graph.
-  *)
-
-From coqup.common Require Import Coquplib.
-
+From Coq Require Import FSets.FMapPositive.
+From coqup Require Import Coquplib Value AssocMap.
+From coqup Require Verilog.
+From compcert Require Events Globalenvs Smallstep Integers.
 From compcert Require Import Maps.
-From compcert Require Op AST Memory Registers.
 
+Import HexNotationValue.
+
+(** The purpose of the hardware transfer language (HTL) is to create a more
+hardware-like layout that is still similar to the register transfer language
+(RTL) that it came from. The main change is that function calls become module
+instantiations and that we now describe a state machine instead of a
+control-flow graph. *)
+
+Definition reg := positive.
 Definition node := positive.
 
-Definition reg := Registers.reg.
+Definition datapath := PTree.t Verilog.stmnt.
+Definition controllogic := PTree.t Verilog.stmnt.
 
-Definition ident := AST.ident.
-
-Inductive instruction : Type :=
-| Hnop : node -> instruction
-| Hnonblock : Op.operation -> list reg -> reg -> node -> instruction
-  (** [Hnonblock op args res next] Defines a nonblocking assignment to a
-      register, using the operation defined in Op.v. *)
-| Hload : AST.memory_chunk -> Op.addressing -> list reg -> reg -> node -> instruction
-| Hstore : AST.memory_chunk -> Op.addressing -> list reg -> reg -> node -> instruction
-| Hinst : AST.signature -> ident -> reg -> node -> instruction
-  (** [Hinst sig fun args rst strt end res next] Defines the start of a
-      module instantiation, meaning the function will run until the result is
-      returned. *)
-| Htailcall : AST.signature -> ident -> list reg -> instruction
-| Hcond : Op.condition -> list reg -> node -> node -> instruction
-| Hjumptable : reg -> list node -> instruction
-| Hfinish : option reg -> instruction.
-
-Record inst : Type :=
-  mkinst {
-    inst_moddecl : ident;
-    inst_args : list reg
-  }.
-
-Definition code : Type := PTree.t instruction.
-
-Definition instances : Type := PTree.t inst.
-
-Definition empty_instances : instances := PTree.empty inst.
-
-(** Function declaration for VTL also contain a construction which describes the
-    functions that are called in the current function. This information is used
-    to print out *)
-Record module : Type :=
+Record module: Type :=
   mkmodule {
-    mod_sig : AST.signature;
     mod_params : list reg;
-    mod_stacksize : Z;
-    mod_code : code;
-    mod_insts : instances;
-    mod_entrypoint : node
+    mod_datapath : datapath;
+    mod_controllogic : controllogic;
+    mod_entrypoint : node;
+    mod_st : reg;
+    mod_finish : reg;
+    mod_return : reg
   }.
 
-Definition moddecl := AST.fundef module.
+(** * Operational Semantics *)
 
-Definition design := AST.program moddecl unit.
+Definition genv := Globalenvs.Genv.t unit unit.
+Definition genv_empty := Globalenvs.Genv.empty_genv unit unit nil.
 
-Definition modsig (md : moddecl) :=
-  match md with
-  | AST.Internal m => mod_sig m
-  | AST.External ef => AST.ef_sig ef
-  end.
+Inductive state : Type :=
+| State :
+    forall (m : module)
+           (st : node)
+           (assoc : assocmap),
+  state
+| Returnstate : forall v : value, state.
 
-(** Describes various transformations that can be applied to HTL. This applies
-    the transformation to each instruction in the function and returns the new
-    function with the modified instructions. *)
-Section TRANSF.
+Inductive step : genv -> state -> Events.trace -> state -> Prop :=
+| step_module :
+    forall g t m st ctrl data assoc0 assoc1 assoc2 assoc3 nbassoc0 nbassoc1 f stval pstval,
+      m.(mod_controllogic)!st = Some ctrl ->
+      m.(mod_datapath)!st = Some data ->
+      Verilog.stmnt_runp f
+        (Verilog.mkassociations assoc0 empty_assocmap)
+        ctrl
+        (Verilog.mkassociations assoc1 nbassoc0) ->
+      Verilog.stmnt_runp f
+        (Verilog.mkassociations assoc1 nbassoc0)
+        data
+        (Verilog.mkassociations assoc2 nbassoc1) ->
+      assoc3 = merge_assocmap nbassoc1 assoc2 ->
+      assoc3!(m.(mod_st)) = Some stval ->
+      valueToPos stval = pstval ->
+      step g (State m st assoc0) t (State m pstval assoc3)
+| step_finish :
+    forall g t m st assoc retval,
+    assoc!(m.(mod_finish)) = Some (1'h"1") ->
+    assoc!(m.(mod_return)) = Some retval ->
+    step g (State m st assoc) t (Returnstate retval).
+Hint Constructors step : htl.
 
-  Variable transf_instr : node -> instruction -> instruction.
+Inductive initial_state (m : module) : state -> Prop :=
+| initial_state_intro : forall st,
+    st = m.(mod_entrypoint) ->
+    initial_state m (State m st empty_assocmap).
 
-  Definition transf_module (m : module) : module :=
-    mkmodule
-      m.(mod_sig)
-      m.(mod_params)
-      m.(mod_stacksize)
-      (PTree.map transf_instr m.(mod_code))
-      m.(mod_insts)
-      m.(mod_entrypoint).
+Inductive final_state : state -> Integers.int -> Prop :=
+| final_state_intro : forall retval retvali,
+    value_int_eqb retval retvali = true ->
+    final_state (Returnstate retval) retvali.
 
-End TRANSF.
+Definition semantics (m : module) :=
+  Smallstep.Semantics step (initial_state m) final_state genv_empty.

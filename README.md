@@ -18,14 +18,6 @@ The project is written in Coq, a theorem prover, which is extracted to OCaml so 
 
 These dependencies can be installed manually, or automatically through Nix.
 
-### Building on OSX
-
-To build the project on OSX, currently the makefile has to be manually edited so that CompCert builds for the correct architecture. To do this, simply execute the following `sed` command to change the instance of `x86_64-linux` into `x86_64-macosx`.
-
-``` shell
-sed -i'' 's/x86_64-linux/x86_64-macosx/' Makefile
-```
-
 ### Downloading CompCert
 
 CompCert is added as a submodule in the `lib/CompCert` directory. It is needed to run the build process below, as it is the one dependency that is not downloaded by nix, and has to be downloaded together with the repository. To clone CompCert together with this project, you can run:

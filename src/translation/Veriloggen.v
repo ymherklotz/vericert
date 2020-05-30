@@ -1,4 +1,4 @@
-(* -*- mode: coq -*-
+(*
  * CoqUp: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -37,6 +37,18 @@ Hint Resolve Ple_refl : verilog_state.
 Inductive statetrans : Type :=
 | StateGoto (p : node)
 | StateCond (c : expr) (t f : node).
+
+Definition state_goto (st : reg) (n : node) : stmnt :=
+  Vnonblock (Vvar st) (Vlit (posToValue 32 n)).
+
+Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
+  Vnonblock (Vvar st) (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)).
+
+Definition statetrans_transl (stvar : reg) (st : statetrans) : stmnt :=
+  match st with
+  | StateGoto p => state_goto stvar p
+  | StateCond c t f => state_cond stvar c t f
+  end.
 
 Definition valid_freshstate (stm: PositiveMap.t stmnt) (fs: node) :=
   forall (n: node),
@@ -371,6 +383,10 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
     | _, _, _ => Error (Errors.msg "Veriloggen.add_instr")
     end.
 
+(** Add a register to the state without changing the [st_freshreg], as this
+should already be the right value.  This can be assumed because the max register
+is taken from the RTL code. *)
+
 Definition add_reg (r: reg) (s: state) : state :=
   mkstate (st_freshreg s)
           (st_freshstate s)
@@ -410,6 +426,9 @@ Lemma decl_io_state_incr:
          (st_wf s)).
 Proof. constructor; simpl; auto using Ple_succ with verilog_state. Qed.
 
+(** Declare a new register by incrementing the [st_freshreg] by one and
+returning the old [st_freshreg]. *)
+
 Definition decl_io (d: decl) : mon (reg * decl) :=
   fun s => let r := s.(st_freshreg) in
            OK (r, d) (mkstate
@@ -421,6 +440,9 @@ Definition decl_io (d: decl) : mon (reg * decl) :=
                      (st_wf s))
               (decl_io_state_incr s).
 
+(** Declare a new register which is given, by changing [st_decl] and without
+affecting anything else. *)
+
 Definition declare_reg (r: reg) (d: decl): mon (reg * decl) :=
   fun s => OK (r, d) (mkstate
                       (st_freshreg s)
@@ -430,6 +452,9 @@ Definition declare_reg (r: reg) (d: decl): mon (reg * decl) :=
                       (PositiveMap.add r d s.(st_decl))
                       (st_wf s))
               (change_decl_state_incr s (PositiveMap.add r d s.(st_decl))).
+
+(** Declare a new fresh register by first getting a valid register to increment,
+and then adding it to the declaration list. *)
 
 Definition decl_fresh_reg (d: decl) : mon (reg * decl) :=
   do (r, d) <- decl_io d;
@@ -557,18 +582,17 @@ Definition make_stm (r : reg) (s : PositiveMap.t stmnt) : stmnt :=
 
 Definition make_statetrans_cases (r : reg) (st : positive * statetrans) : expr * stmnt :=
   match st with
-  | (n, StateGoto n') => (posToExpr 32 n, nonblock r (posToExpr 32 n'))
-  | (n, StateCond c n1 n2) => (posToExpr 32 n, nonblock r (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)))
+  | (n, StateGoto n') => (posToExpr 32 n, state_goto r n')
+  | (n, StateCond c n1 n2) => (posToExpr 32 n, state_cond r c n1 n2)
   end.
 
 Definition make_statetrans (r : reg) (s : PositiveMap.t statetrans) : stmnt :=
   Vcase (Vvar r) (map (make_statetrans_cases r) (PositiveMap.elements s)) (Some Vskip).
 
-Fixpoint allocate_regs (e : list (reg * decl)) {struct e} : list module_item :=
+Definition allocate_reg (e : reg * decl) : module_item :=
   match e with
-  | (r, (mkdecl n 0))::es => Vdecl r n :: allocate_regs es
-  | (r, (mkdecl n l))::es => Vdeclarr r n l :: allocate_regs es
-  | nil => nil
+  | (r, (mkdecl n 0)) => Vdecl r n
+  | (r, (mkdecl n l)) => Vdeclarr r n l
   end.
 
 Definition make_module_items (entry: node) (clk st rst: reg) (s: state) : list module_item :=
@@ -577,7 +601,7 @@ Definition make_module_items (entry: node) (clk st rst: reg) (s: state) : list m
       (nonblock st (posToExpr 32 entry))
       (make_statetrans st s.(st_statetrans))))
   :: (Valways_ff (Vposedge clk) (make_stm st s.(st_stm)))
-  :: (allocate_regs (PositiveMap.elements s.(st_decl))).
+  :: (map allocate_reg (PositiveMap.elements s.(st_decl))).
 
 (** To start out with, the assumption is made that there is only one
     function/module in the original code. *)
@@ -598,19 +622,8 @@ Definition transf_module (f: function) : mon module :=
   do st <- decl_fresh_reg (mkdecl 32 0);
   do current_state <- get;
   let mi := make_module_items f.(fn_entrypoint) (fst clk) (fst st) (fst rst) current_state in
-  ret (mkmodule (get_sz start) (get_sz rst) (get_sz clk) (get_sz fin) (get_sz rtrn)
+  ret (mkmodule (get_sz start) (get_sz rst) (get_sz clk) (get_sz fin) (get_sz rtrn) (get_sz st)
                 (map set_int_size f.(fn_params)) mi).
-
-Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef unit))
-{struct flist} : option function :=
-  match flist with
-  | (i, AST.Gfun (AST.Internal f)) :: xs =>
-    if Pos.eqb i main
-    then Some f
-    else main_function main xs
-  | _ :: xs => main_function main xs
-  | nil => None
-  end.
 
 Lemma max_state_valid_freshstate:
   forall f,
@@ -631,6 +644,24 @@ Definition max_state (f: function) : state :=
           (st_statetrans init_state)
           (st_decl init_state)
           (max_state_st_wf f).
+
+Definition transl_module (f : function) : Errors.res module :=
+  run_mon (max_state f) (transf_module f).
+
+(** Retrieve the main function from the RTL, this should probably be replaced by
+retrieving a designated function instead.  This could be passed on the
+commandline and be assumed as a [Parameter] in this code. *)
+
+Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef unit))
+{struct flist} : option function :=
+  match flist with
+  | (i, AST.Gfun (AST.Internal f)) :: xs =>
+    if Pos.eqb i main
+    then Some f
+    else main_function main xs
+  | _ :: xs => main_function main xs
+  | nil => None
+  end.
 
 Definition transf_program (d : program) : Errors.res module :=
   match main_function d.(AST.prog_main) d.(AST.prog_defs) with
