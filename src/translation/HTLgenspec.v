@@ -350,10 +350,9 @@ Proof.
   econstructor; simpl; trivial.
   intros.
   inv_incr.
-  assert (st_controllogic s8 = st_controllogic s2) by congruence.
-  rewrite <- H10.
-  assert (st_datapath s8 = st_datapath s2) by congruence.
-  assert (st_st s5 = st_st s2) by congruence.
-  rewrite H80. rewrite H81. rewrite H82.
+  assert (STC: st_controllogic s8 = st_controllogic s2) by congruence.
+  assert (STD: st_datapath s8 = st_datapath s2) by congruence.
+  assert (STST: st_st s8 = st_st s2) by congruence.
+  rewrite STC. rewrite STD. rewrite STST.
   eauto with htlspec.
 Qed.

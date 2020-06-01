@@ -47,10 +47,13 @@ Record module: Type :=
     mod_return : reg
   }.
 
+Definition fundef := AST.fundef module.
+
+Definition program := AST.program fundef unit.
+
 (** * Operational Semantics *)
 
-Definition genv := Globalenvs.Genv.t unit unit.
-Definition genv_empty := Globalenvs.Genv.empty_genv unit unit nil.
+Definition genv := Globalenvs.Genv.t fundef unit.
 
 Inductive state : Type :=
 | State :
@@ -84,15 +87,19 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     step g (State m st assoc) t (Returnstate retval).
 Hint Constructors step : htl.
 
-Inductive initial_state (m : module) : state -> Prop :=
-| initial_state_intro : forall st,
-    st = m.(mod_entrypoint) ->
-    initial_state m (State m st empty_assocmap).
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b m0 st m,
+      let ge := Globalenvs.Genv.globalenv p in
+      Globalenvs.Genv.init_mem p = Some m0 ->
+      Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+      Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) ->
+      st = m.(mod_entrypoint) ->
+      initial_state p (State m st empty_assocmap).
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,
     value_int_eqb retval retvali = true ->
     final_state (Returnstate retval) retvali.
 
-Definition semantics (m : module) :=
-  Smallstep.Semantics step (initial_state m) final_state genv_empty.
+Definition semantics (m : program) :=
+  Smallstep.Semantics step (initial_state m) final_state (Globalenvs.Genv.globalenv m).
