@@ -16,9 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+From compcert Require RTL Registers AST.
+From compcert Require Import Globalenvs.
 From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap.
 From coqup Require HTL Verilog.
-From compcert Require RTL Registers Globalenvs AST.
 
 Import AssocMapNotation.
 
@@ -53,15 +54,14 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     match_states (RTL.Returnstate stack v m) (HTL.Returnstate v').
 Hint Constructors match_states : htlproof.
 
-Inductive match_program : RTL.program -> HTL.module -> Prop :=
-  match_program_intro :
-    forall ge p b m f,
-    ge = Globalenvs.Genv.globalenv p ->
-    Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-    Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
-    tr_module f m ->
-    match_program p m.
-Hint Constructors match_program : htlproof.
+Definition match_prog (p: RTL.program) (tp: HTL.program) :=
+  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+
+Lemma transf_program_match:
+  forall p tp, HTLgen.transl_program p = Errors.OK tp -> match_prog p tp.
+Proof.
+  intros. apply Linking.match_transform_partial_program; auto.
+Qed.
 
 Lemma regs_lessdef_add_greater :
   forall f rs1 rs2 n v,
@@ -156,12 +156,42 @@ Ltac inv_state :=
 Section CORRECTNESS.
 
   Variable prog : RTL.program.
-  Variable tprog : HTL.module.
+  Variable tprog : HTL.program.
 
-  Hypothesis TRANSL : match_program prog tprog.
+  Hypothesis TRANSL : match_prog prog tprog.
 
   Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
-  Let tge : HTL.genv := HTL.genv_empty.
+  Let tge : HTL.genv := Globalenvs.Genv.globalenv tprog.
+
+  Lemma symbols_preserved:
+    forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+  Proof
+    (Genv.find_symbol_transf_partial TRANSL).
+
+  Lemma function_ptr_translated:
+    forall (b: Values.block) (f: RTL.fundef),
+      Genv.find_funct_ptr ge b = Some f ->
+      exists tf,
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
+  Proof.
+    intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+
+  Lemma functions_translated:
+    forall (v: Values.val) (f: RTL.fundef),
+      Genv.find_funct ge v = Some f ->
+      exists tf,
+        Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
+  Proof.
+    intros. exploit (Genv.find_funct_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+
+  Lemma senv_preserved:
+    Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
+  Proof
+    (Genv.senv_transf_partial TRANSL).
 
   Lemma eval_correct :
     forall sp op rs args m v v' e assoc f,
@@ -216,6 +246,7 @@ Section CORRECTNESS.
   Proof.
     induction 1; intros R1 MSTATE; try inv_state.
     - (* Inop *)
+      unfold match_prog in TRANSL.
       econstructor.
       split.
       apply Smallstep.plus_one.
@@ -232,7 +263,7 @@ Section CORRECTNESS.
       (* prove match_state *)
       rewrite assumption_32bit.
       constructor; auto.
-      unfold_merge. simpl. apply regs_lessdef_regs. apply greater_than_max_func.
+      unfold_merge. simpl. apply regs_lessdef_add_greater. apply greater_than_max_func.
       assumption.
       unfold state_st_wf. inversion 1. subst. unfold_merge. apply AssocMap.gss.
     - (* Iop *)
