@@ -662,14 +662,16 @@ Definition genv := Genv.t unit unit.
 
 Inductive step : state -> state -> Prop :=
 | step_module :
-    forall m stvar stvar' cycle f asr0 asa0 asr1 asa1,
+    forall m stvar stvar' cycle f
+      asr0 asa0 asr1 asa1
+      asr' asa',
     mis_stepp (f cycle) asr0 asa0
               m.(mod_body) asr1 asa1 ->
-    let asr := merge_associations asr1 in
-    let asa := merge_associations asa1 in
-    Some stvar' = asr.(assoc_blocking)!(fst m.(mod_state)) ->
+    asr' = merge_associations asr1 ->
+    asa' = merge_associations asa1 ->
+    Some stvar' = asr'.(assoc_blocking)!(fst m.(mod_state)) ->
     step (State m asr0 asa0 f cycle stvar)
-         (State m asr asa f (S cycle) stvar')
+         (State m asr' asa' f (S cycle) stvar')
 | step_finish :
     forall m asr asa f cycle stvar result,
     asr.(assoc_blocking)!(fst m.(mod_finish)) = Some (1'h"1") ->

@@ -59,32 +59,43 @@ Inductive state : Type :=
 | State :
     forall (m : module)
            (st : node)
-           (assoc : assocmap),
+           (reg_assoc : assocmap)
+           (arr_assoc : AssocMap.t (list value)),
   state
 | Returnstate : forall v : value, state.
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g t m st ctrl data assoc0 assoc1 assoc2 assoc3 nbassoc0 nbassoc1 f stval pstval,
+    forall g t m st ctrl data
+      asr asa
+      basr1 basa1 nasr1 nasa1
+      basr2 basa2 nasr2 nasa2
+      asr' asa'
+      f stval pstval,
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
-        (Verilog.mkassociations assoc0 empty_assocmap)
+        (Verilog.mkassociations asr empty_assocmap)
+        (Verilog.mkassociations asa (AssocMap.empty (list value)))
         ctrl
-        (Verilog.mkassociations assoc1 nbassoc0) ->
+        (Verilog.mkassociations basr1 nasr1)
+        (Verilog.mkassociations basa1 nasa1) ->
       Verilog.stmnt_runp f
-        (Verilog.mkassociations assoc1 nbassoc0)
+        (Verilog.mkassociations basr1 nasr1)
+        (Verilog.mkassociations basa1 nasa1)
         data
-        (Verilog.mkassociations assoc2 nbassoc1) ->
-      assoc3 = merge_assocmap nbassoc1 assoc2 ->
-      assoc3!(m.(mod_st)) = Some stval ->
+        (Verilog.mkassociations basr2 nasr2)
+        (Verilog.mkassociations basa2 nasa2) ->
+      asr' = merge_assocmap nasr2 basr2 ->
+      asa' = AssocMapExt.merge (list value) nasa2 basa2 ->
+      asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
-      step g (State m st assoc0) t (State m pstval assoc3)
+      step g (State m st asr asa) t (State m pstval asr' asa')
 | step_finish :
-    forall g t m st assoc retval,
-    assoc!(m.(mod_finish)) = Some (1'h"1") ->
-    assoc!(m.(mod_return)) = Some retval ->
-    step g (State m st assoc) t (Returnstate retval).
+    forall g t m st asr asa retval,
+    asr!(m.(mod_finish)) = Some (1'h"1") ->
+    asr!(m.(mod_return)) = Some retval ->
+    step g (State m st asr asa) t (Returnstate retval).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -94,7 +105,7 @@ Inductive initial_state (p: program): state -> Prop :=
       Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
       Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) ->
       st = m.(mod_entrypoint) ->
-      initial_state p (State m st empty_assocmap).
+      initial_state p (State m st empty_assocmap (AssocMap.empty (list value))).
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,
