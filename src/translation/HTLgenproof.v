@@ -476,7 +476,9 @@ Section CORRECTNESS.
            (r : Integers.Int.int),
       match_states s1 s2 ->
       Smallstep.final_state (RTL.semantics prog) s1 r -> Smallstep.final_state (HTL.semantics tprog) s2 r.
-  Proof. Admitted.
+  Proof.
+    intros. inv H0. inv H. inv H4. constructor. trivial.
+  Qed.
   Hint Resolve transl_final_states : htlproof.
 
 Theorem transf_program_correct:
