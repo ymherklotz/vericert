@@ -191,6 +191,7 @@ Section CORRECTNESS.
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
   Proof
     (Genv.senv_transf_partial TRANSL).
+  Hint Resolve senv_preserved : htlproof.
 
   Lemma eval_correct :
     forall sp op rs args m v v' e assoc f,
@@ -204,7 +205,10 @@ Section CORRECTNESS.
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f assoc,
     translate_condition cond args s1 = OK c s' i ->
-    Op.eval_condition cond (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some b ->
+    Op.eval_condition
+      cond
+      (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
+      m = Some b ->
     Verilog.expr_runp f assoc c (boolToValue 32 b).
   Admitted.
 
@@ -366,8 +370,8 @@ Section CORRECTNESS.
       rewrite assumption_32bit.
       apply match_state. apply rs0.
       unfold_merge.
-      apply regs_lessdef_regs. assumption.
-      assumption.
+      apply regs_lessdef_add_greater. apply greater_than_max_func.
+      assumption. assumption.
 
       unfold state_st_wf. intros. inversion H1.
       subst. unfold_merge.
@@ -375,7 +379,7 @@ Section CORRECTNESS.
       rewrite assumption_32bit.
       apply match_state. apply rs0.
       unfold_merge.
-      apply regs_lessdef_regs. assumption.
+      apply regs_lessdef_add_greater. apply greater_than_max_func. assumption.
       assumption.
 
       unfold state_st_wf. intros. inversion H1.
@@ -441,13 +445,6 @@ Section CORRECTNESS.
       Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
-  Lemma senv_preserved :
-    forall id : AST.ident,
-      Globalenvs.Senv.public_symbol (Smallstep.symbolenv (HTL.semantics tprog)) id =
-      Globalenvs.Senv.public_symbol (Smallstep.symbolenv (RTL.semantics prog)) id.
-  Proof. Admitted.
-  Hint Resolve senv_preserved : htlproof.
-
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
@@ -464,8 +461,14 @@ Section CORRECTNESS.
   Proof. Admitted.
   Hint Resolve transl_final_states : htlproof.
 
-  Theorem transf_program_correct:
-    Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
-  Proof. eauto with htlproof. Qed.
+Theorem transf_program_correct:
+  Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
+Proof.
+  eapply Smallstep.forward_simulation_plus.
+  apply senv_preserved.
+  eexact transl_initial_states.
+  eexact transl_final_states.
+  exact transl_step_correct.
+Qed.
 
 End CORRECTNESS.
