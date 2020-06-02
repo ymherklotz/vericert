@@ -83,7 +83,7 @@ Definition intToValue (i : Integers.int) : value :=
   ZToValue Int.wordsize (Int.unsigned i).
 
 Definition valueToInt (i : value) : Integers.int :=
-  Int.repr (valueToZ i).
+  Int.repr (uvalueToZ i).
 
 Definition valToValue (v : Values.val) : option value :=
   match v with
@@ -292,7 +292,7 @@ End HexNotationValue.
 Inductive val_value_lessdef: val -> value -> Prop :=
 | val_value_lessdef_int:
     forall i v',
-    Integers.Int.unsigned i = valueToZ v' ->
+    i = valueToInt v' ->
     val_value_lessdef (Vint i) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
 
@@ -314,6 +314,15 @@ Proof.
   auto using uwordToZ_ZToWord.
 Qed.
 
+Lemma ZToValue_uvalueToZ :
+  forall v,
+  ZToValue (vsize v) (uvalueToZ v) = v.
+Proof.
+  intros.
+  unfold ZToValue, uvalueToZ.
+  rewrite ZToWord_uwordToZ. destruct v; auto.
+Qed.
+
 Lemma valueToPos_posToValueAuto :
   forall p, valueToPos (posToValueAuto p) = p.
 Proof.
@@ -324,4 +333,26 @@ Proof.
   assert (p < 2 ^ (Pos.size p))%positive. apply Pos.size_gt.
   inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
   simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
+Qed.
+
+Lemma valueToInt_intToValue :
+  forall v,
+  valueToInt (intToValue v) = v.
+Proof.
+  intros.
+  unfold valueToInt, intToValue. rewrite uvalueToZ_ZToValue. auto using Int.repr_unsigned.
+  split. apply Int.unsigned_range_2.
+  assert ((Int.unsigned v <= Int.max_unsigned)%Z) by apply Int.unsigned_range_2.
+  apply Z.lt_le_pred in H. apply H.
+Qed.
+
+Lemma valToValue_lessdef :
+  forall v v',
+    valToValue v = Some v' ->
+    val_value_lessdef v v'.
+Proof.
+  intros.
+  destruct v; try discriminate; constructor.
+  unfold valToValue in H. inversion H.
+  symmetry. apply valueToInt_intToValue.
 Qed.

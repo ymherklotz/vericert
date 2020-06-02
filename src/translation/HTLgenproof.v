@@ -16,9 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+From compcert Require RTL Registers AST.
+From compcert Require Import Globalenvs.
 From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap.
 From coqup Require HTL Verilog.
-From compcert Require RTL Registers Globalenvs AST.
 
 Import AssocMapNotation.
 
@@ -53,15 +54,14 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     match_states (RTL.Returnstate stack v m) (HTL.Returnstate v').
 Hint Constructors match_states : htlproof.
 
-Inductive match_program : RTL.program -> HTL.module -> Prop :=
-  match_program_intro :
-    forall ge p b m f,
-    ge = Globalenvs.Genv.globalenv p ->
-    Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-    Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
-    tr_module f m ->
-    match_program p m.
-Hint Constructors match_program : htlproof.
+Definition match_prog (p: RTL.program) (tp: HTL.program) :=
+  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+
+Lemma transf_program_match:
+  forall p tp, HTLgen.transl_program p = Errors.OK tp -> match_prog p tp.
+Proof.
+  intros. apply Linking.match_transform_partial_program; auto.
+Qed.
 
 Lemma regs_lessdef_add_greater :
   forall f rs1 rs2 n v,
@@ -96,16 +96,6 @@ Proof.
   rewrite AssocMap.gso; eauto.
 Qed.
 Hint Resolve regs_lessdef_add_match : htlproof.
-
-Lemma valToValue_lessdef :
-  forall v v',
-    valToValue v = Some v' <->
-    val_value_lessdef v v'.
-Proof.
-  split; intros.
-  destruct v; try discriminate; constructor.
-  unfold valToValue in H. inversion H.
-  Admitted.
 
 (* Need to eventually move posToValue 32 to posToValueAuto, as that has this proof. *)
 Lemma assumption_32bit :
@@ -142,40 +132,83 @@ Ltac inv_state :=
       inversion TF;
       match goal with
         TC : forall _ _,
-          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _,
+          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _,
         H : Maps.PTree.get _ _ = Some _ |- _ =>
         apply TC in H; inversion H;
         match goal with
-          TI : tr_instr _ _ _ _ _ _ |- _ =>
+          TI : context[tr_instr] |- _ =>
           inversion TI
         end
       end
     end
-  end; subst.
+end; subst.
+
+Ltac unfold_func H :=
+  match type of H with
+  | ?f = _ => unfold f in H; repeat (unfold_match H)
+  | ?f _ = _ => unfold f in H; repeat (unfold_match H)
+  | ?f _ _ = _ => unfold f in H; repeat (unfold_match H)
+  | ?f _ _ _ = _ => unfold f in H; repeat (unfold_match H)
+  | ?f _ _ _ _ = _ => unfold f in H; repeat (unfold_match H)
+  end.
 
 Section CORRECTNESS.
 
   Variable prog : RTL.program.
-  Variable tprog : HTL.module.
+  Variable tprog : HTL.program.
 
-  Hypothesis TRANSL : match_program prog tprog.
+  Hypothesis TRANSL : match_prog prog tprog.
 
   Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
-  Let tge : HTL.genv := HTL.genv_empty.
+  Let tge : HTL.genv := Globalenvs.Genv.globalenv tprog.
+
+  Lemma symbols_preserved:
+    forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+  Proof
+    (Genv.find_symbol_transf_partial TRANSL).
+
+  Lemma function_ptr_translated:
+    forall (b: Values.block) (f: RTL.fundef),
+      Genv.find_funct_ptr ge b = Some f ->
+      exists tf,
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
+  Proof.
+    intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+
+  Lemma functions_translated:
+    forall (v: Values.val) (f: RTL.fundef),
+      Genv.find_funct ge v = Some f ->
+      exists tf,
+        Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
+  Proof.
+    intros. exploit (Genv.find_funct_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+
+  Lemma senv_preserved:
+    Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
+  Proof
+    (Genv.senv_transf_partial TRANSL).
+  Hint Resolve senv_preserved : htlproof.
 
   Lemma eval_correct :
     forall sp op rs args m v v' e assoc f,
       Op.eval_operation ge sp op
 (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
       tr_op op args e ->
-      valToValue v = Some v' ->
+      val_value_lessdef v v' ->
       Verilog.expr_runp f assoc e v'.
   Admitted.
 
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f assoc,
     translate_condition cond args s1 = OK c s' i ->
-    Op.eval_condition cond (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some b ->
+    Op.eval_condition
+      cond
+      (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
+      m = Some b ->
     Verilog.expr_runp f assoc c (boolToValue 32 b).
   Admitted.
 
@@ -216,6 +249,7 @@ Section CORRECTNESS.
   Proof.
     induction 1; intros R1 MSTATE; try inv_state.
     - (* Inop *)
+      unfold match_prog in TRANSL.
       econstructor.
       split.
       apply Smallstep.plus_one.
@@ -232,33 +266,46 @@ Section CORRECTNESS.
       (* prove match_state *)
       rewrite assumption_32bit.
       constructor; auto.
-      unfold_merge. simpl. apply regs_lessdef_regs. apply greater_than_max_func.
+      unfold_merge. simpl. apply regs_lessdef_add_greater. apply greater_than_max_func.
       assumption.
       unfold state_st_wf. inversion 1. subst. unfold_merge. apply AssocMap.gss.
     - (* Iop *)
-      econstructor.
-      split.
+      destruct v eqn:?;
+               try (
+                 destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0);
+                 inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5);
+                 try (unfold_func H6);
+                 try (unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6;
+                      unfold_func H3);
+
+                 inversion Heql; inversion MASSOC; subst;
+                 assert (HPle : Ple r (RTL.max_reg_function f))
+                   by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+                 apply H1 in HPle; inversion HPle;
+                 rewrite H2 in *; discriminate
+               ).
+
+      + econstructor. split.
       apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
       econstructor; simpl; trivial.
       constructor; trivial.
       econstructor; simpl; eauto.
-      eapply eval_correct; eauto.
+      eapply eval_correct; eauto. constructor.
       unfold_merge. simpl.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
       apply st_greater_than_res.
-      trivial.
 
       (* match_states *)
-      assert (pc' = valueToPos (posToValue 32 pc')). symmetry. apply assumption_32bit.
+      assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
       rewrite <- H1.
-      constructor. apply rs0.
+      constructor; auto.
       unfold_merge.
-      apply regs_add_match.
-      apply regs_lessdef_regs.
-      assumption.
-      apply valToValue_lessdef.
+      apply regs_lessdef_add_match.
+      constructor.
+      apply regs_lessdef_add_greater.
+      apply greater_than_max_func.
       assumption.
 
       unfold state_st_wf. intros. inversion H2. subst.
@@ -266,7 +313,39 @@ Section CORRECTNESS.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
       apply st_greater_than_res.
-    - econstructor. split. apply Smallstep.plus_one.
+
+      + econstructor. split.
+      apply Smallstep.plus_one.
+      eapply HTL.step_module; eauto.
+      econstructor; simpl; trivial.
+      constructor; trivial.
+      econstructor; simpl; eauto.
+      eapply eval_correct; eauto.
+      constructor. rewrite valueToInt_intToValue. trivial.
+      unfold_merge. simpl.
+      rewrite AssocMap.gso.
+      apply AssocMap.gss.
+      apply st_greater_than_res.
+
+      (* match_states *)
+      assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
+      rewrite <- H1.
+      constructor. apply rs0.
+      unfold_merge.
+      apply regs_lessdef_add_match.
+      constructor.
+      symmetry. apply valueToInt_intToValue.
+      apply regs_lessdef_add_greater.
+      apply greater_than_max_func.
+      assumption. assumption.
+
+      unfold state_st_wf. intros. inversion H2. subst.
+      unfold_merge.
+      rewrite AssocMap.gso.
+      apply AssocMap.gss.
+      apply st_greater_than_res.
+
+      - econstructor. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
       eapply Verilog.stmnt_runp_Vnonblock with
           (rhsval := if b then posToValue 32 ifso else posToValue 32 ifnot).
@@ -291,8 +370,8 @@ Section CORRECTNESS.
       rewrite assumption_32bit.
       apply match_state. apply rs0.
       unfold_merge.
-      apply regs_lessdef_regs. assumption.
-      assumption.
+      apply regs_lessdef_add_greater. apply greater_than_max_func.
+      assumption. assumption.
 
       unfold state_st_wf. intros. inversion H1.
       subst. unfold_merge.
@@ -300,7 +379,7 @@ Section CORRECTNESS.
       rewrite assumption_32bit.
       apply match_state. apply rs0.
       unfold_merge.
-      apply regs_lessdef_regs. assumption.
+      apply regs_lessdef_add_greater. apply greater_than_max_func. assumption.
       assumption.
 
       unfold state_st_wf. intros. inversion H1.
@@ -366,13 +445,6 @@ Section CORRECTNESS.
       Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
-  Lemma senv_preserved :
-    forall id : AST.ident,
-      Globalenvs.Senv.public_symbol (Smallstep.symbolenv (HTL.semantics tprog)) id =
-      Globalenvs.Senv.public_symbol (Smallstep.symbolenv (RTL.semantics prog)) id.
-  Proof. Admitted.
-  Hint Resolve senv_preserved : htlproof.
-
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
@@ -389,8 +461,14 @@ Section CORRECTNESS.
   Proof. Admitted.
   Hint Resolve transl_final_states : htlproof.
 
-  Theorem transf_program_correct:
-    Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
-  Proof. eauto with htlproof. Qed.
+Theorem transf_program_correct:
+  Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
+Proof.
+  eapply Smallstep.forward_simulation_plus.
+  apply senv_preserved.
+  eexact transl_initial_states.
+  eexact transl_final_states.
+  exact transl_step_correct.
+Qed.
 
 End CORRECTNESS.

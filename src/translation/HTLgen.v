@@ -371,19 +371,9 @@ Definition max_state (f: function) : state :=
 Definition transl_module (f : function) : Errors.res module :=
   run_mon (max_state f) (transf_module f).
 
-Fixpoint main_function (main : ident) (flist : list (ident * AST.globdef fundef unit))
-{struct flist} : option function :=
-  match flist with
-  | (i, AST.Gfun (AST.Internal f)) :: xs =>
-    if Pos.eqb i main
-    then Some f
-    else main_function main xs
-  | _ :: xs => main_function main xs
-  | nil => None
-  end.
+Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition transf_program (d : program) : Errors.res module :=
-  match main_function d.(AST.prog_main) d.(AST.prog_defs) with
-  | Some f => transl_module f
-  | _ => Errors.Error (Errors.msg "HTL: could not find main function")
-  end.
+(** Translation of a whole program. *)
+
+Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
+  transform_partial_program transl_fundef p.
