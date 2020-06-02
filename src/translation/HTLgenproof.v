@@ -51,7 +51,11 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
                  (HTL.State m st assoc)
 | match_returnstate : forall v v' stack m,
     val_value_lessdef v v' ->
-    match_states (RTL.Returnstate stack v m) (HTL.Returnstate v').
+    match_states (RTL.Returnstate stack v m) (HTL.Returnstate v')
+| match_initial_call :
+    forall f m m0 st
+    (TF : tr_module f m),
+      match_states (RTL.Callstate nil (AST.Internal f) nil m0) (HTL.State m st empty_assocmap).
 Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
@@ -450,7 +454,21 @@ Section CORRECTNESS.
       Smallstep.initial_state (RTL.semantics prog) s1 ->
       exists s2 : Smallstep.state (HTL.semantics tprog),
         Smallstep.initial_state (HTL.semantics tprog) s2 /\ match_states s1 s2.
-  Proof. Admitted.
+  Proof.
+    induction 1.
+    exploit function_ptr_translated; eauto.
+    intros [tf [A B]].
+    unfold transl_fundef, Errors.bind in B.
+    repeat (unfold_match B). inversion B. subst.
+    econstructor; split. econstructor.
+    apply (Genv.init_mem_transf_partial TRANSL); eauto.
+    replace (AST.prog_main tprog) with (AST.prog_main prog).
+    rewrite symbols_preserved; eauto.
+    symmetry; eapply Linking.match_program_main; eauto.
+    eexact A. trivial.
+    constructor.
+    apply transl_module_correct. auto.
+  Qed.
   Hint Resolve transl_initial_states : htlproof.
 
   Lemma transl_final_states :
