@@ -160,21 +160,22 @@ Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Pr
                (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip.
 Hint Constructors tr_instr : htlspec.
 
-Inductive tr_code (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
+Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
           (fin rtrn st : reg) : Prop :=
   tr_code_intro :
     forall s t,
+      c!pc = Some i ->
       stmnts!pc = Some s ->
       trans!pc = Some t ->
       tr_instr fin rtrn st i s t ->
-      tr_code pc i stmnts trans fin rtrn st.
+      tr_code c pc i stmnts trans fin rtrn st.
 Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
     forall data control fin rtrn st m,
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-                    tr_code pc i data control fin rtrn st) ->
+                    tr_code f.(RTL.fn_code) pc i data control fin rtrn st) ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
@@ -250,7 +251,7 @@ Hint Resolve translate_instr_tr_op : htlspec.
 
 Ltac unfold_match H :=
   match type of H with
-  | context[match ?g with _ => _ end] => destruct g; try discriminate
+  | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
   end.
 
 Ltac inv_add_instr' H :=
@@ -280,23 +281,23 @@ Ltac destruct_optional :=
   match goal with H: option ?r |- _ => destruct H end.
 
 Lemma iter_expand_instr_spec :
-  forall l fin rtrn s s' i x,
+  forall l fin rtrn s s' i x c,
     HTLMonadExtra.collectlist (transf_instr fin rtrn) l s = OK x s' i ->
     list_norepet (List.map fst l) ->
+    (forall pc instr, In (pc, instr) l -> c!pc = Some instr) ->
     (forall pc instr, In (pc, instr) l ->
-                      tr_code pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st)).
+                      c!pc = Some instr ->
+                      tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st)).
 Proof.
   induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
   + subst.
     destruct instr1 eqn:?; try discriminate; try destruct_optional; inv_add_instr; econstructor.
-
-    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * destruct o0 with pc1; destruct  H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * inversion H1. inversion H7. rewrite H. apply tr_instr_Inop.
+    * assumption.
+    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+(*    * inversion H1. inversion H9. rewrite H. apply tr_instr_Inop.
       eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
 
     * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
@@ -330,8 +331,8 @@ Proof.
 
   + eapply IHl. apply EQ0. assumption.
     destruct H1. inversion H1. subst. contradiction.
-    assumption.
-Qed.
+    assumption.*)
+Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Theorem transl_module_correct :
@@ -354,5 +355,6 @@ Proof.
   assert (STD: st_datapath s8 = st_datapath s2) by congruence.
   assert (STST: st_st s8 = st_st s2) by congruence.
   rewrite STC. rewrite STD. rewrite STST.
-  eauto with htlspec.
+  eapply iter_expand_instr_spec; eauto with htlspec.
+  apply PTree.elements_complete.
 Qed.
