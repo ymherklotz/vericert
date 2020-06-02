@@ -34,32 +34,26 @@ From compcert Require Import Errors Smallstep Globalenvs.
 Import HexNotationValue.
 Import AssocMapNotation.
 
+Set Implicit Arguments.
+
 Definition reg : Type := positive.
 Definition node : Type := positive.
 Definition szreg : Type := reg * nat.
 
-Record reg_associations : Type :=
-  mkregassociations {
-    reg_assoc_blocking : assocmap;
-    reg_assoc_nonblocking : assocmap
+Record associations (A : Type) : Type :=
+  mkassociations {
+    assoc_blocking : AssocMap.t A;
+    assoc_nonblocking : AssocMap.t A
   }.
 
-Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
-  mkregassociations (AssocMap.set r v asr.(reg_assoc_blocking)) asr.(reg_assoc_nonblocking).
-
-Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
-  mkregassociations asr.(reg_assoc_blocking) (AssocMap.set r v asr.(reg_assoc_nonblocking)).
-
-Definition merge_reg (asr : reg_associations) : reg_associations :=
-  mkregassociations (merge_assocmap asr.(reg_assoc_nonblocking) asr.(reg_assoc_blocking))
-                    (AssocMap.empty value).
+Definition reg_associations := associations value.
+Definition arr_associations := associations (list value).
 
 Definition assocmap_arr := AssocMap.t (list value).
-Record arr_associations : Type :=
-  mkarrassociations {
-    arr_assoc_blocking : assocmap_arr;
-    arr_assoc_nonblocking : assocmap_arr
-  }.
+
+Definition merge_associations {A : Type} (assoc : associations A) :=
+  mkassociations (AssocMapExt.merge A assoc.(assoc_nonblocking) assoc.(assoc_blocking))
+                 (AssocMap.empty A).
 
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
@@ -80,16 +74,18 @@ Definition assocmap_l_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : a
   | Some arr => AssocMap.set r (list_set i v arr) a
   end.
 
-
 Definition block_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
-  mkarrassociations (assocmap_l_set r i v asa.(arr_assoc_blocking)) asa.(arr_assoc_nonblocking).
+  mkassociations (assocmap_l_set r i v asa.(assoc_blocking)) asa.(assoc_nonblocking).
 
 Definition nonblock_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
-  mkarrassociations asa.(arr_assoc_blocking) (assocmap_l_set r i v asa.(arr_assoc_nonblocking)).
+  mkassociations asa.(assoc_blocking) (assocmap_l_set r i v asa.(assoc_nonblocking)).
 
-Definition merge_arr (asa : arr_associations) : arr_associations :=
-  mkarrassociations (AssocMapExt.merge (list value) asa.(arr_assoc_nonblocking) asa.(arr_assoc_blocking))
-                    (AssocMap.empty (list value)).
+Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
+  mkassociations (AssocMap.set r v asr.(assoc_blocking)) asr.(assoc_nonblocking).
+
+Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
+  mkassociations asr.(assoc_blocking) (AssocMap.set r v asr.(assoc_nonblocking)).
+
 
 (** * Verilog AST
 
@@ -484,60 +480,60 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     stmnt_runp f asr0 asa1 (Vseq st1 st2) asr2 asa2
 | stmnt_runp_Vcond_true:
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) c vc ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
     valueToBool vc = true ->
     stmnt_runp f asr0 asa0 stt asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
 | stmnt_runp_Vcond_false:
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) c vc ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
     valueToBool vc = false ->
     stmnt_runp f asr0 asa0 stt asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
 | stmnt_runp_Vcase_nomatch:
     forall e ve asr0 asa0 f asr1 asa1 me mve sc cs def,
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) e ve ->
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) me mve ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve ->
     mve <> ve ->
     stmnt_runp f asr0 asa0 (Vcase e cs def) asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
 | stmnt_runp_Vcase_match:
     forall e ve asr0 asa0 f asr1 asa1 me mve sc cs def,
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) e ve ->
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) me mve ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve ->
     mve = ve ->
     stmnt_runp f asr0 asa0 sc asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
 | stmnt_runp_Vcase_default:
     forall asr0 asa0 asr1 asa1 f st e ve,
-    expr_runp f asr0.(reg_assoc_blocking) asa0.(arr_assoc_blocking) e ve ->
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
     stmnt_runp f asr0 asa0 st asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcase e nil (Some st)) asr1 asa1
 | stmnt_runp_Vblock_reg:
     forall lhs r rhs rhsval asr asa f,
-    location_is f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) lhs (Reg r) ->
-    expr_runp f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) rhs rhsval ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Reg r) ->
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vblock lhs rhs)
                  (block_reg r asr rhsval) asa
 | stmnt_runp_Vnonblock_reg:
     forall lhs r rhs rhsval asr asa f,
-    location_is f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) lhs (Reg r) ->
-    expr_runp f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) rhs rhsval ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Reg r) ->
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vnonblock lhs rhs)
                  (nonblock_reg r asr rhsval) asa
 | stmnt_runp_Vblock_arr:
     forall lhs r i rhs rhsval asr asa f,
-    location_is f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) lhs (Array r i) ->
-    expr_runp f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) rhs rhsval ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Array r i) ->
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vblock lhs rhs)
                  asr (block_arr r i asa rhsval)
 | stmnt_runp_Vnonblock_arr:
     forall lhs r i rhs rhsval asr asa f,
-    location_is f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) lhs (Array r i) ->
-    expr_runp f asr.(reg_assoc_blocking) asa.(arr_assoc_blocking) rhs rhsval ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Array r i) ->
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vnonblock lhs rhs)
                  asr (nonblock_arr r i asa rhsval).
@@ -669,15 +665,15 @@ Inductive step : state -> state -> Prop :=
     forall m stvar stvar' cycle f asr0 asa0 asr1 asa1,
     mis_stepp (f cycle) asr0 asa0
               m.(mod_body) asr1 asa1 ->
-    let asr := merge_reg asr1 in
-    let asa := merge_arr asa1 in
-    Some stvar' = asr.(reg_assoc_blocking)!(fst m.(mod_state)) ->
+    let asr := merge_associations asr1 in
+    let asa := merge_associations asa1 in
+    Some stvar' = asr.(assoc_blocking)!(fst m.(mod_state)) ->
     step (State m asr0 asa0 f cycle stvar)
          (State m asr asa f (S cycle) stvar')
 | step_finish :
     forall m asr asa f cycle stvar result,
-    asr.(reg_assoc_blocking)!(fst m.(mod_finish)) = Some (1'h"1") ->
-    asr.(reg_assoc_blocking)!(fst m.(mod_return)) = Some result ->
+    asr.(assoc_blocking)!(fst m.(mod_finish)) = Some (1'h"1") ->
+    asr.(assoc_blocking)!(fst m.(mod_return)) = Some result ->
     step (State m asr asa f cycle stvar)
          (Finishstate result).
 Hint Constructors step : verilog.
