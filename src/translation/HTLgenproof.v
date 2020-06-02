@@ -266,7 +266,20 @@ Section CORRECTNESS.
       assumption.
       unfold state_st_wf. inversion 1. subst. unfold_merge. apply AssocMap.gss.
     - (* Iop *)
-      destruct v eqn:?.
+      destruct v eqn:?;
+               try (
+                 destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0);
+                 inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5);
+                 try (unfold_func H6);
+                 try (unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6;
+                      unfold_func H3);
+
+                 inversion Heql; inversion MASSOC; subst;
+                 assert (HPle : Ple r (RTL.max_reg_function f))
+                   by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+                 apply H1 in HPle; inversion HPle;
+                 rewrite H2 in *; discriminate
+               ).
 
       + econstructor. split.
       apply Smallstep.plus_one.
@@ -328,46 +341,7 @@ Section CORRECTNESS.
       apply AssocMap.gss.
       apply st_greater_than_res.
 
-      + destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0);
-      inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5);
-      try (unfold_func H6).
-
-        * inversion Heql. inversion MASSOC. subst.
-          assert (Ple r (RTL.max_reg_function f)). eapply RTL.max_reg_function_use. eauto. simpl; auto.
-          apply H1 in H3. inversion H3. subst. rewrite H2 in H4. discriminate. rewrite H2 in H5.
-          discriminate.
-        * unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6; unfold_func H3.
-
-      + destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0);
-      inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5);
-      try (unfold_func H6).
-
-        * inversion Heql. inversion MASSOC. subst.
-          assert (Ple r (RTL.max_reg_function f)). eapply RTL.max_reg_function_use. eauto. simpl; auto.
-          apply H1 in H3. inversion H3. subst. rewrite H2 in H4. discriminate. rewrite H2 in H5.
-          discriminate.
-        * unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6; unfold_func H3.
-
-      + destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0);
-      inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5);
-      try (unfold_func H6).
-
-        * inversion Heql. inversion MASSOC. subst.
-          assert (Ple r (RTL.max_reg_function f)). eapply RTL.max_reg_function_use. eauto. simpl; auto.
-          apply H1 in H3. inversion H3. subst. rewrite H2 in H4. discriminate. rewrite H2 in H5.
-          discriminate.
-        * unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6; unfold_func H3.
-
-      + destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0);
-      inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5);
-      try (unfold_func H6).
-
-        * inversion Heql. inversion MASSOC. subst.
-          assert (Ple r (RTL.max_reg_function f)). eapply RTL.max_reg_function_use. eauto. simpl; auto.
-          apply H1 in H3. inversion H3. subst. rewrite H2 in H4. discriminate. rewrite H2 in H5.
-          discriminate.
-        * unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6; unfold_func H3.
-    - econstructor. split. apply Smallstep.plus_one.
+      - econstructor. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
       eapply Verilog.stmnt_runp_Vnonblock with
           (rhsval := if b then posToValue 32 ifso else posToValue 32 ifnot).
