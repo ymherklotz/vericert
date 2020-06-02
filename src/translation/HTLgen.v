@@ -27,10 +27,15 @@ Hint Resolve AssocMap.gss : htlh.
 Hint Resolve Ple_refl : htlh.
 Hint Resolve Ple_succ : htlh.
 
+Inductive scl_decl : Type := Scalar (sz : nat).
+Inductive arr_decl : Type := Array (sz : nat) (ln : nat).
+
 Record state: Type := mkstate {
   st_st : reg;
   st_freshreg: reg;
   st_freshstate: node;
+  st_scldecls: AssocMap.t scl_decl;
+  st_arrdecls: AssocMap.t arr_decl;
   st_datapath: datapath;
   st_controllogic: controllogic;
 }.
@@ -39,6 +44,8 @@ Definition init_state (st : reg) : state :=
   mkstate st
           1%positive
           1%positive
+          (AssocMap.empty scl_decl)
+          (AssocMap.empty arr_decl)
           (AssocMap.empty stmnt)
           (AssocMap.empty stmnt).
 
@@ -68,19 +75,9 @@ Module HTLState <: State.
   Lemma st_trans :
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
-    intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans.
-    - rewrite H1. rewrite H. reflexivity.
-    - intros. destruct H4 with n.
-      + left; assumption.
-      + destruct H8 with n;
-          [ rewrite <- H0; left; assumption
-          | right; rewrite <- H0; apply H10
-          ].
-    - intros. destruct H5 with n.
-      + left; assumption.
-      + destruct H9 with n.
-        * rewrite <- H0. left. assumption.
-        * right. rewrite <- H0. apply H10.
+    intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
+    - destruct H4 with n; destruct H8 with n; intuition congruence.
+    - destruct H5 with n; destruct H9 with n; intuition congruence.
   Qed.
 
 End HTLState.
@@ -102,13 +99,13 @@ Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
 Proof.
-  intros. case (s.(st_datapath)!n); intros. right; auto. left; auto.
+  intros. case (s.(st_datapath)!n); tauto.
 Defined.
 
 Definition check_empty_node_controllogic:
   forall (s: state) (n: node), { s.(st_controllogic)!n = None } + { True }.
 Proof.
-  intros. case (s.(st_controllogic)!n); intros. right; auto. left; auto.
+  intros. case (s.(st_controllogic)!n); tauto.
 Defined.
 
 Lemma add_instr_state_incr :
@@ -120,6 +117,8 @@ Lemma add_instr_state_incr :
        s.(st_st)
        s.(st_freshreg)
        (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
        (AssocMap.set n st s.(st_datapath))
        (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
 Proof.
@@ -136,6 +135,8 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
                s.(st_st)
                s.(st_freshreg)
                (st_freshstate s)
+               s.(st_scldecls)
+               s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
          (add_instr_state_incr s n n' st STM TRANS)
@@ -151,6 +152,8 @@ Lemma add_instr_skip_state_incr :
        s.(st_st)
        s.(st_freshreg)
        (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
        (AssocMap.set n st s.(st_datapath))
        (AssocMap.set n Vskip s.(st_controllogic))).
 Proof.
@@ -167,6 +170,8 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
                s.(st_st)
                s.(st_freshreg)
                (st_freshstate s)
+               s.(st_scldecls)
+               s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n Vskip s.(st_controllogic)))
          (add_instr_skip_state_incr s n st STM TRANS)
@@ -274,6 +279,8 @@ Lemma add_branch_instr_state_incr:
                  s.(st_st)
                 (st_freshreg s)
                 (st_freshstate s)
+                s.(st_scldecls)
+                s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
 Proof.
@@ -290,6 +297,8 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                s.(st_st)
                 (st_freshreg s)
                 (st_freshstate s)
+                s.(st_scldecls)
+                s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
@@ -324,32 +333,60 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
   end.
 
 Lemma create_reg_state_incr:
-  forall s,
+  forall s sz,
     st_incr s (mkstate
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
+         (AssocMap.set s.(st_freshreg) (Scalar sz) s.(st_scldecls))
+         s.(st_arrdecls)
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_reg: mon reg :=
+Definition create_reg (sz : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
            OK r (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (Scalar sz) s.(st_scldecls))
+                   (st_arrdecls s)
                    (st_datapath s)
                    (st_controllogic s))
-              (create_reg_state_incr s).
+              (create_reg_state_incr s sz).
+
+Lemma create_arr_state_incr:
+  forall s sz ln,
+    st_incr s (mkstate
+         s.(st_st)
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         s.(st_scldecls)
+         (AssocMap.set s.(st_freshreg) (Array sz ln) s.(st_arrdecls))
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_arr (sz : nat) (ln : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   s.(st_scldecls)
+                   (AssocMap.set s.(st_freshreg) (Array sz ln) s.(st_arrdecls))
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_arr_state_incr s sz ln).
 
 Definition transf_module (f: function) : mon module :=
-  do fin <- create_reg;
-  do rtrn <- create_reg;
+  do fin <- create_reg 1;
+  do rtrn <- create_reg 32;
   do _ <- collectlist (transf_instr fin rtrn) (Maps.PTree.elements f.(RTL.fn_code));
-  do start <- create_reg;
-  do rst <- create_reg;
-  do clk <- create_reg;
+  do start <- create_reg 1;
+  do rst <- create_reg 1;
+  do clk <- create_reg 1;
   do current_state <- get;
   ret (mkmodule
          f.(RTL.fn_params)
@@ -365,6 +402,8 @@ Definition max_state (f: function) : state :=
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
+          (st_scldecls (init_state st))
+          (st_arrdecls (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
