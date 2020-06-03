@@ -321,46 +321,58 @@ Proof.
   induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
-  + subst.
+  - subst.
     destruct instr1 eqn:?; try discriminate;
       try destruct_optional; inv_add_instr; econstructor; try assumption.
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
       eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
       eapply translate_instr_tr_op. apply EQ1.
       eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. rewrite <- e2. rewrite H. econstructor. apply EQ1.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2. inversion H9. rewrite <- e2. rewrite H. econstructor. apply EQ1.
       eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. constructor.
-      eapply in_map with (f := fst) in H9. contradiction.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct H2.
+      * inversion H2.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H2. contradiction.
 
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. constructor.
-      eapply in_map with (f := fst) in H9. contradiction.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct H2.
+      * inversion H2.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H2. contradiction.
 
-  + eapply IHl. apply EQ0. assumption.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2.
+      * inversion H9.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H9. contradiction.
+
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2.
+      * inversion H9.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H9. contradiction.
+
+  - eapply IHl. apply EQ0. assumption.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
