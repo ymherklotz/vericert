@@ -356,3 +356,8 @@ Proof.
   unfold valToValue in H. inversion H.
   symmetry. apply valueToInt_intToValue.
 Qed.
+
+Lemma boolToValue_ValueToBool :
+  forall b,
+  valueToBool (boolToValue 32 b) = b.
+Proof. destruct b; unfold valueToBool, boolToValue; simpl; trivial. Qed.
