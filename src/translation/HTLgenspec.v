@@ -293,46 +293,49 @@ Proof.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
   + subst.
-    destruct instr1 eqn:?; try discriminate; try destruct_optional; inv_add_instr; econstructor.
-    * assumption.
+    destruct instr1 eqn:?; try discriminate;
+      try destruct_optional; inv_add_instr; econstructor; try assumption.
     * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
         [ discriminate | apply H9 ].
-(*    * inversion H1. inversion H9. rewrite H. apply tr_instr_Inop.
-      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
+      eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * inversion H1. inversion H7. unfold nonblock. rewrite <- e2. rewrite H. constructor.
+    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
       eapply translate_instr_tr_op. apply EQ1.
-      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+      eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * inversion H1. inversion H7. rewrite <- e2. rewrite H. econstructor. apply EQ1.
-      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * inversion H2. inversion H9. rewrite <- e2. rewrite H. econstructor. apply EQ1.
+      eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * inversion H1. inversion H7. constructor.
-      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * inversion H2. inversion H9. constructor.
+      eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * destruct o0 with pc1; destruct H9; simpl in *; rewrite AssocMap.gss in H7;
-        [ discriminate | apply H7 ].
-    * inversion H1. inversion H7. constructor.
-      eapply in_map with (f := fst) in H7. simpl in H7. contradiction.
+    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
+        [ discriminate | apply H9 ].
+    * inversion H2. inversion H9. constructor.
+      eapply in_map with (f := fst) in H9. contradiction.
 
   + eapply IHl. apply EQ0. assumption.
-    destruct H1. inversion H1. subst. contradiction.
-    assumption.*)
-Admitted.
+    destruct H2. inversion H2. subst. contradiction.
+    intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
+    destruct H2. inv H2. contradiction. assumption. assumption.
+Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Theorem transl_module_correct :

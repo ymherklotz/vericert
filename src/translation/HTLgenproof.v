@@ -107,11 +107,6 @@ Lemma assumption_32bit :
     valueToPos (posToValue 32 v) = v.
 Admitted.
 
-Lemma assumption_32bit_bool :
-  forall b,
-    valueToBool (boolToValue 32 b) = b.
-Admitted.
-
 Lemma st_greater_than_res :
   forall m res : positive,
     m <> res.
@@ -126,6 +121,11 @@ Lemma finish_not_res :
   forall f r : positive,
     f <> r.
 Admitted.
+
+Lemma greater_than_max_func :
+  forall f st,
+    Plt (RTL.max_reg_function f) st.
+Proof. Admitted.
 
 Ltac inv_state :=
   match goal with
@@ -238,11 +238,6 @@ Section CORRECTNESS.
       tr_instr fin rtrn st instr stmt trans ->
       exists assoc',
         HTL.step tge (HTL.State m st assoc) Events.E0 (HTL.State m st assoc').
-
-  Lemma greater_than_max_func :
-    forall f st,
-      Plt (RTL.max_reg_function f) st.
-  Proof. Admitted.
 
   Theorem transl_step_correct:
     forall (S1 : RTL.state) t S2,
@@ -358,11 +353,11 @@ Section CORRECTNESS.
       eapply Verilog.erun_Vternary_true.
       eapply eval_cond_correct; eauto.
       constructor.
-      apply assumption_32bit_bool.
+      apply boolToValue_ValueToBool.
       eapply Verilog.erun_Vternary_false.
       eapply eval_cond_correct; eauto.
       constructor.
-      apply assumption_32bit_bool.
+      apply boolToValue_ValueToBool.
       trivial.
       constructor.
       trivial.
