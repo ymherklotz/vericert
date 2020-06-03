@@ -19,7 +19,7 @@
 From Coq Require Import FSets.FMapPositive.
 From coqup Require Import Coquplib Value AssocMap.
 From coqup Require Verilog.
-From compcert Require Events Globalenvs Smallstep Integers.
+From compcert Require Events Globalenvs Smallstep Integers Values.
 From compcert Require Import Maps.
 
 Import HexNotationValue.
@@ -109,7 +109,7 @@ Inductive initial_state (p: program): state -> Prop :=
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,
-    value_int_eqb retval retvali = true ->
+    retvali = valueToInt retval ->
     final_state (Returnstate retval) retvali.
 
 Definition semantics (m : program) :=

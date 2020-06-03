@@ -410,7 +410,13 @@ Definition max_state (f: function) : state :=
 Definition transl_module (f : function) : Errors.res module :=
   run_mon (max_state f) (transf_module f).
 
-Definition transl_fundef := transf_partial_fundef transl_module.
+Definition transl_fundef (f : RTL.fundef) : Errors.res HTL.fundef :=
+  match f with
+  | Internal f' =>
+    Errors.bind (transl_module f')
+                (fun f'' => Errors.OK (Internal f''))
+  | _ => Errors.Error (Errors.msg "External function could not be translated.")
+  end.
 
 (** Translation of a whole program. *)
 
