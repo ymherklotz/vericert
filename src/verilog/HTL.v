@@ -43,6 +43,7 @@ Record module: Type :=
     mod_controllogic : controllogic;
     mod_entrypoint : node;
     mod_st : reg;
+    mod_stk : reg;
     mod_finish : reg;
     mod_return : reg
   }.

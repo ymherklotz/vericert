@@ -274,7 +274,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Olea a, _ => translate_eff_addressing a args
   | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
-  | Op.Ocast32signed, r::nill => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
+  | Op.Ocast32signed, r::nil => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
   | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
@@ -425,6 +425,7 @@ Definition transf_module (f: function) : mon module :=
          current_state.(st_controllogic)
          f.(fn_entrypoint)
          current_state.(st_st)
+         stack
          fin
          rtrn).
 
