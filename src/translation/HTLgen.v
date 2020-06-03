@@ -229,9 +229,14 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
   | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
   | Op.Ascaled scale offset, r1::nil =>
-    ret (Vbinop Vadd (boplitz Vadd r1 scale) (Vlit (ZToValue 32%nat offset)))
+    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil =>
     ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+  (* Stack arrays/referenced variables *)
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vlit (ZToValue 32 (a / 4)))
+    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
   | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
   end.
 
@@ -268,6 +273,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Olea a, _ => translate_eff_addressing a args
+  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
+  | Op.Ocast32signed, r::nill => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
   | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
@@ -305,7 +312,26 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
     | _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
     end.
 
-Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
+Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
+           (args : list reg) (stack : reg) : mon expr :=
+  match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Op.Aindexed off, r1::nil => ret (Vvari stack (boplitz Vadd r1 off)) (* FIXME: Cannot guarantee alignment *)
+  | Op.Ascaled scale offset, r1::nil =>
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vadd r1 (offset / 4)) (boplitz Vmul r2 (scale / 4))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
+    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
+  | _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
+  end.
+
+Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -313,8 +339,12 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
     | Iop op args dst n' =>
       do instr <- translate_instr op args;
       add_instr n n' (nonblock dst instr)
-    | Iload _ _ _ _ _ => error (Errors.msg "Loads are not implemented.")
-    | Istore _ _ _ _ _ => error (Errors.msg "Stores are not implemented.")
+    | Iload mem addr args dst n' =>
+      do src <- translate_arr_access mem addr args stack;
+      add_instr n n' (block dst src)
+    | Istore mem addr args src n' =>
+      do dst <- translate_arr_access mem addr args stack;
+      add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -383,7 +413,8 @@ Definition create_arr (sz : nat) (ln : nat) : mon reg :=
 Definition transf_module (f: function) : mon module :=
   do fin <- create_reg 1;
   do rtrn <- create_reg 32;
-  do _ <- collectlist (transf_instr fin rtrn) (Maps.PTree.elements f.(RTL.fn_code));
+  do stack <- create_arr 32 (Z.to_nat (f.(fn_stacksize) / 4));
+  do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
   do start <- create_reg 1;
   do rst <- create_reg 1;
   do clk <- create_reg 1;
