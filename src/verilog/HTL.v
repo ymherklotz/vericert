@@ -30,6 +30,8 @@ hardware-like layout that is still similar to the register transfer language
 instantiations and that we now describe a state machine instead of a
 control-flow graph. *)
 
+Local Open Scope assocmap.
+
 Definition reg := positive.
 Definition node := positive.
 
@@ -51,21 +53,42 @@ Definition fundef := AST.fundef module.
 
 Definition program := AST.program fundef unit.
 
+Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
+  match rl, vl with
+  | r :: rl', v :: vl' => AssocMap.set r v (init_regs vl' rl')
+  | _, _ => empty_assocmap
+  end.
+
 (** * Operational Semantics *)
 
 Definition genv := Globalenvs.Genv.t fundef unit.
 
+Inductive stackframe : Type :=
+  Stackframe :
+    forall  (res : reg)
+            (m : module)
+            (pc : node)
+            (assoc : assocmap),
+      stackframe.
+
 Inductive state : Type :=
 | State :
-    forall (m : module)
+    forall (stack : list stackframe)
+           (m : module)
            (st : node)
-           (assoc : assocmap),
-  state
-| Returnstate : forall v : value, state.
+           (assoc : assocmap), state
+| Returnstate :
+    forall (res : list stackframe)
+           (v : value), state
+| Callstate :
+    forall (stack : list stackframe)
+           (m : module)
+           (args : list value), state.
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g t m st ctrl data assoc0 assoc1 assoc2 assoc3 nbassoc0 nbassoc1 f stval pstval,
+    forall g m st ctrl data assoc0 assoc1 assoc2
+           assoc3 nbassoc0 nbassoc1 f stval pstval sf,
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
@@ -79,27 +102,38 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       assoc3 = merge_assocmap nbassoc1 assoc2 ->
       assoc3!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
-      step g (State m st assoc0) t (State m pstval assoc3)
+      step g (State sf m st assoc0) Events.E0 (State sf m pstval assoc3)
 | step_finish :
-    forall g t m st assoc retval,
+    forall g m st assoc retval sf,
     assoc!(m.(mod_finish)) = Some (1'h"1") ->
     assoc!(m.(mod_return)) = Some retval ->
-    step g (State m st assoc) t (Returnstate retval).
+    step g (State sf m st assoc) Events.E0 (Returnstate sf retval)
+| step_call :
+    forall g m args res,
+      step g (Callstate res m args) Events.E0
+           (State res m m.(mod_entrypoint)
+             (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
+               (init_regs args m.(mod_params))))
+| step_return :
+    forall g m assoc i r sf pc mst,
+      mst = mod_st m ->
+      step g (Returnstate (Stackframe r m pc assoc :: sf) i) Events.E0
+           (State sf m pc ((assoc # mst <- (posToValue 32 pc)) # r <- i)).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b m0 st m,
+  | initial_state_intro: forall b m0 m,
       let ge := Globalenvs.Genv.globalenv p in
       Globalenvs.Genv.init_mem p = Some m0 ->
       Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
       Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) ->
-      st = m.(mod_entrypoint) ->
-      initial_state p (State m st empty_assocmap).
+      initial_state p (Callstate nil m nil).
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,
     retvali = valueToInt retval ->
-    final_state (Returnstate retval) retvali.
+    final_state (Returnstate nil retval) retvali.
 
 Definition semantics (m : program) :=
-  Smallstep.Semantics step (initial_state m) final_state (Globalenvs.Genv.globalenv m).
+  Smallstep.Semantics step (initial_state m) final_state
+                      (Globalenvs.Genv.globalenv m).

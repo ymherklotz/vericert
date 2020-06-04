@@ -32,7 +32,8 @@ From compcert Require Integers Events.
 From compcert Require Import Errors Smallstep Globalenvs.
 
 Import HexNotationValue.
-Import AssocMapNotation.
+
+Local Open Scope assocmap.
 
 Definition reg : Type := positive.
 Definition node : Type := positive.
@@ -246,12 +247,8 @@ Inductive expr_runp : fext -> assocmap -> expr -> value -> Prop :=
       expr_runp fext assoc (Vlit v) v
   | erun_Vvar :
       forall fext assoc v r,
-      assoc!r = Some v ->
+      assoc#r = v ->
       expr_runp fext assoc (Vvar r) v
-  | erun_Vvar_empty :
-      forall fext assoc r sz,
-      assoc!r = None ->
-      expr_runp fext assoc (Vvar r) (ZToValue sz 0)
   | erun_Vinputvar :
       forall fext assoc r v,
       fext!r = Some v ->

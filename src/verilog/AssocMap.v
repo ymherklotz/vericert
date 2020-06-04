@@ -202,9 +202,16 @@ Ltac unfold_merge :=
   unfold merge_assocmap; try (repeat (rewrite merge_add_assoc));
   rewrite AssocMapExt.merge_base_1.
 
-Module AssocMapNotation.
-  Notation "a ! b" := (AssocMap.get b a) (at level 1).
-  Notation "a # ( b , c )" := (find_assocmap c b a) (at level 1).
-  Notation "a # b" := (find_assocmap 32 b a) (at level 1).
-  Notation "a ## b" := (List.map (fun c => find_assocmap 32 c a) b) (at level 1).
-End AssocMapNotation.
+Declare Scope assocmap.
+Notation "a ! b" := (AssocMap.get b a) (at level 1) : assocmap.
+Notation "a # ( b , c )" := (find_assocmap c b a) (at level 1) : assocmap.
+Notation "a # b" := (find_assocmap 32 b a) (at level 1) : assocmap.
+Notation "a ## b" := (List.map (fun c => find_assocmap 32 c a) b) (at level 1) : assocmap.
+Notation "a # b '<-' c" := (AssocMap.set b c a) (at level 1, b at next level) : assocmap.
+
+Local Open Scope assocmap.
+Lemma find_get_assocmap :
+  forall assoc r v,
+  assoc ! r = Some v ->
+  assoc # r = v.
+Proof. intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H. trivial. Qed.

@@ -300,15 +300,14 @@ Proof.
     * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
         [ discriminate | apply H9 ].
     * inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
-      eapply in_map with (f := fst) in H9. contradiction.
+      eapply in_map with (f := fst) in H9; contradiction.
 
     * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
         [ discriminate | apply H9 ].
     * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
         [ discriminate | apply H9 ].
     * inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
-      eapply translate_instr_tr_op. apply EQ1.
-      eapply in_map with (f := fst) in H9. contradiction.
+      eapply translate_instr_tr_op. apply EQ1. eapply in_map with (f := fst) in H9. contradiction.
 
     * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
         [ discriminate | apply H9 ].
