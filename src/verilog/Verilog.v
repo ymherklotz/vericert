@@ -32,7 +32,8 @@ From compcert Require Integers Events.
 From compcert Require Import Errors Smallstep Globalenvs.
 
 Import HexNotationValue.
-Import AssocMapNotation.
+
+Local Open Scope assocmap.
 
 Set Implicit Arguments.
 
@@ -291,17 +292,13 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       expr_runp fext reg stack (Vlit v) v
   | erun_Vvar :
       forall fext reg stack v r,
-      reg!r = Some v ->
+      reg#r = v ->
       expr_runp fext reg stack (Vvar r) v
   | erun_Vvari :
       forall fext reg stack v iexp i r,
       expr_runp fext reg stack iexp i ->
       arr_assocmap_lookup stack r (valueToNat i) = Some v ->
       expr_runp fext reg stack (Vvari r iexp) v
-  | erun_Vvar_empty :
-      forall fext reg stack r sz,
-      reg!r = None ->
-      expr_runp fext reg stack (Vvar r) (ZToValue sz 0)
   | erun_Vinputvar :
       forall fext reg stack r v,
       fext!r = Some v ->

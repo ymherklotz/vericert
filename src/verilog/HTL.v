@@ -30,6 +30,8 @@ hardware-like layout that is still similar to the register transfer language
 instantiations and that we now describe a state machine instead of a
 control-flow graph. *)
 
+Local Open Scope assocmap.
+
 Definition reg := positive.
 Definition node := positive.
 
@@ -52,22 +54,42 @@ Definition fundef := AST.fundef module.
 
 Definition program := AST.program fundef unit.
 
+Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
+  match rl, vl with
+  | r :: rl', v :: vl' => AssocMap.set r v (init_regs vl' rl')
+  | _, _ => empty_assocmap
+  end.
+
 (** * Operational Semantics *)
 
 Definition genv := Globalenvs.Genv.t fundef unit.
 
+Inductive stackframe : Type :=
+  Stackframe :
+    forall  (res : reg)
+            (m : module)
+            (pc : node)
+            (assoc : assocmap),
+      stackframe.
+
 Inductive state : Type :=
 | State :
-    forall (m : module)
+    forall (stack : list stackframe)
+           (m : module)
            (st : node)
            (reg_assoc : assocmap)
-           (arr_assoc : AssocMap.t (list value)),
-  state
-| Returnstate : forall v : value, state.
+           (arr_assoc : AssocMap.t (list value)), state
+| Returnstate :
+    forall (res : list stackframe)
+           (v : value), state
+| Callstate :
+    forall (stack : list stackframe)
+           (m : module)
+           (args : list value), state.
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g t m st ctrl data
+    forall g m st sf ctrl data
       asr asa
       basr1 basa1 nasr1 nasa1
       basr2 basa2 nasr2 nasa2
@@ -91,27 +113,40 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asa' = AssocMapExt.merge (list value) nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
-      step g (State m st asr asa) t (State m pstval asr' asa')
+      step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
-    forall g t m st asr asa retval,
+    forall g m st asr asa retval sf,
     asr!(m.(mod_finish)) = Some (1'h"1") ->
     asr!(m.(mod_return)) = Some retval ->
-    step g (State m st asr asa) t (Returnstate retval).
+    step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
+| step_call :
+    forall g m args res,
+      step g (Callstate res m args) Events.E0
+           (State res m m.(mod_entrypoint)
+             (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
+                           (init_regs args m.(mod_params)))
+              (AssocMap.empty (list value)))
+| step_return :
+    forall g m asr i r sf pc mst,
+      mst = mod_st m ->
+      step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
+           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
+                  (AssocMap.empty (list value))).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b m0 st m,
+  | initial_state_intro: forall b m0 m,
       let ge := Globalenvs.Genv.globalenv p in
       Globalenvs.Genv.init_mem p = Some m0 ->
       Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
       Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) ->
-      st = m.(mod_entrypoint) ->
-      initial_state p (State m st empty_assocmap (AssocMap.empty (list value))).
+      initial_state p (Callstate nil m nil).
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,
     retvali = valueToInt retval ->
-    final_state (Returnstate retval) retvali.
+    final_state (Returnstate nil retval) retvali.
 
 Definition semantics (m : program) :=
-  Smallstep.Semantics step (initial_state m) final_state (Globalenvs.Genv.globalenv m).
+  Smallstep.Semantics step (initial_state m) final_state
+                      (Globalenvs.Genv.globalenv m).
