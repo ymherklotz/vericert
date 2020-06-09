@@ -164,7 +164,7 @@ Ltac inv_state :=
       inversion TF;
       match goal with
         TC : forall _ _,
-          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _,
+          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _ _,
         H : Maps.PTree.get _ _ = Some _ |- _ =>
         apply TC in H; inversion H;
         match goal with
@@ -298,10 +298,12 @@ Section CORRECTNESS.
       (* processing of state *)
       econstructor.
       simpl. trivial.
-      econstructor. trivial.
+      econstructor.
+      econstructor.
       econstructor.
 
       (* prove stval *)
+      unfold merge_assocmap.
       unfold_merge. simpl. apply AssocMap.gss.
 
       (* prove match_state *)
