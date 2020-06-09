@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require RTL Registers AST.
-From compcert Require Import Globalenvs.
+From compcert Require RTL Registers AST Integers.
+From compcert Require Import Globalenvs Memory.
 From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap.
 From coqup Require HTL Verilog.
 
@@ -37,9 +37,9 @@ Inductive match_assocmaps : RTL.function -> RTL.regset -> assocmap -> Prop :=
 Hint Constructors match_assocmaps : htlproof.
 
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
-  forall st assoc res,
-  s = HTL.State res m st assoc ->
-  assoc!(m.(HTL.mod_st)) = Some (posToValue 32 st).
+  forall st asa asr res,
+  s = HTL.State res m st asa asr ->
+  asa!(m.(HTL.mod_st)) = Some (posToValue 32 st).
 Hint Unfold state_st_wf : htlproof.
 
 Inductive match_stacks : list RTL.stackframe -> list HTL.stackframe -> Prop :=
@@ -53,14 +53,27 @@ Inductive match_stacks : list RTL.stackframe -> list HTL.stackframe -> Prop :=
       match_stacks (RTL.Stackframe r f sp pc rs :: cs)
                    (HTL.Stackframe r m pc assoc :: lr).
 
+Inductive match_arrs (m : HTL.module) : RTL.function -> mem ->  AssocMap.t (list value) -> Prop :=
+| match_arr : forall mem asa stack sp f sz,
+    sz = f.(RTL.fn_stacksize) ->
+    asa ! (m.(HTL.mod_stk)) = Some stack ->
+    (forall ptr,
+        0 <= ptr < sz ->
+        nth_error stack (Z.to_nat ptr) =
+        (Coquplib.Option.bind (Mem.loadv AST.Mint32 mem
+                                         (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)))
+         valToValue)) ->
+    match_arrs m f mem asa.
+
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
-| match_state : forall assoc sf f sp rs mem m st res
-    (MASSOC : match_assocmaps f rs assoc)
+| match_state : forall asa asr sf f sp rs mem m st res
+    (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module f m)
-    (WF : state_st_wf m (HTL.State res m st assoc))
-    (MS : match_stacks sf res),
+    (WF : state_st_wf m (HTL.State res m st asr asa))
+    (MS : match_stacks sf res)
+    (MA : match_arrs m f mem asa),
     match_states (RTL.State sf f sp st rs mem)
-                 (HTL.State res m st assoc)
+                 (HTL.State res m st asr asa)
 | match_returnstate :
     forall
       v v' stack m res
@@ -227,22 +240,22 @@ Section CORRECTNESS.
   Hint Resolve senv_preserved : htlproof.
 
   Lemma eval_correct :
-    forall sp op rs args m v v' e assoc f,
+    forall sp op rs args m v v' e asr asa f,
       Op.eval_operation ge sp op
 (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
       tr_op op args e ->
       val_value_lessdef v v' ->
-      Verilog.expr_runp f assoc e v'.
+      Verilog.expr_runp f asr asa e v'.
   Admitted.
 
   Lemma eval_cond_correct :
-    forall cond (args : list Registers.reg) s1 c s' i rs args m b f assoc,
+    forall cond (args : list Registers.reg) s1 c s' i rs args m b f asr asa,
     translate_condition cond args s1 = OK c s' i ->
     Op.eval_condition
       cond
       (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
       m = Some b ->
-    Verilog.expr_runp f assoc c (boolToValue 32 b).
+    Verilog.expr_runp f asr asa c (boolToValue 32 b).
   Admitted.
 
   (** The proof of semantic preservation for the translation of instructions
@@ -263,10 +276,10 @@ Section CORRECTNESS.
    *)
 
   Definition transl_instr_prop (instr : RTL.instruction) : Prop :=
-    forall m assoc fin rtrn st stmt trans res,
-      tr_instr fin rtrn st instr stmt trans ->
-      exists assoc',
-        HTL.step tge (HTL.State res m st assoc) Events.E0 (HTL.State res m st assoc').
+    forall m asr asa fin rtrn st stmt trans res,
+      tr_instr fin rtrn st (m.(HTL.mod_stk)) instr stmt trans ->
+      exists asr' asa',
+        HTL.step tge (HTL.State res m st asr asa) Events.E0 (HTL.State res m st asr' asa').
 
   Theorem transl_step_correct:
     forall (S1 : RTL.state) t S2,
