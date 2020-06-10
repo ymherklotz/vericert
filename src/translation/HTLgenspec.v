@@ -136,67 +136,92 @@ Inductive tr_op : Op.operation -> list reg -> expr -> Prop :=
 | tr_op_Oshr : forall r1 r2, tr_op Op.Oshr (r1::r2::nil) (bop Vshr r1 r2)
 | tr_op_Oshrimm : forall n r, tr_op (Op.Oshrimm n) (r::nil) (boplit Vshr r n)
 | tr_op_Ocmp : forall c l e s s' i, translate_condition c l s = OK e s' i -> tr_op (Op.Ocmp c) l e
-| tr_op_Olea : forall a l e s s' i, translate_eff_addressing a l s = OK e s' i -> tr_op (Op.Olea a) l e.
+| tr_op_Olea : forall a l e s s' i, translate_eff_addressing a l s = OK e s' i -> tr_op (Op.Olea a) l e
+| tr_op_Oleal : forall a l e s s' i, translate_eff_addressing a l s = OK e s' i -> tr_op (Op.Oleal a) l e
+| tr_op_Ocast32signed : forall r, tr_op (Op.Ocast32signed) (r::nil) (Vvar r).
 Hint Constructors tr_op : htlspec.
 
-Inductive tr_instr (fin rtrn st : reg) : RTL.instruction -> stmnt -> stmnt -> Prop :=
+Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -> Prop :=
 | tr_instr_Inop :
     forall n,
-      tr_instr fin rtrn st (RTL.Inop n) Vskip (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Inop n) Vskip (state_goto st n)
 | tr_instr_Iop :
     forall n op args e dst,
       tr_op op args e ->
-      tr_instr fin rtrn st (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       translate_condition cond args s = OK c s' i ->
-      tr_instr fin rtrn st (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
+      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-    tr_instr fin rtrn st (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)))
+    tr_instr fin rtrn st stk (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)))
                                                   (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
 | tr_instr_Ireturn_Some :
     forall r,
-      tr_instr fin rtrn st (RTL.Ireturn (Some r))
-               (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip.
+      tr_instr fin rtrn st stk (RTL.Ireturn (Some r))
+               (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip
+| tr_instr_Iload :
+    forall mem addr args s s' i c dst n,
+      translate_arr_access mem addr args stk s = OK c s' i ->
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (block dst c) (state_goto st n)
+| tr_instr_Istore :
+    forall mem addr args s s' i c src n,
+      translate_arr_access mem addr args stk s = OK c s' i ->
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vblock c (Vvar src))
+               (state_goto st n).
 Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
-          (fin rtrn st : reg) : Prop :=
+          (fin rtrn st stk : reg) : Prop :=
   tr_code_intro :
     forall s t,
       c!pc = Some i ->
       stmnts!pc = Some s ->
       trans!pc = Some t ->
-      tr_instr fin rtrn st i s t ->
-      tr_code c pc i stmnts trans fin rtrn st.
+      tr_instr fin rtrn st stk i s t ->
+      tr_code c pc i stmnts trans fin rtrn st stk.
 Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st m,
+    forall data control fin rtrn st stk m,
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-                    tr_code f.(RTL.fn_code) pc i data control fin rtrn st) ->
+                    tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                            st fin rtrn) ->
+                            st stk fin rtrn) ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
 Lemma create_reg_datapath_trans :
-  forall s s' x i,
-    create_reg s = OK x s' i ->
+  forall sz s s' x i,
+    create_reg sz s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_datapath_trans : htlspec.
 
 Lemma create_reg_controllogic_trans :
-  forall s s' x i,
-    create_reg s = OK x s' i ->
+  forall sz s s' x i,
+    create_reg sz s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_controllogic_trans : htlspec.
+
+Lemma create_arr_datapath_trans :
+  forall sz ln s s' x i,
+    create_arr sz ln s = OK x s' i ->
+    s.(st_datapath) = s'.(st_datapath).
+Proof. intros. monadInv H. trivial. Qed.
+Hint Resolve create_arr_datapath_trans : htlspec.
+
+Lemma create_arr_controllogic_trans :
+  forall sz ln s s' x i,
+    create_arr sz ln s = OK x s' i ->
+    s.(st_controllogic) = s'.(st_controllogic).
+Proof. intros. monadInv H. trivial. Qed.
+Hint Resolve create_arr_controllogic_trans : htlspec.
 
 Lemma get_refl_x :
   forall s s' x i,
@@ -214,10 +239,14 @@ Hint Resolve get_refl_s : htlspec.
 
 Ltac inv_incr :=
   repeat match goal with
-  | [ H: create_reg ?s = OK _ ?s' _ |- _ ] =>
+  | [ H: create_reg _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); eapply create_reg_datapath_trans in H;
     eapply create_reg_controllogic_trans in H1
+  | [ H: create_arr _ _ ?s = OK _ ?s' _ |- _ ] =>
+    let H1 := fresh "H" in
+    assert (H1 := H); eapply create_arr_datapath_trans in H;
+    eapply create_arr_controllogic_trans in H1
   | [ H: get ?s = OK _ _ _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); apply get_refl_x in H; apply get_refl_s in H1;
@@ -281,56 +310,69 @@ Ltac destruct_optional :=
   match goal with H: option ?r |- _ => destruct H end.
 
 Lemma iter_expand_instr_spec :
-  forall l fin rtrn s s' i x c,
-    HTLMonadExtra.collectlist (transf_instr fin rtrn) l s = OK x s' i ->
+  forall l fin rtrn stack s s' i x c,
+    HTLMonadExtra.collectlist (transf_instr fin rtrn stack) l s = OK x s' i ->
     list_norepet (List.map fst l) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr) ->
     (forall pc instr, In (pc, instr) l ->
                       c!pc = Some instr ->
-                      tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st)).
+                      tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st) stack).
 Proof.
   induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
-  + subst.
+  - subst.
     destruct instr1 eqn:?; try discriminate;
       try destruct_optional; inv_add_instr; econstructor; try assumption.
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
-      eapply in_map with (f := fst) in H9; contradiction.
-
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
-      eapply translate_instr_tr_op. apply EQ1. eapply in_map with (f := fst) in H9. contradiction.
-
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. rewrite <- e2. rewrite H. econstructor. apply EQ1.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
       eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. constructor.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
+      eapply translate_instr_tr_op. apply EQ1.
       eapply in_map with (f := fst) in H9. contradiction.
 
-    * destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9;
-        [ discriminate | apply H9 ].
-    * inversion H2. inversion H9. constructor.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2. inversion H9. rewrite <- e2. rewrite H. econstructor. apply EQ1.
       eapply in_map with (f := fst) in H9. contradiction.
 
-  + eapply IHl. apply EQ0. assumption.
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct H2.
+      * inversion H2.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H2. contradiction.
+
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct H2.
+      * inversion H2.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H2. contradiction.
+
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2.
+      * inversion H9.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H9. contradiction.
+
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
+    + inversion H2.
+      * inversion H9.
+        replace (st_st s2) with (st_st s0) by congruence.
+        eauto with htlspec.
+      * apply in_map with (f := fst) in H9. contradiction.
+
+  - eapply IHl. apply EQ0. assumption.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
@@ -353,9 +395,9 @@ Proof.
   econstructor; simpl; trivial.
   intros.
   inv_incr.
-  assert (STC: st_controllogic s8 = st_controllogic s2) by congruence.
-  assert (STD: st_datapath s8 = st_datapath s2) by congruence.
-  assert (STST: st_st s8 = st_st s2) by congruence.
+  assert (STC: st_controllogic s9 = st_controllogic s3) by congruence.
+  assert (STD: st_datapath s9 = st_datapath s3) by congruence.
+  assert (STST: st_st s9 = st_st s3) by congruence.
   rewrite STC. rewrite STD. rewrite STST.
   eapply iter_expand_instr_spec; eauto with htlspec.
   apply PTree.elements_complete.

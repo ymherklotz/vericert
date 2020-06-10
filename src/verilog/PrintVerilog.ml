@@ -70,6 +70,7 @@ let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))
 let rec pprint_expr = function
   | Vlit l -> literal l
   | Vvar s -> register s
+  | Vvari (s, i) -> concat [register s; "["; pprint_expr i; "]"]
   | Vinputvar s -> register s
   | Vunop (u, e) -> concat ["("; unop u; pprint_expr e; ")"]
   | Vbinop (op, a, b) -> concat ["("; pprint_binop (pprint_expr a) (pprint_expr b) op; ")"]
@@ -111,9 +112,16 @@ let declare i t =
     concat [ indent i; t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r; ";\n" ]
 
+let declarearr i t =
+  function (r, sz, ln) ->
+    concat [ indent i; t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
+             register r;
+             " ["; sprintf "%d" (Nat.to_int ln - 1); ":0];\n" ]
+
 (* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function
   | Vdecl (r, sz) -> declare i "reg" (r, sz)
+  | Vdeclarr (r, sz, ln) -> declarearr i "reg" (r, sz, ln)
   | Valways (e, s) ->
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
   | Valways_ff (e, s) ->

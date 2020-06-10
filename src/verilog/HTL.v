@@ -45,6 +45,7 @@ Record module: Type :=
     mod_controllogic : controllogic;
     mod_entrypoint : node;
     mod_st : reg;
+    mod_stk : reg;
     mod_finish : reg;
     mod_return : reg
   }.
@@ -76,7 +77,8 @@ Inductive state : Type :=
     forall (stack : list stackframe)
            (m : module)
            (st : node)
-           (assoc : assocmap), state
+           (reg_assoc : assocmap)
+           (arr_assoc : AssocMap.t (list value)), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -87,38 +89,49 @@ Inductive state : Type :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g m st ctrl data assoc0 assoc1 assoc2
-           assoc3 nbassoc0 nbassoc1 f stval pstval sf,
+    forall g m st sf ctrl data
+      asr asa
+      basr1 basa1 nasr1 nasa1
+      basr2 basa2 nasr2 nasa2
+      asr' asa'
+      f stval pstval,
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
-        (Verilog.mkassociations assoc0 empty_assocmap)
+        (Verilog.mkassociations asr empty_assocmap)
+        (Verilog.mkassociations asa (AssocMap.empty (list value)))
         ctrl
-        (Verilog.mkassociations assoc1 nbassoc0) ->
+        (Verilog.mkassociations basr1 nasr1)
+        (Verilog.mkassociations basa1 nasa1) ->
       Verilog.stmnt_runp f
-        (Verilog.mkassociations assoc1 nbassoc0)
+        (Verilog.mkassociations basr1 nasr1)
+        (Verilog.mkassociations basa1 nasa1)
         data
-        (Verilog.mkassociations assoc2 nbassoc1) ->
-      assoc3 = merge_assocmap nbassoc1 assoc2 ->
-      assoc3!(m.(mod_st)) = Some stval ->
+        (Verilog.mkassociations basr2 nasr2)
+        (Verilog.mkassociations basa2 nasa2) ->
+      asr' = merge_assocmap nasr2 basr2 ->
+      asa' = AssocMapExt.merge (list value) nasa2 basa2 ->
+      asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
-      step g (State sf m st assoc0) Events.E0 (State sf m pstval assoc3)
+      step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
-    forall g m st assoc retval sf,
-    assoc!(m.(mod_finish)) = Some (1'h"1") ->
-    assoc!(m.(mod_return)) = Some retval ->
-    step g (State sf m st assoc) Events.E0 (Returnstate sf retval)
+    forall g m st asr asa retval sf,
+    asr!(m.(mod_finish)) = Some (1'h"1") ->
+    asr!(m.(mod_return)) = Some retval ->
+    step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
 | step_call :
     forall g m args res,
       step g (Callstate res m args) Events.E0
            (State res m m.(mod_entrypoint)
              (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
-               (init_regs args m.(mod_params))))
+                           (init_regs args m.(mod_params)))
+              (AssocMap.empty (list value)))
 | step_return :
-    forall g m assoc i r sf pc mst,
+    forall g m asr i r sf pc mst,
       mst = mod_st m ->
-      step g (Returnstate (Stackframe r m pc assoc :: sf) i) Events.E0
-           (State sf m pc ((assoc # mst <- (posToValue 32 pc)) # r <- i)).
+      step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
+           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
+                  (AssocMap.empty (list value))).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=

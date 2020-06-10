@@ -27,10 +27,15 @@ Hint Resolve AssocMap.gss : htlh.
 Hint Resolve Ple_refl : htlh.
 Hint Resolve Ple_succ : htlh.
 
+Inductive scl_decl : Type := Scalar (sz : nat).
+Inductive arr_decl : Type := Array (sz : nat) (ln : nat).
+
 Record state: Type := mkstate {
   st_st : reg;
   st_freshreg: reg;
   st_freshstate: node;
+  st_scldecls: AssocMap.t scl_decl;
+  st_arrdecls: AssocMap.t arr_decl;
   st_datapath: datapath;
   st_controllogic: controllogic;
 }.
@@ -39,6 +44,8 @@ Definition init_state (st : reg) : state :=
   mkstate st
           1%positive
           1%positive
+          (AssocMap.empty scl_decl)
+          (AssocMap.empty arr_decl)
           (AssocMap.empty stmnt)
           (AssocMap.empty stmnt).
 
@@ -68,19 +75,9 @@ Module HTLState <: State.
   Lemma st_trans :
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
-    intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans.
-    - rewrite H1. rewrite H. reflexivity.
-    - intros. destruct H4 with n.
-      + left; assumption.
-      + destruct H8 with n;
-          [ rewrite <- H0; left; assumption
-          | right; rewrite <- H0; apply H10
-          ].
-    - intros. destruct H5 with n.
-      + left; assumption.
-      + destruct H9 with n.
-        * rewrite <- H0. left. assumption.
-        * right. rewrite <- H0. apply H10.
+    intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
+    - destruct H4 with n; destruct H8 with n; intuition congruence.
+    - destruct H5 with n; destruct H9 with n; intuition congruence.
   Qed.
 
 End HTLState.
@@ -102,13 +99,13 @@ Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
 Proof.
-  intros. case (s.(st_datapath)!n); intros. right; auto. left; auto.
+  intros. case (s.(st_datapath)!n); tauto.
 Defined.
 
 Definition check_empty_node_controllogic:
   forall (s: state) (n: node), { s.(st_controllogic)!n = None } + { True }.
 Proof.
-  intros. case (s.(st_controllogic)!n); intros. right; auto. left; auto.
+  intros. case (s.(st_controllogic)!n); tauto.
 Defined.
 
 Lemma add_instr_state_incr :
@@ -120,6 +117,8 @@ Lemma add_instr_state_incr :
        s.(st_st)
        s.(st_freshreg)
        (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
        (AssocMap.set n st s.(st_datapath))
        (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
 Proof.
@@ -136,6 +135,8 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
                s.(st_st)
                s.(st_freshreg)
                (st_freshstate s)
+               s.(st_scldecls)
+               s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
          (add_instr_state_incr s n n' st STM TRANS)
@@ -151,6 +152,8 @@ Lemma add_instr_skip_state_incr :
        s.(st_st)
        s.(st_freshreg)
        (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
        (AssocMap.set n st s.(st_datapath))
        (AssocMap.set n Vskip s.(st_controllogic))).
 Proof.
@@ -167,6 +170,8 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
                s.(st_st)
                s.(st_freshreg)
                (st_freshstate s)
+               s.(st_scldecls)
+               s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n Vskip s.(st_controllogic)))
          (add_instr_skip_state_incr s n st STM TRANS)
@@ -224,9 +229,14 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
   | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
   | Op.Ascaled scale offset, r1::nil =>
-    ret (Vbinop Vadd (boplitz Vadd r1 scale) (Vlit (ZToValue 32%nat offset)))
+    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil =>
     ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+  (* Stack arrays/referenced variables *)
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vlit (ZToValue 32 (a / 4)))
+    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
   | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
   end.
 
@@ -263,6 +273,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Olea a, _ => translate_eff_addressing a args
+  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
+  | Op.Ocast32signed, r::nil => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
   | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
   end.
 
@@ -274,6 +286,8 @@ Lemma add_branch_instr_state_incr:
                  s.(st_st)
                 (st_freshreg s)
                 (st_freshstate s)
+                s.(st_scldecls)
+                s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
 Proof.
@@ -290,13 +304,34 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                s.(st_st)
                 (st_freshreg s)
                 (st_freshstate s)
+                s.(st_scldecls)
+                s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
     | _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
     end.
 
-Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
+Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
+           (args : list reg) (stack : reg) : mon expr :=
+  match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Op.Aindexed off, r1::nil => ret (Vvari stack (boplitz Vadd r1 off)) (* FIXME: Cannot guarantee alignment *)
+  | Op.Ascaled scale offset, r1::nil =>
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vadd r1 (offset / 4)) (boplitz Vmul r2 (scale / 4))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
+    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
+  | _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
+  end.
+
+Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -304,8 +339,12 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
     | Iop op args dst n' =>
       do instr <- translate_instr op args;
       add_instr n n' (nonblock dst instr)
-    | Iload _ _ _ _ _ => error (Errors.msg "Loads are not implemented.")
-    | Istore _ _ _ _ _ => error (Errors.msg "Stores are not implemented.")
+    | Iload mem addr args dst n' =>
+      do src <- translate_arr_access mem addr args stack;
+      add_instr n n' (block dst src)
+    | Istore mem addr args src n' =>
+      do dst <- translate_arr_access mem addr args stack;
+      add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -324,32 +363,61 @@ Definition transf_instr (fin rtrn: reg) (ni: node * instruction) : mon unit :=
   end.
 
 Lemma create_reg_state_incr:
-  forall s,
+  forall s sz,
     st_incr s (mkstate
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
+         (AssocMap.set s.(st_freshreg) (Scalar sz) s.(st_scldecls))
+         s.(st_arrdecls)
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_reg: mon reg :=
+Definition create_reg (sz : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
            OK r (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (Scalar sz) s.(st_scldecls))
+                   (st_arrdecls s)
                    (st_datapath s)
                    (st_controllogic s))
-              (create_reg_state_incr s).
+              (create_reg_state_incr s sz).
+
+Lemma create_arr_state_incr:
+  forall s sz ln,
+    st_incr s (mkstate
+         s.(st_st)
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         s.(st_scldecls)
+         (AssocMap.set s.(st_freshreg) (Array sz ln) s.(st_arrdecls))
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_arr (sz : nat) (ln : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   s.(st_scldecls)
+                   (AssocMap.set s.(st_freshreg) (Array sz ln) s.(st_arrdecls))
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_arr_state_incr s sz ln).
 
 Definition transf_module (f: function) : mon module :=
-  do fin <- create_reg;
-  do rtrn <- create_reg;
-  do _ <- collectlist (transf_instr fin rtrn) (Maps.PTree.elements f.(RTL.fn_code));
-  do start <- create_reg;
-  do rst <- create_reg;
-  do clk <- create_reg;
+  do fin <- create_reg 1;
+  do rtrn <- create_reg 32;
+  do stack <- create_arr 32 (Z.to_nat (f.(fn_stacksize) / 4));
+  do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+  do start <- create_reg 1;
+  do rst <- create_reg 1;
+  do clk <- create_reg 1;
   do current_state <- get;
   ret (mkmodule
          f.(RTL.fn_params)
@@ -357,6 +425,7 @@ Definition transf_module (f: function) : mon module :=
          current_state.(st_controllogic)
          f.(fn_entrypoint)
          current_state.(st_st)
+         stack
          fin
          rtrn).
 
@@ -365,6 +434,8 @@ Definition max_state (f: function) : state :=
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
+          (st_scldecls (init_state st))
+          (st_arrdecls (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
