@@ -51,7 +51,7 @@ Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem 
         0 <= ptr < Z.of_nat m.(HTL.mod_stk_len) ->
         opt_val_value_lessdef (Mem.loadv AST.Mint32 mem
                                          (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)))
-                              (nth (Z.to_nat ptr) stack (ZToValue 32 0))) ->
+                              (nth (Z.to_nat ptr / 4) stack (ZToValue 32 0))) ->
     match_arrs m f sp mem asa.
 
 Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
@@ -425,38 +425,113 @@ Section CORRECTNESS.
         | [ H: Values.Vptr _ _ = Values.Vptr _ _ |- _]  => invert H
         end.
 
-    - destruct c, addr, args; simplify; rt; t; simplify.
+      Opaque Nat.div.
+
+    - destruct c, chunk, addr, args; simplify; rt; simplify.
 
       + admit. (* FIXME: Alignment *)
-
-
-      + unfold Op.eval_addressing in *.
-        (* destruct (Archi.ptr64); simplify; *)
-        (*   destruct (Registers.Regmap.get r0 rs); simplify. *)
-        admit.
-
-        (* eexists. split. *)
-        (* eapply Smallstep.plus_one. *)
-        (* eapply HTL.step_module; eauto. *)
-        (* econstructor. econstructor. econstructor. simpl. *)
-        (* econstructor. econstructor. econstructor. econstructor. econstructor. *)
-        (* econstructor. econstructor. econstructor. econstructor. econstructor. *)
-        (* econstructor. econstructor. econstructor. simpl. *)
-
-        (* inversion MARR; subst; clear MARR. simpl in *. *)
-        (* unfold Verilog.arr_assocmap_lookup. *)
-        (* rewrite H3. *)
-
-        (* admit. *)
-
-      + unfold Op.eval_addressing in *.
-        (* destruct (Archi.ptr64); simplify; *)
-        (* destruct (Registers.Regmap.get r0 rs); *)
-        (*   destruct (Registers.Regmap.get r1 rs); simplify; *)
-        (*     destruct (Archi.ptr64); simplify. *)
-        admit.
-
       + admit.
+      + admit.
+
+      + invert MARR. simplify.
+
+        unfold Op.eval_addressing in H0.
+        destruct (Archi.ptr64) eqn:ARCHI; simplify.
+        rewrite ARCHI in H0. simplify.
+
+        (* Out of bounds reads are undefined behaviour. *)
+        assert (forall ptr v, f.(RTL.fn_stacksize) <= ptr ->
+                         Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)) = Some v ->
+                         v = Values.Vundef) as INVALID_READ by admit.
+
+        (* Case split on whether read is out of bounds. *)
+        destruct (RTL.fn_stacksize f <=? Integers.Ptrofs.unsigned i0) eqn:BOUND.
+        * assert (RTL.fn_stacksize f <= Integers.Ptrofs.unsigned i0) as OUT_OF_BOUNDS. {
+            apply Zle_bool_imp_le. assumption.
+          }
+          eapply INVALID_READ in OUT_OF_BOUNDS.
+          2: { rewrite Integers.Ptrofs.repr_unsigned. eassumption. }
+
+          eexists. split.
+          eapply Smallstep.plus_one.
+          eapply HTL.step_module; eauto.
+          econstructor. econstructor. econstructor. simplify.
+          econstructor. econstructor. econstructor. econstructor. simplify.
+
+          unfold Verilog.arr_assocmap_lookup. rewrite H3.
+          reflexivity.
+
+          simplify. unfold_merge. apply AssocMap.gss.
+
+          simplify. rewrite assumption_32bit.
+          constructor.
+
+          unfold_merge.
+          apply regs_lessdef_add_greater.
+          apply greater_than_max_func.
+
+          apply regs_lessdef_add_match.
+          rewrite OUT_OF_BOUNDS.
+          constructor. assumption.
+
+          assumption.
+
+          unfold state_st_wf. inversion 1. simplify.
+          unfold_merge. apply AssocMap.gss.
+
+          assumption.
+
+          econstructor; simplify; try reflexivity; eassumption.
+
+        * assert (Integers.Ptrofs.unsigned i0 < f.(RTL.fn_stacksize)) as IN_BOUNDS. {
+            rewrite Z.leb_antisym in BOUND.
+            rewrite negb_false_iff in BOUND.
+            apply Zlt_is_lt_bool. assumption.
+          }
+
+          eexists. split.
+          eapply Smallstep.plus_one.
+          eapply HTL.step_module; eauto.
+          econstructor. econstructor. econstructor. simplify.
+          econstructor. econstructor. econstructor. econstructor. simplify.
+
+          unfold Verilog.arr_assocmap_lookup. rewrite H3.
+          reflexivity.
+
+          simplify. unfold_merge. apply AssocMap.gss.
+
+          simplify. rewrite assumption_32bit.
+          constructor.
+
+          unfold_merge.
+          apply regs_lessdef_add_greater.
+          apply greater_than_max_func.
+
+          apply regs_lessdef_add_match.
+
+          assert (exists ptr, (Z.to_nat ptr / 4)%nat = (valueToNat (ZToValue 32 (Integers.Ptrofs.unsigned i0 / 4))))
+                 by admit.
+          simplify. rewrite <- H5.
+          specialize (H4 x).
+          assert (0 <= x < Z.of_nat (Z.to_nat (RTL.fn_stacksize f / 4))) by admit.
+          apply H4 in H0.
+          invert H0.
+          assert (Integers.Ptrofs.repr x = i0) by admit.
+          rewrite H0 in H6.
+          rewrite H1 in H6.
+          invert H6.
+          assumption.
+
+          assumption.
+
+          assumption.
+
+          unfold state_st_wf. inversion 1. simplify.
+          unfold_merge. apply AssocMap.gss.
+
+          assumption.
+
+          econstructor; simplify; try reflexivity; eassumption.
 
     - admit.
 

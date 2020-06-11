@@ -56,10 +56,10 @@ Definition merge_associations {A : Type} (assoc : associations A) :=
   mkassociations (AssocMapExt.merge A assoc.(assoc_nonblocking) assoc.(assoc_blocking))
                  (AssocMap.empty A).
 
-Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
+Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : value :=
   match a ! r with
-  | None => None
-  | Some arr => nth_error arr i
+  | None => natToValue 32 0
+  | Some arr => nth i arr (natToValue 32 0)
   end.
 
 Fixpoint list_set {A : Type} (i : nat) (x : A) (l : list A) : list A :=
@@ -297,7 +297,7 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
   | erun_Vvari :
       forall fext reg stack v iexp i r,
       expr_runp fext reg stack iexp i ->
-      arr_assocmap_lookup stack r (valueToNat i) = Some v ->
+      arr_assocmap_lookup stack r (valueToNat i) = v ->
       expr_runp fext reg stack (Vvari r iexp) v
   | erun_Vinputvar :
       forall fext reg stack r v,

@@ -314,21 +314,21 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
-  match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Op.Aindexed off, r1::nil => ret (Vvari stack (boplitz Vadd r1 off)) (* FIXME: Cannot guarantee alignment *)
-  | Op.Ascaled scale offset, r1::nil =>
+  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Mint32, Op.Aindexed off, r1::nil => ret (Vvari stack (boplitz Vadd r1 off)) (* FIXME: Cannot guarantee alignment *)
+  | Mint32, Op.Ascaled scale offset, r1::nil =>
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
-  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack (Vbinop Vadd (boplitz Vadd r1 (offset / 4)) (boplitz Vmul r2 (scale / 4))))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
-  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
     if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
     else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
-  | _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
+  | _, _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
   end.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
