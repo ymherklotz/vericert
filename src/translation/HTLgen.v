@@ -398,9 +398,9 @@ Lemma create_arr_state_incr:
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_arr (sz : nat) (ln : nat) : mon reg :=
+Definition create_arr (sz : nat) (ln : nat) : mon (reg * nat) :=
   fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
+           OK (r, ln) (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
@@ -413,7 +413,7 @@ Definition create_arr (sz : nat) (ln : nat) : mon reg :=
 Definition transf_module (f: function) : mon module :=
   do fin <- create_reg 1;
   do rtrn <- create_reg 32;
-  do stack <- create_arr 32 (Z.to_nat (f.(fn_stacksize) / 4));
+  do (stack, stack_len) <- create_arr 32 (Z.to_nat (f.(fn_stacksize) / 4));
   do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
   do start <- create_reg 1;
   do rst <- create_reg 1;
@@ -426,6 +426,7 @@ Definition transf_module (f: function) : mon module :=
          f.(fn_entrypoint)
          current_state.(st_st)
          stack
+         stack_len
          fin
          rtrn).
 

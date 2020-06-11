@@ -184,14 +184,15 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk m,
+    forall data control fin rtrn st stk stk_len m,
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-                    tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
+               tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
+      stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                            st stk fin rtrn) ->
+                            st stk stk_len fin rtrn) ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
@@ -379,6 +380,12 @@ Proof.
 Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
+Lemma create_arr_inv : forall x y z a b c d,
+    create_arr x y z = OK (a, b) c d -> y = b.
+Proof.
+  inversion 1. reflexivity.
+Qed.
+
 Theorem transl_module_correct :
   forall f m,
     transl_module f = Errors.OK m -> tr_module f m.
@@ -392,6 +399,11 @@ Proof.
 
   unfold transf_module in *.
   monadInv Heqr.
+
+  (* TODO: We should be able to fold this into the automation. *)
+  pose proof (create_arr_inv _ _ _ _ _ _ _ EQ0) as STK_LEN.
+  rewrite <- STK_LEN.
+
   econstructor; simpl; trivial.
   intros.
   inv_incr.

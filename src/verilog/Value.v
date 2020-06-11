@@ -296,6 +296,11 @@ Inductive val_value_lessdef: val -> value -> Prop :=
     val_value_lessdef (Vint i) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
 
+Inductive opt_val_value_lessdef: option val -> value -> Prop :=
+| opt_lessdef_some:
+    forall v v', val_value_lessdef v v' -> opt_val_value_lessdef (Some v) v'
+| opt_lessdef_none: forall v, opt_val_value_lessdef None v.
+
 Lemma valueToZ_ZToValue :
   forall n z,
   (- Z.of_nat (2 ^ n) <= z < Z.of_nat (2 ^ n))%Z ->

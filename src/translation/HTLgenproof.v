@@ -42,44 +42,45 @@ Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
   asa!(m.(HTL.mod_st)) = Some (posToValue 32 st).
 Hint Unfold state_st_wf : htlproof.
 
-Inductive match_stacks : list RTL.stackframe -> list HTL.stackframe -> Prop :=
-| match_stacks_nil :
-    match_stacks nil nil
-| match_stacks_cons :
-    forall cs lr r f sp pc rs m assoc
-           (TF : tr_module f m)
-           (ST: match_stacks cs lr)
-           (MA: match_assocmaps f rs assoc),
-      match_stacks (RTL.Stackframe r f sp pc rs :: cs)
-                   (HTL.Stackframe r m pc assoc :: lr).
-
-Inductive match_arrs (m : HTL.module) : RTL.function -> mem ->  AssocMap.t (list value) -> Prop :=
-| match_arr : forall mem asa stack sp f sz,
-    sz = f.(RTL.fn_stacksize) ->
+Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem : mem) :
+  AssocMap.t (list value) -> Prop :=
+| match_arr : forall asa stack,
+    m.(HTL.mod_stk_len) = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
     asa ! (m.(HTL.mod_stk)) = Some stack ->
     (forall ptr,
-        0 <= ptr < sz ->
-        nth_error stack (Z.to_nat ptr) =
-        (Coquplib.Option.bind (Mem.loadv AST.Mint32 mem
+        0 <= ptr < Z.of_nat m.(HTL.mod_stk_len) ->
+        opt_val_value_lessdef (Mem.loadv AST.Mint32 mem
                                          (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)))
-         valToValue)) ->
-    match_arrs m f mem asa.
+                              (nth (Z.to_nat ptr) stack (ZToValue 32 0))) ->
+    match_arrs m f sp mem asa.
+
+Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
+| match_stacks_nil :
+    match_stacks mem nil nil
+| match_stacks_cons :
+    forall cs lr r f sp pc rs m asr asa
+           (TF : tr_module f m)
+           (ST: match_stacks mem cs lr)
+           (MA: match_assocmaps f rs asr)
+           (MARR : match_arrs m f sp mem asa),
+      match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
+                       (HTL.Stackframe r m pc asr asa :: lr).
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp rs mem m st res
     (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module f m)
     (WF : state_st_wf m (HTL.State res m st asr asa))
-    (MS : match_stacks sf res)
-    (MA : match_arrs m f mem asa),
+    (MS : match_stacks mem sf res)
+    (MARR : match_arrs m f sp mem asa),
     match_states (RTL.State sf f sp st rs mem)
                  (HTL.State res m st asr asa)
 | match_returnstate :
     forall
-      v v' stack m res
-      (MS : match_stacks stack res),
+      v v' stack mem res
+      (MS : match_stacks mem stack res),
       val_value_lessdef v v' ->
-      match_states (RTL.Returnstate stack v m) (HTL.Returnstate res v')
+      match_states (RTL.Returnstate stack v mem) (HTL.Returnstate res v')
 | match_initial_call :
     forall f m m0
     (TF : tr_module f m),
@@ -390,7 +391,73 @@ Section CORRECTNESS.
       (* assumption. *)
       admit.
 
-    - admit.
+      Ltac invert x := inversion x; subst; clear x.
+
+      Ltac clear_obvious :=
+        repeat match goal with
+        | [ H : ex _ |- _ ] => invert H
+        | [ H : Some _ = Some _ |- _ ] => invert H
+        end.
+
+      Ltac simplify := simpl in *; clear_obvious; simpl in *; try discriminate.
+
+      Ltac rt :=
+        repeat match goal with
+        | [ _ : error _ _ = OK _ _ _ |- _ ] => discriminate
+        | [ _ : context[if (?x && ?y) then _ else _] |- _ ] =>
+          let EQ1 := fresh "EQ" in
+          let EQ2 := fresh "EQ" in
+          destruct x eqn:EQ1; destruct y eqn:EQ2; simpl in *
+        | [ _ : context[if ?x then _ else _] |- _ ] =>
+          let EQ := fresh "EQ" in
+          destruct x eqn:EQ; simpl in *
+        | [ H : ret _ _ = _  |- _ ] => invert H
+        | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
+        end.
+
+      Ltac t :=
+        match goal with
+        | [ _ : Mem.loadv _ _ ?a = Some _ |- _ ] =>
+          let PTR := fresh "PTR" in
+          assert (exists b ofs, a = Values.Vptr b ofs) as PTR;
+          [> destruct a; simpl in *; try discriminate;
+          repeat eexists |]
+        | [ H: Values.Vptr _ _ = Values.Vptr _ _ |- _]  => invert H
+        end.
+
+    - destruct c, addr, args; simplify; rt; t; simplify.
+
+      + admit. (* FIXME: Alignment *)
+
+
+      + unfold Op.eval_addressing in *.
+        (* destruct (Archi.ptr64); simplify; *)
+        (*   destruct (Registers.Regmap.get r0 rs); simplify. *)
+        admit.
+
+        (* eexists. split. *)
+        (* eapply Smallstep.plus_one. *)
+        (* eapply HTL.step_module; eauto. *)
+        (* econstructor. econstructor. econstructor. simpl. *)
+        (* econstructor. econstructor. econstructor. econstructor. econstructor. *)
+        (* econstructor. econstructor. econstructor. econstructor. econstructor. *)
+        (* econstructor. econstructor. econstructor. simpl. *)
+
+        (* inversion MARR; subst; clear MARR. simpl in *. *)
+        (* unfold Verilog.arr_assocmap_lookup. *)
+        (* rewrite H3. *)
+
+        (* admit. *)
+
+      + unfold Op.eval_addressing in *.
+        (* destruct (Archi.ptr64); simplify; *)
+        (* destruct (Registers.Regmap.get r0 rs); *)
+        (*   destruct (Registers.Regmap.get r1 rs); simplify; *)
+        (*     destruct (Archi.ptr64); simplify. *)
+        admit.
+
+      + admit.
+
     - admit.
 
     - eexists. split. apply Smallstep.plus_one.
@@ -453,8 +520,7 @@ Section CORRECTNESS.
       econstructor; simpl; trivial.
       constructor.
 
-      constructor.
-      constructor.
+      constructor. constructor.
 
       unfold_merge. simpl.
       rewrite AssocMap.gso.
@@ -470,7 +536,8 @@ Section CORRECTNESS.
       apply AssocMap.gss.
       rewrite Events.E0_left. reflexivity.
       constructor.
-      assumption.
+
+      admit.
       constructor.
 
     - econstructor. split.
@@ -499,21 +566,38 @@ Section CORRECTNESS.
       apply AssocMap.gss.
       rewrite Events.E0_left. trivial.
 
-      constructor. assumption. simpl. inversion MASSOC. subst.
+      constructor.
+      admit.
+
+      simpl. inversion MASSOC. subst.
       unfold find_assocmap, AssocMapExt.get_default. rewrite AssocMap.gso.
       apply H1. eapply RTL.max_reg_function_use. eauto. simpl; tauto.
       apply st_greater_than_res.
 
     - inversion MSTATE; subst. inversion TF; subst.
       econstructor. split. apply Smallstep.plus_one.
-      eapply HTL.step_call.
+      eapply HTL.step_call. simpl.
 
       constructor. apply regs_lessdef_add_greater.
       apply greater_than_max_func.
       apply init_reg_assoc_empty. assumption. unfold state_st_wf.
       intros. inv H1. apply AssocMap.gss. constructor.
 
-      admit.
+      econstructor; simpl.
+      reflexivity.
+      rewrite AssocMap.gss. reflexivity.
+      intros.
+      destruct (Mem.load AST.Mint32 m' stk
+                         (Integers.Ptrofs.unsigned (Integers.Ptrofs.add
+                                                      Integers.Ptrofs.zero
+                                                      (Integers.Ptrofs.repr ptr)))) eqn:LOAD.
+      pose proof Mem.load_alloc_same as LOAD_ALLOC.
+      pose proof H as ALLOC.
+      eapply LOAD_ALLOC in ALLOC.
+      2: { exact LOAD. }
+      rewrite ALLOC.
+      repeat constructor.
+      constructor.
 
     - inversion MSTATE; subst. inversion MS; subst. econstructor.
       split. apply Smallstep.plus_one.
@@ -525,13 +609,11 @@ Section CORRECTNESS.
       unfold state_st_wf. intros. inv H. rewrite AssocMap.gso.
       rewrite AssocMap.gss. trivial. apply st_greater_than_res.
 
-      admit.
-
       Unshelve.
       exact (AssocMap.empty value).
       exact (AssocMap.empty value).
-      admit.
-      admit.
+      exact (AssocMap.empty value).
+      exact (AssocMap.empty value).
       (* exact (ZToValue 32 0). *)
       (* exact (AssocMap.empty value). *)
       (* exact (AssocMap.empty value). *)

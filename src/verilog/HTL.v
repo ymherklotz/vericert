@@ -46,6 +46,7 @@ Record module: Type :=
     mod_entrypoint : node;
     mod_st : reg;
     mod_stk : reg;
+    mod_stk_len : nat;
     mod_finish : reg;
     mod_return : reg
   }.
@@ -60,6 +61,14 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
   | _, _ => empty_assocmap
   end.
 
+Fixpoint zeroes' (acc : list value) (n : nat) : list value :=
+  match n with
+  | O => acc
+  | S n => zeroes' ((NToValue 32 0)::acc) n
+  end.
+
+Definition zeroes : nat -> list value := zeroes' nil.
+
 (** * Operational Semantics *)
 
 Definition genv := Globalenvs.Genv.t fundef unit.
@@ -69,7 +78,8 @@ Inductive stackframe : Type :=
     forall  (res : reg)
             (m : module)
             (pc : node)
-            (assoc : assocmap),
+            (reg_assoc : assocmap)
+            (arr_assoc : AssocMap.t (list value)),
       stackframe.
 
 Inductive state : Type :=
@@ -125,13 +135,12 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
            (State res m m.(mod_entrypoint)
              (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
                            (init_regs args m.(mod_params)))
-              (AssocMap.empty (list value)))
+              (AssocMap.set m.(mod_stk) (zeroes m.(mod_stk_len)) (AssocMap.empty (list value))))
 | step_return :
-    forall g m asr i r sf pc mst,
+    forall g m asr asa i r sf pc mst,
       mst = mod_st m ->
-      step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
-           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
-                  (AssocMap.empty (list value))).
+      step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
+           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i) asa).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
