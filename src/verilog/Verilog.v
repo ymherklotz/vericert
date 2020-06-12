@@ -87,6 +87,8 @@ Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
 Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
   mkassociations asr.(assoc_blocking) (AssocMap.set r v asr.(assoc_nonblocking)).
 
+Inductive scl_decl : Type := Scalar (sz : nat).
+Inductive arr_decl : Type := Array (sz : nat) (ln : nat).
 
 (** * Verilog AST
 
@@ -181,9 +183,17 @@ Module items can either be declarations ([Vdecl]) or always blocks ([Valways]).
 The declarations are always register declarations as combinational logic can be
 done using combinational always block instead of continuous assignments. *)
 
+Inductive io : Type :=
+| Vinput : io
+| Voutput : io
+| Vinout : io.
+
+Inductive declaration : Type :=
+| Vdecl : option io -> reg -> nat -> declaration
+| Vdeclarr : option io -> reg -> nat -> nat -> declaration.
+
 Inductive module_item : Type :=
-| Vdecl : reg -> nat -> module_item
-| Vdeclarr : reg -> nat -> nat -> module_item
+| Vdeclaration : declaration -> module_item
 | Valways : edge -> stmnt -> module_item
 | Valways_ff : edge -> stmnt -> module_item
 | Valways_comb : edge -> stmnt -> module_item.
@@ -200,15 +210,22 @@ Inductive module_item : Type :=
 *)
 
 Record module : Type := mkmodule {
-  mod_start : szreg;
-  mod_reset : szreg;
-  mod_clk : szreg;
-  mod_finish : szreg;
-  mod_return : szreg;
-  mod_state : szreg; (**r Variable that defines the current state, it should be internal. *)
-  mod_args : list szreg;
+  mod_start : reg;
+  mod_reset : reg;
+  mod_clk : reg;
+  mod_finish : reg;
+  mod_return : reg;
+  mod_st : reg; (**r Variable that defines the current state, it should be internal. *)
+  mod_stk : reg;
+  mod_args : list reg;
   mod_body : list module_item;
-                        }.
+  mod_entrypoint : node;
+}.
+
+Definition fundef := AST.fundef module.
+
+Definition program := AST.program fundef unit.
+
 (** Convert a [positive] to an expression directly, setting it to the right
     size. *)
 Definition posToLit (p : positive) : expr :=
@@ -241,18 +258,28 @@ retrieved and set appropriately.
   which determines which part of the Verilog is executed.  This is then the part
   of the Verilog that should match with the RTL. *)
 
+Inductive stackframe : Type :=
+  Stackframe :
+    forall  (res : reg)
+            (m : module)
+            (pc : node)
+            (assoc : assocmap),
+      stackframe.
+
 Inductive state : Type :=
-| State:
-    forall (m : module)
-           (assoc : reg_associations)
-           (assoc : arr_associations)
-           (f : fextclk)
-           (cycle : nat)
-           (stvar : value),
-    state
-| Finishstate:
-    forall v : value,
-    state.
+| State :
+    forall (stack : list stackframe)
+           (m : module)
+           (st : node)
+           (reg_assoc : assocmap)
+           (arr_assoc : AssocMap.t (list value)), state
+| Returnstate :
+    forall (res : list stackframe)
+           (v : value), state
+| Callstate :
+    forall (stack : list stackframe)
+           (m : module)
+           (args : list value), state.
 
 Definition binop_run (op : binop) : forall v1 v2 : value, vsize v1 = vsize v2 -> value :=
   match op with
@@ -383,14 +410,14 @@ Definition access_fext (f : fext) (r : reg) : res value :=
 (** Return the location of the lhs of an assignment. *)
 
 Inductive location : Type :=
-| Reg (_ : reg)
-| Array (_ : reg) (_ : nat).
+| LocReg (_ : reg)
+| LocArray (_ : reg) (_ : nat).
 
 Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> Prop :=
-| Base : forall f asr asa r, location_is f asr asa (Vvar r) (Reg r)
+| Base : forall f asr asa r, location_is f asr asa (Vvar r) (LocReg r)
 | Indexed : forall f asr asa r iexp iv,
   expr_runp f asr asa iexp iv ->
-  location_is f asr asa (Vvari r iexp) (Array r (valueToNat iv)).
+  location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).
 
 (* Definition assign_name (f : fext) (asr: assocmap) (asa : assocmap_l)  (e : expr) : res reg := *)
 (*   match e with *)
@@ -508,28 +535,28 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     stmnt_runp f asr0 asa0 (Vcase e nil (Some st)) asr1 asa1
 | stmnt_runp_Vblock_reg:
     forall lhs r rhs rhsval asr asa f,
-    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Reg r) ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocReg r) ->
     expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vblock lhs rhs)
                  (block_reg r asr rhsval) asa
 | stmnt_runp_Vnonblock_reg:
     forall lhs r rhs rhsval asr asa f,
-    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Reg r) ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocReg r) ->
     expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vnonblock lhs rhs)
                  (nonblock_reg r asr rhsval) asa
 | stmnt_runp_Vblock_arr:
     forall lhs r i rhs rhsval asr asa f,
-    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Array r i) ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocArray r i) ->
     expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vblock lhs rhs)
                  asr (block_arr r i asa rhsval)
 | stmnt_runp_Vnonblock_arr:
     forall lhs r i rhs rhsval asr asa f,
-    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (Array r i) ->
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocArray r i) ->
     expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval ->
     stmnt_runp f asr asa
                  (Vnonblock lhs rhs)
@@ -565,8 +592,8 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
     stmnt_runp f sr0 sa0 st sr1 sa1 ->
     mi_stepp f sr0 sa0 (Valways_comb c st) sr1 sa1
 | mi_stepp_Vdecl :
-    forall f sr sa lhs rhs,
-    mi_stepp f sr sa (Vdecl lhs rhs) sr sa.
+    forall f sr sa lhs rhs io,
+    mi_stepp f sr sa (Vdeclaration (Vdecl io lhs rhs)) sr sa.
 Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
@@ -607,8 +634,8 @@ other arguments to the module are also to be supported. *)
 
 Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
-           | S O => (AssocMap.set (fst (mod_reset m)) (ZToValue 1 1) empty_assocmap)
-           | _ => (AssocMap.set (fst (mod_reset m)) (ZToValue 1 0) empty_assocmap)
+           | S O => (AssocMap.set (mod_reset m) (ZToValue 1 1) empty_assocmap)
+           | _ => (AssocMap.set (mod_reset m) (ZToValue 1 0) empty_assocmap)
            end.
 
 (*Definition module_run (n : nat) (m : module) : res assocmap :=
@@ -655,42 +682,60 @@ Qed.
 
  *)
 
-Definition genv := Genv.t unit unit.
+Fixpoint init_params (vl : list value) (rl : list reg) {struct rl} :=
+  match rl, vl with
+  | r :: rl', v :: vl' => AssocMap.set r v (init_params vl' rl')
+  | _, _ => empty_assocmap
+  end.
 
-Inductive step : state -> state -> Prop :=
-| step_module :
-    forall m stvar stvar' cycle f
-      asr0 asa0 asr1 asa1
-      asr' asa',
-    mis_stepp (f cycle) asr0 asa0
-              m.(mod_body) asr1 asa1 ->
-    asr' = merge_associations asr1 ->
-    asa' = merge_associations asa1 ->
-    Some stvar' = asr'.(assoc_blocking)!(fst m.(mod_state)) ->
-    step (State m asr0 asa0 f cycle stvar)
-         (State m asr' asa' f (S cycle) stvar')
+Definition genv := Globalenvs.Genv.t fundef unit.
+
+Inductive step : genv -> state -> Events.trace -> state -> Prop :=
+  | step_module :
+      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g,
+      mis_stepp f (mkassociations asr empty_assocmap)
+                  (mkassociations asa (AssocMap.empty (list value)))
+                  m.(mod_body)
+                  (mkassociations basr1 nasr1)
+                  (mkassociations basa1 nasa1)->
+      asr' = merge_assocmap nasr1 basr1 ->
+      asa' = AssocMapExt.merge (list value) nasa1 basa1 ->
+      asr'!(m.(mod_st)) = Some stval ->
+      valueToPos stval = pstval ->
+      step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
-    forall m asr asa f cycle stvar result,
-    asr.(assoc_blocking)!(fst m.(mod_finish)) = Some (1'h"1") ->
-    asr.(assoc_blocking)!(fst m.(mod_return)) = Some result ->
-    step (State m asr asa f cycle stvar)
-         (Finishstate result).
+    forall asr asa sf retval m st g,
+    asr!(m.(mod_finish)) = Some (1'h"1") ->
+    asr!(m.(mod_return)) = Some retval ->
+    step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
+| step_call :
+    forall g res m args,
+    step g (Callstate res m args) Events.E0
+         (State res m m.(mod_entrypoint)
+          (AssocMap.set m.(mod_st) (posToValue 32 m.(mod_entrypoint))
+           (init_params args m.(mod_args)))
+          (AssocMap.empty (list value)))
+| step_return :
+    forall g m asr i r sf pc mst,
+    mst = mod_st m ->
+    step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
+         (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
+                (AssocMap.empty (list value))).
 Hint Constructors step : verilog.
 
-(*Inductive initial_state (m: module): state -> Prop :=
-| initial_state_intro:
-    forall hmi tmi,
-    hmi::tmi = mod_body m ->
-    initial_state m (State m hmi tmi empty_assocmap empty_assocmap (initial_fextclk m) O xH).
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b m0 m,
+      let ge := Globalenvs.Genv.globalenv p in
+      Globalenvs.Genv.init_mem p = Some m0 ->
+      Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+      Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) ->
+      initial_state p (Callstate nil m nil).
 
-(** A final state is a [Returnstate] with an empty call stack. *)
+Inductive final_state : state -> Integers.int -> Prop :=
+| final_state_intro : forall retval retvali,
+    retvali = valueToInt retval ->
+    final_state (Returnstate nil retval) retvali.
 
-Inductive final_state: state -> Integers.int -> Prop :=
-  | final_state_intro: forall v,
-      final_state (Finishstate v) (valueToInt v).
-
-(** The small-step semantics for a module. *)
-
-Definition semantics (p: module) :=
-  Semantics step (initial_state p) final_state (Genv.empty_genv unit unit nil).
-*)
+Definition semantics (m : program) :=
+  Smallstep.Semantics step (initial_state m) final_state
+                      (Globalenvs.Genv.globalenv m).
