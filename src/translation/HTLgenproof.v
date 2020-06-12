@@ -415,16 +415,6 @@ Section CORRECTNESS.
         | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
         end.
 
-      Ltac t :=
-        match goal with
-        | [ _ : Mem.loadv _ _ ?a = Some _ |- _ ] =>
-          let PTR := fresh "PTR" in
-          assert (exists b ofs, a = Values.Vptr b ofs) as PTR;
-          [> destruct a; simpl in *; try discriminate;
-          repeat eexists |]
-        | [ H: Values.Vptr _ _ = Values.Vptr _ _ |- _]  => invert H
-        end.
-
       Opaque Nat.div.
 
     - destruct c, chunk, addr, args; simplify; rt; simplify.
@@ -522,6 +512,11 @@ Section CORRECTNESS.
           invert H6.
           assumption.
 
+          assert (Integers.Ptrofs.repr x = i0) by admit.
+          rewrite H0 in H7.
+          rewrite H1 in H7.
+          discriminate.
+
           assumption.
 
           assumption.
@@ -533,7 +528,39 @@ Section CORRECTNESS.
 
           econstructor; simplify; try reflexivity; eassumption.
 
-    - admit.
+    - destruct c, chunk, addr, args; simplify; rt; simplify.
+      + admit.
+      + admit.
+      + admit.
+
+      + eexists. split.
+        eapply Smallstep.plus_one.
+        eapply HTL.step_module; eauto.
+        econstructor. econstructor. econstructor. simplify.
+        eapply Verilog.stmnt_runp_Vblock_arr. simplify.
+        econstructor. econstructor. econstructor. simplify.
+
+        reflexivity.
+
+        unfold_merge. apply AssocMap.gss.
+
+        simplify. rewrite assumption_32bit. econstructor.
+
+        unfold_merge.
+        apply regs_lessdef_add_greater.
+        apply greater_than_max_func.
+        assumption.
+
+        assumption.
+
+        unfold state_st_wf. inversion 1. simplify.
+        unfold_merge. apply AssocMap.gss.
+
+        admit.
+
+        econstructor; simplify; try reflexivity.
+        admit.
+
 
     - eexists. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
