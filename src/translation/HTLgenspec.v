@@ -387,10 +387,11 @@ Proof.
       constructor. eapply translate_instr_tr_op. apply EQ1.
       eapply in_map with (f := fst) in H14. contradiction.
 
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + inversion H2. inversion H9. rewrite <- e2. rewrite H. econstructor. apply EQ1.
-      eapply in_map with (f := fst) in H9. contradiction.
+    + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    + inversion H2. inversion H14. rewrite <- e2. assert (HST: st_st s2 = st_st s0) by congruence.
+      rewrite HST. econstructor. apply EQ1.
+      eapply in_map with (f := fst) in H14. contradiction.
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.

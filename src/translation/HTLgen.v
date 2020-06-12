@@ -363,6 +363,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       add_instr n n' (nonblock dst instr)
     | Iload mem addr args dst n' =>
       do src <- translate_arr_access mem addr args stack;
+      do _ <- declare_reg None dst 32;
       add_instr n n' (block dst src)
     | Istore mem addr args src n' =>
       do dst <- translate_arr_access mem addr args stack;
