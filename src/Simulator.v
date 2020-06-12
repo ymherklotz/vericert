@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import FSets.FMapPositive.
+(*From Coq Require Import FSets.FMapPositive.
 
 From compcert Require Import Errors.
 
@@ -33,3 +33,4 @@ Definition simulate (n : nat) (m : Verilog.module) : res (Value.value * list (po
   end.
 
 Local Close Scope error_monad_scope.
+*)
