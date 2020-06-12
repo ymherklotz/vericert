@@ -433,8 +433,8 @@ Proof.
 Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
-Lemma create_arr_inv : forall x y z a b c d,
-    create_arr x y z = OK (a, b) c d -> y = b.
+Lemma create_arr_inv : forall w x y z a b c d,
+    create_arr w x y z = OK (a, b) c d -> y = b.
 Proof.
   inversion 1. reflexivity.
 Qed.
@@ -454,14 +454,14 @@ Proof.
   monadInv Heqr.
 
   (* TODO: We should be able to fold this into the automation. *)
-  pose proof (create_arr_inv _ _ _ _ _ _ _ EQ0) as STK_LEN.
+  pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN.
   rewrite <- STK_LEN.
 
   econstructor; simpl; trivial.
   intros.
   inv_incr.
   assert (EQ3D := EQ3).
-  destruct x3.
+  destruct x4.
   apply collect_declare_datapath_trans in EQ3.
   apply collect_declare_controllogic_trans in EQ3D.
   assert (STC: st_controllogic s10 = st_controllogic s3) by congruence.
