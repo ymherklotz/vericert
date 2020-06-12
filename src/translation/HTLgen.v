@@ -17,7 +17,7 @@
  *)
 
 From compcert Require Import Maps.
-From compcert Require Errors.
+From compcert Require Errors Globalenvs.
 From compcert Require Import AST RTL.
 From coqup Require Import Verilog HTL Coquplib AssocMap Value Statemonad.
 
@@ -27,15 +27,12 @@ Hint Resolve AssocMap.gss : htlh.
 Hint Resolve Ple_refl : htlh.
 Hint Resolve Ple_succ : htlh.
 
-Inductive scl_decl : Type := Scalar (sz : nat).
-Inductive arr_decl : Type := Array (sz : nat) (ln : nat).
-
 Record state: Type := mkstate {
   st_st : reg;
   st_freshreg: reg;
   st_freshstate: node;
-  st_scldecls: AssocMap.t scl_decl;
-  st_arrdecls: AssocMap.t arr_decl;
+  st_scldecls: AssocMap.t (option io * scl_decl);
+  st_arrdecls: AssocMap.t (option io * arr_decl);
   st_datapath: datapath;
   st_controllogic: controllogic;
 }.
@@ -44,8 +41,8 @@ Definition init_state (st : reg) : state :=
   mkstate st
           1%positive
           1%positive
-          (AssocMap.empty scl_decl)
-          (AssocMap.empty arr_decl)
+          (AssocMap.empty (option io * scl_decl))
+          (AssocMap.empty (option io * arr_decl))
           (AssocMap.empty stmnt)
           (AssocMap.empty stmnt).
 
@@ -126,6 +123,30 @@ Proof.
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
 Qed.
+
+Lemma declare_reg_state_incr :
+  forall s r sz,
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       s.(st_freshstate)
+       (AssocMap.set r (None, Scalar sz) s.(st_scldecls))
+       s.(st_arrdecls)
+       s.(st_datapath)
+       s.(st_controllogic)).
+Proof. auto with htlh. Qed.
+
+Definition declare_reg (r : reg) (sz : nat) : mon unit :=
+  fun s => OK tt (mkstate
+                s.(st_st)
+                s.(st_freshreg)
+                s.(st_freshstate)
+                (AssocMap.set r (None, Scalar sz) s.(st_scldecls))
+                s.(st_arrdecls)
+                s.(st_datapath)
+                s.(st_controllogic))
+              (declare_reg_state_incr s r sz).
 
 Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
   fun s =>
@@ -338,6 +359,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Inop n' => add_instr n n' Vskip
     | Iop op args dst n' =>
       do instr <- translate_instr op args;
+      do _ <- declare_reg dst 32;
       add_instr n n' (nonblock dst instr)
     | Iload mem addr args dst n' =>
       do src <- translate_arr_access mem addr args stack;
@@ -363,61 +385,61 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
   end.
 
 Lemma create_reg_state_incr:
-  forall s sz,
+  forall s sz i,
     st_incr s (mkstate
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (Scalar sz) s.(st_scldecls))
+         (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
          s.(st_arrdecls)
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_reg (sz : nat) : mon reg :=
+Definition create_reg (i : option io) (sz : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
            OK r (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (Scalar sz) s.(st_scldecls))
+                   (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
                    (st_arrdecls s)
                    (st_datapath s)
                    (st_controllogic s))
-              (create_reg_state_incr s sz).
+              (create_reg_state_incr s sz i).
 
 Lemma create_arr_state_incr:
-  forall s sz ln,
+  forall s sz ln i,
     st_incr s (mkstate
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
          s.(st_scldecls)
-         (AssocMap.set s.(st_freshreg) (Array sz ln) s.(st_arrdecls))
+         (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_arr (sz : nat) (ln : nat) : mon reg :=
+Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
            OK r (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
                    s.(st_scldecls)
-                   (AssocMap.set s.(st_freshreg) (Array sz ln) s.(st_arrdecls))
+                   (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
                    (st_datapath s)
                    (st_controllogic s))
-              (create_arr_state_incr s sz ln).
+              (create_arr_state_incr s sz ln i).
 
 Definition transf_module (f: function) : mon module :=
-  do fin <- create_reg 1;
-  do rtrn <- create_reg 32;
-  do stack <- create_arr 32 (Z.to_nat (f.(fn_stacksize) / 4));
+  do fin <- create_reg (Some Voutput) 1;
+  do rtrn <- create_reg (Some Voutput) 32;
+  do stack <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
   do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
-  do start <- create_reg 1;
-  do rst <- create_reg 1;
-  do clk <- create_reg 1;
+  do start <- create_reg (Some Vinput) 1;
+  do rst <- create_reg (Some Vinput) 1;
+  do clk <- create_reg (Some Vinput) 1;
   do current_state <- get;
   ret (mkmodule
          f.(RTL.fn_params)
@@ -427,14 +449,19 @@ Definition transf_module (f: function) : mon module :=
          current_state.(st_st)
          stack
          fin
-         rtrn).
+         rtrn
+         start
+         rst
+         clk
+         current_state.(st_scldecls)
+         current_state.(st_arrdecls)).
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
-          (st_scldecls (init_state st))
+          (AssocMap.set st (None, Scalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
@@ -442,15 +469,30 @@ Definition max_state (f: function) : state :=
 Definition transl_module (f : function) : Errors.res module :=
   run_mon (max_state f) (transf_module f).
 
-Definition transl_fundef (f : RTL.fundef) : Errors.res HTL.fundef :=
+Definition transl_fundef := transf_partial_fundef transl_module.
+
+Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p.
+
+(*Definition transl_main_fundef f : Errors.res HTL.fundef :=
   match f with
-  | Internal f' =>
-    Errors.bind (transl_module f')
-                (fun f'' => Errors.OK (Internal f''))
-  | _ => Errors.Error (Errors.msg "External function could not be translated.")
+  | Internal f => transl_fundef (Internal f)
+  | External f => Errors.Error (Errors.msg "Could not find internal main function")
   end.
 
 (** Translation of a whole program. *)
 
 Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
-  transform_partial_program transl_fundef p.
+  transform_partial_program2 (fun i f => if Pos.eqb p.(AST.prog_main) i
+                                         then transl_fundef f
+                                         else transl_main_fundef f)
+                             (fun i v => Errors.OK v) p.
+*)
+
+(*Definition main_is_internal (p : RTL.program): Prop :=
+  let ge := Globalenvs.Genv.globalenv p in
+  forall b m,
+  Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+  Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m).
+
+Definition tranls_program_with_proof (p : RTL.program) : Errors.res { p' : HTL.program | main_is_internal p }.
+*)

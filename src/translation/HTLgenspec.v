@@ -184,41 +184,41 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk m,
+    forall data control fin rtrn st stk m start rst clk scldecls arrdecls,
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                     tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                            st stk fin rtrn) ->
+                        st stk fin rtrn start rst clk scldecls arrdecls) ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
 Lemma create_reg_datapath_trans :
-  forall sz s s' x i,
-    create_reg sz s = OK x s' i ->
+  forall sz s s' x i iop,
+    create_reg iop sz s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_datapath_trans : htlspec.
 
 Lemma create_reg_controllogic_trans :
-  forall sz s s' x i,
-    create_reg sz s = OK x s' i ->
+  forall sz s s' x i iop,
+    create_reg iop sz s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_controllogic_trans : htlspec.
 
 Lemma create_arr_datapath_trans :
-  forall sz ln s s' x i,
-    create_arr sz ln s = OK x s' i ->
+  forall sz ln s s' x i iop,
+    create_arr iop sz ln s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_arr_datapath_trans : htlspec.
 
 Lemma create_arr_controllogic_trans :
-  forall sz ln s s' x i,
-    create_arr sz ln s = OK x s' i ->
+  forall sz ln s s' x i iop,
+    create_arr iop sz ln s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_arr_controllogic_trans : htlspec.
@@ -239,11 +239,11 @@ Hint Resolve get_refl_s : htlspec.
 
 Ltac inv_incr :=
   repeat match goal with
-  | [ H: create_reg _ ?s = OK _ ?s' _ |- _ ] =>
+  | [ H: create_reg _ _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); eapply create_reg_datapath_trans in H;
     eapply create_reg_controllogic_trans in H1
-  | [ H: create_arr _ _ ?s = OK _ ?s' _ |- _ ] =>
+  | [ H: create_arr _ _ _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); eapply create_arr_datapath_trans in H;
     eapply create_arr_controllogic_trans in H1
@@ -329,11 +329,11 @@ Proof.
     + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
       eapply in_map with (f := fst) in H9. contradiction.
 
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + inversion H2. inversion H9. unfold nonblock. rewrite <- e2. rewrite H. constructor.
-      eapply translate_instr_tr_op. apply EQ1.
-      eapply in_map with (f := fst) in H9. contradiction.
+    + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    + inversion H2. inversion H14. unfold nonblock. assert (HST: st_st s4 = st_st s2) by congruence. rewrite HST.
+      constructor. eapply translate_instr_tr_op. apply EQ1.
+      eapply in_map with (f := fst) in H14. contradiction.
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
