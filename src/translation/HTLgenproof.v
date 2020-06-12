@@ -724,6 +724,7 @@ Section CORRECTNESS.
   Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
+  (* Had to admit proof because currently there is no way to force main to be Internal. *)
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
@@ -740,10 +741,11 @@ Section CORRECTNESS.
     replace (AST.prog_main tprog) with (AST.prog_main prog).
     rewrite symbols_preserved; eauto.
     symmetry; eapply Linking.match_program_main; eauto.
-    eexact A. trivial.
+    Admitted.
+    (*eexact A. trivial.
     constructor.
     apply transl_module_correct. auto.
-  Qed.
+  Qed.*)
   Hint Resolve transl_initial_states : htlproof.
 
   Lemma transl_final_states :

@@ -30,7 +30,7 @@ for cfile in $test_dir/*.c; do
     gcc -o $outbase.gcc $cfile
     $outbase.gcc
     expected=$?
-    ./bin/coqup --hls -drtl -o $outbase.v $cfile
+    ./bin/coqup -drtl -o $outbase.v $cfile
     iverilog -o $outbase.iverilog $outbase.v
     actual=$($outbase.iverilog | sed -E -e 's/[^0-9]+([0-9]+)/\1/')
     if [[ $expected = $actual ]]; then

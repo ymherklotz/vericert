@@ -21,6 +21,7 @@ open Value
 open Datatypes
 
 open Camlcoq
+open AST
 
 open Printf
 
@@ -107,21 +108,30 @@ let pprint_edge_top i = function
   | Valledge -> "@*"
   | Voredge (e1, e2) -> concat ["@("; pprint_edge e1; " or "; pprint_edge e2; ")"]
 
-let declare i t =
+let declare t =
   function (r, sz) ->
-    concat [ indent i; t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
+    concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r; ";\n" ]
 
-let declarearr i t =
+let declarearr t =
   function (r, sz, ln) ->
-    concat [ indent i; t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
+    concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r;
              " ["; sprintf "%d" (Nat.to_int ln - 1); ":0];\n" ]
 
+let print_io = function
+  | Some Vinput -> "input"
+  | Some Voutput -> "output reg"
+  | Some Vinout -> "inout"
+  | None -> "reg"
+
+let decl i = function
+  | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
+  | Vdeclarr (io, r, sz, ln) -> concat [indent i; declarearr (print_io io) (r, sz, ln)]
+
 (* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function
-  | Vdecl (r, sz) -> declare i "reg" (r, sz)
-  | Vdeclarr (r, sz, ln) -> declarearr i "reg" (r, sz, ln)
+  | Vdeclaration d -> decl i d
   | Valways (e, s) ->
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
   | Valways_ff (e, s) ->
@@ -137,10 +147,6 @@ let rec intersperse c = function
 let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
 
 let compose f g x = g x |> f
-
-let init_inputs i r = declare i "input" r
-
-let init_outputs i r = declare i "output reg" r
 
 let testbench = "module testbench;
    reg start, reset, clk;
@@ -171,16 +177,11 @@ endmodule
 let pprint_module i n m =
   let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
   let outputs = [m.mod_finish; m.mod_return] in
-  concat [ indent i; "module "; n;
-           "("; concat (intersperse ", " (List.map (compose register fst) (inputs @ outputs))); ");\n";
-           fold_map (init_inputs (i+1)) inputs;
-           fold_map (init_outputs (i+1)) outputs;
+  concat [ indent i; "module "; (extern_atom n);
+           "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
            fold_map (pprint_module_item (i+1)) m.mod_body;
-           indent i; "endmodule\n\n";
-           testbench
+           indent i; "endmodule\n\n"
          ]
-
-let print_program pp v = pstr pp (pprint_module 0 "main" v)
 
 let print_result pp lst =
   let rec print_result_in pp = function
@@ -192,3 +193,12 @@ let print_result pp lst =
   print_result_in pp lst
 
 let print_value pp v = fprintf pp "%s" (literal v)
+
+let print_globdef pp (id, gd) =
+  match gd with
+  | Gfun(Internal f) -> pstr pp (pprint_module 0 id f)
+  | _ -> ()
+
+let print_program pp prog =
+  List.iter (print_globdef pp) prog.prog_defs;
+  pstr pp testbench

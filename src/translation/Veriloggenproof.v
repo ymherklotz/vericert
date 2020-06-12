@@ -17,30 +17,15 @@
  *)
 
 From compcert Require Import Smallstep.
-From compcert Require RTL.
-From coqup Require Verilog.
+From coqup Require HTL Verilog.
 
 Section CORRECTNESS.
 
-  Variable prog: RTL.program.
-  Variable tprog: Verilog.module.
-
-  Inductive match_states: RTL.state -> Verilog.state -> Prop :=
-  | match_state:
-      forall,
-        
-        match_states (RTL.State f s k sp e m)
-                     (Verilog.State m mi mis assoc nbassoc f cycle pc)
-  | match_returnstate:
-      forall v tv k m tm cs
-             (MS: match_stacks k cs)
-             (LD: Val.lessdef v tv)
-             (MEXT: Mem.extends m tm),
-        match_states (CminorSel.Returnstate v k m)
-                     (RTL.Returnstate cs tv tm).
+  Variable prog: HTL.program.
+  Variable tprog: Verilog.program.
 
   Theorem transf_program_correct:
-    forward_simulation (RTL.semantics prog) (Verilog.semantics tprog).
+    forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).
   Admitted.
 
 End CORRECTNESS.
