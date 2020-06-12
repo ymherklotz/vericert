@@ -47,7 +47,12 @@ Record module: Type :=
     mod_st : reg;
     mod_stk : reg;
     mod_finish : reg;
-    mod_return : reg
+    mod_return : reg;
+    mod_start : reg;
+    mod_reset : reg;
+    mod_clk : reg;
+    mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
+    mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
   }.
 
 Definition fundef := AST.fundef module.
