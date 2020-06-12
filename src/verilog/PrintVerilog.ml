@@ -180,8 +180,7 @@ let pprint_module i n m =
   concat [ indent i; "module "; (extern_atom n);
            "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
            fold_map (pprint_module_item (i+1)) m.mod_body;
-           indent i; "endmodule\n\n";
-           testbench
+           indent i; "endmodule\n\n"
          ]
 
 let print_result pp lst =
@@ -201,4 +200,5 @@ let print_globdef pp (id, gd) =
   | _ -> ()
 
 let print_program pp prog =
-  List.iter (print_globdef pp) prog.prog_defs
+  List.iter (print_globdef pp) prog.prog_defs;
+  pstr pp testbench

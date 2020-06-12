@@ -125,28 +125,28 @@ Proof.
 Qed.
 
 Lemma declare_reg_state_incr :
-  forall s r sz,
+  forall i s r sz,
     st_incr s
     (mkstate
        s.(st_st)
        s.(st_freshreg)
        s.(st_freshstate)
-       (AssocMap.set r (None, Scalar sz) s.(st_scldecls))
+       (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
 Proof. auto with htlh. Qed.
 
-Definition declare_reg (r : reg) (sz : nat) : mon unit :=
+Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
   fun s => OK tt (mkstate
                 s.(st_st)
                 s.(st_freshreg)
                 s.(st_freshstate)
-                (AssocMap.set r (None, Scalar sz) s.(st_scldecls))
+                (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
                 s.(st_arrdecls)
                 s.(st_datapath)
                 s.(st_controllogic))
-              (declare_reg_state_incr s r sz).
+              (declare_reg_state_incr i s r sz).
 
 Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
   fun s =>
@@ -359,7 +359,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Inop n' => add_instr n n' Vskip
     | Iop op args dst n' =>
       do instr <- translate_instr op args;
-      do _ <- declare_reg dst 32;
+      do _ <- declare_reg None dst 32;
       add_instr n n' (nonblock dst instr)
     | Iload mem addr args dst n' =>
       do src <- translate_arr_access mem addr args stack;
@@ -437,6 +437,7 @@ Definition transf_module (f: function) : mon module :=
   do rtrn <- create_reg (Some Voutput) 32;
   do stack <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
   do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+  do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
   do start <- create_reg (Some Vinput) 1;
   do rst <- create_reg (Some Vinput) 1;
   do clk <- create_reg (Some Vinput) 1;

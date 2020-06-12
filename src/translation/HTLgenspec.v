@@ -209,6 +209,20 @@ Lemma create_reg_controllogic_trans :
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_controllogic_trans : htlspec.
 
+Lemma declare_reg_datapath_trans :
+  forall sz s s' x i iop r,
+    declare_reg iop r sz s = OK x s' i ->
+    s.(st_datapath) = s'.(st_datapath).
+Proof. intros. monadInv H. trivial. Qed.
+Hint Resolve create_reg_datapath_trans : htlspec.
+
+Lemma declare_reg_controllogic_trans :
+  forall sz s s' x i iop r,
+    declare_reg iop r sz s = OK x s' i ->
+    s.(st_controllogic) = s'.(st_controllogic).
+Proof. intros. monadInv H. trivial. Qed.
+Hint Resolve create_reg_controllogic_trans : htlspec.
+
 Lemma create_arr_datapath_trans :
   forall sz ln s s' x i iop,
     create_arr iop sz ln s = OK x s' i ->
@@ -254,6 +268,44 @@ Ltac inv_incr :=
   | [ H: st_prop _ _ |- _ ] => unfold st_prop in H; destruct H
   | [ H: st_incr _ _ |- _ ] => destruct st_incr
   end.
+
+Lemma collect_controllogic_trans :
+  forall A f l cs cs' ci,
+  (forall s s' x i y, f y s = OK x s' i -> s.(st_controllogic) = s'.(st_controllogic)) ->
+  @HTLMonadExtra.collectlist A f l cs = OK tt cs' ci -> cs.(st_controllogic) = cs'.(st_controllogic).
+Proof.
+  induction l; intros; monadInv H0.
+  - trivial.
+  - apply H in EQ. rewrite EQ. eauto.
+Qed.
+
+Lemma collect_datapath_trans :
+  forall A f l cs cs' ci,
+  (forall s s' x i y, f y s = OK x s' i -> s.(st_datapath) = s'.(st_datapath)) ->
+  @HTLMonadExtra.collectlist A f l cs = OK tt cs' ci -> cs.(st_datapath) = cs'.(st_datapath).
+Proof.
+  induction l; intros; monadInv H0.
+  - trivial.
+  - apply H in EQ. rewrite EQ. eauto.
+Qed.
+
+Lemma collect_declare_controllogic_trans :
+  forall io n l s s' i,
+  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
+  s.(st_controllogic) = s'.(st_controllogic).
+Proof.
+  intros. eapply collect_controllogic_trans; try eassumption.
+  intros. eapply declare_reg_controllogic_trans. simpl in H0. eassumption.
+Qed.
+
+Lemma collect_declare_datapath_trans :
+  forall io n l s s' i,
+  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
+  s.(st_datapath) = s'.(st_datapath).
+Proof.
+  intros. eapply collect_datapath_trans; try eassumption.
+  intros. eapply declare_reg_datapath_trans. simpl in H0. eassumption.
+Qed.
 
 Ltac rewrite_states :=
   match goal with
@@ -395,9 +447,13 @@ Proof.
   econstructor; simpl; trivial.
   intros.
   inv_incr.
-  assert (STC: st_controllogic s9 = st_controllogic s3) by congruence.
-  assert (STD: st_datapath s9 = st_datapath s3) by congruence.
-  assert (STST: st_st s9 = st_st s3) by congruence.
+  assert (EQ3D := EQ3).
+  destruct x3.
+  apply collect_declare_datapath_trans in EQ3.
+  apply collect_declare_controllogic_trans in EQ3D.
+  assert (STC: st_controllogic s10 = st_controllogic s3) by congruence.
+  assert (STD: st_datapath s10 = st_datapath s3) by congruence.
+  assert (STST: st_st s10 = st_st s3) by congruence.
   rewrite STC. rewrite STD. rewrite STST.
   eapply iter_expand_instr_spec; eauto with htlspec.
   apply PTree.elements_complete.
