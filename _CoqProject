@@ -14,4 +14,4 @@
 -R lib/CompCert/flocq compcert.flocq
 -R lib/CompCert/lib compcert.lib
 -R lib/CompCert/x86 compcert.x86
--R lib/CompCert/x86_64 compcert.x86_64
+-R lib/CompCert/x86_32 compcert.x86_64
