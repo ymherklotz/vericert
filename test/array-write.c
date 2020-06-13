@@ -1,8 +1,8 @@
 int main() {
         int x[2] = {5, 10};
-        int y[2];
+        int y[2]; //= {0 , 0};
         for(int i=0; i<2;i++){
-          y[i] += x[i] * (i+1);
+          y[i] += x[i] ;
         }
 
         int sum = 0;
