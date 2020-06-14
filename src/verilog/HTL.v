@@ -17,7 +17,7 @@
  *)
 
 From Coq Require Import FSets.FMapPositive.
-From coqup Require Import Coquplib Value AssocMap.
+From coqup Require Import Coquplib Value AssocMap Array.
 From coqup Require Verilog.
 From compcert Require Events Globalenvs Smallstep Integers Values.
 From compcert Require Import Maps.
@@ -66,13 +66,8 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
   | _, _ => empty_assocmap
   end.
 
-Fixpoint zeroes' (acc : list value) (n : nat) : list value :=
-  match n with
-  | O => acc
-  | S n => zeroes' ((NToValue 32 0)::acc) n
-  end.
-
-Definition zeroes : nat -> list value := zeroes' nil.
+Definition empty_stack (m : module) : AssocMap.t (Array value) :=
+  (AssocMap.set m.(mod_stk) (Verilog.zeroes m.(mod_stk_len)) (AssocMap.empty (Array value))).
 
 (** * Operational Semantics *)
 
@@ -84,7 +79,7 @@ Inductive stackframe : Type :=
             (m : module)
             (pc : node)
             (reg_assoc : assocmap)
-            (arr_assoc : AssocMap.t (list value)),
+            (arr_assoc : AssocMap.t (Array value)),
       stackframe.
 
 Inductive state : Type :=
@@ -93,7 +88,7 @@ Inductive state : Type :=
            (m : module)
            (st : node)
            (reg_assoc : assocmap)
-           (arr_assoc : AssocMap.t (list value)), state
+           (arr_assoc : AssocMap.t (Array value)), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -114,7 +109,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations asr empty_assocmap)
-        (Verilog.mkassociations asa (AssocMap.empty (list value)))
+        (Verilog.mkassociations asa (empty_stack m))
         ctrl
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1) ->
@@ -125,7 +120,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
       asr' = merge_assocmap nasr2 basr2 ->
-      asa' = AssocMapExt.merge (list value) nasa2 basa2 ->
+      asa' = AssocMapExt.merge (Array value) nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
@@ -140,7 +135,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
            (State res m m.(mod_entrypoint)
              (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
                            (init_regs args m.(mod_params)))
-              (AssocMap.set m.(mod_stk) (zeroes m.(mod_stk_len)) (AssocMap.empty (list value))))
+             (empty_stack m))
 | step_return :
     forall g m asr asa i r sf pc mst,
       mst = mod_st m ->

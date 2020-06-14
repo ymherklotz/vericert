@@ -131,7 +131,7 @@ Lemma declare_reg_state_incr :
        s.(st_st)
        s.(st_freshreg)
        s.(st_freshstate)
-       (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
+       (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
@@ -142,7 +142,7 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_st)
                 s.(st_freshreg)
                 s.(st_freshstate)
-                (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
+                (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
                 s.(st_arrdecls)
                 s.(st_datapath)
                 s.(st_controllogic))
@@ -393,7 +393,7 @@ Lemma create_reg_state_incr:
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
+         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
          s.(st_arrdecls)
          (st_datapath s)
          (st_controllogic s)).
@@ -405,7 +405,7 @@ Definition create_reg (i : option io) (sz : nat) : mon reg :=
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
                    (st_arrdecls s)
                    (st_datapath s)
                    (st_controllogic s))
@@ -418,7 +418,7 @@ Lemma create_arr_state_incr:
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
          s.(st_scldecls)
-         (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
+         (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
@@ -430,7 +430,7 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
                    (Pos.succ r)
                    (st_freshstate s)
                    s.(st_scldecls)
-                   (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
+                   (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
                    (st_datapath s)
                    (st_controllogic s))
               (create_arr_state_incr s sz ln i).
@@ -466,7 +466,7 @@ Definition max_state (f: function) : state :=
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
-          (AssocMap.set st (None, Scalar 32) (st_scldecls (init_state st)))
+          (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
