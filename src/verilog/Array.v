@@ -122,14 +122,15 @@ Proof.
   info_eauto with array.
 Qed.
 
+(** Tail recursive version of standard library function. *)
 Fixpoint list_repeat' {A : Type} (acc : list A) (a : A) (n : nat) : list A :=
   match n with
   | O => acc
   | S n => list_repeat' (a::acc) a n
   end.
 
-Lemma list_repeat'_len : forall {A : Type} (a : A) n l,
-    Datatypes.length (list_repeat' l a n) = (n + Datatypes.length l)%nat.
+Lemma list_repeat'_len {A : Type} : forall (a : A) n l,
+    length (list_repeat' l a n) = (n + Datatypes.length l)%nat.
 Proof.
   induction n; intros; simplify; try reflexivity.
 
@@ -139,14 +140,87 @@ Proof.
   lia.
 Qed.
 
+Lemma list_repeat'_app {A : Type} : forall (a : A) n l,
+    list_repeat' l a n = list_repeat' [] a n ++ l.
+Proof.
+  induction n; intros; simplify; try reflexivity.
+
+  pose proof IHn.
+  specialize (H (a :: l)).
+  rewrite H. clear H.
+  specialize (IHn (a :: nil)).
+  rewrite IHn. clear IHn.
+  remember (list_repeat' [] a n) as l0.
+
+  rewrite <- app_assoc.
+  f_equal.
+Qed.
+
+Lemma list_repeat'_head_tail {A : Type} : forall n (a : A),
+  a :: list_repeat' [] a n = list_repeat' [] a n ++ [a].
+Proof.
+  induction n; intros; simplify; try reflexivity.
+  rewrite list_repeat'_app.
+
+  replace (a :: list_repeat' [] a n ++ [a]) with (list_repeat' [] a n ++ [a] ++ [a]).
+  2: { rewrite app_comm_cons. rewrite IHn; auto.
+       rewrite app_assoc. reflexivity. }
+  rewrite app_assoc. reflexivity.
+Qed.
+
+Lemma list_repeat'_cons {A : Type} : forall (a : A) n,
+    list_repeat' [a] a n = a :: list_repeat' [] a n.
+Proof.
+  intros.
+
+  rewrite list_repeat'_head_tail; auto.
+  apply list_repeat'_app.
+Qed.
+
 Definition list_repeat {A : Type} : A -> nat -> list A := list_repeat' nil.
 
-Lemma list_repeat_len {A : Type} : forall n (a : A), Datatypes.length (list_repeat a n) = n.
+Lemma list_repeat_len {A : Type} : forall n (a : A), length (list_repeat a n) = n.
 Proof.
   intros.
   unfold list_repeat.
   rewrite list_repeat'_len.
   simplify. lia.
+Qed.
+
+Lemma dec_list_repeat_spec {A : Type} : forall n (a : A) a',
+    (forall x x' : A, {x' = x} + {~ x' = x}) ->
+    In a' (list_repeat a n) -> a' = a.
+Proof.
+  induction n; intros; simplify; try contradiction.
+
+  unfold list_repeat in *.
+  simplify.
+
+  rewrite list_repeat'_app in H.
+  pose proof (X a a').
+  destruct H0; auto.
+
+  (* This is actually a degenerate case, not an unprovable goal. *)
+  pose proof (in_app_or (list_repeat' [] a n) ([a])).
+  apply H0 in H. invert H.
+
+  - eapply IHn in X; eassumption.
+  - invert H1; contradiction.
+Qed.
+
+Lemma list_repeat_head_tail {A : Type} : forall n (a : A),
+    a :: list_repeat a n = list_repeat a n ++ [a].
+Proof.
+  unfold list_repeat. apply list_repeat'_head_tail.
+Qed.
+
+Lemma list_repeat_cons {A : Type} : forall n (a : A),
+    list_repeat a (S n) = a :: list_repeat a n.
+Proof.
+  intros.
+
+  unfold list_repeat.
+  apply list_repeat'_cons.
 Qed.
 
 Definition arr_repeat {A : Type} (a : A) (n : nat) : Array A := make_array (list_repeat a n).
@@ -157,5 +231,33 @@ Fixpoint list_combine {A B C : Type} (f : A -> B -> C) (x : list A) (y : list B)
   | _, _ => nil
   end.
 
+Lemma list_combine_length {A B C : Type} (f : A -> B -> C) : forall (x : list A) (y : list B),
+    length (list_combine f x y) = min (length x) (length y).
+Proof.
+  induction x; intros; simplify; try reflexivity.
+
+  destruct y; simplify; auto.
+Qed.
+
 Definition combine {A B C : Type} (f : A -> B -> C) (x : Array A) (y : Array B) : Array C :=
   make_array (list_combine f x.(arr_contents) y.(arr_contents)).
+
+Lemma combine_length {A B C: Type} : forall x y (f : A -> B -> C),
+    x.(arr_length) = y.(arr_length) -> arr_length (combine f x y) = x.(arr_length).
+Proof.
+  intros.
+
+  unfold combine.
+  unfold make_array.
+  simplify.
+
+  rewrite <- (arr_wf x) in *.
+  rewrite <- (arr_wf y) in *.
+
+  destruct (arr_contents x); simplify.
+  - reflexivity.
+  - destruct (arr_contents y); simplify.
+    f_equal.
+    rewrite list_combine_length.
+    destruct (Min.min_dec (length l) (length l0)); congruence.
+Qed.

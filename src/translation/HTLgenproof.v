@@ -43,15 +43,16 @@ Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
 Hint Unfold state_st_wf : htlproof.
 
 Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem : mem) :
-  AssocMap.t (list value) -> Prop :=
+  Verilog.assocmap_arr -> Prop :=
 | match_arr : forall asa stack,
-    m.(HTL.mod_stk_len) = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
-    asa ! (m.(HTL.mod_stk)) = Some stack ->
+    asa ! (m.(HTL.mod_stk)) = Some stack /\
+    stack.(arr_length) = Z.to_nat (f.(RTL.fn_stacksize) / 4) /\
     (forall ptr,
         0 <= ptr < Z.of_nat m.(HTL.mod_stk_len) ->
         opt_val_value_lessdef (Mem.loadv AST.Mint32 mem
                                          (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)))
-                              (nth (Z.to_nat ptr / 4) stack (ZToValue 32 0))) ->
+                              (Option.default (NToValue 32 0)
+                                 (Option.join (array_get_error (Z.to_nat ptr / 4) stack)))) ->
     match_arrs m f sp mem asa.
 
 Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
@@ -129,6 +130,33 @@ Proof.
   rewrite AssocMap.gso; eauto.
 Qed.
 Hint Resolve regs_lessdef_add_match : htlproof.
+
+Lemma list_combine_none :
+  forall n l,
+    length l = n ->
+    list_combine Verilog.merge_cell (list_repeat None n) l = l.
+Proof.
+  induction n; intros; simplify.
+  - symmetry. apply length_zero_iff_nil. auto.
+  - destruct l; simplify.
+    rewrite list_repeat_cons.
+    simplify. f_equal.
+    eauto.
+Qed.
+
+Lemma combine_none :
+  forall n a,
+    a.(arr_length) = n ->
+    arr_contents (combine Verilog.merge_cell (arr_repeat None n) a) = arr_contents a.
+Proof.
+  intros.
+  unfold combine.
+  simplify.
+
+  rewrite <- (arr_wf a) in H.
+  apply list_combine_none.
+  assumption.
+Qed.
 
 (* Need to eventually move posToValue 32 to posToValueAuto, as that has this proof. *)
 Lemma assumption_32bit :

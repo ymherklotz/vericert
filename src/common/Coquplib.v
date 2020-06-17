@@ -52,6 +52,8 @@ Ltac clear_obvious :=
 
 Ltac simplify := simpl in *; clear_obvious; simpl in *; try discriminate.
 
+Global Opaque Nat.div.
+
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
 Definition compose (A B C : Type) (f : B -> C) (g : A -> B) (x : A) : C := f (g x). *)
