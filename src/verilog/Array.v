@@ -83,6 +83,14 @@ Hint Resolve array_set_spec2 : array.
 Definition array_get_error {A : Type} (i : nat) (a : Array A) : option A :=
   nth_error a.(arr_contents) i.
 
+Lemma array_get_error_equal {A : Type} :
+  forall (a b : Array A) i,
+    a.(arr_contents) = b.(arr_contents) ->
+    array_get_error i a = array_get_error i b.
+Proof.
+  unfold array_get_error. congruence.
+Qed.
+
 Lemma array_get_error_bound {A : Type} :
   forall (a : Array A) i,
     i < a.(arr_length) -> exists x, array_get_error i a = Some x.

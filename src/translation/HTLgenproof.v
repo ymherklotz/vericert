@@ -18,7 +18,7 @@
 
 From compcert Require RTL Registers AST Integers.
 From compcert Require Import Globalenvs Memory.
-From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap.
+From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array.
 From coqup Require HTL Verilog.
 
 Local Open Scope assocmap.
@@ -326,21 +326,51 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       (* processing of state *)
       econstructor.
-      simpl. trivial.
+      simplify.
       econstructor.
       econstructor.
       econstructor.
+      simplify.
 
-      (* prove stval *)
-      unfold merge_assocmap.
-      unfold_merge. simpl. apply AssocMap.gss.
+      unfold Verilog.merge_regs.
+      unfold_merge. apply AssocMap.gss.
 
       (* prove match_state *)
       rewrite assumption_32bit.
-      constructor; auto.
+      constructor; auto; simplify.
+
+      unfold Verilog.merge_regs.
       unfold_merge. simpl. apply regs_lessdef_add_greater. apply greater_than_max_func.
       assumption.
+      unfold Verilog.merge_regs.
       unfold state_st_wf. inversion 1. subst. unfold_merge. apply AssocMap.gss.
+
+      (* prove match_arrs *)
+      invert MARR. simplify.
+      unfold HTL.empty_stack. simplify. unfold Verilog.merge_arrs.
+      econstructor.
+      simplify. repeat split.
+
+      rewrite AssocMap.gcombine.
+      2: { reflexivity. }
+      rewrite AssocMap.gss.
+      unfold Verilog.merge_arr.
+      setoid_rewrite H1.
+      reflexivity.
+
+      rewrite combine_length.
+      unfold arr_repeat. simplify.
+      rewrite list_repeat_len.
+      reflexivity.
+
+      unfold arr_repeat. simplify.
+      rewrite list_repeat_len; auto.
+      intros.
+      erewrite array_get_error_equal.
+      eauto. apply combine_none.
+
+      assumption.
+
     - (* Iop *)
       (* destruct v eqn:?; *)
       (*          try ( *)
@@ -443,7 +473,6 @@ Section CORRECTNESS.
         | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
         end.
 
-      Opaque Nat.div.
 
     - destruct c, chunk, addr, args; simplify; rt; simplify.
 
