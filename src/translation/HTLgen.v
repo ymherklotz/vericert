@@ -366,10 +366,10 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Iload mem addr args dst n' =>
       do src <- translate_arr_access mem addr args stack;
       do _ <- declare_reg None dst 32;
-      add_instr n n' (block dst src)
+      add_instr n n' (nonblock dst src)
     | Istore mem addr args src n' =>
       do dst <- translate_arr_access mem addr args stack;
-      add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
