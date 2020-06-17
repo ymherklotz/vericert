@@ -66,8 +66,8 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
   | _, _ => empty_assocmap
   end.
 
-Definition empty_stack (m : module) : AssocMap.t (Array value) :=
-  (AssocMap.set m.(mod_stk) (Verilog.zeroes m.(mod_stk_len)) (AssocMap.empty (Array value))).
+Definition empty_stack (m : module) : Verilog.assocmap_arr :=
+  (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty Verilog.arr)).
 
 (** * Operational Semantics *)
 
@@ -78,8 +78,8 @@ Inductive stackframe : Type :=
     forall  (res : reg)
             (m : module)
             (pc : node)
-            (reg_assoc : assocmap)
-            (arr_assoc : AssocMap.t (Array value)),
+            (reg_assoc : Verilog.assocmap_reg)
+            (arr_assoc : Verilog.assocmap_arr),
       stackframe.
 
 Inductive state : Type :=
@@ -87,8 +87,8 @@ Inductive state : Type :=
     forall (stack : list stackframe)
            (m : module)
            (st : node)
-           (reg_assoc : assocmap)
-           (arr_assoc : AssocMap.t (Array value)), state
+           (reg_assoc : Verilog.assocmap_reg)
+           (arr_assoc : Verilog.assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -119,8 +119,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         data
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
-      asr' = merge_assocmap nasr2 basr2 ->
-      asa' = AssocMapExt.merge (Array value) nasa2 basa2 ->
+      asr' = Verilog.merge_regs nasr2 basr2 ->
+      asa' = Verilog.merge_arrs nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')

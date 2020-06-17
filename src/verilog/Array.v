@@ -121,3 +121,41 @@ Proof.
   unfold array_get.
   info_eauto with array.
 Qed.
+
+Fixpoint list_repeat' {A : Type} (acc : list A) (a : A) (n : nat) : list A :=
+  match n with
+  | O => acc
+  | S n => list_repeat' (a::acc) a n
+  end.
+
+Lemma list_repeat'_len : forall {A : Type} (a : A) n l,
+    Datatypes.length (list_repeat' l a n) = (n + Datatypes.length l)%nat.
+Proof.
+  induction n; intros; simplify; try reflexivity.
+
+  specialize (IHn (a :: l)).
+  rewrite IHn.
+  simplify.
+  lia.
+Qed.
+
+Definition list_repeat {A : Type} : A -> nat -> list A := list_repeat' nil.
+
+Lemma list_repeat_len {A : Type} : forall n (a : A), Datatypes.length (list_repeat a n) = n.
+Proof.
+  intros.
+  unfold list_repeat.
+  rewrite list_repeat'_len.
+  simplify. lia.
+Qed.
+
+Definition arr_repeat {A : Type} (a : A) (n : nat) : Array A := make_array (list_repeat a n).
+
+Fixpoint list_combine {A B C : Type} (f : A -> B -> C) (x : list A) (y : list B) : list C :=
+  match x, y with
+  | a :: t, b :: t' => f a b :: list_combine f t t'
+  | _, _ => nil
+  end.
+
+Definition combine {A B C : Type} (f : A -> B -> C) (x : Array A) (y : Array B) : Array C :=
+  make_array (list_combine f x.(arr_contents) y.(arr_contents)).

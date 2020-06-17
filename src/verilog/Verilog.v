@@ -25,6 +25,8 @@ From Coq Require Import
   Lists.List
   Program.
 
+Require Import Lia.
+
 Import ListNotations.
 
 From coqup Require Import common.Coquplib common.Show verilog.Value AssocMap Array.
@@ -47,25 +49,44 @@ Record associations (A : Type) : Type :=
     assoc_nonblocking : AssocMap.t A
   }.
 
+Definition arr := (Array (option value)).
+
 Definition reg_associations := associations value.
-Definition arr_associations := associations (Array value).
+Definition arr_associations := associations arr.
 
-Definition assocmap_arr := AssocMap.t (Array value).
+Definition assocmap_reg := AssocMap.t value.
+Definition assocmap_arr := AssocMap.t arr.
 
-Definition merge_associations {A : Type} (assoc : associations A) :=
-  mkassociations (AssocMapExt.merge A assoc.(assoc_nonblocking) assoc.(assoc_blocking))
-                 (AssocMap.empty A).
+Definition merge_regs (new : assocmap_reg) (old : assocmap_reg) : assocmap_reg :=
+  AssocMapExt.merge value new old.
+
+Definition merge_cell (new : option value) (old : option value) : option value :=
+  match new, old with
+  | Some _, _ => new
+  | _, _ => old
+  end.
+
+Definition merge_arr (new : option arr) (old : option arr) : option arr :=
+  match new, old with
+  | Some new', Some old' => Some (combine merge_cell new' old')
+  | Some new', None => Some new'
+  | None, Some old' => Some old'
+  | None, None => None
+  end.
+
+Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :=
+  AssocMap.combine merge_arr new old.
 
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
   | None => None
-  | Some arr => array_get_error i arr
+  | Some arr => Option.join (array_get_error i arr)
   end.
 
 Definition arr_assocmap_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
   match a ! r with
   | None => a
-  | Some arr => a # r <- (array_set i v arr)
+  | Some arr => a # r <- (array_set i (Some v) arr)
   end.
 
 Definition block_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
@@ -265,8 +286,8 @@ Inductive state : Type :=
     forall (stack : list stackframe)
            (m : module)
            (st : node)
-           (reg_assoc : assocmap)
-           (arr_assoc : AssocMap.t (Array value)), state
+           (reg_assoc : assocmap_reg)
+           (arr_assoc : assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -683,17 +704,8 @@ Fixpoint init_params (vl : list value) (rl : list reg) {struct rl} :=
   end.
 
 Definition genv := Globalenvs.Genv.t fundef unit.
-
-Fixpoint list_zeroes' (acc : list value) (n : nat) : list value :=
-  match n with
-  | O => acc
-  | S n => list_zeroes' ((NToValue 32 0)::acc) n
-  end.
-
-Definition list_zeroes : nat -> list value := list_zeroes' nil.
-Definition zeroes (n : nat) : Array value := make_array (list_zeroes n).
-Definition empty_stack (m : module) : AssocMap.t (Array value) :=
-  (AssocMap.set m.(mod_stk) (zeroes m.(mod_stk_len)) (AssocMap.empty (Array value))).
+Definition empty_stack (m : module) : assocmap_arr :=
+  (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty arr)).
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
@@ -703,8 +715,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
                   m.(mod_body)
                   (mkassociations basr1 nasr1)
                   (mkassociations basa1 nasa1)->
-      asr' = merge_assocmap nasr1 basr1 ->
-      asa' = AssocMapExt.merge (Array value) nasa1 basa1 ->
+      asr' = merge_regs nasr1 basr1 ->
+      asa' = merge_arrs nasa1 basa1 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
