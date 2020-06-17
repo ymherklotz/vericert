@@ -21,6 +21,8 @@ From compcert Require Import Globalenvs Memory.
 From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array.
 From coqup Require HTL Verilog.
 
+Require Import Lia.
+
 Local Open Scope assocmap.
 
 Hint Resolve Smallstep.forward_simulation_plus : htlproof.
@@ -449,16 +451,6 @@ Section CORRECTNESS.
       (* assumption. *)
       admit.
 
-      Ltac invert x := inversion x; subst; clear x.
-
-      Ltac clear_obvious :=
-        repeat match goal with
-        | [ H : ex _ |- _ ] => invert H
-        | [ H : Some _ = Some _ |- _ ] => invert H
-        end.
-
-      Ltac simplify := simpl in *; clear_obvious; simpl in *; try discriminate.
-
       Ltac rt :=
         repeat match goal with
         | [ _ : error _ _ = OK _ _ _ |- _ ] => discriminate
@@ -473,8 +465,8 @@ Section CORRECTNESS.
         | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
         end.
 
-
-    - destruct c, chunk, addr, args; simplify; rt; simplify.
+    - (* FIXME: Should be able to use the spec to avoid destructing here. *)
+      destruct c, chunk, addr, args; simplify; rt; simplify.
 
       + admit. (* FIXME: Alignment *)
       + admit.
@@ -486,104 +478,75 @@ Section CORRECTNESS.
         destruct (Archi.ptr64) eqn:ARCHI; simplify.
         rewrite ARCHI in H0. simplify.
 
-        (* Out of bounds reads are undefined behaviour. *)
-        assert (forall ptr v, f.(RTL.fn_stacksize) <= ptr ->
-                         Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)) = Some v ->
-                         v = Values.Vundef) as INVALID_READ by admit.
 
-        (* Case split on whether read is out of bounds. *)
-        destruct (RTL.fn_stacksize f <=? Integers.Ptrofs.unsigned i0) eqn:BOUND.
-        * assert (RTL.fn_stacksize f <= Integers.Ptrofs.unsigned i0) as OUT_OF_BOUNDS. {
-            apply Zle_bool_imp_le. assumption.
-          }
-          eapply INVALID_READ in OUT_OF_BOUNDS.
-          2: { rewrite Integers.Ptrofs.repr_unsigned. eassumption. }
+        (** Here we are assuming that any stack read will be within the bounds
+            of the activation record. *)
+        assert (0 <= Integers.Ptrofs.unsigned i0) as READ_BOUND_LOW by admit.
+        assert (Integers.Ptrofs.unsigned i0 < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
-          eexists. split.
-          eapply Smallstep.plus_one.
-          eapply HTL.step_module; eauto.
-          econstructor. econstructor. econstructor. simplify.
-          econstructor. econstructor. econstructor. econstructor. simplify.
+        eexists. split.
+        eapply Smallstep.plus_one.
+        eapply HTL.step_module; eauto.
+        econstructor. econstructor. econstructor. simplify.
+        econstructor. econstructor. econstructor. econstructor. simplify.
 
-          unfold Verilog.arr_assocmap_lookup. rewrite H3.
-          reflexivity.
+        unfold Verilog.arr_assocmap_lookup. setoid_rewrite H3.
+        f_equal.
 
-          simplify. unfold_merge. apply AssocMap.gss.
+        simplify. unfold Verilog.merge_regs.
+        unfold_merge.
+        rewrite AssocMap.gso.
+        apply AssocMap.gss.
+        apply st_greater_than_res.
 
-          simplify. rewrite assumption_32bit.
-          constructor.
+        simplify. rewrite assumption_32bit.
+        constructor.
 
-          unfold_merge.
-          apply regs_lessdef_add_greater.
-          apply greater_than_max_func.
+        unfold Verilog.merge_regs. unfold_merge.
+        apply regs_lessdef_add_match.
 
-          apply regs_lessdef_add_match.
-          rewrite OUT_OF_BOUNDS.
-          constructor. assumption.
+        (** Equality proof *)
+        admit.
 
-          assumption.
+        apply regs_lessdef_add_greater.
+        apply greater_than_max_func.
+        assumption. assumption.
 
-          unfold state_st_wf. inversion 1. simplify.
-          unfold_merge. apply AssocMap.gss.
+        unfold state_st_wf. inversion 1. simplify.
+        unfold Verilog.merge_regs.
+        unfold_merge. rewrite AssocMap.gso.
+        apply AssocMap.gss.
+        apply st_greater_than_res.
 
-          assumption.
+        assumption.
 
-          econstructor; simplify; try reflexivity; eassumption.
+        econstructor.
+        repeat split; simplify.
+        unfold HTL.empty_stack.
+        simplify.
+        unfold Verilog.merge_arrs.
 
-        * assert (Integers.Ptrofs.unsigned i0 < f.(RTL.fn_stacksize)) as IN_BOUNDS. {
-            rewrite Z.leb_antisym in BOUND.
-            rewrite negb_false_iff in BOUND.
-            apply Zlt_is_lt_bool. assumption.
-          }
+        rewrite AssocMap.gcombine.
+        2: { reflexivity. }
+        rewrite AssocMap.gss.
+        unfold Verilog.merge_arr.
+        setoid_rewrite H3.
+        reflexivity.
 
-          eexists. split.
-          eapply Smallstep.plus_one.
-          eapply HTL.step_module; eauto.
-          econstructor. econstructor. econstructor. simplify.
-          econstructor. econstructor. econstructor. econstructor. simplify.
+        rewrite combine_length.
+        unfold arr_repeat. simplify.
+        rewrite list_repeat_len.
+        reflexivity.
 
-          unfold Verilog.arr_assocmap_lookup. rewrite H3.
-          reflexivity.
+        unfold arr_repeat. simplify.
+        rewrite list_repeat_len.
+        congruence.
 
-          simplify. unfold_merge. apply AssocMap.gss.
+        intros.
+        erewrite array_get_error_equal.
+        eauto. apply combine_none.
 
-          simplify. rewrite assumption_32bit.
-          constructor.
-
-          unfold_merge.
-          apply regs_lessdef_add_greater.
-          apply greater_than_max_func.
-
-          apply regs_lessdef_add_match.
-
-          assert (exists ptr, (Z.to_nat ptr / 4)%nat = (valueToNat (ZToValue 32 (Integers.Ptrofs.unsigned i0 / 4))))
-                 by admit.
-          simplify. rewrite <- H5.
-          specialize (H4 x).
-          assert (0 <= x < Z.of_nat (Z.to_nat (RTL.fn_stacksize f / 4))) by admit.
-          apply H4 in H0.
-          invert H0.
-          assert (Integers.Ptrofs.repr x = i0) by admit.
-          rewrite H0 in H6.
-          rewrite H1 in H6.
-          invert H6.
-          assumption.
-
-          assert (Integers.Ptrofs.repr x = i0) by admit.
-          rewrite H0 in H7.
-          rewrite H1 in H7.
-          discriminate.
-
-          assumption.
-
-          assumption.
-
-          unfold state_st_wf. inversion 1. simplify.
-          unfold_merge. apply AssocMap.gss.
-
-          assumption.
-
-          econstructor; simplify; try reflexivity; eassumption.
+        assumption.
 
     - destruct c, chunk, addr, args; simplify; rt; simplify.
       + admit.
