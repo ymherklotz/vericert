@@ -80,7 +80,7 @@ Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
   | None => None
-  | Some arr => Option.join (array_get_error i arr)
+  | Some arr => Some (Option.default (NToValue 32 0) (Option.join (array_get_error i arr)))
   end.
 
 Definition arr_assocmap_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
