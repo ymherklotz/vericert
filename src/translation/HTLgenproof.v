@@ -69,13 +69,31 @@ Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe 
       match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
                        (HTL.Stackframe r m pc asr asa :: lr).
 
+Definition reg_stack_based_pointers (sp : Values.block) (rs : Registers.Regmap.t Values.val) : Prop :=
+  forall r, match Registers.Regmap.get r rs with
+        | Values.Vptr sp' off => sp' = sp
+        | _ => True
+        end.
+
+Definition arr_stack_based_pointers (spb : Values.block) (m : mem) (stack_length : Z)
+  (sp : Values.val) : Prop :=
+  forall ptr,
+    0 <= ptr < (stack_length / 4) ->
+    match Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr))) with
+    | Some (Values.Vptr sp' off) => sp' = spb
+    | _ => True
+    end.
+
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
-| match_state : forall asa asr sf f sp rs mem m st res
+| match_state : forall asa asr sf f sp sp' rs mem m st res
     (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module f m)
     (WF : state_st_wf m (HTL.State res m st asr asa))
     (MS : match_stacks mem sf res)
-    (MARR : match_arrs m f sp mem asa),
+    (MARR : match_arrs m f sp mem asa)
+    (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
+    (RSBP: reg_stack_based_pointers sp' rs)
+    (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp),
     match_states (RTL.State sf f sp st rs mem)
                  (HTL.State res m st asr asa)
 | match_returnstate :
@@ -339,7 +357,7 @@ Section CORRECTNESS.
 
       (* prove match_state *)
       rewrite assumption_32bit.
-      constructor; auto; simplify.
+      econstructor; simplify; eauto.
 
       unfold Verilog.merge_regs.
       unfold_merge. simpl. apply regs_lessdef_add_greater. apply greater_than_max_func.
@@ -471,8 +489,67 @@ Section CORRECTNESS.
       destruct c, chunk, addr, args; simplify; rt; simplify.
 
       + admit. (* FIXME: Alignment *)
-      + admit.
-      + admit.
+
+      + (* FIXME: Why is this degenerate? Should we support this mode? *)
+        unfold Op.eval_addressing in H0.
+        destruct (Archi.ptr64) eqn:ARCHI; simplify.
+        destruct (Registers.Regmap.get r0 rs) eqn:EQr0; discriminate.
+
+      + invert MARR. simplify.
+
+        unfold Op.eval_addressing in H0.
+        destruct (Archi.ptr64) eqn:ARCHI; simplify.
+
+        unfold reg_stack_based_pointers in RSBP.
+        pose proof (RSBP r0) as RSBPr0.
+        pose proof (RSBP r1) as RSBPr1.
+
+        destruct (Registers.Regmap.get r0 rs) eqn:EQr0;
+        destruct (Registers.Regmap.get r1 rs) eqn:EQr1; simplify.
+
+        rewrite ARCHI in H1. simplify.
+        subst.
+
+        eexists. split.
+        eapply Smallstep.plus_one.
+        eapply HTL.step_module; eauto.
+        econstructor. econstructor. econstructor. simplify.
+        econstructor. econstructor. econstructor. econstructor. simplify.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor. (* FIXME: Oh dear. *)
+
+        unfold Verilog.arr_assocmap_lookup. simplify. setoid_rewrite H3.
+        f_equal.
+
+        simplify. unfold Verilog.merge_regs.
+        unfold_merge.
+        rewrite AssocMap.gso.
+        apply AssocMap.gss.
+        apply st_greater_than_res.
+
+        simplify. rewrite assumption_32bit.
+        econstructor; simplify; eauto.
+
+        unfold Verilog.merge_regs. unfold_merge.
+        apply regs_lessdef_add_match.
+
+        all: admit.
 
       + invert MARR. simplify.
 
@@ -501,7 +578,7 @@ Section CORRECTNESS.
         apply st_greater_than_res.
 
         simplify. rewrite assumption_32bit.
-        constructor.
+        econstructor; simplify; eauto.
 
         unfold Verilog.merge_regs. unfold_merge.
         apply regs_lessdef_add_match.
@@ -534,15 +611,13 @@ Section CORRECTNESS.
 
         apply regs_lessdef_add_greater.
         apply greater_than_max_func.
-        assumption. assumption.
+        assumption.
 
         unfold state_st_wf. inversion 1. simplify.
         unfold Verilog.merge_regs.
         unfold_merge. rewrite AssocMap.gso.
         apply AssocMap.gss.
         apply st_greater_than_res.
-
-        assumption.
 
         econstructor.
         repeat split; simplify.
@@ -569,8 +644,9 @@ Section CORRECTNESS.
         intros.
         erewrite array_get_error_equal.
         eauto. apply combine_none.
-
         assumption.
+
+        (* FIXME: RSBP Proof. *)
 
     - destruct c, chunk, addr, args; simplify; rt; simplify.
       + admit.
