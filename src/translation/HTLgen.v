@@ -436,6 +436,7 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
               (create_arr_state_incr s sz ln i).
 
 Definition transf_module (f: function) : mon module :=
+  if (Z.eq_dec (Z.modulo f.(fn_stacksize) 4) 0) then
   do fin <- create_reg (Some Voutput) 1;
   do rtrn <- create_reg (Some Voutput) 32;
   do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
@@ -459,7 +460,8 @@ Definition transf_module (f: function) : mon module :=
          rst
          clk
          current_state.(st_scldecls)
-         current_state.(st_arrdecls)).
+         current_state.(st_arrdecls))
+  else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in

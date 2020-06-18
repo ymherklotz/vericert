@@ -482,8 +482,8 @@ Section CORRECTNESS.
 
         (** Here we are assuming that any stack read will be within the bounds
             of the activation record. *)
-        assert (0 <= Integers.Ptrofs.unsigned i0 / 4) as READ_BOUND_LOW by admit.
-        assert (Integers.Ptrofs.unsigned i0 / 4 < f.(RTL.fn_stacksize) / 4) as READ_BOUND_HIGH by admit.
+        assert (0 <= Integers.Ptrofs.unsigned i0) as READ_BOUND_LOW by admit.
+        assert (Integers.Ptrofs.unsigned i0 < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
         eexists. split.
         eapply Smallstep.plus_one.
@@ -509,16 +509,25 @@ Section CORRECTNESS.
         (** Equality proof *)
         (* FIXME: 32-bit issue. *)
         assert (forall x, valueToNat (ZToValue 32 x) = Z.to_nat x) as VALUE_IDENTITY by admit.
-        assert (4 * (Integers.Ptrofs.unsigned i0 / 4) = Integers.Ptrofs.unsigned i0) as MOD_IDENTITY.
-        {
-          rewrite Z.mul_comm.
-          rewrite ZLib.div_mul_undo; lia.
-        }
         rewrite VALUE_IDENTITY.
         specialize (H5 (Integers.Ptrofs.unsigned i0 / 4)).
         rewrite Z2Nat.id in H5; try lia.
         exploit H5; auto; intros.
-        rewrite MOD_IDENTITY in H0.
+        1: {
+          split.
+          - apply Z.div_pos; lia.
+          - apply Zmult_lt_reg_r with (p := 4); try lia.
+            repeat rewrite ZLib.div_mul_undo; lia.
+        }
+        2: {
+          assert (0 < RTL.fn_stacksize f) by lia.
+          apply Z.div_pos; lia.
+        }
+        replace (4 * (Integers.Ptrofs.unsigned i0 / 4)) with (Integers.Ptrofs.unsigned i0) in H0.
+        2: {
+          rewrite Z.mul_comm.
+          rewrite ZLib.div_mul_undo; lia.
+        }
         rewrite Integers.Ptrofs.repr_unsigned in H0.
         rewrite H1 in H0.
         invert H0. assumption.

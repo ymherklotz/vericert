@@ -188,6 +188,7 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
+      Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
@@ -451,7 +452,7 @@ Proof.
   inversion s; subst.
 
   unfold transf_module in *.
-  monadInv Heqr.
+  destruct (Z.eq_dec (RTL.fn_stacksize f mod 4) 0); monadInv Heqr.
 
   (* TODO: We should be able to fold this into the automation. *)
   pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN.
