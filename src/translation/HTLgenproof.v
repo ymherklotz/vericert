@@ -52,9 +52,9 @@ Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem 
     (forall ptr,
         0 <= ptr < Z.of_nat m.(HTL.mod_stk_len) ->
         opt_val_value_lessdef (Mem.loadv AST.Mint32 mem
-                                         (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr)))
+                                         (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr))))
                               (Option.default (NToValue 32 0)
-                                 (Option.join (array_get_error (Z.to_nat ptr / 4) stack)))) ->
+                                 (Option.join (array_get_error (Z.to_nat ptr) stack)))) ->
     match_arrs m f sp mem asa.
 
 Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
@@ -465,6 +465,8 @@ Section CORRECTNESS.
         | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
         end.
 
+      Opaque Z.mul.
+
     - (* FIXME: Should be able to use the spec to avoid destructing here. *)
       destruct c, chunk, addr, args; simplify; rt; simplify.
 
@@ -477,7 +479,6 @@ Section CORRECTNESS.
         unfold Op.eval_addressing in H0.
         destruct (Archi.ptr64) eqn:ARCHI; simplify.
         rewrite ARCHI in H0. simplify.
-
 
         (** Here we are assuming that any stack read will be within the bounds
             of the activation record. *)
@@ -506,7 +507,18 @@ Section CORRECTNESS.
         apply regs_lessdef_add_match.
 
         (** Equality proof *)
-        admit.
+        assert (forall x, valueToNat (ZToValue 32 x) = Z.to_nat x) by admit. (* FIXME: 32-bit issue. *)
+        (* Modular arithmetic facts. *)
+        assert (0 <= Integers.Ptrofs.unsigned i0 / 4 < RTL.fn_stacksize f / 4) by admit.
+        assert (4 * (Integers.Ptrofs.unsigned i0 / 4) = Integers.Ptrofs.unsigned i0) by admit.
+        rewrite H0.
+        specialize (H5 (Integers.Ptrofs.unsigned i0 / 4)).
+        rewrite Z2Nat.id in H5; try lia.
+        apply H5 in H4.
+        rewrite H6 in H4.
+        rewrite Integers.Ptrofs.repr_unsigned in H4.
+        rewrite H1 in H4.
+        invert H4. assumption.
 
         apply regs_lessdef_add_greater.
         apply greater_than_max_func.
@@ -553,34 +565,11 @@ Section CORRECTNESS.
       + admit.
       + admit.
 
-      + eexists. split.
-        eapply Smallstep.plus_one.
-        eapply HTL.step_module; eauto.
-        econstructor. econstructor. econstructor. simplify.
-        eapply Verilog.stmnt_runp_Vblock_arr. simplify.
-        econstructor. econstructor. econstructor. simplify.
-
-        reflexivity.
-
-        unfold_merge. apply AssocMap.gss.
-
-        simplify. rewrite assumption_32bit. econstructor.
-
-        unfold_merge.
-        apply regs_lessdef_add_greater.
-        apply greater_than_max_func.
-        assumption.
-
-        assumption.
-
-        unfold state_st_wf. inversion 1. simplify.
-        unfold_merge. apply AssocMap.gss.
-
-        admit.
-
-        econstructor; simplify; try reflexivity.
-        admit.
-
+      (* + eexists. split. *)
+      (*   eapply Smallstep.plus_one. *)
+      (*   eapply HTL.step_module; eauto. *)
+      (*   econstructor. econstructor. econstructor. simplify. *)
+      + admit.
 
     - eexists. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
