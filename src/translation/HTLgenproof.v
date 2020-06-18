@@ -482,8 +482,8 @@ Section CORRECTNESS.
 
         (** Here we are assuming that any stack read will be within the bounds
             of the activation record. *)
-        assert (0 <= Integers.Ptrofs.unsigned i0) as READ_BOUND_LOW by admit.
-        assert (Integers.Ptrofs.unsigned i0 < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (0 <= Integers.Ptrofs.unsigned i0 / 4) as READ_BOUND_LOW by admit.
+        assert (Integers.Ptrofs.unsigned i0 / 4 < f.(RTL.fn_stacksize) / 4) as READ_BOUND_HIGH by admit.
 
         eexists. split.
         eapply Smallstep.plus_one.
@@ -507,18 +507,21 @@ Section CORRECTNESS.
         apply regs_lessdef_add_match.
 
         (** Equality proof *)
-        assert (forall x, valueToNat (ZToValue 32 x) = Z.to_nat x) by admit. (* FIXME: 32-bit issue. *)
-        (* Modular arithmetic facts. *)
-        assert (0 <= Integers.Ptrofs.unsigned i0 / 4 < RTL.fn_stacksize f / 4) by admit.
-        assert (4 * (Integers.Ptrofs.unsigned i0 / 4) = Integers.Ptrofs.unsigned i0) by admit.
-        rewrite H0.
+        (* FIXME: 32-bit issue. *)
+        assert (forall x, valueToNat (ZToValue 32 x) = Z.to_nat x) as VALUE_IDENTITY by admit.
+        assert (4 * (Integers.Ptrofs.unsigned i0 / 4) = Integers.Ptrofs.unsigned i0) as MOD_IDENTITY.
+        {
+          rewrite Z.mul_comm.
+          rewrite ZLib.div_mul_undo; lia.
+        }
+        rewrite VALUE_IDENTITY.
         specialize (H5 (Integers.Ptrofs.unsigned i0 / 4)).
         rewrite Z2Nat.id in H5; try lia.
-        apply H5 in H4.
-        rewrite H6 in H4.
-        rewrite Integers.Ptrofs.repr_unsigned in H4.
-        rewrite H1 in H4.
-        invert H4. assumption.
+        exploit H5; auto; intros.
+        rewrite MOD_IDENTITY in H0.
+        rewrite Integers.Ptrofs.repr_unsigned in H0.
+        rewrite H1 in H0.
+        invert H0. assumption.
 
         apply regs_lessdef_add_greater.
         apply greater_than_max_func.

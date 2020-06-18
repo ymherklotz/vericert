@@ -104,7 +104,7 @@ Proof.
   apply not_iff_compat in H1.
   apply <- H1 in H0.
 
-  destruct (nth_error (arr_contents a) i ) eqn:EQ; try contradiction; eauto.
+  destruct (nth_error (arr_contents a) i) eqn:EQ; try contradiction; eauto.
 Qed.
 
 Lemma array_get_error_set_bound {A : Type} :
