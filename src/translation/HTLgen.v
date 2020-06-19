@@ -219,7 +219,7 @@ Definition translate_comparison (c : Integers.comparison) (args : list reg) : mo
   | Integers.Cgt, r1::r2::nil => ret (bop Vgt r1 r2)
   | Integers.Cle, r1::r2::nil => ret (bop Vle r1 r2)
   | Integers.Cge, r1::r2::nil => ret (bop Vge r1 r2)
-  | _, _ => error (Errors.msg "Veriloggen: comparison instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: comparison instruction not implemented: other")
   end.
 
 Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) (i: Integers.int)
@@ -231,7 +231,7 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
   | Integers.Cgt, r1::nil => ret (boplit Vgt r1 i)
   | Integers.Cle, r1::nil => ret (boplit Vle r1 i)
   | Integers.Cge, r1::nil => ret (boplit Vge r1 i)
-  | _, _ => error (Errors.msg "Veriloggen: comparison_imm instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
   end.
 
 Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :=
@@ -240,9 +240,9 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
   | Op.Ccompu c, _ => translate_comparison c args
   | Op.Ccompimm c i, _ => translate_comparison_imm c args i
   | Op.Ccompuimm c i, _ => translate_comparison_imm c args i
-  | Op.Cmaskzero n, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: Cmaskzero")
-  | Op.Cmasknotzero n, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: Cmasknotzero")
-  | _, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: other")
+  | Op.Cmaskzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmaskzero")
+  | Op.Cmasknotzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmasknotzero")
+  | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
@@ -257,7 +257,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
     ret (Vlit (ZToValue 32 a))
-  | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: eff_addressing instruction not implemented: other")
   end.
 
 (** Translate an instruction to a statement. *)
@@ -269,8 +269,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Osub, r1::r2::nil => ret (bop Vsub r1 r2)
   | Op.Omul, r1::r2::nil => ret (bop Vmul r1 r2)
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
-  | Op.Omulhs, _ => error (Errors.msg "Veriloggen: Instruction not implemented: Omulhs")
-  | Op.Omulhu, _ => error (Errors.msg "Veriloggen: Instruction not implemented: Omulhu")
+  | Op.Omulhs, _ => error (Errors.msg "Htlgen: Instruction not implemented: Omulhs")
+  | Op.Omulhu, _ => error (Errors.msg "Htlgen: Instruction not implemented: Omulhu")
   | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
   | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
   | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
@@ -286,16 +286,21 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshlimm n, r::nil => ret (boplit Vshl r n)
   | Op.Oshr, r1::r2::nil => ret (bop Vshr r1 r2)
   | Op.Oshrimm n, r::nil => ret (boplit Vshr r n)
-  | Op.Oshrximm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshrximm")
-  | Op.Oshru, r1::r2::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshru")
-  | Op.Oshruimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshruimm")
-  | Op.Ororimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Ororimm")
-  | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
+  | Op.Oshrximm n, r::nil => ret (Vbinop Vdiv (Vvar r)
+                                         (Vbinop Vshl (Vlit (ZToValue 32 1))
+                                                 (Vlit (intToValue n))))
+  | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
+  | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
+  | Op.Ororimm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Ororimm")
+  | Op.Oshldimm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
+  | Op.Osel c AST.Tint, r1::r2::rl =>
+    do tc <- translate_condition c rl;
+    ret (Vternary tc (Vvar r1) (Vvar r2))
   | Op.Olea a, _ => translate_eff_addressing a args
   | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
   | Op.Ocast32signed, r::nil => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
-  | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
 
 Lemma add_branch_instr_state_incr:
@@ -329,7 +334,7 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
-    | _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
+    | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
@@ -340,18 +345,18 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
   | Op.Ascaled scale offset, r1::nil =>
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
-    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+    else error (Errors.msg "Htlgen: translate_arr_access address misaligned")
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack
                     (Vbinop Vadd (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (offset / 4))))
                                  (boplitz Vmul r2 (scale / 4))))
-    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+    else error (Errors.msg "Htlgen: translate_arr_access address misaligned")
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
     if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
-    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
-  | _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
+    else error (Errors.msg "Htlgen: eff_addressing misaligned stack offset")
+  | _, _ => error (Errors.msg "Htlgen: translate_arr_access unsupported addressing")
   end.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=

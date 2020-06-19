@@ -58,7 +58,8 @@ let pprint_binop l r =
   | Vor -> unsigned "|"
   | Vxor -> unsigned "^"
   | Vshl -> unsigned "<<"
-  | Vshr -> unsigned ">>"
+  | Vshr -> signed ">>>"
+  | Vshru -> unsigned ">>"
 
 let unop = function
   | Vneg -> " ~ "

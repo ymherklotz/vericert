@@ -1,6 +1,6 @@
 #define N 4
 
-void matrix_multiply(int first[][N], int second[][N], int multiply[][N]) {
+void matrix_multiply(int first[N][N], int second[N][N], int multiply[N][N]) {
     int sum = 0;
     for (int c = 0; c < N; c++) {
         for (int d = 0; d < N; d++) {
