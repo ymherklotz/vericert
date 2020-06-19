@@ -29,13 +29,13 @@ Fixpoint transl_list (st : list (node * Verilog.stmnt)) {struct st} : list (expr
 
 Fixpoint scl_to_Vdecl (scldecl : list (reg * (option io * scl_decl))) {struct scldecl} : list module_item :=
   match scldecl with
-  | (r, (io, Scalar sz))::scldecl' => Vdeclaration (Vdecl io r sz) :: scl_to_Vdecl scldecl'
+  | (r, (io, VScalar sz))::scldecl' => Vdeclaration (Vdecl io r sz) :: scl_to_Vdecl scldecl'
   | nil => nil
   end.
 
 Fixpoint arr_to_Vdeclarr (arrdecl : list (reg * (option io * arr_decl))) {struct arrdecl} : list module_item :=
   match arrdecl with
-  | (r, (io, Array sz l))::arrdecl' => Vdeclaration (Vdeclarr io r sz l) :: arr_to_Vdeclarr arrdecl'
+  | (r, (io, VArray sz l))::arrdecl' => Vdeclaration (Vdeclarr io r sz l) :: arr_to_Vdeclarr arrdecl'
   | nil => nil
   end.
 
@@ -56,6 +56,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                    m.(mod_return)
                    m.(mod_st)
                    m.(mod_stk)
+                   m.(mod_stk_len)
                    m.(mod_params)
                    body
                    m.(mod_entrypoint).

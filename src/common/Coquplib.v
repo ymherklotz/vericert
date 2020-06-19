@@ -41,6 +41,19 @@ Ltac solve_by_inverts n :=
 
 Ltac solve_by_invert := solve_by_inverts 1.
 
+Ltac invert x := inversion x; subst; clear x.
+
+Ltac clear_obvious :=
+  repeat match goal with
+         | [ H : ex _ |- _ ] => invert H
+         | [ H : ?C _ = ?C _ |- _ ] => invert H
+         | [ H : _ /\ _ |- _ ] => invert H
+         end.
+
+Ltac simplify := simpl in *; clear_obvious; simpl in *; try discriminate.
+
+Global Opaque Nat.div.
+
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
 Definition compose (A B C : Type) (f : B -> C) (g : A -> B) (x : A) : C := f (g x). *)
@@ -69,6 +82,12 @@ Definition bind {A B : Type} (f : option A) (g : A -> option B) : option B :=
   match f with
   | Some a => g a
   | _ => None
+  end.
+
+Definition join {A : Type} (a : option (option A)) : option A :=
+  match a with
+  | None => None
+  | Some a' => a'
   end.
 
 Module Notation.

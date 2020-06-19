@@ -131,7 +131,7 @@ Lemma declare_reg_state_incr :
        s.(st_st)
        s.(st_freshreg)
        s.(st_freshstate)
-       (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
+       (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
@@ -142,7 +142,7 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_st)
                 s.(st_freshreg)
                 s.(st_freshstate)
-                (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
+                (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
                 s.(st_arrdecls)
                 s.(st_datapath)
                 s.(st_controllogic))
@@ -339,24 +339,24 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
-  match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Op.Aindexed off, r1::nil => (* FIXME: Cannot guarantee alignment *)
+  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Mint32, Op.Aindexed off, r1::nil => (* FIXME: Cannot guarantee alignment *)
     ret (Vvari stack (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (off / 4)))))
-  | Op.Ascaled scale offset, r1::nil =>
+  | Mint32, Op.Ascaled scale offset, r1::nil =>
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
     else error (Errors.msg "Htlgen: translate_arr_access address misaligned")
-  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
     then ret (Vvari stack
                     (Vbinop Vadd (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (offset / 4))))
                                  (boplitz Vmul r2 (scale / 4))))
     else error (Errors.msg "Htlgen: translate_arr_access address misaligned")
-  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
     if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
     else error (Errors.msg "Htlgen: eff_addressing misaligned stack offset")
-  | _, _ => error (Errors.msg "Htlgen: translate_arr_access unsupported addressing")
+  | _, _, _ => error (Errors.msg "Htlgen: translate_arr_access unsuported addressing")
   end.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
@@ -371,10 +371,10 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Iload mem addr args dst n' =>
       do src <- translate_arr_access mem addr args stack;
       do _ <- declare_reg None dst 32;
-      add_instr n n' (block dst src)
+      add_instr n n' (nonblock dst src)
     | Istore mem addr args src n' =>
       do dst <- translate_arr_access mem addr args stack;
-      add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -398,7 +398,7 @@ Lemma create_reg_state_incr:
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
+         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
          s.(st_arrdecls)
          (st_datapath s)
          (st_controllogic s)).
@@ -410,7 +410,7 @@ Definition create_reg (i : option io) (sz : nat) : mon reg :=
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
                    (st_arrdecls s)
                    (st_datapath s)
                    (st_controllogic s))
@@ -423,27 +423,28 @@ Lemma create_arr_state_incr:
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
          s.(st_scldecls)
-         (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
+         (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon reg :=
+Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
   fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
+           OK (r, ln) (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
                    s.(st_scldecls)
-                   (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
+                   (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
                    (st_datapath s)
                    (st_controllogic s))
               (create_arr_state_incr s sz ln i).
 
 Definition transf_module (f: function) : mon module :=
+  if (Z.eq_dec (Z.modulo f.(fn_stacksize) 4) 0) then
   do fin <- create_reg (Some Voutput) 1;
   do rtrn <- create_reg (Some Voutput) 32;
-  do stack <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
+  do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
   do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
   do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
   do start <- create_reg (Some Vinput) 1;
@@ -457,20 +458,22 @@ Definition transf_module (f: function) : mon module :=
          f.(fn_entrypoint)
          current_state.(st_st)
          stack
+         stack_len
          fin
          rtrn
          start
          rst
          clk
          current_state.(st_scldecls)
-         current_state.(st_arrdecls)).
+         current_state.(st_arrdecls))
+  else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
-          (AssocMap.set st (None, Scalar 32) (st_scldecls (init_state st)))
+          (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).

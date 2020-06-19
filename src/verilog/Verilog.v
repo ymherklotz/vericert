@@ -25,9 +25,11 @@ From Coq Require Import
   Lists.List
   Program.
 
+Require Import Lia.
+
 Import ListNotations.
 
-From coqup Require Import common.Coquplib common.Show verilog.Value AssocMap.
+From coqup Require Import common.Coquplib common.Show verilog.Value AssocMap Array.
 From compcert Require Integers Events.
 From compcert Require Import Errors Smallstep Globalenvs.
 
@@ -47,39 +49,51 @@ Record associations (A : Type) : Type :=
     assoc_nonblocking : AssocMap.t A
   }.
 
+Definition arr := (Array (option value)).
+
 Definition reg_associations := associations value.
-Definition arr_associations := associations (list value).
+Definition arr_associations := associations arr.
 
-Definition assocmap_arr := AssocMap.t (list value).
+Definition assocmap_reg := AssocMap.t value.
+Definition assocmap_arr := AssocMap.t arr.
 
-Definition merge_associations {A : Type} (assoc : associations A) :=
-  mkassociations (AssocMapExt.merge A assoc.(assoc_nonblocking) assoc.(assoc_blocking))
-                 (AssocMap.empty A).
+Definition merge_regs (new : assocmap_reg) (old : assocmap_reg) : assocmap_reg :=
+  AssocMapExt.merge value new old.
+
+Definition merge_cell (new : option value) (old : option value) : option value :=
+  match new, old with
+  | Some _, _ => new
+  | _, _ => old
+  end.
+
+Definition merge_arr (new : option arr) (old : option arr) : option arr :=
+  match new, old with
+  | Some new', Some old' => Some (combine merge_cell new' old')
+  | Some new', None => Some new'
+  | None, Some old' => Some old'
+  | None, None => None
+  end.
+
+Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :=
+  AssocMap.combine merge_arr new old.
 
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
   | None => None
-  | Some arr => nth_error arr i
+  | Some arr => Some (Option.default (NToValue 32 0) (Option.join (array_get_error i arr)))
   end.
 
-Fixpoint list_set {A : Type} (i : nat) (x : A) (l : list A) : list A :=
-  match i, l with
-  | _, nil => nil
-  | S n, h :: t => h :: list_set n x t
-  | O, h :: t => x :: t
-  end.
-
-Definition assocmap_l_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
+Definition arr_assocmap_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
   match a ! r with
   | None => a
-  | Some arr => AssocMap.set r (list_set i v arr) a
+  | Some arr => a # r <- (array_set i (Some v) arr)
   end.
 
 Definition block_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
-  mkassociations (assocmap_l_set r i v asa.(assoc_blocking)) asa.(assoc_nonblocking).
+  mkassociations (arr_assocmap_set r i v asa.(assoc_blocking)) asa.(assoc_nonblocking).
 
 Definition nonblock_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
-  mkassociations asa.(assoc_blocking) (assocmap_l_set r i v asa.(assoc_nonblocking)).
+  mkassociations asa.(assoc_blocking) (arr_assocmap_set r i v asa.(assoc_nonblocking)).
 
 Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
   mkassociations (AssocMap.set r v asr.(assoc_blocking)) asr.(assoc_nonblocking).
@@ -87,8 +101,8 @@ Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
 Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
   mkassociations asr.(assoc_blocking) (AssocMap.set r v asr.(assoc_nonblocking)).
 
-Inductive scl_decl : Type := Scalar (sz : nat).
-Inductive arr_decl : Type := Array (sz : nat) (ln : nat).
+Inductive scl_decl : Type := VScalar (sz : nat).
+Inductive arr_decl : Type := VArray (sz : nat) (ln : nat).
 
 (** * Verilog AST
 
@@ -218,6 +232,7 @@ Record module : Type := mkmodule {
   mod_return : reg;
   mod_st : reg; (**r Variable that defines the current state, it should be internal. *)
   mod_stk : reg;
+  mod_stk_len : nat;
   mod_args : list reg;
   mod_body : list module_item;
   mod_entrypoint : node;
@@ -235,7 +250,7 @@ Definition posToLit (p : positive) : expr :=
 Coercion Vlit : value >-> expr.
 Coercion Vvar : reg >-> expr.
 
-Definition fext := AssocMap.t value.
+Definition fext := assocmap.
 Definition fextclk := nat -> fext.
 
 (** ** State
@@ -272,8 +287,8 @@ Inductive state : Type :=
     forall (stack : list stackframe)
            (m : module)
            (st : node)
-           (reg_assoc : assocmap)
-           (arr_assoc : AssocMap.t (list value)), state
+           (reg_assoc : assocmap_reg)
+           (arr_assoc : assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -691,17 +706,19 @@ Fixpoint init_params (vl : list value) (rl : list reg) {struct rl} :=
   end.
 
 Definition genv := Globalenvs.Genv.t fundef unit.
+Definition empty_stack (m : module) : assocmap_arr :=
+  (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty arr)).
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
       forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g,
       mis_stepp f (mkassociations asr empty_assocmap)
-                  (mkassociations asa (AssocMap.empty (list value)))
+                  (mkassociations asa (empty_stack m))
                   m.(mod_body)
                   (mkassociations basr1 nasr1)
                   (mkassociations basa1 nasa1)->
-      asr' = merge_assocmap nasr1 basr1 ->
-      asa' = AssocMapExt.merge (list value) nasa1 basa1 ->
+      asr' = merge_regs nasr1 basr1 ->
+      asa' = merge_arrs nasa1 basa1 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
@@ -716,13 +733,13 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
          (State res m m.(mod_entrypoint)
           (AssocMap.set m.(mod_st) (posToValue 32 m.(mod_entrypoint))
            (init_params args m.(mod_args)))
-          (AssocMap.empty (list value)))
+          (empty_stack m))
 | step_return :
     forall g m asr i r sf pc mst,
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
          (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
-                (AssocMap.empty (list value))).
+                (empty_stack m)).
 Hint Constructors step : verilog.
 
 Inductive initial_state (p: program): state -> Prop :=

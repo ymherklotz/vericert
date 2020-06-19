@@ -163,11 +163,11 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
 | tr_instr_Iload :
     forall mem addr args s s' i c dst n,
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (block dst c) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (nonblock dst c) (state_goto st n)
 | tr_instr_Istore :
     forall mem addr args s s' i c src n,
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vblock c (Vvar src))
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
                (state_goto st n).
 Hint Constructors tr_instr : htlspec.
 
@@ -184,14 +184,16 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk m start rst clk scldecls arrdecls,
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls,
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-                    tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
+               tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
+      stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
+      Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk fin rtrn start rst clk scldecls arrdecls) ->
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls) ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
@@ -432,6 +434,12 @@ Proof.
 Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
+Lemma create_arr_inv : forall w x y z a b c d,
+    create_arr w x y z = OK (a, b) c d -> y = b.
+Proof.
+  inversion 1. reflexivity.
+Qed.
+
 Theorem transl_module_correct :
   forall f m,
     transl_module f = Errors.OK m -> tr_module f m.
@@ -444,12 +452,17 @@ Proof.
   inversion s; subst.
 
   unfold transf_module in *.
-  monadInv Heqr.
+  destruct (Z.eq_dec (RTL.fn_stacksize f mod 4) 0); monadInv Heqr.
+
+  (* TODO: We should be able to fold this into the automation. *)
+  pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN.
+  rewrite <- STK_LEN.
+
   econstructor; simpl; trivial.
   intros.
   inv_incr.
   assert (EQ3D := EQ3).
-  destruct x3.
+  destruct x4.
   apply collect_declare_datapath_trans in EQ3.
   apply collect_declare_controllogic_trans in EQ3D.
   assert (STC: st_controllogic s10 = st_controllogic s3) by congruence.

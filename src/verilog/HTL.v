@@ -17,7 +17,7 @@
  *)
 
 From Coq Require Import FSets.FMapPositive.
-From coqup Require Import Coquplib Value AssocMap.
+From coqup Require Import Coquplib Value AssocMap Array.
 From coqup Require Verilog.
 From compcert Require Events Globalenvs Smallstep Integers Values.
 From compcert Require Import Maps.
@@ -46,6 +46,7 @@ Record module: Type :=
     mod_entrypoint : node;
     mod_st : reg;
     mod_stk : reg;
+    mod_stk_len : nat;
     mod_finish : reg;
     mod_return : reg;
     mod_start : reg;
@@ -65,6 +66,9 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
   | _, _ => empty_assocmap
   end.
 
+Definition empty_stack (m : module) : Verilog.assocmap_arr :=
+  (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty Verilog.arr)).
+
 (** * Operational Semantics *)
 
 Definition genv := Globalenvs.Genv.t fundef unit.
@@ -74,7 +78,8 @@ Inductive stackframe : Type :=
     forall  (res : reg)
             (m : module)
             (pc : node)
-            (assoc : assocmap),
+            (reg_assoc : Verilog.assocmap_reg)
+            (arr_assoc : Verilog.assocmap_arr),
       stackframe.
 
 Inductive state : Type :=
@@ -82,8 +87,8 @@ Inductive state : Type :=
     forall (stack : list stackframe)
            (m : module)
            (st : node)
-           (reg_assoc : assocmap)
-           (arr_assoc : AssocMap.t (list value)), state
+           (reg_assoc : Verilog.assocmap_reg)
+           (arr_assoc : Verilog.assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -104,7 +109,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations asr empty_assocmap)
-        (Verilog.mkassociations asa (AssocMap.empty (list value)))
+        (Verilog.mkassociations asa (empty_stack m))
         ctrl
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1) ->
@@ -114,8 +119,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         data
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
-      asr' = merge_assocmap nasr2 basr2 ->
-      asa' = AssocMapExt.merge (list value) nasa2 basa2 ->
+      asr' = Verilog.merge_regs nasr2 basr2 ->
+      asa' = Verilog.merge_arrs nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
@@ -130,13 +135,12 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
            (State res m m.(mod_entrypoint)
              (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
                            (init_regs args m.(mod_params)))
-              (AssocMap.empty (list value)))
+             (empty_stack m))
 | step_return :
-    forall g m asr i r sf pc mst,
+    forall g m asr asa i r sf pc mst,
       mst = mod_st m ->
-      step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
-           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
-                  (AssocMap.empty (list value))).
+      step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
+           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i) asa).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
