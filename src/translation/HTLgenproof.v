@@ -69,20 +69,24 @@ Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe 
       match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
                        (HTL.Stackframe r m pc asr asa :: lr).
 
+Definition stack_based (v : Values.val) (sp : Values.block) : Prop :=
+   match v with
+   | Values.Vptr sp' off => sp' = sp
+   | _ => True
+   end.
+
 Definition reg_stack_based_pointers (sp : Values.block) (rs : Registers.Regmap.t Values.val) : Prop :=
-  forall r, match Registers.Regmap.get r rs with
-        | Values.Vptr sp' off => sp' = sp
-        | _ => True
-        end.
+  forall r, stack_based (Registers.Regmap.get r rs) sp.
 
 Definition arr_stack_based_pointers (spb : Values.block) (m : mem) (stack_length : Z)
   (sp : Values.val) : Prop :=
   forall ptr,
     0 <= ptr < (stack_length / 4) ->
-    match Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr))) with
-    | Some (Values.Vptr sp' off) => sp' = spb
-    | _ => True
-    end.
+    stack_based (Option.default
+                   Values.Vundef
+                   (Mem.loadv AST.Mint32 m
+                              (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr)))))
+                spb.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
@@ -514,7 +518,10 @@ Section CORRECTNESS.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
         econstructor. econstructor. econstructor. simplify.
-        econstructor. econstructor. econstructor. econstructor. simplify.
+        econstructor. econstructor. econstructor. simplify.
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ1]). (* FIXME: These will be shelved and cause sadness. *)
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ2]).
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ3]).
         econstructor.
         econstructor.
         econstructor.
@@ -523,9 +530,7 @@ Section CORRECTNESS.
         econstructor.
         econstructor.
         econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ4]).
         econstructor.
         econstructor.
         econstructor.
@@ -549,7 +554,135 @@ Section CORRECTNESS.
         unfold Verilog.merge_regs. unfold_merge.
         apply regs_lessdef_add_match.
 
-        all: admit.
+        pose proof H1.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
+        rewrite H4 in H5.
+        setoid_rewrite Integers.Ptrofs.add_zero_l in H5.
+
+        specialize (H5 (uvalueToZ
+                (vplus (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ3) (ZToValue 32 (z0 / 4)) ?EQ2)
+                   (vmul asr # r1 (ZToValue 32 (z / 4)) ?EQ4) ?EQ1))).
+
+        assert (0 <= uvalueToZ
+                      (vplus (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ3) (ZToValue 32 (z0 / 4)) ?EQ2)
+                             (vmul asr # r1 (ZToValue 32 (z / 4)) ?EQ4) ?EQ1) <
+                Z.of_nat (Z.to_nat (RTL.fn_stacksize f / 4))) by admit.
+        apply H5 in H6.
+
+        invert MASSOC.
+        pose proof (H7 r0).
+        pose proof (H7 r1).
+        assert (HPler0 : Ple r0 (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simplify; eauto).
+        assert (HPler1 : Ple r1 (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+        apply H8 in HPler0.
+        apply H10 in HPler1.
+        invert HPler0; invert HPler1; try congruence.
+        rewrite EQr0 in H12.
+        rewrite EQr1 in H13.
+
+        assert ((Integers.Ptrofs.unsigned
+            (Integers.Ptrofs.add i0
+               (Integers.Ptrofs.of_int
+                  (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z))
+                                    (Integers.Int.repr z0))))) =
+                (Integers.Ptrofs.unsigned
+               (Integers.Ptrofs.repr
+                  (4 *
+                   uvalueToZ
+                     (vplus
+                        (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ3)
+                           (ZToValue 32 (z0 / 4)) ?EQ2)
+                        (vmul asr # r1 (ZToValue 32 (z / 4)) ?EQ4)
+                        ?EQ1))))) by admit.
+
+        rewrite <- H19 in H6.
+        rewrite H0 in H6.
+        invert H6.
+        assert (forall x, Z.to_nat (uvalueToZ x) = valueToNat x) as VALUE_IDENTITY by admit.
+        rewrite VALUE_IDENTITY in H21.
+        assumption.
+
+        apply regs_lessdef_add_greater.
+        apply greater_than_max_func.
+        assumption.
+
+        unfold state_st_wf. inversion 1. simplify.
+        unfold Verilog.merge_regs.
+        unfold_merge. rewrite AssocMap.gso.
+        apply AssocMap.gss.
+        apply st_greater_than_res.
+
+        econstructor.
+        repeat split; simplify.
+        unfold HTL.empty_stack.
+        simplify.
+        unfold Verilog.merge_arrs.
+
+        rewrite AssocMap.gcombine.
+        2: { reflexivity. }
+        rewrite AssocMap.gss.
+        unfold Verilog.merge_arr.
+        setoid_rewrite H3.
+        reflexivity.
+
+        rewrite combine_length.
+        unfold arr_repeat. simplify.
+        rewrite list_repeat_len.
+        reflexivity.
+
+        unfold arr_repeat. simplify.
+        rewrite list_repeat_len.
+        congruence.
+
+        intros.
+        erewrite array_get_error_equal.
+        eauto. apply combine_none.
+        assumption.
+
+        unfold reg_stack_based_pointers. intros.
+        destruct (Pos.eq_dec r2 dst); subst.
+
+        rewrite Registers.Regmap.gss.
+
+        unfold arr_stack_based_pointers in ASBP.
+        specialize (ASBP ((Integers.Ptrofs.unsigned
+            (Integers.Ptrofs.add i0
+               (Integers.Ptrofs.of_int
+                  (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z))
+                     (Integers.Int.repr z0))))) / 4)).
+        exploit ASBP; auto; intros.
+        1: {
+          split.
+          - admit. (*apply Z.div_pos; lia.*)
+          - admit. (* apply Zmult_lt_reg_r with (p := 4); try lia. *)
+            (* repeat rewrite ZLib.div_mul_undo; lia. *)
+        }
+        replace (4 * ((Integers.Ptrofs.unsigned
+            (Integers.Ptrofs.add i0
+               (Integers.Ptrofs.of_int
+                  (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z))
+                     (Integers.Int.repr z0)))))  / 4)) with (Integers.Ptrofs.unsigned
+            (Integers.Ptrofs.add i0
+               (Integers.Ptrofs.of_int
+                  (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z))
+                     (Integers.Int.repr z0)))))  in H0.
+        2: {
+          rewrite Z.mul_comm.
+          admit.
+          (* rewrite ZLib.div_mul_undo; lia. *)
+        }
+        rewrite Integers.Ptrofs.repr_unsigned in H0.
+        simplify.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
+        rewrite H4 in H0.
+        setoid_rewrite Integers.Ptrofs.add_zero_l in H0.
+        rewrite H1 in H0.
+        simplify.
+        assumption.
+
+        rewrite Registers.Regmap.gso; auto.
 
       + invert MARR. simplify.
 
@@ -646,7 +779,32 @@ Section CORRECTNESS.
         eauto. apply combine_none.
         assumption.
 
-        (* FIXME: RSBP Proof. *)
+        unfold reg_stack_based_pointers. intros.
+        destruct (Pos.eq_dec r0 dst); subst.
+
+        rewrite Registers.Regmap.gss.
+
+        unfold arr_stack_based_pointers in ASBP.
+        specialize (ASBP (Integers.Ptrofs.unsigned i0 / 4)).
+        exploit ASBP; auto; intros.
+        1: {
+          split.
+          - apply Z.div_pos; lia.
+          - apply Zmult_lt_reg_r with (p := 4); try lia.
+            repeat rewrite ZLib.div_mul_undo; lia.
+        }
+        replace (4 * (Integers.Ptrofs.unsigned i0 / 4)) with (Integers.Ptrofs.unsigned i0) in H0.
+        2: {
+          rewrite Z.mul_comm.
+          rewrite ZLib.div_mul_undo; lia.
+        }
+        rewrite Integers.Ptrofs.repr_unsigned in H0.
+        simplify.
+        rewrite H1 in H0.
+        simplify.
+        assumption.
+
+        rewrite Registers.Regmap.gso; auto.
 
     - destruct c, chunk, addr, args; simplify; rt; simplify.
       + admit.
