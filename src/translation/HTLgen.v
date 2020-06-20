@@ -260,7 +260,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | _, _ => error (Errors.msg "Htlgen: eff_addressing instruction not implemented: other")
   end.
 
-(** Translate an instruction to a statement. *)
+(** Translate an instruction to a statement. FIX mulhs mulhu *)
 Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   match op, args with
   | Op.Omove, r::nil => ret (Vvar r)
@@ -269,8 +269,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Osub, r1::r2::nil => ret (bop Vsub r1 r2)
   | Op.Omul, r1::r2::nil => ret (bop Vmul r1 r2)
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
-  | Op.Omulhs, _ => error (Errors.msg "Htlgen: Instruction not implemented: Omulhs")
-  | Op.Omulhu, _ => error (Errors.msg "Htlgen: Instruction not implemented: Omulhu")
+  | Op.Omulhs, r1::r2::nil => ret (bop Vmul r1 r2)
+  | Op.Omulhu, r1::r2::nil => ret (bop Vmul r1 r2)
   | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
   | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
   | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
@@ -291,7 +291,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
                                                  (Vlit (intToValue n))))
   | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
-  | Op.Ororimm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Ororimm")
+  | Op.Ororimm n, r::nil => ret (Vbinop Vand (boplit Vshr r n) (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) n)))
   | Op.Oshldimm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Oshldimm")
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>
