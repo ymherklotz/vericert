@@ -19,7 +19,7 @@
 (* begin hide *)
 From bbv Require Import Word.
 From bbv Require HexNotation WordScope.
-From Coq Require Import ZArith.ZArith FSets.FMapPositive.
+From Coq Require Import ZArith.ZArith FSets.FMapPositive Lia.
 From compcert Require Import lib.Integers common.Values.
 (* end hide *)
 
@@ -335,7 +335,7 @@ Proof.
   rewrite uvalueToZ_ZToValue. auto. rewrite positive_nat_Z.
   split. apply Zle_0_pos.
 
-  assert (p < 2 ^ (Pos.size p))%positive. apply Pos.size_gt.
+  assert (p < 2 ^ (Pos.size p))%positive by apply Pos.size_gt.
   inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
   simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
 Qed.
@@ -366,3 +366,16 @@ Lemma boolToValue_ValueToBool :
   forall b,
   valueToBool (boolToValue 32 b) = b.
 Proof. destruct b; unfold valueToBool, boolToValue; simpl; trivial. Qed.
+
+Lemma ZToValue_valueToNat :
+  forall x sz,
+  (x < 2^(Z.of_nat sz))%Z ->
+  valueToNat (ZToValue sz x) = Z.to_nat x.
+Proof.
+  destruct x; intros; unfold ZToValue, valueToNat; simpl.
+  - rewrite wzero'_def. apply wordToNat_wzero.
+  - rewrite posToWord_nat. rewrite wordToNat_natToWord_2. auto.
+    inversion H. destruct (2 ^ Z.of_nat sz)%Z eqn:?; try discriminate.
+    Set Printing All.
+    Search positive Z.
+  - lia.
