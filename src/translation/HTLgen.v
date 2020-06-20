@@ -291,8 +291,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
                                                  (Vlit (intToValue n))))
   | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
-  | Op.Ororimm n, r::nil => ret (Vbinop Vand (boplit Vshr r n) (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) n)))
-  | Op.Oshldimm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Oshldimm")
+  | Op.Ororimm n, r::nil => ret (Vbinop Vor (boplit Vshr r n) (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) n)))
+  | Op.Oshldimm n, r::nil => ret (Vbinop Vor (boplit Vshl r n) (boplit Vshr r (Integers.Int.sub (Integers.Int.repr 32) n)))
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>
     do tc <- translate_condition c rl;
