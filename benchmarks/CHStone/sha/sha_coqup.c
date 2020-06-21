@@ -24,8 +24,6 @@
 /* NIST's proposed modification to SHA of 7/11/94 may be */
 /* activated by defining USE_MODIFIED_SHA */
 
-#include <stdio.h>
-
 /* NIST Secure Hash Algorithm */
 /* heavily modified from Peter C. Gutmann's implementation */
 
@@ -1348,10 +1346,8 @@ main ()
 
       for (i = 0; i < 5; i++)
 	{
-    printf("%d: %x == %x\n", i, sha_info_digest[i], outData[i]);
 	  main_result += (sha_info_digest[i] != outData[i]);
 	}
-      printf ("%d\n", main_result);
 
       return main_result;
     }

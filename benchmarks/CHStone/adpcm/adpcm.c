@@ -62,7 +62,6 @@
 /*                                                                       */
 /*                                                                       */
 /*************************************************************************/
-#include <stdio.h>
 
 int encode (int, int);
 void decode (int);
@@ -250,23 +249,23 @@ encode (int xin1, int xin2)
   int i;
   const int *h_ptr;
   int *tqmf_ptr, *tqmf_ptr1;
-  long int xa, xb;
+   int xa, xb;
   int decis;
 
 /* transmit quadrature mirror filters implemented here */
   h_ptr = h;
   tqmf_ptr = tqmf;
-  xa = (long) (*tqmf_ptr++) * (*h_ptr++);
-  xb = (long) (*tqmf_ptr++) * (*h_ptr++);
+  xa = (int) (*tqmf_ptr++) * (*h_ptr++);
+  xb = (int) (*tqmf_ptr++) * (*h_ptr++);
 /* main multiply accumulate loop for samples and coefficients */
   for (i = 0; i < 10; i++)
     {
-      xa += (long) (*tqmf_ptr++) * (*h_ptr++);
-      xb += (long) (*tqmf_ptr++) * (*h_ptr++);
+      xa += (int) (*tqmf_ptr++) * (*h_ptr++);
+      xb += (int) (*tqmf_ptr++) * (*h_ptr++);
     }
 /* final mult/accumulate */
-  xa += (long) (*tqmf_ptr++) * (*h_ptr++);
-  xb += (long) (*tqmf_ptr) * (*h_ptr++);
+  xa += (int) (*tqmf_ptr++) * (*h_ptr++);
+  xb += (int) (*tqmf_ptr) * (*h_ptr++);
 
 /* update delay line tqmf */
   tqmf_ptr1 = tqmf_ptr - 2;
@@ -298,7 +297,7 @@ encode (int xin1, int xin2)
 
 /* computes quantized difference signal */
 /* for invqbl, truncate by 2 lsbs, so mode = 3 */
-  dlt = ((long) detl * qq4_code4_table[il >> 2]) >> 15;
+  dlt = ((int) detl * qq4_code4_table[il >> 2]) >> 15;
 
 /* logscl: updates logarithmic quant. scale factor in low sub band */
   nbl = logscl (il, nbl);
@@ -354,12 +353,12 @@ encode (int xin1, int xin2)
     {
       ih = 1;			/* 0,1 are neg codes */
     }
-  decis = (564L * (long) deth) >> 12L;
+  decis = (564L * (int) deth) >> 12L;
   if (abs (eh) > decis)
     ih--;			/* mih = 2 case */
 
 /* compute the quantized difference signal, higher sub-band*/
-  dh = ((long) deth * qq2_code2_table[ih]) >> 15L;
+  dh = ((int) deth * qq2_code2_table[ih]) >> 15L;
 
 /* logsch: update logarithmic quantizer scale factor in hi sub-band*/
   nbh = logsch (ih, nbh);
@@ -401,7 +400,7 @@ void
 decode (int input)
 {
   int i;
-  long int xa1, xa2;		/* qmf accumulators */
+   int xa1, xa2;		/* qmf accumulators */
   const int *h_ptr;
   int *ac_ptr, *ac_ptr1, *ad_ptr, *ad_ptr1;
 
@@ -420,10 +419,10 @@ decode (int input)
   dec_sl = dec_spl + dec_szl;
 
 /* compute quantized difference signal for adaptive predic */
-  dec_dlt = ((long) dec_detl * qq4_code4_table[ilr >> 2]) >> 15;
+  dec_dlt = ((int) dec_detl * qq4_code4_table[ilr >> 2]) >> 15;
 
 /* compute quantized difference signal for decoder output */
-  dl = ((long) dec_detl * qq6_code6_table[il]) >> 15;
+  dl = ((int) dec_detl * qq6_code6_table[il]) >> 15;
 
   rl = dl + dec_sl;
 
@@ -467,7 +466,7 @@ decode (int input)
   dec_sh = dec_sph + dec_szh;
 
 /* in-place compute the quantized difference signal */
-  dec_dh = ((long) dec_deth * qq2_code2_table[ih]) >> 15L;
+  dec_dh = ((int) dec_deth * qq2_code2_table[ih]) >> 15L;
 
 /* logsch: update logarithmic quantizer scale factor in hi sub band */
   dec_nbh = logsch (ih, dec_nbh);
@@ -506,17 +505,17 @@ decode (int input)
   h_ptr = h;
   ac_ptr = accumc;
   ad_ptr = accumd;
-  xa1 = (long) xd *(*h_ptr++);
-  xa2 = (long) xs *(*h_ptr++);
+  xa1 = (int) xd *(*h_ptr++);
+  xa2 = (int) xs *(*h_ptr++);
 /* main multiply accumulate loop for samples and coefficients */
   for (i = 0; i < 10; i++)
     {
-      xa1 += (long) (*ac_ptr++) * (*h_ptr++);
-      xa2 += (long) (*ad_ptr++) * (*h_ptr++);
+      xa1 += (int) (*ac_ptr++) * (*h_ptr++);
+      xa2 += (int) (*ad_ptr++) * (*h_ptr++);
     }
 /* final mult/accumulate */
-  xa1 += (long) (*ac_ptr) * (*h_ptr++);
-  xa2 += (long) (*ad_ptr) * (*h_ptr++);
+  xa1 += (int) (*ac_ptr) * (*h_ptr++);
+  xa2 += (int) (*ad_ptr) * (*h_ptr++);
 
 /* scale by 2^14 */
   xout1 = xa1 >> 14;
@@ -581,10 +580,10 @@ int
 filtez (int *bpl, int *dlt)
 {
   int i;
-  long int zl;
-  zl = (long) (*bpl++) * (*dlt++);
+  int zl;
+  zl = (int) (*bpl++) * (*dlt++);
   for (i = 1; i < 6; i++)
-    zl += (long) (*bpl++) * (*dlt++);
+    zl += (int) (*bpl++) * (*dlt++);
 
   return ((int) (zl >> 14));	/* x2 here */
 }
@@ -595,11 +594,11 @@ filtez (int *bpl, int *dlt)
 int
 filtep (int rlt1, int al1, int rlt2, int al2)
 {
-  long int pl, pl2;
+  int pl, pl2;
   pl = 2 * rlt1;
-  pl = (long) al1 *pl;
+  pl = (int) al1 *pl;
   pl2 = 2 * rlt2;
-  pl += (long) al2 *pl2;
+  pl += (int) al2 *pl2;
   return ((int) (pl >> 15));
 }
 
@@ -608,14 +607,14 @@ int
 quantl (int el, int detl)
 {
   int ril, mil;
-  long int wd, decis;
+  int wd, decis;
 
 /* abs of difference signal */
   wd = abs (el);
 /* determine mil based on decision levels and detl gain */
   for (mil = 0; mil < 30; mil++)
     {
-      decis = (decis_levl[mil] * (long) detl) >> 15L;
+      decis = (decis_levl[mil] * (int) detl) >> 15L;
       if (wd <= decis)
 	break;
     }
@@ -633,8 +632,8 @@ quantl (int el, int detl)
 int
 logscl (int il, int nbl)
 {
-  long int wd;
-  wd = ((long) nbl * 127L) >> 7L;	/* leak factor 127/128 */
+  int wd;
+  wd = ((int) nbl * 127L) >> 7L;	/* leak factor 127/128 */
   nbl = (int) wd + wl_code_table[il >> 2];
   if (nbl < 0)
     nbl = 0;
@@ -674,7 +673,7 @@ upzero (int dlt, int *dlti, int *bli)
     {
       for (i = 0; i < 6; i++)
 	{
-	  if ((long) dlt * dlti[i] >= 0)
+	  if ((int) dlt * dlti[i] >= 0)
 	    wd2 = 128;
 	  else
 	    wd2 = -128;
@@ -697,13 +696,13 @@ upzero (int dlt, int *dlti, int *bli)
 int
 uppol2 (int al1, int al2, int plt, int plt1, int plt2)
 {
-  long int wd2, wd4;
+  int wd2, wd4;
   int apl2;
-  wd2 = 4L * (long) al1;
-  if ((long) plt * plt1 >= 0L)
+  wd2 = 4L * (int) al1;
+  if ((int) plt * plt1 >= 0L)
     wd2 = -wd2;			/* check same sign */
   wd2 = wd2 >> 7;		/* gain of 1/128 */
-  if ((long) plt * plt2 >= 0L)
+  if ((int) plt * plt2 >= 0L)
     {
       wd4 = wd2 + 128;		/* same sign case */
     }
@@ -711,7 +710,7 @@ uppol2 (int al1, int al2, int plt, int plt1, int plt2)
     {
       wd4 = wd2 - 128;
     }
-  apl2 = wd4 + (127L * (long) al2 >> 7L);	/* leak factor of 127/128 */
+  apl2 = wd4 + (127L * (int) al2 >> 7L);	/* leak factor of 127/128 */
 
 /* apl2 is limited to +-.75 */
   if (apl2 > 12288)
@@ -727,10 +726,10 @@ uppol2 (int al1, int al2, int plt, int plt1, int plt2)
 int
 uppol1 (int al1, int apl2, int plt, int plt1)
 {
-  long int wd2;
+  int wd2;
   int wd3, apl1;
-  wd2 = ((long) al1 * 255L) >> 8L;	/* leak factor of 255/256 */
-  if ((long) plt * plt1 >= 0L)
+  wd2 = ((int) al1 * 255L) >> 8L;	/* leak factor of 255/256 */
+  if ((int) plt * plt1 >= 0L)
     {
       apl1 = (int) wd2 + 192;	/* same sign case */
     }
@@ -754,7 +753,7 @@ int
 logsch (int ih, int nbh)
 {
   int wd;
-  wd = ((long) nbh * 127L) >> 7L;	/* leak factor 127/128 */
+  wd = ((int) nbh * 127L) >> 7L;	/* leak factor 127/128 */
   nbh = wd + wh_code_table[ih];
   if (nbh < 0)
     nbh = 0;
@@ -877,6 +876,5 @@ main ()
 	      main_result += 1;
 	    }
 	}
-      printf ("%d\n", main_result);
       return main_result;
     }
