@@ -246,18 +246,21 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
   end.
 
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
-  match a, args with
+  match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
-  | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
   | Op.Ascaled scale offset, r1::nil =>
-    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
-  | Op.Aindexed2scaled scale offset, r1::r2::nil =>
-    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-  (* Stack arrays/referenced variables *)
-  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
-    ret (Vlit (ZToValue 32 a))
-  | _, _ => error (Errors.msg "Veriloggen: eff_addressing instruction not implemented: other")
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+    then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in
+    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vlit (ZToValue 32 a))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+  | _, _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
 (** Translate an instruction to a statement. *)
@@ -335,7 +338,7 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
   match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Mint32, Op.Aindexed off, r1::nil => (* FIXME: Cannot guarantee alignment *)
+  | Mint32, Op.Aindexed off, r1::nil =>
     ret (Vvari stack (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (off / 4)))))
   | Mint32, Op.Ascaled scale offset, r1::nil =>
     if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
@@ -348,7 +351,7 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
                                  (boplitz Vmul r2 (scale / 4))))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
+    let a := Integers.Ptrofs.unsigned a in
     if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
     else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
   | _, _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
