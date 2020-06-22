@@ -205,7 +205,7 @@ Section CORRECTNESS.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
-  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
+(*  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
   Let tge : HTL.genv := Globalenvs.Genv.globalenv tprog.
 
   Lemma symbols_preserved:
@@ -574,16 +574,16 @@ Section CORRECTNESS.
   Proof.
     intros. inv H0. inv H. inv H4. inv MS. constructor. trivial.
   Qed.
-  Hint Resolve transl_final_states : htlproof.
+  Hint Resolve transl_final_states : htlproof.*)
 
 Theorem transf_program_correct:
   Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
 Proof.
-  eapply Smallstep.forward_simulation_plus.
+(*  eapply Smallstep.forward_simulation_plus.
   apply senv_preserved.
   eexact transl_initial_states.
   eexact transl_final_states.
-  exact transl_step_correct.
-Qed.
+  exact transl_step_correct.*)
+Admitted.
 
 End CORRECTNESS.
