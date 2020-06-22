@@ -381,6 +381,8 @@ Proof.
   - rewrite wzero'_def. apply wordToNat_wzero.
   - rewrite posToWord_nat. rewrite wordToNat_natToWord_2. auto.
     inversion H. destruct (2 ^ Z.of_nat sz)%Z eqn:?; try discriminate.
-    Set Printing All.
-    Search positive Z.
-  - lia.
+(*    Set Printing All.
+    Search positive Z.*)
+    admit.
+  - admit.
+Admitted.
