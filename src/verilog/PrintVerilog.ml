@@ -188,14 +188,16 @@ let debug_always i clk state = concat [
   ]
 
 let pprint_module debug i n m =
-  let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
-  let outputs = [m.mod_finish; m.mod_return] in
-  concat [ indent i; "module "; (extern_atom n);
-           "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-           fold_map (pprint_module_item (i+1)) m.mod_body;
-           if debug then debug_always i m.mod_clk m.mod_st else "";
-           indent i; "endmodule\n\n"
-         ]
+  if (extern_atom n) = "main" then
+    let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
+    let outputs = [m.mod_finish; m.mod_return] in
+    concat [ indent i; "module "; (extern_atom n);
+             "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
+             fold_map (pprint_module_item (i+1)) m.mod_body;
+             if debug then debug_always i m.mod_clk m.mod_st else "";
+             indent i; "endmodule\n\n"
+           ]
+  else ""
 
 let print_result pp lst =
   let rec print_result_in pp = function
