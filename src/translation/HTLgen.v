@@ -199,6 +199,41 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
 
+Lemma add_node_skip_state_incr :
+  forall s n st,
+    (st_datapath s)!n = None ->
+    (st_controllogic s)!n = None ->
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       (AssocMap.set n Vskip s.(st_datapath))
+       (AssocMap.set n st s.(st_controllogic))).
+Proof.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
+
+Definition add_node_skip (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
+    | left STM, left TRANS =>
+      OK tt (mkstate
+               s.(st_st)
+               s.(st_freshreg)
+               (st_freshstate s)
+               s.(st_scldecls)
+               s.(st_arrdecls)
+               (AssocMap.set n Vskip s.(st_datapath))
+               (AssocMap.set n st s.(st_controllogic)))
+         (add_node_skip_state_incr s n st STM TRANS)
+    | _, _ => Error (Errors.msg "HTL.add_instr")
+    end.
+
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
 Definition block (dst : reg) (e : expr) := Vblock (Vvar dst) e.
 
@@ -359,6 +394,18 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
   | _, _ => error (Errors.msg "Htlgen: translate_arr_access unsupported addressing")
   end.
 
+Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
+  match ns with
+  | n :: ns' => (i, n) :: enumerate (i+1) ns'
+  | nil => nil
+  end.
+
+Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
+  List.map (fun a => match a with
+                    (i, n) => (Vlit (natToValue 32 i), Vnonblock (Vvar st) (Vlit (posToValue 32 n)))
+                  end)
+           (enumerate 0 ns).
+
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
@@ -381,7 +428,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icond cond args n1 n2 =>
       do e <- translate_condition cond args;
       add_branch_instr e n n1 n2
-    | Ijumptable _ _ => error (Errors.msg "Jumptable not implemented")
+    | Ijumptable r tbl =>
+      do s <- get;
+      add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
     | Ireturn r =>
       match r with
       | Some r' =>
