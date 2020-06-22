@@ -684,6 +684,7 @@ Section CORRECTNESS.
         rewrite Integers.Ptrofs.add_zero_l in H0.
         rewrite H1 in H0.
         assumption.
+        simplify.
 
         rewrite Registers.Regmap.gso; auto.
 
@@ -925,43 +926,24 @@ Section CORRECTNESS.
         destruct (Pos.eq_dec r2 dst); subst.
 
         rewrite Registers.Regmap.gss.
-
         unfold arr_stack_based_pointers in ASBP.
-        (* specialize (ASBP ((Integers.Ptrofs.unsigned *)
-        (*     (Integers.Ptrofs.add i0 *)
-        (*        (Integers.Ptrofs.of_int *)
-        (*           (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z)) *)
-        (*              (Integers.Int.repr z0))))) / 4)). *)
-        (* exploit ASBP; auto; intros. *)
-        (* 1: { *)
-        (*   split. *)
-        (*   - admit. (*apply Z.div_pos; lia.*) *)
-        (*   - admit. (* apply Zmult_lt_reg_r with (p := 4); try lia. *) *)
-        (*     (* repeat rewrite ZLib.div_mul_undo; lia. *) *)
-        (* } *)
-        (* replace (4 * ((Integers.Ptrofs.unsigned *)
-        (*     (Integers.Ptrofs.add i0 *)
-        (*        (Integers.Ptrofs.of_int *)
-        (*           (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z)) *)
-        (*              (Integers.Int.repr z0)))))  / 4)) with (Integers.Ptrofs.unsigned *)
-        (*     (Integers.Ptrofs.add i0 *)
-        (*        (Integers.Ptrofs.of_int *)
-        (*           (Integers.Int.add (Integers.Int.mul i1 (Integers.Int.repr z)) *)
-        (*              (Integers.Int.repr z0)))))  in H0. *)
-        (* 2: { *)
-        (*   rewrite Z.mul_comm. *)
-        (*   admit. *)
-        (*   (* rewrite ZLib.div_mul_undo; lia. *) *)
-        (* } *)
-        (* rewrite Integers.Ptrofs.repr_unsigned in H0. *)
-        (* simplify. *)
-        (* assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity. *)
-        (* rewrite H4 in H0. *)
-        (* setoid_rewrite Integers.Ptrofs.add_zero_l in H0. *)
-        (* rewrite H1 in H0. *)
-        (* simplify. *)
-        (* assumption. *)
+        specialize (ASBP (Integers.Ptrofs.unsigned
+                            (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                                 (Integers.Ptrofs.of_int
+                                                    (Integers.Int.add
+                                                       (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr (z / 4)))
+                                                       (Integers.Int.repr (z0 / 4))))))).
+        exploit ASBP; auto; intros.
         admit.
+
+        rewrite <- NORMALISE in H0.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
+        rewrite H19 in H0. clear H19.
+        simplify.
+        rewrite Integers.Ptrofs.add_zero_l in H0.
+        rewrite H1 in H0.
+        assumption.
+        simplify.
 
         rewrite Registers.Regmap.gso; auto.
 
