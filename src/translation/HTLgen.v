@@ -252,7 +252,10 @@ Definition check_address_parameter (p : Z) : bool :=
 
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
+  | Op.Aindexed off, r1::nil =>
+    if (check_address_parameter off)
+    then ret (boplitz Vadd r1 off)
+    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
   | Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
@@ -345,7 +348,9 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
   match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Mint32, Op.Aindexed off, r1::nil =>
-    ret (Vvari stack (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (off / 4)))))
+    if (check_address_parameter off)
+    then ret (Vvari stack (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (off / 4)))))
+    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
   | Mint32, Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))

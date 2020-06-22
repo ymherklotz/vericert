@@ -488,17 +488,212 @@ Section CORRECTNESS.
         | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
         end.
 
-    - (* FIXME: Should be able to use the spec to avoid destructing here. *)
+    - (* FIXME: Should be able to use the spec to avoid destructing here? *)
       destruct c, chunk, addr, args; simplify; rt; simplify.
 
-      + admit. (* FIXME: Alignment *)
+      + (** Preamble *)
+        invert MARR. simplify.
+
+        unfold Op.eval_addressing in H0.
+        destruct (Archi.ptr64) eqn:ARCHI; simplify.
+
+        unfold reg_stack_based_pointers in RSBP.
+        pose proof (RSBP r0) as RSBPr0.
+
+        destruct (Registers.Regmap.get r0 rs) eqn:EQr0; simplify.
+
+        rewrite ARCHI in H1. simplify.
+        subst.
+
+        pose proof MASSOC as MASSOC'.
+        invert MASSOC'.
+        pose proof (H0 r0).
+        assert (HPler0 : Ple r0 (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simplify; eauto).
+        apply H4 in HPler0.
+        invert HPler0; try congruence.
+        rewrite EQr0 in H6.
+        invert H6.
+        clear H0. clear H4.
+
+        unfold check_address_parameter in *. simplify.
+
+        (** Normalisation proof *)
+        assert
+          (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+                               (Integers.Ptrofs.of_int (Integers.Int.repr z))
+           =
+           Integers.Ptrofs.repr
+             (4 *
+              Integers.Ptrofs.unsigned
+                (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                     (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4))))))
+          as NORMALISE.
+        etransitivity.
+        2: {
+          replace (4 *
+                   Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                          (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))
+          with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4) *
+                   Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                          (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4))))).
+          2: { rewrite Integers.Ptrofs.unsigned_repr_eq.
+               rewrite Z.mod_small. reflexivity.
+               simplify. lia. }
+
+          rewrite <- PtrofsExtra.mul_unsigned.
+          rewrite Integers.Ptrofs.mul_add_distr_r.
+          rewrite PtrofsExtra.mul_repr; simplify; try lia.
+          rewrite ZLib.div_mul_undo; try lia.
+          rewrite mul_of_int; simplify; try lia.
+          rewrite IntExtra.mul_repr; simplify; try lia.
+          rewrite ZLib.div_mul_undo; try lia.
+          reflexivity.
+
+          split.
+          apply Z.div_le_lower_bound; lia.
+          apply Z.div_le_upper_bound; lia.
+
+          admit. (* FIXME: Register size 32 bits *) }
+        reflexivity.
+
+        remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+                                      (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
+
+        (** Read bounds assumption *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+
+        eexists. split.
+        eapply Smallstep.plus_one.
+        eapply HTL.step_module; eauto.
+        econstructor. econstructor. econstructor. simplify.
+        econstructor. econstructor. econstructor. simplify.
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ1]). (* FIXME: These will be shelved and cause sadness. *)
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ2]).
+        econstructor. econstructor. econstructor. econstructor.
+        econstructor. econstructor. econstructor. econstructor.
+
+        (** Verilog array lookup *)
+        unfold Verilog.arr_assocmap_lookup. simplify. setoid_rewrite H3.
+        f_equal.
+
+        (** State Lookup *)
+        unfold Verilog.merge_regs.
+        simplify.
+        unfold_merge.
+        rewrite AssocMap.gso.
+        apply AssocMap.gss.
+        apply st_greater_than_res.
+
+        (** Match states *)
+        rewrite assumption_32bit.
+        econstructor; eauto.
+
+        (** Match assocmaps *)
+        unfold Verilog.merge_regs. simplify. unfold_merge.
+        apply regs_lessdef_add_match.
+
+        (** Equality proof *)
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
+        rewrite H0 in H5. clear H0.
+        setoid_rewrite Integers.Ptrofs.add_zero_l in H5.
+
+        specialize (H5 (Integers.Ptrofs.unsigned
+                          (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                               (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))).
+
+        exploit H5; auto; intros.
+        rewrite Z2Nat.id.
+        split.
+        apply Integers.Ptrofs.unsigned_range_2.
+        admit.
+        apply Z_div_pos; lia.
+        clear H5.
+
+        assert (Z.to_nat
+                  (Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                          (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))
+                =
+                valueToNat (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ2) (ZToValue 32 (z / 4)) ?EQ1))
+        as EXPR_OK by admit.
+
+        rewrite <- EXPR_OK.
+        rewrite <- NORMALISE in H0.
+        rewrite H1 in H0.
+        invert H0. assumption.
+
+        (** PC match *)
+        apply regs_lessdef_add_greater.
+        apply greater_than_max_func.
+        assumption.
+
+        (** States well formed *)
+        unfold state_st_wf. inversion 1. simplify.
+        unfold Verilog.merge_regs.
+        unfold_merge. rewrite AssocMap.gso.
+        apply AssocMap.gss.
+        apply st_greater_than_res.
+
+        (** Match arrays *)
+        econstructor.
+        repeat split; simplify.
+        unfold HTL.empty_stack.
+        simplify.
+        unfold Verilog.merge_arrs.
+
+        rewrite AssocMap.gcombine.
+        2: { reflexivity. }
+        rewrite AssocMap.gss.
+        unfold Verilog.merge_arr.
+        setoid_rewrite H3.
+        reflexivity.
+
+        rewrite combine_length.
+        unfold arr_repeat. simplify.
+        rewrite list_repeat_len.
+        reflexivity.
+
+        unfold arr_repeat. simplify.
+        rewrite list_repeat_len.
+        congruence.
+
+        intros.
+        erewrite array_get_error_equal.
+        eauto. apply combine_none.
+        assumption.
+
+        (** RSBP preservation *)
+        unfold reg_stack_based_pointers. intros.
+        destruct (Pos.eq_dec r1 dst); subst.
+
+        rewrite Registers.Regmap.gss.
+        unfold arr_stack_based_pointers in ASBP.
+        specialize (ASBP (Integers.Ptrofs.unsigned
+                            (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
+                                                 (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))).
+        exploit ASBP; auto; intros.
+        admit.
+
+        rewrite <- NORMALISE in H0.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
+        rewrite H10 in H0. clear H10.
+        simplify.
+        rewrite Integers.Ptrofs.add_zero_l in H0.
+        rewrite H1 in H0.
+        assumption.
+
+        rewrite Registers.Regmap.gso; auto.
 
       + (* FIXME: Why is this degenerate? Should we support this mode? *)
         unfold Op.eval_addressing in H0.
         destruct (Archi.ptr64) eqn:ARCHI; simplify.
         destruct (Registers.Regmap.get r0 rs) eqn:EQr0; discriminate.
 
-      + invert MARR. simplify.
+      + (** Preamble *)
+        invert MARR. simplify.
 
         unfold Op.eval_addressing in H0.
         destruct (Archi.ptr64) eqn:ARCHI; simplify.
@@ -598,28 +793,27 @@ Section CORRECTNESS.
                                          (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
                                                            (Integers.Int.repr z0)))) as OFFSET.
 
-        (** Here we are assuming that any stack read will be within the bounds
-            of the activation record. *)
+        (** Read bounds assumption *)
         assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
-        (* Proof begins in earnest here. *)
+        (** Start of proof proper *)
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
         econstructor. econstructor. econstructor. simplify.
         econstructor. econstructor. econstructor. simplify.
-        eapply Verilog.erun_Vbinop with (EQ := ?[EQ1]). (* FIXME: These will be shelved and cause sadness. *)
-        eapply Verilog.erun_Vbinop with (EQ := ?[EQ2]).
-        eapply Verilog.erun_Vbinop with (EQ := ?[EQ3]).
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ3]). (* FIXME: These will be shelved and cause sadness. *)
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ4]).
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ5]).
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        econstructor.
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ6]).
         econstructor.
         econstructor.
         econstructor.
@@ -628,19 +822,24 @@ Section CORRECTNESS.
         econstructor.
         econstructor. (* FIXME: Oh dear. *)
 
+        (** Verilog array lookup *)
         unfold Verilog.arr_assocmap_lookup. simplify. setoid_rewrite H3.
         f_equal.
 
-        simplify. unfold Verilog.merge_regs.
+        (** State Lookup *)
+        unfold Verilog.merge_regs.
+        simplify.
         unfold_merge.
         rewrite AssocMap.gso.
         apply AssocMap.gss.
         apply st_greater_than_res.
 
-        simplify. rewrite assumption_32bit.
-        econstructor; simplify; eauto.
+        (** Match states *)
+        rewrite assumption_32bit.
+        econstructor; eauto.
 
-        unfold Verilog.merge_regs. unfold_merge.
+        (** Match assocmaps *)
+        unfold Verilog.merge_regs. simplify. unfold_merge.
         apply regs_lessdef_add_match.
 
         (** Equality proof *)
@@ -674,23 +873,26 @@ Section CORRECTNESS.
                                  (Integers.Int.repr (z0 / 4))))))
                 =
                 valueToNat
-                (vplus (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ3) (ZToValue 32 (z0 / 4)) ?EQ2)
-                       (vmul asr # r1 (ZToValue 32 (z / 4)) ?EQ4) ?EQ1)) as EXPR_OK by admit.
+                (vplus (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ5) (ZToValue 32 (z0 / 4)) ?EQ4)
+                       (vmul asr # r1 (ZToValue 32 (z / 4)) ?EQ6) ?EQ3)) as EXPR_OK by admit.
         rewrite <- EXPR_OK.
         rewrite <- NORMALISE in H0.
         rewrite H1 in H0.
         invert H0. assumption.
 
+        (** PC match *)
         apply regs_lessdef_add_greater.
         apply greater_than_max_func.
         assumption.
 
+        (** States well formed *)
         unfold state_st_wf. inversion 1. simplify.
         unfold Verilog.merge_regs.
         unfold_merge. rewrite AssocMap.gso.
         apply AssocMap.gss.
         apply st_greater_than_res.
 
+        (** Match arrays *)
         econstructor.
         repeat split; simplify.
         unfold HTL.empty_stack.
@@ -718,6 +920,7 @@ Section CORRECTNESS.
         eauto. apply combine_none.
         assumption.
 
+        (** RSBP preservation *)
         unfold reg_stack_based_pointers. intros.
         destruct (Pos.eq_dec r2 dst); subst.
 
@@ -862,7 +1065,6 @@ Section CORRECTNESS.
         destruct (Pos.eq_dec r0 dst); subst.
 
         rewrite Registers.Regmap.gss.
-
         unfold arr_stack_based_pointers in ASBP.
         specialize (ASBP (Integers.Ptrofs.unsigned i0 / 4)).
         exploit ASBP; auto; intros.
