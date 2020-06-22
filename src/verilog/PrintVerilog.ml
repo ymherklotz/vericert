@@ -175,14 +175,29 @@ let testbench = "module testbench;
 endmodule
 "
 
-let pprint_module i n m =
-  let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
-  let outputs = [m.mod_finish; m.mod_return] in
-  concat [ indent i; "module "; (extern_atom n);
-           "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-           fold_map (pprint_module_item (i+1)) m.mod_body;
-           indent i; "endmodule\n\n"
-         ]
+let debug_always i clk state = concat [
+    indent i; "reg [31:0] count;\n";
+    indent i; "initial count = 0;\n";
+    indent i; "always @(posedge " ^ register clk ^ ") begin\n";
+    indent (i+1); "if(count[0:0] == 10'd0) begin\n";
+    indent (i+2); "$display(\"Cycle count %d\", count);\n";
+    indent (i+2); "$display(\"State %d\\n\", " ^ register state ^ ");\n";
+    indent (i+1); "end\n";
+    indent (i+1); "count <= count + 1;\n";
+    indent i; "end\n"
+  ]
+
+let pprint_module debug i n m =
+  if (extern_atom n) = "main" then
+    let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
+    let outputs = [m.mod_finish; m.mod_return] in
+    concat [ indent i; "module "; (extern_atom n);
+             "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
+             fold_map (pprint_module_item (i+1)) m.mod_body;
+             if debug then debug_always i m.mod_clk m.mod_st else "";
+             indent i; "endmodule\n\n"
+           ]
+  else ""
 
 let print_result pp lst =
   let rec print_result_in pp = function
@@ -195,11 +210,11 @@ let print_result pp lst =
 
 let print_value pp v = fprintf pp "%s" (literal v)
 
-let print_globdef pp (id, gd) =
+let print_globdef debug pp (id, gd) =
   match gd with
-  | Gfun(Internal f) -> pstr pp (pprint_module 0 id f)
+  | Gfun(Internal f) -> pstr pp (pprint_module debug 0 id f)
   | _ -> ()
 
-let print_program pp prog =
-  List.iter (print_globdef pp) prog.prog_defs;
+let print_program debug pp prog =
+  List.iter (print_globdef debug pp) prog.prog_defs;
   pstr pp testbench
