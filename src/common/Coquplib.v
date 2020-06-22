@@ -28,6 +28,7 @@ From coqup Require Import Show.
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
 From compcert.lib Require Export Coqlib.
+From compcert Require Integers.
 
 Ltac unfold_rec c := unfold c; fold c.
 
@@ -50,9 +51,61 @@ Ltac clear_obvious :=
          | [ H : _ /\ _ |- _ ] => invert H
          end.
 
-Ltac simplify := simpl in *; clear_obvious; simpl in *; try discriminate.
+Ltac kill_bools :=
+  repeat match goal with
+         | [ H : _ && _ = true |- _ ] => apply andb_prop in H
+         | [ H : _ || _ = false |- _ ] => apply orb_false_elim in H
+
+         | [ H : _ <=? _ = true |- _ ] => apply Z.leb_le in H
+         | [ H : _ <=? _ = false |- _ ] => apply Z.leb_gt in H
+         | [ H : _ <? _ = true |- _ ] => apply Z.ltb_lt in H
+         | [ H : _ <? _ = false |- _ ] => apply Z.ltb_ge in H
+         | [ H : _ >=? _ = _ |- _ ] => rewrite Z.geb_leb in H
+         | [ H : _ >? _ = _ |- _ ] => rewrite Z.gtb_ltb in H
+
+         | [ H : _ =? _ = true |- _ ] => apply Z.eqb_eq in H
+         | [ H : _ =? _ = false |- _ ] => apply Z.eqb_neq in H
+         end.
+
+Ltac unfold_constants :=
+  repeat match goal with
+         | [ _ : _ |- context[Integers.Ptrofs.modulus] ] =>
+           replace Integers.Ptrofs.modulus with 4294967296 by reflexivity
+         | [ H : context[Integers.Ptrofs.modulus] |- _ ] =>
+           replace Integers.Ptrofs.modulus with 4294967296 in H by reflexivity
+
+         | [ _ : _ |- context[Integers.Ptrofs.min_signed] ] =>
+           replace Integers.Ptrofs.min_signed with (-2147483648) by reflexivity
+         | [ H : context[Integers.Ptrofs.min_signed] |- _ ] =>
+           replace Integers.Ptrofs.min_signed with (-2147483648) in H by reflexivity
+
+         | [ _ : _ |- context[Integers.Ptrofs.max_signed] ] =>
+           replace Integers.Ptrofs.max_signed with 2147483647 by reflexivity
+         | [ H : context[Integers.Ptrofs.max_signed] |- _ ] =>
+           replace Integers.Ptrofs.max_signed with 2147483647 in H by reflexivity
+
+         | [ _ : _ |- context[Integers.Int.modulus] ] =>
+           replace Integers.Int.modulus with 4294967296 by reflexivity
+         | [ H : context[Integers.Int.modulus] |- _ ] =>
+           replace Integers.Int.modulus with 4294967296 in H by reflexivity
+
+         | [ _ : _ |- context[Integers.Int.min_signed] ] =>
+           replace Integers.Int.min_signed with (-2147483648) by reflexivity
+         | [ H : context[Integers.Int.min_signed] |- _ ] =>
+           replace Integers.Int.min_signed with (-2147483648) in H by reflexivity
+
+         | [ _ : _ |- context[Integers.Int.max_signed] ] =>
+           replace Integers.Int.max_signed with 2147483647 by reflexivity
+         | [ H : context[Integers.Int.max_signed] |- _ ] =>
+           replace Integers.Int.max_signed with 2147483647 in H by reflexivity
+         end.
+
+Ltac simplify := unfold_constants; simpl in *;
+                 repeat (clear_obvious; kill_bools);
+                 simpl in *; try discriminate.
 
 Global Opaque Nat.div.
+Global Opaque Z.mul.
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 

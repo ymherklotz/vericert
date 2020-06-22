@@ -248,7 +248,7 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
 Definition check_address_parameter (p : Z) : bool :=
   Z.eqb (Z.modulo p 4) 0
   && Z.leb Integers.Ptrofs.min_signed p
-  && Z.leb p Integers.Ptrofs.min_signed.
+  && Z.leb p Integers.Ptrofs.max_signed.
 
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
@@ -445,8 +445,11 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
                    (st_controllogic s))
               (create_arr_state_incr s sz ln i).
 
+Definition stack_correct (sz : Z) : bool :=
+  (0 <=? sz) && (Z.modulo sz 4 =? 0).
+
 Definition transf_module (f: function) : mon module :=
-  if (Z.eq_dec (Z.modulo f.(fn_stacksize) 4) 0) then
+  if stack_correct f.(fn_stacksize) then
   do fin <- create_reg (Some Voutput) 1;
   do rtrn <- create_reg (Some Voutput) 32;
   do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
