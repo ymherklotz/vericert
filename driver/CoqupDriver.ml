@@ -40,6 +40,7 @@ open Coqup.Diagnostics
 (* Coqup flags *)
 let option_simulate = ref false
 let option_hls = ref true
+let option_debug_hls = ref false
 
 (* Name used for version string etc. *)
 let tool_name = "C verified high-level synthesis"
@@ -100,7 +101,7 @@ let compile_c_file sourcename ifile ofile =
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     let oc = open_out ofile in
-    Coqup.PrintVerilog.print_program oc verilog;
+    Coqup.PrintVerilog.print_program !option_debug_hls oc verilog;
     close_out oc
   end
 
@@ -213,6 +214,7 @@ Processing options:
   -o <file>      Generate output in <file>
   --no-hls       Do not use HLS and generate standard flow.
   --simulate     Simulate the result with the Verilog semantics.
+  --debug-hls    Add debug logic to the Verilog.
 |} ^
   prepro_help ^
   language_support_help ^
@@ -313,6 +315,7 @@ let cmdline_actions =
 (* Use HLS *)
   [Exact "--no-hls", Unset option_hls;
    Exact "--simulate", Set option_simulate;
+   Exact "--debug-hls", Set option_debug_hls;
   ]
 (* Getting version info *)
   @ version_options tool_name @
