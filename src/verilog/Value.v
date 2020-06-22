@@ -294,6 +294,11 @@ Inductive val_value_lessdef: val -> value -> Prop :=
     forall i v',
     i = valueToInt v' ->
     val_value_lessdef (Vint i) v'
+| val_value_lessdef_ptr:
+    forall b off v',
+    off = Ptrofs.repr (valueToZ v') ->
+    (Z.modulo (valueToZ v') 4) = 0%Z ->
+    val_value_lessdef (Vptr b off) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
 
 Inductive opt_val_value_lessdef: option val -> value -> Prop :=
