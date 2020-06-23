@@ -374,15 +374,17 @@ Proof. destruct b; unfold valueToBool, boolToValue; simpl; trivial. Qed.
 
 Lemma ZToValue_valueToNat :
   forall x sz,
+  sz > 0 ->
   (x < 2^(Z.of_nat sz))%Z ->
   valueToNat (ZToValue sz x) = Z.to_nat x.
 Proof.
   destruct x; intros; unfold ZToValue, valueToNat; simpl.
   - rewrite wzero'_def. apply wordToNat_wzero.
-  - rewrite posToWord_nat. rewrite wordToNat_natToWord_2. auto.
-    inversion H. destruct (2 ^ Z.of_nat sz)%Z eqn:?; try discriminate.
-(*    Set Printing All.
-    Search positive Z.*)
-    admit.
-  - admit.
-Admitted.
+  - rewrite posToWord_nat. rewrite wordToNat_natToWord_2. trivial.
+    unfold Z.of_nat in *. destruct sz eqn:?. omega. simpl in H0.
+    rewrite <- Pos2Z.inj_pow_pos in H0. Search (Z.pos _ < Z.pos _)%Z.
+    Search Pos.to_nat (_ < _). (* Pos2Nat.inj_lt *)
+    Search Pos.to_nat.
+    (* Pos2Nat.is_succ: forall p : positive, exists n : nat, Pos.to_nat p = S n *)
+    Search S Pos.to_nat. Search (_ < _ <-> _)%positive. assert (exists p, Pos.to_nat p = S n).
+    econstructor. Search Pos2Nat.is_succ. Search Pos.of_succ_nat.
