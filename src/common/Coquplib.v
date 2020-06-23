@@ -84,6 +84,11 @@ Ltac unfold_constants :=
          | [ H : context[Integers.Ptrofs.max_signed] |- _ ] =>
            replace Integers.Ptrofs.max_signed with 2147483647 in H by reflexivity
 
+         | [ _ : _ |- context[Integers.Ptrofs.max_unsigned] ] =>
+           replace Integers.Ptrofs.max_unsigned with 4294967295 by reflexivity
+         | [ H : context[Integers.Ptrofs.max_unsigned] |- _ ] =>
+           replace Integers.Ptrofs.max_unsigned with 4294967295 in H by reflexivity
+
          | [ _ : _ |- context[Integers.Int.modulus] ] =>
            replace Integers.Int.modulus with 4294967296 by reflexivity
          | [ H : context[Integers.Int.modulus] |- _ ] =>
@@ -98,6 +103,11 @@ Ltac unfold_constants :=
            replace Integers.Int.max_signed with 2147483647 by reflexivity
          | [ H : context[Integers.Int.max_signed] |- _ ] =>
            replace Integers.Int.max_signed with 2147483647 in H by reflexivity
+
+         | [ _ : _ |- context[Integers.Int.max_unsigned] ] =>
+           replace Integers.Int.max_unsigned with 4294967295 by reflexivity
+         | [ H : context[Integers.Int.max_unsigned] |- _ ] =>
+           replace Integers.Int.max_unsigned with 4294967295 in H by reflexivity
          end.
 
 Ltac simplify := unfold_constants; simpl in *;

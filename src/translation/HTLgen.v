@@ -349,17 +349,18 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
   match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Mint32, Op.Aindexed off, r1::nil =>
     if (check_address_parameter off)
-    then ret (Vvari stack (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (off / 4)))))
+    then ret (Vvari stack (Vbinop Vdiv (boplitz Vadd r1 off) (Vlit (ZToValue 32 4))))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
   | Mint32, Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter scale) && (check_address_parameter offset)
-    then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
+    then ret (Vvari stack (Vbinop Vdiv (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset))) (Vlit (ZToValue 32 4))))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vvari stack
-                    (Vbinop Vadd (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (offset / 4))))
-                                 (boplitz Vmul r2 (scale / 4))))
+                    (Vbinop Vdiv
+                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+                            (ZToValue 32 4)))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
@@ -451,7 +452,7 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
               (create_arr_state_incr s sz ln i).
 
 Definition stack_correct (sz : Z) : bool :=
-  (0 <=? sz) && (Z.modulo sz 4 =? 0).
+  (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
 
 Definition transf_module (f: function) : mon module :=
   if stack_correct f.(fn_stacksize) then

@@ -380,7 +380,7 @@ Section CORRECTNESS.
       2: { reflexivity. }
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
-      setoid_rewrite H1.
+      setoid_rewrite H3.
       reflexivity.
 
       rewrite combine_length.
@@ -510,60 +510,58 @@ Section CORRECTNESS.
         pose proof (H0 r0).
         assert (HPler0 : Ple r0 (RTL.max_reg_function f))
           by (eapply RTL.max_reg_function_use; eauto; simplify; eauto).
-        apply H4 in HPler0.
+        apply H6 in HPler0.
         invert HPler0; try congruence.
-        rewrite EQr0 in H6.
-        invert H6.
-        clear H0. clear H4.
+        rewrite EQr0 in H8.
+        invert H8.
+        clear H0. clear H6.
 
         unfold check_address_parameter in *. simplify.
-
-        (** Normalisation proof *)
-        assert
-          (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
-                               (Integers.Ptrofs.of_int (Integers.Int.repr z))
-           =
-           Integers.Ptrofs.repr
-             (4 *
-              Integers.Ptrofs.unsigned
-                (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                     (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4))))))
-          as NORMALISE.
-        etransitivity.
-        2: {
-          replace (4 *
-                   Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                          (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))
-          with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4) *
-                   Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                          (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4))))).
-          2: { rewrite Integers.Ptrofs.unsigned_repr_eq.
-               rewrite Z.mod_small. reflexivity.
-               simplify. lia. }
-
-          rewrite <- PtrofsExtra.mul_unsigned.
-          rewrite Integers.Ptrofs.mul_add_distr_r.
-          rewrite PtrofsExtra.mul_repr; simplify; try lia.
-          rewrite ZLib.div_mul_undo; try lia.
-          rewrite mul_of_int; simplify; try lia.
-          rewrite IntExtra.mul_repr; simplify; try lia.
-          rewrite ZLib.div_mul_undo; try lia.
-          reflexivity.
-
-          split.
-          apply Z.div_le_lower_bound; lia.
-          apply Z.div_le_upper_bound; lia.
-
-          admit. (* FIXME: Register size 32 bits *) }
-        reflexivity.
 
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
                                       (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
         (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
+        assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+
+        (** Modular Preservation proof *)
+        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE by admit.
+
+        (** Normalisation proof *)
+        assert (Integers.Ptrofs.repr
+                  (4 * Integers.Ptrofs.unsigned
+                         (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
+          as NORMALISE.
+        { replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) at 1 by reflexivity.
+          rewrite <- PtrofsExtra.mul_unsigned.
+          apply PtrofsExtra.mul_divs; auto.
+          rewrite Integers.Ptrofs.signed_repr; simplify; lia. }
+
+        (** Normalised bounds proof *)
+        assert (0 <=
+                Integers.Ptrofs.unsigned (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))
+                < (RTL.fn_stacksize f / 4))
+        as NORMALISE_BOUND.
+        { split.
+          apply Integers.Ptrofs.unsigned_range_2.
+          assert (forall x y, Integers.Ptrofs.divs x y = Integers.Ptrofs.divs x y ) by reflexivity.
+          unfold Integers.Ptrofs.divs at 2 in H0.
+          rewrite H0. clear H0.
+          rewrite Integers.Ptrofs.unsigned_repr; simplify.
+          rewrite Integers.Ptrofs.signed_repr; simplify; try lia.
+          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
+          apply Zmult_lt_reg_r with (p := 4); try lia.
+          repeat rewrite ZLib.div_mul_undo; try lia.
+          rewrite Integers.Ptrofs.signed_repr.
+          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
+          split.
+          apply Z.div_pos; try (rewrite <- HeqOFFSET; assumption); try lia.
+          apply Z.div_le_upper_bound; simplify; try (rewrite <- HeqOFFSET; lia); try lia.
+          simplify; lia. }
+
+        inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
+        clear NORMALISE_BOUND.
 
         eexists. split.
         eapply Smallstep.plus_one.
@@ -575,8 +573,10 @@ Section CORRECTNESS.
         econstructor. econstructor. econstructor. econstructor.
         econstructor. econstructor. econstructor. econstructor.
 
+        all: simplify.
+
         (** Verilog array lookup *)
-        unfold Verilog.arr_assocmap_lookup. simplify. setoid_rewrite H3.
+        unfold Verilog.arr_assocmap_lookup. setoid_rewrite H5.
         f_equal.
 
         (** State Lookup *)
@@ -596,34 +596,33 @@ Section CORRECTNESS.
         apply regs_lessdef_add_match.
 
         (** Equality proof *)
-        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
-        rewrite H0 in H5. clear H0.
-        setoid_rewrite Integers.Ptrofs.add_zero_l in H5.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in H7. clear ZERO.
+        setoid_rewrite Integers.Ptrofs.add_zero_l in H7.
 
-        specialize (H5 (Integers.Ptrofs.unsigned
-                          (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                               (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))).
+        specialize (H7 (Integers.Ptrofs.unsigned
+                          (Integers.Ptrofs.divs
+                             OFFSET
+                             (Integers.Ptrofs.repr 4)))).
 
-        exploit H5; auto; intros.
-        rewrite Z2Nat.id.
-        split.
-        apply Integers.Ptrofs.unsigned_range_2.
-        admit.
-        apply Z_div_pos; lia.
-        clear H5.
+        exploit H7.
+        rewrite Z2Nat.id; eauto.
+        apply Z.div_pos; lia.
+
+        intros I.
 
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                          (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))
+                     (Integers.Ptrofs.divs
+                        OFFSET
+                        (Integers.Ptrofs.repr 4)))
                 =
-                valueToNat (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ2) (ZToValue 32 (z / 4)) ?EQ1))
-        as EXPR_OK by admit.
-
+                valueToNat (vdivs (vplus asr # r0 (ZToValue 32 z) ?EQ2) (ZToValue 32 4) ?EQ1))
+          as EXPR_OK by admit.
         rewrite <- EXPR_OK.
-        rewrite <- NORMALISE in H0.
-        rewrite H1 in H0.
-        invert H0. assumption.
+        rewrite NORMALISE in I.
+        rewrite H1 in I.
+        invert I. assumption.
 
         (** PC match *)
         apply regs_lessdef_add_greater.
@@ -648,7 +647,7 @@ Section CORRECTNESS.
         2: { reflexivity. }
         rewrite AssocMap.gss.
         unfold Verilog.merge_arr.
-        setoid_rewrite H3.
+        setoid_rewrite H5.
         reflexivity.
 
         rewrite combine_length.
@@ -667,22 +666,20 @@ Section CORRECTNESS.
 
         (** RSBP preservation *)
         unfold reg_stack_based_pointers. intros.
-        destruct (Pos.eq_dec r1 dst); subst.
+        destruct (Pos.eq_dec r1 dst); try rewrite e. (* FIXME: Prepare this for automation *)
 
         rewrite Registers.Regmap.gss.
         unfold arr_stack_based_pointers in ASBP.
         specialize (ASBP (Integers.Ptrofs.unsigned
-                            (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                                 (Integers.Ptrofs.of_int (Integers.Int.repr (z / 4)))))).
-        exploit ASBP; auto; intros.
-        admit.
+                            (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4)))).
+        exploit ASBP; auto; intros I.
 
-        rewrite <- NORMALISE in H0.
-        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
-        rewrite H10 in H0. clear H10.
+        rewrite NORMALISE in I.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in I. clear ZERO.
         simplify.
-        rewrite Integers.Ptrofs.add_zero_l in H0.
-        rewrite H1 in H0.
+        rewrite Integers.Ptrofs.add_zero_l in I.
+        rewrite H1 in I.
         assumption.
         simplify.
 
@@ -718,76 +715,15 @@ Section CORRECTNESS.
           by (eapply RTL.max_reg_function_use; eauto; simplify; eauto).
         assert (HPler1 : Ple r1 (RTL.max_reg_function f))
           by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
-        apply H4 in HPler0.
-        apply H6 in HPler1.
+        apply H6 in HPler0.
+        apply H8 in HPler1.
         invert HPler0; invert HPler1; try congruence.
-        rewrite EQr0 in H7.
-        rewrite EQr1 in H8.
-        invert H7. invert H8.
-        clear H0. clear H4. clear H6.
+        rewrite EQr0 in H10.
+        rewrite EQr1 in H12.
+        invert H10. invert H12.
+        clear H0. clear H6. clear H8.
 
         unfold check_address_parameter in *. simplify.
-
-        (** Normalisation proof *)
-        assert
-          (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
-                               (Integers.Ptrofs.of_int
-                                  (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
-                                                    (Integers.Int.repr z0)))
-           =
-           Integers.Ptrofs.repr
-             (4 *
-              Integers.Ptrofs.unsigned
-                (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                     (Integers.Ptrofs.of_int
-                                        (Integers.Int.add
-                                           (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr (z / 4)))
-                                           (Integers.Int.repr (z0 / 4))))))) as NORMALISE.
-        etransitivity.
-        2: {
-          replace (4 *
-                   Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                          (Integers.Ptrofs.of_int
-                                             (Integers.Int.add
-                                                (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr (z / 4)))
-                                                (Integers.Int.repr (z0 / 4)))))) with
-              (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4) *
-               Integers.Ptrofs.unsigned
-                 (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                      (Integers.Ptrofs.of_int
-                                         (Integers.Int.add
-                                            (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr (z / 4)))
-                                            (Integers.Int.repr (z0 / 4)))))).
-          2: { rewrite Integers.Ptrofs.unsigned_repr_eq.
-               rewrite Z.mod_small. reflexivity.
-               simplify. lia. }
-
-          rewrite <- PtrofsExtra.mul_unsigned.
-          rewrite Integers.Ptrofs.mul_add_distr_r.
-          rewrite PtrofsExtra.mul_repr; simplify; try lia.
-          rewrite ZLib.div_mul_undo; try lia.
-          rewrite mul_of_int; simplify; try lia.
-          rewrite Integers.Int.mul_add_distr_r.
-          rewrite Integers.Int.mul_commut.
-          rewrite Integers.Int.mul_assoc.
-          rewrite IntExtra.mul_repr; simplify; try lia.
-          rewrite IntExtra.mul_repr; simplify; try lia.
-          rewrite ZLib.div_mul_undo; try lia.
-          rewrite Z.mul_comm.
-          rewrite ZLib.div_mul_undo; try lia.
-          reflexivity.
-
-          split.
-          apply Z.div_le_lower_bound; lia.
-          apply Z.div_le_upper_bound; lia.
-
-          split.
-          apply Z.div_le_lower_bound; lia.
-          apply Z.div_le_upper_bound; lia.
-
-          admit. (* FIXME: Register size 32 bits *) }
-        reflexivity.
 
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
                                       (Integers.Ptrofs.of_int
@@ -795,7 +731,46 @@ Section CORRECTNESS.
                                                            (Integers.Int.repr z0)))) as OFFSET.
 
         (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
+        assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+
+        (** Modular Preservation proof *)
+        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE by admit.
+
+        (** Normalisation proof *)
+        assert (Integers.Ptrofs.repr
+                  (4 * Integers.Ptrofs.unsigned
+                         (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
+          as NORMALISE.
+        { replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) at 1 by reflexivity.
+          rewrite <- PtrofsExtra.mul_unsigned.
+          apply PtrofsExtra.mul_divs; auto.
+          rewrite Integers.Ptrofs.signed_repr; simplify; lia. }
+
+        (** Normalised bounds proof *)
+        assert (0 <=
+                Integers.Ptrofs.unsigned (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))
+                < (RTL.fn_stacksize f / 4))
+        as NORMALISE_BOUND.
+        { split.
+          apply Integers.Ptrofs.unsigned_range_2.
+          assert (forall x y, Integers.Ptrofs.divs x y = Integers.Ptrofs.divs x y ) by reflexivity.
+          unfold Integers.Ptrofs.divs at 2 in H0.
+          rewrite H0. clear H0.
+          rewrite Integers.Ptrofs.unsigned_repr; simplify.
+          rewrite Integers.Ptrofs.signed_repr; simplify; try lia.
+          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
+          apply Zmult_lt_reg_r with (p := 4); try lia.
+          repeat rewrite ZLib.div_mul_undo; try lia.
+          rewrite Integers.Ptrofs.signed_repr.
+          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
+          split.
+          apply Z.div_pos; try (rewrite <- HeqOFFSET; assumption); try lia.
+          apply Z.div_le_upper_bound; simplify; try (rewrite <- HeqOFFSET; lia); try lia.
+          simplify; lia. }
+
+        inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
+        clear NORMALISE_BOUND.
 
         (** Start of proof proper *)
         eexists. split.
@@ -806,25 +781,17 @@ Section CORRECTNESS.
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ3]). (* FIXME: These will be shelved and cause sadness. *)
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ4]).
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ5]).
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
+        econstructor. econstructor. econstructor. econstructor.
         econstructor.
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ6]).
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor.
-        econstructor. (* FIXME: Oh dear. *)
+        econstructor. econstructor. econstructor. econstructor.
+        econstructor. econstructor. econstructor. econstructor.
+        econstructor. econstructor.
+
+        all: simplify.
 
         (** Verilog array lookup *)
-        unfold Verilog.arr_assocmap_lookup. simplify. setoid_rewrite H3.
+        unfold Verilog.arr_assocmap_lookup. setoid_rewrite H5.
         f_equal.
 
         (** State Lookup *)
@@ -844,42 +811,33 @@ Section CORRECTNESS.
         apply regs_lessdef_add_match.
 
         (** Equality proof *)
-        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
-        rewrite H0 in H5. clear H0.
-        setoid_rewrite Integers.Ptrofs.add_zero_l in H5.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in H7. clear ZERO.
+        setoid_rewrite Integers.Ptrofs.add_zero_l in H7.
 
-        specialize (H5
-                      (Integers.Ptrofs.unsigned
-                         (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                              (Integers.Ptrofs.of_int
-                                                 (Integers.Int.add (Integers.Int.mul
-                                                                      (valueToInt asr # r1)
-                                                                      (Integers.Int.repr (z / 4)))
-                                                                   (Integers.Int.repr (z0 / 4))))))).
+        specialize (H7 (Integers.Ptrofs.unsigned
+                          (Integers.Ptrofs.divs
+                             OFFSET
+                             (Integers.Ptrofs.repr 4)))).
 
-        exploit H5; auto; intros.
-        rewrite Z2Nat.id.
-        split.
-        apply Integers.Ptrofs.unsigned_range_2.
-        admit.
-        apply Z_div_pos; lia.
-        clear H5.
+        exploit H7.
+        rewrite Z2Nat.id; eauto.
+        apply Z.div_pos; lia.
 
+        intros I.
         assert (Z.to_nat
-                     (Integers.Ptrofs.unsigned
-                        (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                           (Integers.Ptrofs.of_int
-                              (Integers.Int.add
-                                 (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr (z / 4)))
-                                 (Integers.Int.repr (z0 / 4))))))
-                =
-                valueToNat
-                (vplus (vplus (vdivs asr # r0 (ZToValue 32 4) ?EQ5) (ZToValue 32 (z0 / 4)) ?EQ4)
-                       (vmul asr # r1 (ZToValue 32 (z / 4)) ?EQ6) ?EQ3)) as EXPR_OK by admit.
+                  (Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.divs
+                        OFFSET
+                        (Integers.Ptrofs.repr 4)))
+                = valueToNat
+                    (vdivs (vplus (vplus asr # r0 (ZToValue 32 z0) ?EQ5)
+                                  (vmul asr # r1 (ZToValue 32 z) ?EQ6) ?EQ4) (ZToValue 32 4) ?EQ3))
+          as EXPR_OK by admit.
         rewrite <- EXPR_OK.
-        rewrite <- NORMALISE in H0.
-        rewrite H1 in H0.
-        invert H0. assumption.
+        rewrite NORMALISE in I.
+        rewrite H1 in I.
+        invert I. assumption.
 
         (** PC match *)
         apply regs_lessdef_add_greater.
@@ -904,7 +862,7 @@ Section CORRECTNESS.
         2: { reflexivity. }
         rewrite AssocMap.gss.
         unfold Verilog.merge_arr.
-        setoid_rewrite H3.
+        setoid_rewrite H5.
         reflexivity.
 
         rewrite combine_length.
@@ -923,25 +881,20 @@ Section CORRECTNESS.
 
         (** RSBP preservation *)
         unfold reg_stack_based_pointers. intros.
-        destruct (Pos.eq_dec r2 dst); subst.
+        destruct (Pos.eq_dec r2 dst); try rewrite e. (* FIXME: Prepare this for automation *)
 
         rewrite Registers.Regmap.gss.
         unfold arr_stack_based_pointers in ASBP.
         specialize (ASBP (Integers.Ptrofs.unsigned
-                            (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0 / 4))
-                                                 (Integers.Ptrofs.of_int
-                                                    (Integers.Int.add
-                                                       (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr (z / 4)))
-                                                       (Integers.Int.repr (z0 / 4))))))).
-        exploit ASBP; auto; intros.
-        admit.
+                            (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4)))).
+        exploit ASBP; auto; intros I.
 
-        rewrite <- NORMALISE in H0.
-        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) by reflexivity.
-        rewrite H19 in H0. clear H19.
+        rewrite NORMALISE in I.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in I. clear ZERO.
         simplify.
-        rewrite Integers.Ptrofs.add_zero_l in H0.
-        rewrite H1 in H0.
+        rewrite Integers.Ptrofs.add_zero_l in I.
+        rewrite H1 in I.
         assumption.
         simplify.
 
@@ -955,67 +908,124 @@ Section CORRECTNESS.
 
         unfold check_address_parameter in EQ; simplify.
 
-        (** Here we are assuming that any stack read will be within the bounds
-            of the activation record. *)
-        assert (Integers.Ptrofs.unsigned i0 < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in H1. clear ZERO.
+        rewrite Integers.Ptrofs.add_zero_l in H1.
 
+        remember i0 as OFFSET.
+
+        (** Read bounds assumption *)
+        assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
+        assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+
+        (** Modular Preservation proof *)
+        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE by admit.
+
+        (** Normalisation proof *)
+        assert (Integers.Ptrofs.repr
+                  (4 * Integers.Ptrofs.unsigned
+                         (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
+          as NORMALISE.
+        { replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) at 1 by reflexivity.
+          rewrite <- PtrofsExtra.mul_unsigned.
+          apply PtrofsExtra.mul_divs; auto.
+          rewrite Integers.Ptrofs.signed_repr; simplify; lia. }
+
+        (** Normalised bounds proof *)
+        assert (0 <=
+                Integers.Ptrofs.unsigned (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))
+                < (RTL.fn_stacksize f / 4))
+        as NORMALISE_BOUND.
+        { split.
+          apply Integers.Ptrofs.unsigned_range_2.
+          assert (forall x y, Integers.Ptrofs.divs x y = Integers.Ptrofs.divs x y ) by reflexivity.
+          unfold Integers.Ptrofs.divs at 2 in H0.
+          rewrite H0. clear H0.
+          rewrite Integers.Ptrofs.unsigned_repr; simplify.
+          rewrite Integers.Ptrofs.signed_repr; simplify; try lia.
+          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
+          apply Zmult_lt_reg_r with (p := 4); try lia.
+          repeat rewrite ZLib.div_mul_undo; try lia.
+          rewrite Integers.Ptrofs.signed_repr.
+          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
+          split.
+          apply Z.div_pos; try (rewrite <- HeqOFFSET; assumption); try lia.
+          apply Z.div_le_upper_bound; simplify; try (rewrite <- HeqOFFSET; lia); try lia.
+          simplify; lia. }
+
+        inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
+        clear NORMALISE_BOUND.
+
+        (** Start of proof proper *)
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
         econstructor. econstructor. econstructor. simplify.
         econstructor. econstructor. econstructor. econstructor. simplify.
 
-        unfold Verilog.arr_assocmap_lookup. setoid_rewrite H3.
+        all: simplify.
+
+        (** Verilog array lookup *)
+        unfold Verilog.arr_assocmap_lookup. setoid_rewrite H5.
         f_equal.
 
-        simplify. unfold Verilog.merge_regs.
+        (** State Lookup *)
+        unfold Verilog.merge_regs.
+        simplify.
         unfold_merge.
         rewrite AssocMap.gso.
         apply AssocMap.gss.
         apply st_greater_than_res.
 
-        simplify. rewrite assumption_32bit.
-        econstructor; simplify; eauto.
+        (** Match states *)
+        rewrite assumption_32bit.
+        econstructor; eauto.
 
-        unfold Verilog.merge_regs. unfold_merge.
+        (** Match assocmaps *)
+        unfold Verilog.merge_regs. simplify. unfold_merge.
         apply regs_lessdef_add_match.
 
         (** Equality proof *)
-        (* FIXME: 32-bit issue. *)
-        assert (forall x, valueToNat (ZToValue 32 x) = Z.to_nat x) as VALUE_IDENTITY by admit.
-        rewrite VALUE_IDENTITY.
-        specialize (H5 (Integers.Ptrofs.unsigned i0 / 4)).
-        rewrite Z2Nat.id in H5; try lia.
-        exploit H5; auto; intros.
-        1: {
-          split.
-          - apply Z.div_pos; try lia.
-            apply Integers.Ptrofs.unsigned_range_2.
-          - apply Zmult_lt_reg_r with (p := 4); try lia.
-            repeat rewrite ZLib.div_mul_undo; lia.
-        }
-        2: {
-          apply Z.div_pos; lia.
-        }
-        replace (4 * (Integers.Ptrofs.unsigned i0 / 4)) with (Integers.Ptrofs.unsigned i0) in H0.
-        2: {
-          rewrite Z.mul_comm.
-          rewrite ZLib.div_mul_undo; lia.
-        }
-        rewrite Integers.Ptrofs.repr_unsigned in H0.
-        rewrite H1 in H0.
-        invert H0. assumption.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in H7. clear ZERO.
+        setoid_rewrite Integers.Ptrofs.add_zero_l in H7.
 
+        specialize (H7 (Integers.Ptrofs.unsigned
+                          (Integers.Ptrofs.divs
+                             OFFSET
+                             (Integers.Ptrofs.repr 4)))).
+
+        exploit H7.
+        rewrite Z2Nat.id; eauto.
+        apply Z.div_pos; lia.
+
+        intros I.
+        assert (Z.to_nat
+                  (Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.divs
+                        OFFSET
+                        (Integers.Ptrofs.repr 4)))
+                  =
+                  valueToNat (ZToValue 32 (Integers.Ptrofs.unsigned OFFSET / 4)))
+          as EXPR_OK by admit.
+        rewrite <- EXPR_OK.
+        rewrite NORMALISE in I.
+        rewrite H1 in I.
+        invert I. assumption.
+
+        (** PC match *)
         apply regs_lessdef_add_greater.
         apply greater_than_max_func.
         assumption.
 
+        (** States well formed *)
         unfold state_st_wf. inversion 1. simplify.
         unfold Verilog.merge_regs.
         unfold_merge. rewrite AssocMap.gso.
         apply AssocMap.gss.
         apply st_greater_than_res.
 
+        (** Match arrays *)
         econstructor.
         repeat split; simplify.
         unfold HTL.empty_stack.
@@ -1026,7 +1036,7 @@ Section CORRECTNESS.
         2: { reflexivity. }
         rewrite AssocMap.gss.
         unfold Verilog.merge_arr.
-        setoid_rewrite H3.
+        setoid_rewrite H5.
         reflexivity.
 
         rewrite combine_length.
@@ -1043,30 +1053,24 @@ Section CORRECTNESS.
         eauto. apply combine_none.
         assumption.
 
+        (** RSBP preservation *)
         unfold reg_stack_based_pointers. intros.
-        destruct (Pos.eq_dec r0 dst); subst.
+        destruct (Pos.eq_dec r0 dst); try rewrite e. (* FIXME: Prepare this for automation *)
 
         rewrite Registers.Regmap.gss.
         unfold arr_stack_based_pointers in ASBP.
-        specialize (ASBP (Integers.Ptrofs.unsigned i0 / 4)).
-        exploit ASBP; auto; intros.
-        1: {
-          split.
-          - apply Z.div_pos; try lia.
-            apply Integers.Ptrofs.unsigned_range_2.
-          - apply Zmult_lt_reg_r with (p := 4); try lia.
-            repeat rewrite ZLib.div_mul_undo; lia.
-        }
-        replace (4 * (Integers.Ptrofs.unsigned i0 / 4)) with (Integers.Ptrofs.unsigned i0) in H0.
-        2: {
-          rewrite Z.mul_comm.
-          rewrite ZLib.div_mul_undo; lia.
-        }
-        rewrite Integers.Ptrofs.repr_unsigned in H0.
+        specialize (ASBP (Integers.Ptrofs.unsigned
+                            (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4)))).
+        exploit ASBP; auto; intros I.
+
+        rewrite NORMALISE in I.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        rewrite ZERO in I. clear ZERO.
         simplify.
-        rewrite H1 in H0.
-        simplify.
+        rewrite Integers.Ptrofs.add_zero_l in I.
+        rewrite H1 in I.
         assumption.
+        simplify.
 
         rewrite Registers.Regmap.gso; auto.
 

@@ -189,7 +189,7 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
       Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
-      0 <= f.(RTL.fn_stacksize) ->
+      0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
@@ -454,7 +454,8 @@ Proof.
 
   unfold transf_module in *.
   unfold stack_correct in *.
-  destruct (0 <=? RTL.fn_stacksize f) eqn:STACK_BOUND;
+  destruct (0 <=? RTL.fn_stacksize f) eqn:STACK_BOUND_LOW;
+    destruct (RTL.fn_stacksize f <? Integers.Ptrofs.modulus) eqn:STACK_BOUND_HIGH;
     destruct (RTL.fn_stacksize f mod 4 =? 0) eqn:STACK_ALIGN;
     simplify;
     monadInv Heqr.
@@ -463,7 +464,7 @@ Proof.
   pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN.
   rewrite <- STK_LEN.
 
-  econstructor; simpl; trivial.
+  econstructor; simpl; auto.
   intros.
   inv_incr.
   assert (EQ3D := EQ3).
