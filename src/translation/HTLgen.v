@@ -283,7 +283,6 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with
   | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
-  | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
   | Op.Ascaled scale offset, r1::nil =>
     ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil =>
@@ -529,7 +528,7 @@ Definition transl_module (f : function) : Errors.res module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p.
+(* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
 
 (*Definition transl_main_fundef f : Errors.res HTL.fundef :=
   match f with
@@ -546,11 +545,18 @@ Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
                              (fun i v => Errors.OK v) p.
 *)
 
-(*Definition main_is_internal (p : RTL.program): Prop :=
+Definition main_is_internal {A B : Type} (p : AST.program A B) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
-  forall b m,
-  Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-  Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m).
+  match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
+  | Some b =>
+    match Globalenvs.Genv.find_funct_ptr ge b with
+    | Some (AST.Internal _) => true
+    | _ => false
+    end
+  | _ => false
+  end.
 
-Definition tranls_program_with_proof (p : RTL.program) : Errors.res { p' : HTL.program | main_is_internal p }.
-*)
+Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
+  if main_is_internal p
+  then transform_partial_program transl_fundef p
+  else Errors.Error (Errors.msg "Main function is not Internal.").

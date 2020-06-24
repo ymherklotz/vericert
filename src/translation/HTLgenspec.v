@@ -113,41 +113,13 @@ Ltac monadInv H :=
 statemachine that is created by the translation contains the correct
 translations for each of the elements *)
 
-Inductive tr_op : Op.operation -> list reg -> expr -> Prop :=
-| tr_op_Omove : forall r, tr_op Op.Omove (r::nil) (Vvar r)
-| tr_op_Ointconst : forall n l, tr_op (Op.Ointconst n) l (Vlit (intToValue n))
-| tr_op_Oneg : forall r, tr_op Op.Oneg (r::nil) (Vunop Vneg (Vvar r))
-| tr_op_Osub : forall r1 r2, tr_op Op.Osub (r1::r2::nil) (bop Vsub r1 r2)
-| tr_op_Omul : forall r1 r2, tr_op Op.Omul (r1::r2::nil) (bop Vmul r1 r2)
-| tr_op_Omulimm : forall r n, tr_op (Op.Omulimm n) (r::nil) (boplit Vmul r n)
-| tr_op_Odiv : forall r1 r2, tr_op Op.Odiv (r1::r2::nil) (bop Vdiv r1 r2)
-| tr_op_Odivu : forall r1 r2, tr_op Op.Odivu (r1::r2::nil) (bop Vdivu r1 r2)
-| tr_op_Omod : forall r1 r2, tr_op Op.Omod (r1::r2::nil) (bop Vmod r1 r2)
-| tr_op_Omodu : forall r1 r2, tr_op Op.Omodu (r1::r2::nil) (bop Vmodu r1 r2)
-| tr_op_Oand : forall r1 r2, tr_op Op.Oand (r1::r2::nil) (bop Vand r1 r2)
-| tr_op_Oandimm : forall n r, tr_op (Op.Oandimm n) (r::nil) (boplit Vand r n)
-| tr_op_Oor : forall r1 r2, tr_op Op.Oor (r1::r2::nil) (bop Vor r1 r2)
-| tr_op_Oorimm : forall n r, tr_op (Op.Oorimm n) (r::nil) (boplit Vor r n)
-| tr_op_Oxor : forall r1 r2, tr_op Op.Oxor (r1::r2::nil) (bop Vxor r1 r2)
-| tr_op_Oxorimm : forall n r, tr_op (Op.Oxorimm n) (r::nil) (boplit Vxor r n)
-| tr_op_Onot : forall r, tr_op Op.Onot (r::nil) (Vunop Vnot (Vvar r))
-| tr_op_Oshl : forall r1 r2, tr_op Op.Oshl (r1::r2::nil) (bop Vshl r1 r2)
-| tr_op_Oshlimm : forall n r, tr_op (Op.Oshlimm n) (r::nil) (boplit Vshl r n)
-| tr_op_Oshr : forall r1 r2, tr_op Op.Oshr (r1::r2::nil) (bop Vshr r1 r2)
-| tr_op_Oshrimm : forall n r, tr_op (Op.Oshrimm n) (r::nil) (boplit Vshr r n)
-| tr_op_Ocmp : forall c l e s s' i, translate_condition c l s = OK e s' i -> tr_op (Op.Ocmp c) l e
-| tr_op_Olea : forall a l e s s' i, translate_eff_addressing a l s = OK e s' i -> tr_op (Op.Olea a) l e
-| tr_op_Oleal : forall a l e s s' i, translate_eff_addressing a l s = OK e s' i -> tr_op (Op.Oleal a) l e
-| tr_op_Ocast32signed : forall r, tr_op (Op.Ocast32signed) (r::nil) (Vvar r).
-Hint Constructors tr_op : htlspec.
-
 Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -> Prop :=
 | tr_instr_Inop :
     forall n,
       tr_instr fin rtrn st stk (RTL.Inop n) Vskip (state_goto st n)
 | tr_instr_Iop :
-    forall n op args e dst,
-      tr_op op args e ->
+    forall n op args dst s s' e i,
+      translate_instr op args s = OK e s' i ->
       tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
@@ -168,7 +140,11 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
     forall mem addr args s s' i c src n,
       translate_arr_access mem addr args stk s = OK c s' i ->
       tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vblock c (Vvar src))
-               (state_goto st n).
+               (state_goto st n)
+| tr_instr_Ijumptable :
+    forall cexpr tbl r,
+    cexpr = tbl_to_case_expr st tbl ->
+    tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).
 Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
@@ -315,21 +291,6 @@ Ltac rewrite_states :=
     remember (?x ?s) as c1; remember (?x ?s') as c2; try subst
   end.
 
-Lemma translate_instr_tr_op :
-  forall op args s s' e i,
-    translate_instr op args s = OK e s' i ->
-    tr_op op args e.
-Proof.
-(*  intros.
-  destruct op eqn:?; eauto with htlspec; try discriminate; simpl in *;
-    try (match goal with
-           [ H: match ?args with _ => _ end _ = _ _ _ |- _ ] =>
-           repeat (destruct args; try discriminate)
-         end);
-    monadInv H; constructor.
-Qed.*) Admitted. (* FIXME: Currently admitted because added Osel *)
-Hint Resolve translate_instr_tr_op : htlspec.
-
 Ltac unfold_match H :=
   match type of H with
   | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
@@ -343,7 +304,7 @@ Ltac inv_add_instr' H :=
   end; repeat unfold_match H; inversion H.
 
 Ltac inv_add_instr :=
-  match goal with
+  lazymatch goal with
   | H: context[add_instr_skip _ _ _] |- _ =>
     inv_add_instr' H
   | H: context[add_instr_skip _ _] |- _ =>
@@ -355,6 +316,10 @@ Ltac inv_add_instr :=
   | H: context[add_branch_instr _ _ _ _ _] |- _ =>
     inv_add_instr' H
   | H: context[add_branch_instr _ _ _ _] |- _ =>
+    monadInv H; inv_incr; inv_add_instr
+  | H: context[add_node_skip _ _ _] |- _ =>
+    inv_add_instr' H
+  | H: context[add_node_skip _ _] |- _ =>
     monadInv H; inv_incr; inv_add_instr
   end.
 
@@ -370,7 +335,7 @@ Lemma iter_expand_instr_spec :
                       c!pc = Some instr ->
                       tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st) stack).
 Proof.
-(*  induction l; simpl; intros; try contradiction.
+  induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
   - subst.
@@ -383,15 +348,13 @@ Proof.
 
     + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + inversion H2. inversion H14. unfold nonblock. assert (HST: st_st s4 = st_st s2) by congruence. rewrite HST.
-      constructor. eapply translate_instr_tr_op. apply EQ1.
-      eapply in_map with (f := fst) in H14. contradiction.
+    + inversion H2. inversion H14. unfold nonblock. replace (st_st s4) with (st_st s2) by congruence.
+      econstructor. apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
 
     + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + inversion H2. inversion H14. rewrite <- e2. assert (HST: st_st s2 = st_st s0) by congruence.
-      rewrite HST. econstructor. apply EQ1.
-      eapply in_map with (f := fst) in H14. contradiction.
+    + inversion H2. inversion H14. rewrite <- e2. replace (st_st s2) with (st_st s0) by congruence.
+      econstructor. apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
@@ -408,6 +371,12 @@ Proof.
         replace (st_st s2) with (st_st s0) by congruence.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
+
+    + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    + inversion H2.
+      * inversion H14. constructor. congruence.
+      * apply in_map with (f := fst) in H14. contradiction.
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
@@ -428,8 +397,8 @@ Proof.
   - eapply IHl. apply EQ0. assumption.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
-    destruct H2. inv H2. contradiction. assumption. assumption.*)
-Admitted.
+    destruct H2. inv H2. contradiction. assumption. assumption.
+Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Theorem transl_module_correct :
