@@ -525,8 +525,16 @@ Section CORRECTNESS.
         assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
         assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
-        (** Modular Preservation proof *)
-        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE by admit.
+        (** Modular preservation proof *)
+        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE.
+        { rewrite HeqOFFSET.
+          apply PtrofsExtra.add_mod; simplify; try lia.
+          exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
+          rewrite Integers.Ptrofs.signed_repr; try assumption.
+          admit. (* FIXME: Register bounds. *)
+          apply PtrofsExtra.of_int_mod.
+          rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
+        }
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
@@ -734,8 +742,22 @@ Section CORRECTNESS.
         assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
         assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
-        (** Modular Preservation proof *)
-        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE by admit.
+        (** Modular preservation proof *)
+        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE.
+        { rewrite HeqOFFSET.
+          apply PtrofsExtra.add_mod; simplify; try lia.
+          exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
+          rewrite Integers.Ptrofs.signed_repr; try assumption.
+          admit. (* FIXME: Register bounds. *)
+          apply PtrofsExtra.of_int_mod.
+          apply IntExtra.add_mod; simplify; try lia.
+          exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
+          apply IntExtra.mul_mod; simplify; try lia.
+          exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
+          admit. (* FIXME: Register bounds. *)
+          rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
+          rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
+        }
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
@@ -918,8 +940,8 @@ Section CORRECTNESS.
         assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
         assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
-        (** Modular Preservation proof *)
-        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE by admit.
+        (** Modular preservation proof *)
+        rename H8 into MOD_PRESERVE.
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
@@ -1006,7 +1028,7 @@ Section CORRECTNESS.
                         OFFSET
                         (Integers.Ptrofs.repr 4)))
                   =
-                  valueToNat (ZToValue 32 (Integers.Ptrofs.unsigned OFFSET / 4)))
+                  valueToNat (ZToValue 32 (Integers.Ptrofs.signed OFFSET / 4)))
           as EXPR_OK by admit.
         rewrite <- EXPR_OK.
         rewrite NORMALISE in I.

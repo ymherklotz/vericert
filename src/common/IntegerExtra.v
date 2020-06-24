@@ -11,6 +11,96 @@ Local Open Scope Z_scope.
 
 Module PtrofsExtra.
 
+  Ltac ptrofs_mod_match m :=
+    match goal with
+    | [ H : ?x = 0 |- context[?x] ] => rewrite H
+    | [ _ : _ |- context[_ - 0] ] => rewrite Z.sub_0_r
+    | [ _ : _ |- context[0 + _] ] => rewrite Z.add_0_l
+    | [ _ : _ |- context[_ + 0] ] => rewrite Z.add_0_r
+    | [ _ : _ |- context[0 * _] ] => rewrite Z.mul_0_l
+    | [ _ : _ |- context[_ * 0] ] => rewrite Z.mul_0_r
+    | [ _ : _ |- context[?m mod ?m] ] =>
+      rewrite Z_mod_same_full with (a := m)
+    | [ _ : _ |- context[0 mod _] ] =>
+      rewrite Z.mod_0_l
+    | [ _ : _ |- context[(_ mod ?m) mod ?m] ] =>
+      rewrite Zmod_mod
+    | [ _ : _ |- context[(_ mod Ptrofs.modulus) mod m ] ] =>
+      rewrite <- Zmod_div_mod;
+      try (simplify; lia || assumption)
+
+    | [ _ : _ |- context[Ptrofs.modulus mod m] ] =>
+      rewrite Zdivide_mod with (a := Ptrofs.modulus);
+      try (lia || assumption)
+
+    | [ _ : _ |- context[Ptrofs.signed ?a mod Ptrofs.modulus] ] =>
+      rewrite Z.mod_small with (a := Ptrofs.signed a) (b := Ptrofs.modulus)
+
+    | [ _ : _ |- context[(?x - ?y) mod ?m] ] =>
+      rewrite Zminus_mod with (a := x) (b := y) (n := m)
+
+    | [ _ : _ |- context[((?x + ?y) mod ?m) + _] ] =>
+      rewrite Zplus_mod with (a := x) (b := y) (n := m)
+    | [ _ : _ |- context[(?x + ?y) mod ?m] ] =>
+      rewrite Zplus_mod with (a := x) (b := y) (n := m)
+
+    | [ _ : _ |- context[(?x * ?y) mod ?m] ] =>
+      rewrite Zmult_mod with (a := x) (b := y) (n := m)
+    end.
+
+  Ltac ptrofs_mod_tac m :=
+    repeat (ptrofs_mod_match m); lia.
+
+  Lemma of_int_mod :
+    forall x m,
+      Int.signed x mod m = 0 ->
+      Ptrofs.signed (Ptrofs.of_int x) mod m = 0.
+  Proof.
+    intros.
+    pose proof (Integers.Ptrofs.agree32_of_int eq_refl x) as A.
+    pose proof Ptrofs.agree32_signed.
+    apply H0 in A; try reflexivity.
+    rewrite A. assumption.
+  Qed.
+
+  Lemma mul_mod :
+    forall x y m,
+      0 < m ->
+      (m | Ptrofs.modulus) ->
+      Ptrofs.signed x mod m = 0 ->
+      Ptrofs.signed y mod m = 0 ->
+      (Ptrofs.signed (Ptrofs.mul x y)) mod m = 0.
+  Proof.
+    intros. unfold Ptrofs.mul.
+    rewrite Ptrofs.signed_repr_eq.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
+           end; try (simplify; lia); ptrofs_mod_tac m.
+  Qed.
+
+  Lemma add_mod :
+    forall x y m,
+      0 < m ->
+      (m | Ptrofs.modulus) ->
+      Ptrofs.signed x mod m = 0 ->
+      Ptrofs.signed y mod m = 0 ->
+      (Ptrofs.signed (Ptrofs.add x y)) mod m = 0.
+  Proof.
+    intros. unfold Ptrofs.add.
+    rewrite Ptrofs.signed_repr_eq.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
+           end; try (simplify; lia); ptrofs_mod_tac m.
+  Qed.
+
   Lemma mul_divs :
     forall x y,
       0 <= Ptrofs.signed y ->
@@ -31,24 +121,6 @@ Module PtrofsExtra.
     congruence.
   Qed.
 
-  Lemma Z_div_distr_add :
-    forall x y z,
-      x mod z = 0 ->
-      y mod z = 0 ->
-      z <> 0 ->
-      x / z + y / z = (x + y) / z.
-  Proof.
-    intros.
-
-    assert ((x + y) mod z = 0).
-    { rewrite <- Z.add_mod_idemp_l; try assumption.
-      rewrite H. assumption. }
-
-    rewrite <- Z.mul_cancel_r with (p := z); try assumption.
-    rewrite Z.mul_add_distr_r.
-    repeat rewrite ZLib.div_mul_undo; lia.
-  Qed.
-
   Lemma mul_unsigned :
     forall x y,
       Ptrofs.mul x y =
@@ -58,178 +130,85 @@ Module PtrofsExtra.
     apply Ptrofs.eqm_samerepr.
     apply Ptrofs.eqm_mult; exists 0; lia.
   Qed.
-
-  Lemma mul_repr :
-    forall x y,
-      Ptrofs.min_signed <= y <= Ptrofs.max_signed ->
-      Ptrofs.min_signed <= x <= Ptrofs.max_signed ->
-      Ptrofs.mul (Ptrofs.repr y) (Ptrofs.repr x) = Ptrofs.repr (x * y).
-  Proof.
-    intros; unfold Ptrofs.mul.
-    destruct (Z_ge_lt_dec x 0); destruct (Z_ge_lt_dec y 0).
-
-    - f_equal.
-      repeat rewrite Ptrofs.unsigned_repr_eq.
-      repeat rewrite Z.mod_small; simplify; lia.
-
-    - assert (Ptrofs.lt (Ptrofs.repr y) Ptrofs.zero = true).
-      {
-        unfold Ptrofs.lt.
-        rewrite Ptrofs.signed_repr; auto.
-        rewrite Ptrofs.signed_zero.
-        destruct (zlt y 0); try lia; auto.
-      }
-
-      rewrite Ptrofs.unsigned_signed with (n := Ptrofs.repr y).
-      rewrite H1.
-      rewrite Ptrofs.signed_repr; auto.
-      rewrite Ptrofs.unsigned_repr_eq.
-      rewrite Z.mod_small; simplify; try lia.
-      rewrite Z.mul_add_distr_r.
-      apply Ptrofs.eqm_samerepr.
-      exists x. simplify. lia.
-
-    - assert (Ptrofs.lt (Ptrofs.repr x) Ptrofs.zero = true).
-      {
-        unfold Ptrofs.lt.
-        rewrite Ptrofs.signed_repr; auto.
-        rewrite Ptrofs.signed_zero.
-        destruct (zlt x 0); try lia; auto.
-      }
-
-      rewrite Ptrofs.unsigned_signed with (n := Ptrofs.repr x).
-      rewrite H1.
-      rewrite Ptrofs.signed_repr; auto.
-      rewrite Ptrofs.unsigned_repr_eq.
-      rewrite Z.mod_small; simplify; try lia.
-      rewrite Z.mul_add_distr_l.
-      apply Ptrofs.eqm_samerepr.
-      exists y. simplify. lia.
-
-    - assert (Ptrofs.lt (Ptrofs.repr x) Ptrofs.zero = true).
-      {
-        unfold Ptrofs.lt.
-        rewrite Ptrofs.signed_repr; auto.
-        rewrite Ptrofs.signed_zero.
-        destruct (zlt x 0); try lia; auto.
-      }
-      assert (Ptrofs.lt (Ptrofs.repr y) Ptrofs.zero = true).
-      {
-        unfold Ptrofs.lt.
-        rewrite Ptrofs.signed_repr; auto.
-        rewrite Ptrofs.signed_zero.
-        destruct (zlt y 0); try lia; auto.
-      }
-      rewrite Ptrofs.unsigned_signed with (n := Ptrofs.repr x).
-      rewrite Ptrofs.unsigned_signed with (n := Ptrofs.repr y).
-      rewrite H2.
-      rewrite H1.
-      repeat rewrite Ptrofs.signed_repr; auto.
-      replace ((y + Ptrofs.modulus) * (x + Ptrofs.modulus)) with
-          (x * y + (x + y + Ptrofs.modulus) * Ptrofs.modulus) by lia.
-      apply Ptrofs.eqm_samerepr.
-      exists (x + y + Ptrofs.modulus). lia.
-  Qed.
 End PtrofsExtra.
 
 Module IntExtra.
-  Lemma mul_unsigned :
-    forall x y,
-      Int.mul x y =
-      Int.repr (Int.unsigned x * Int.unsigned y).
+
+  Ltac int_mod_match m :=
+    match goal with
+    | [ H : ?x = 0 |- context[?x] ] => rewrite H
+    | [ _ : _ |- context[_ - 0] ] => rewrite Z.sub_0_r
+    | [ _ : _ |- context[0 + _] ] => rewrite Z.add_0_l
+    | [ _ : _ |- context[_ + 0] ] => rewrite Z.add_0_r
+    | [ _ : _ |- context[0 * _] ] => rewrite Z.mul_0_l
+    | [ _ : _ |- context[_ * 0] ] => rewrite Z.mul_0_r
+    | [ _ : _ |- context[?m mod ?m] ] =>
+      rewrite Z_mod_same_full with (a := m)
+    | [ _ : _ |- context[0 mod _] ] =>
+      rewrite Z.mod_0_l
+    | [ _ : _ |- context[(_ mod ?m) mod ?m] ] =>
+      rewrite Zmod_mod
+    | [ _ : _ |- context[(_ mod Int.modulus) mod m ] ] =>
+      rewrite <- Zmod_div_mod;
+      try (simplify; lia || assumption)
+
+    | [ _ : _ |- context[Int.modulus mod m] ] =>
+      rewrite Zdivide_mod with (a := Int.modulus);
+      try (lia || assumption)
+
+    | [ _ : _ |- context[Int.signed ?a mod Int.modulus] ] =>
+      rewrite Z.mod_small with (a := Int.signed a) (b := Int.modulus)
+
+    | [ _ : _ |- context[(?x - ?y) mod ?m] ] =>
+      rewrite Zminus_mod with (a := x) (b := y) (n := m)
+
+    | [ _ : _ |- context[((?x + ?y) mod ?m) + _] ] =>
+      rewrite Zplus_mod with (a := x) (b := y) (n := m)
+    | [ _ : _ |- context[(?x + ?y) mod ?m] ] =>
+      rewrite Zplus_mod with (a := x) (b := y) (n := m)
+
+    | [ _ : _ |- context[(?x * ?y) mod ?m] ] =>
+      rewrite Zmult_mod with (a := x) (b := y) (n := m)
+    end.
+
+  Ltac int_mod_tac m :=
+    repeat (int_mod_match m); lia.
+
+  Lemma mul_mod :
+    forall x y m,
+      0 < m ->
+      (m | Int.modulus) ->
+      Int.signed x mod m = 0 ->
+      Int.signed y mod m = 0 ->
+      (Int.signed (Int.mul x y)) mod m = 0.
   Proof.
-    intros; unfold Int.mul.
-    apply Int.eqm_samerepr.
-    apply Int.eqm_mult; exists 0; lia.
+    intros. unfold Int.mul.
+    rewrite Int.signed_repr_eq.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
+           end; try (simplify; lia); int_mod_tac m.
   Qed.
 
-  Lemma mul_repr :
-    forall x y,
-      Int.min_signed <= y <= Int.max_signed ->
-      Int.min_signed <= x <= Int.max_signed ->
-      Int.mul (Int.repr y) (Int.repr x) = Int.repr (x * y).
+  Lemma add_mod :
+    forall x y m,
+      0 < m ->
+      (m | Int.modulus) ->
+      Int.signed x mod m = 0 ->
+      Int.signed y mod m = 0 ->
+      (Int.signed (Int.add x y)) mod m = 0.
   Proof.
-    intros; unfold Int.mul.
-    destruct (Z_ge_lt_dec x 0); destruct (Z_ge_lt_dec y 0).
+    intros. unfold Int.add.
+    rewrite Int.signed_repr_eq.
 
-    - f_equal.
-      repeat rewrite Int.unsigned_repr_eq.
-      repeat rewrite Z.mod_small; simplify; lia.
-
-    - assert (Int.lt (Int.repr y) Int.zero = true).
-      {
-        unfold Int.lt.
-        rewrite Int.signed_repr; auto.
-        rewrite Int.signed_zero.
-        destruct (zlt y 0); try lia; auto.
-      }
-
-      rewrite Int.unsigned_signed with (n := Int.repr y).
-      rewrite H1.
-      rewrite Int.signed_repr; auto.
-      rewrite Int.unsigned_repr_eq.
-      rewrite Z.mod_small; simplify; try lia.
-      rewrite Z.mul_add_distr_r.
-      apply Int.eqm_samerepr.
-      exists x. simplify. lia.
-
-    - assert (Int.lt (Int.repr x) Int.zero = true).
-      {
-        unfold Int.lt.
-        rewrite Int.signed_repr; auto.
-        rewrite Int.signed_zero.
-        destruct (zlt x 0); try lia; auto.
-      }
-
-      rewrite Int.unsigned_signed with (n := Int.repr x).
-      rewrite H1.
-      rewrite Int.signed_repr; auto.
-      rewrite Int.unsigned_repr_eq.
-      rewrite Z.mod_small; simplify; try lia.
-      rewrite Z.mul_add_distr_l.
-      apply Int.eqm_samerepr.
-      exists y. simplify. lia.
-
-    - assert (Int.lt (Int.repr x) Int.zero = true).
-      {
-        unfold Int.lt.
-        rewrite Int.signed_repr; auto.
-        rewrite Int.signed_zero.
-        destruct (zlt x 0); try lia; auto.
-      }
-      assert (Int.lt (Int.repr y) Int.zero = true).
-      {
-        unfold Int.lt.
-        rewrite Int.signed_repr; auto.
-        rewrite Int.signed_zero.
-        destruct (zlt y 0); try lia; auto.
-      }
-      rewrite Int.unsigned_signed with (n := Int.repr x).
-      rewrite Int.unsigned_signed with (n := Int.repr y).
-      rewrite H2.
-      rewrite H1.
-      repeat rewrite Int.signed_repr; auto.
-      replace ((y + Int.modulus) * (x + Int.modulus)) with
-          (x * y + (x + y + Int.modulus) * Int.modulus) by lia.
-      apply Int.eqm_samerepr.
-      exists (x + y + Int.modulus). lia.
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
+           end; try (simplify; lia); int_mod_tac m.
   Qed.
 End IntExtra.
-
-Lemma mul_of_int :
-  forall x y,
-    0 <= x < Integers.Ptrofs.modulus ->
-    Integers.Ptrofs.mul (Integers.Ptrofs.repr x) (Integers.Ptrofs.of_int y) =
-    Integers.Ptrofs.of_int (Integers.Int.mul (Integers.Int.repr x) y).
-Proof.
-  intros.
-  pose proof (Integers.Ptrofs.agree32_of_int eq_refl y) as A.
-  pose proof (Integers.Ptrofs.agree32_to_int eq_refl (Integers.Ptrofs.repr x)) as B.
-  exploit Integers.Ptrofs.agree32_mul; [> reflexivity | exact B | exact A | intro C].
-  unfold Integers.Ptrofs.to_int in C.
-  unfold Integers.Ptrofs.of_int in C.
-  rewrite Integers.Ptrofs.unsigned_repr_eq in C.
-  rewrite Z.mod_small in C; auto.
-  symmetry.
-  apply Integers.Ptrofs.agree32_of_int_eq; auto.
-Qed.

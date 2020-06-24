@@ -260,6 +260,10 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
     else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+  | Op.Aindexed2 offset, r1::r2::nil =>
+    if (check_address_parameter offset)
+    then ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
@@ -363,7 +367,7 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
                             (ZToValue 32 4)))
     else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in
+    let a := Integers.Ptrofs.signed a in
     if (check_address_parameter a)
     then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
     else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
