@@ -110,21 +110,6 @@ gsm_norm (longword a)
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
   };
 
-  int ret;
-  if (a <= -1073741824) ret = 0;
-  else{
-    if (a < 0)
-    {
-      if (a > -1073741824)
-      a = ~a;
-    }
-
-    ret = a & 0xffff0000 ?
-      (a & 0xff000000 ? -1 + bitoff[0xFF & (a >> 24)] :
-       7 + bitoff[0xFF & (a >> 16)])
-      : (a & 0xff00 ? 15 + bitoff[0xFF & (a >> 8)] : 23 + bitoff[0xFF & a]);
-  }
-  /*
   if (a < 0)
     {
       if (a <= -1073741824)
@@ -136,9 +121,6 @@ gsm_norm (longword a)
     (a & 0xff000000 ? -1 + bitoff[0xFF & (a >> 24)] :
      7 + bitoff[0xFF & (a >> 16)])
     : (a & 0xff00 ? 15 + bitoff[0xFF & (a >> 8)] : 23 + bitoff[0xFF & a]);
-    */
-
-    return ret;
 }
 
 word
