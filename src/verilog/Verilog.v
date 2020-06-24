@@ -144,7 +144,8 @@ Inductive binop : Type :=
 | Vor : binop   (** or (binary [|]) *)
 | Vxor : binop  (** xor (binary [^|]) *)
 | Vshl : binop  (** shift left ([<<]) *)
-| Vshr : binop. (** shift right ([>>]) *)
+| Vshr : binop (** shift right ([>>>]) *)
+| Vshru : binop. (** shift right unsigned ([>>]) *)
 
 (** ** Unary Operators *)
 
@@ -320,6 +321,7 @@ Definition binop_run (op : binop) : forall v1 v2 : value, vsize v1 = vsize v2 ->
   | Vxor => vxor
   | Vshl => vshl
   | Vshr => vshr
+  | Vshru => vshr (* FIXME: should not be the same operation. *)
   end.
 
 Definition unop_run (op : unop) : value -> value :=

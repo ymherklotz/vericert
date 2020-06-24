@@ -199,6 +199,41 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
 
+Lemma add_node_skip_state_incr :
+  forall s n st,
+    (st_datapath s)!n = None ->
+    (st_controllogic s)!n = None ->
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       (AssocMap.set n Vskip s.(st_datapath))
+       (AssocMap.set n st s.(st_controllogic))).
+Proof.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
+
+Definition add_node_skip (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
+    | left STM, left TRANS =>
+      OK tt (mkstate
+               s.(st_st)
+               s.(st_freshreg)
+               (st_freshstate s)
+               s.(st_scldecls)
+               s.(st_arrdecls)
+               (AssocMap.set n Vskip s.(st_datapath))
+               (AssocMap.set n st s.(st_controllogic)))
+         (add_node_skip_state_incr s n st STM TRANS)
+    | _, _ => Error (Errors.msg "HTL.add_instr")
+    end.
+
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
 Definition block (dst : reg) (e : expr) := Vblock (Vvar dst) e.
 
@@ -219,7 +254,7 @@ Definition translate_comparison (c : Integers.comparison) (args : list reg) : mo
   | Integers.Cgt, r1::r2::nil => ret (bop Vgt r1 r2)
   | Integers.Cle, r1::r2::nil => ret (bop Vle r1 r2)
   | Integers.Cge, r1::r2::nil => ret (bop Vge r1 r2)
-  | _, _ => error (Errors.msg "Veriloggen: comparison instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: comparison instruction not implemented: other")
   end.
 
 Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) (i: Integers.int)
@@ -231,7 +266,7 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
   | Integers.Cgt, r1::nil => ret (boplit Vgt r1 i)
   | Integers.Cle, r1::nil => ret (boplit Vle r1 i)
   | Integers.Cge, r1::nil => ret (boplit Vge r1 i)
-  | _, _ => error (Errors.msg "Veriloggen: comparison_imm instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
   end.
 
 Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :=
@@ -240,9 +275,9 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
   | Op.Ccompu c, _ => translate_comparison c args
   | Op.Ccompimm c i, _ => translate_comparison_imm c args i
   | Op.Ccompuimm c i, _ => translate_comparison_imm c args i
-  | Op.Cmaskzero n, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: Cmaskzero")
-  | Op.Cmasknotzero n, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: Cmasknotzero")
-  | _, _ => error (Errors.msg "Veriloggen: condition instruction not implemented: other")
+  | Op.Cmaskzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmaskzero")
+  | Op.Cmasknotzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmasknotzero")
+  | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
 Definition check_address_parameter (p : Z) : bool :=
@@ -276,7 +311,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
-(** Translate an instruction to a statement. *)
+(** Translate an instruction to a statement. FIX mulhs mulhu *)
 Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   match op, args with
   | Op.Omove, r::nil => ret (Vvar r)
@@ -285,8 +320,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Osub, r1::r2::nil => ret (bop Vsub r1 r2)
   | Op.Omul, r1::r2::nil => ret (bop Vmul r1 r2)
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
-  | Op.Omulhs, _ => error (Errors.msg "Veriloggen: Instruction not implemented: Omulhs")
-  | Op.Omulhu, _ => error (Errors.msg "Veriloggen: Instruction not implemented: Omulhu")
+  | Op.Omulhs, r1::r2::nil => ret (bop Vmul r1 r2)
+  | Op.Omulhu, r1::r2::nil => ret (bop Vmul r1 r2)
   | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
   | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
   | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
@@ -302,16 +337,21 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshlimm n, r::nil => ret (boplit Vshl r n)
   | Op.Oshr, r1::r2::nil => ret (bop Vshr r1 r2)
   | Op.Oshrimm n, r::nil => ret (boplit Vshr r n)
-  | Op.Oshrximm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshrximm")
-  | Op.Oshru, r1::r2::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshru")
-  | Op.Oshruimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshruimm")
-  | Op.Ororimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Ororimm")
-  | Op.Oshldimm n, r::nil => error (Errors.msg "Veriloggen: Instruction not implemented: Oshldimm")
+  | Op.Oshrximm n, r::nil => ret (Vbinop Vdiv (Vvar r)
+                                         (Vbinop Vshl (Vlit (ZToValue 32 1))
+                                                 (Vlit (intToValue n))))
+  | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
+  | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
+  | Op.Ororimm n, r::nil => ret (Vbinop Vor (boplit Vshr r n) (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) n)))
+  | Op.Oshldimm n, r::nil => ret (Vbinop Vor (boplit Vshl r n) (boplit Vshr r (Integers.Int.sub (Integers.Int.repr 32) n)))
   | Op.Ocmp c, _ => translate_condition c args
+  | Op.Osel c AST.Tint, r1::r2::rl =>
+    do tc <- translate_condition c rl;
+    ret (Vternary tc (Vvar r1) (Vvar r2))
   | Op.Olea a, _ => translate_eff_addressing a args
   | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
   | Op.Ocast32signed, r::nil => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
-  | _, _ => error (Errors.msg "Veriloggen: Instruction not implemented: other")
+  | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
 
 Lemma add_branch_instr_state_incr:
@@ -345,7 +385,7 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
-    | _, _ => Error (Errors.msg "Veriloggen: add_branch_instr")
+    | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
@@ -354,25 +394,37 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
   | Mint32, Op.Aindexed off, r1::nil =>
     if (check_address_parameter off)
     then ret (Vvari stack (Vbinop Vdiv (boplitz Vadd r1 off) (Vlit (ZToValue 32 4))))
-    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vvari stack (Vbinop Vdiv (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset))) (Vlit (ZToValue 32 4))))
-    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vvari stack
                     (Vbinop Vdiv
                             (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
                             (ZToValue 32 4)))
-    else error (Errors.msg "Veriloggen: translate_arr_access address misaligned")
+    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.signed a in
     if (check_address_parameter a)
     then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
-    else error (Errors.msg "Veriloggen: eff_addressing misaligned stack offset")
-  | _, _, _ => error (Errors.msg "Veriloggen: translate_arr_access unsuported addressing")
+    else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset")
+  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
   end.
+
+Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
+  match ns with
+  | n :: ns' => (i, n) :: enumerate (i+1) ns'
+  | nil => nil
+  end.
+
+Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
+  List.map (fun a => match a with
+                    (i, n) => (Vlit (natToValue 32 i), Vnonblock (Vvar st) (Vlit (posToValue 32 n)))
+                  end)
+           (enumerate 0 ns).
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
@@ -396,7 +448,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icond cond args n1 n2 =>
       do e <- translate_condition cond args;
       add_branch_instr e n n1 n2
-    | Ijumptable _ _ => error (Errors.msg "Jumptable not implemented")
+    | Ijumptable r tbl =>
+      do s <- get;
+      add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
     | Ireturn r =>
       match r with
       | Some r' =>
@@ -501,7 +555,7 @@ Definition transl_module (f : function) : Errors.res module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p.
+(* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
 
 (*Definition transl_main_fundef f : Errors.res HTL.fundef :=
   match f with
@@ -518,11 +572,19 @@ Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
                              (fun i v => Errors.OK v) p.
 *)
 
-(*Definition main_is_internal (p : RTL.program): Prop :=
+Definition main_is_internal {A B : Type} (p : AST.program A B) : bool := true.
+(*
   let ge := Globalenvs.Genv.globalenv p in
-  forall b m,
-  Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-  Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m).
+  match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
+  | Some b =>
+    match Globalenvs.Genv.find_funct_ptr ge b with
+    | Some (AST.Internal _) => true
+    | _ => false
+    end
+  | _ => false
+  end. *)
 
-Definition tranls_program_with_proof (p : RTL.program) : Errors.res { p' : HTL.program | main_is_internal p }.
-*)
+Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
+  if main_is_internal p
+  then transform_partial_program transl_fundef p
+  else Errors.Error (Errors.msg "Main function is not Internal.").
