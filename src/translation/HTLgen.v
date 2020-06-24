@@ -559,7 +559,7 @@ Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
                              (fun i v => Errors.OK v) p.
 *)
 
-Definition main_is_internal {A B : Type} (p : AST.program A B) : bool :=
+Definition main_is_internal (p : RTL.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
   match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
   | Some b =>

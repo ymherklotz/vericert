@@ -393,7 +393,7 @@ Section CORRECTNESS.
       2: { reflexivity. }
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
-      setoid_rewrite H1.
+      setoid_rewrite H3.
       reflexivity.
 
       rewrite combine_length.
