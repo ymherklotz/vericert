@@ -1365,16 +1365,29 @@ Section CORRECTNESS.
   Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
-  Lemma main_tprog_internal :
-    forall b f,
-      Globalenvs.Genv.find_symbol tge tprog.(AST.prog_main) = Some b ->
-      Genv.find_funct_ptr (Genv.globalenv tprog) b = Some (AST.Internal f).
-  Admitted.
 
   Lemma option_inv :
     forall A x y,
       @Some A x = Some y -> x = y.
-    Proof. intros. inversion H. trivial. Qed.
+  Proof. intros. inversion H. trivial. Qed.
+
+  Lemma main_tprog_internal :
+    forall b,
+      Globalenvs.Genv.find_symbol tge tprog.(AST.prog_main) = Some b ->
+      exists f, Genv.find_funct_ptr (Genv.globalenv tprog) b = Some (AST.Internal f).
+  Proof.
+    intros.
+    destruct TRANSL. unfold main_is_internal in H1.
+    repeat (unfold_match H1). replace b with b0.
+    exploit function_ptr_translated; eauto. intros [tf [A B]].
+    unfold transl_fundef, AST.transf_partial_fundef, Errors.bind in B.
+    unfold_match B. inv B. econstructor. apply A.
+
+    apply option_inv. rewrite <- Heqo. rewrite <- H.
+    rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
+    trivial. symmetry; eapply Linking.match_program_main; eauto.
+  Qed.
+
 
   (* Had to admit proof because currently there is no way to force main to be Internal. *)
   Lemma transl_initial_states :
@@ -1395,21 +1408,23 @@ Section CORRECTNESS.
     unfold transl_fundef, Errors.bind in B.
     unfold AST.transf_partial_fundef, Errors.bind in B.
     repeat (unfold_match B). inversion B. subst.
+    exploit main_tprog_internal; eauto; intros.
+    rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
+    apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
+    inversion H5.
     econstructor; split. econstructor.
     apply (Genv.init_mem_transf_partial TRANSL'); eauto.
     replace (AST.prog_main tprog) with (AST.prog_main prog).
     rewrite symbols_preserved; eauto.
     symmetry; eapply Linking.match_program_main; eauto.
-    apply main_tprog_internal. replace ge0 with ge in * by auto.
-    replace b0 with b in *. rewrite symbols_preserved.
-    replace (AST.prog_main tprog) with (AST.prog_main prog).
-    assumption.
-    symmetry; eapply Linking.match_program_main; eauto.
-    apply option_inv. rewrite <- H0. rewrite <- Heqo.
-    trivial.
+    apply H6.
 
     constructor.
-    apply transl_module_correct. eassumption.
+    apply transl_module_correct.
+    assert (Some (AST.Internal x) = Some (AST.Internal m)).
+    replace (AST.fundef HTL.module) with (HTL.fundef).
+    rewrite <- H6. setoid_rewrite <- A. trivial.
+    trivial. inversion H7.
   Qed.
   Hint Resolve transl_initial_states : htlproof.
 
