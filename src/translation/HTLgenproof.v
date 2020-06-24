@@ -113,12 +113,23 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
 Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
-  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp /\
+  main_is_internal p = true.
+
+Definition match_prog_matches :
+  forall p tp,
+    match_prog p tp ->
+    Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+  Proof. intros. unfold match_prog in H. tauto. Qed.
 
 Lemma transf_program_match:
   forall p tp, HTLgen.transl_program p = Errors.OK tp -> match_prog p tp.
 Proof.
-  intros. apply Linking.match_transform_partial_program; auto.
+  intros. unfold transl_program in H.
+  destruct (main_is_internal p) eqn:?; try discriminate.
+  unfold match_prog. split.
+  apply Linking.match_transform_partial_program; auto.
+  assumption.
 Qed.
 
 Lemma regs_lessdef_add_greater :
@@ -258,13 +269,16 @@ Section CORRECTNESS.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
-(*  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
+  Lemma TRANSL' :
+    Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq prog tprog.
+  Proof. intros; apply match_prog_matches; assumption. Qed.
+
+  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
   Let tge : HTL.genv := Globalenvs.Genv.globalenv tprog.
 
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-  Proof
-    (Genv.find_symbol_transf_partial TRANSL).
+  Proof. intros. eapply (Genv.find_symbol_match TRANSL'). Qed.
 
   Lemma function_ptr_translated:
     forall (b: Values.block) (f: RTL.fundef),
@@ -272,7 +286,7 @@ Section CORRECTNESS.
       exists tf,
         Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
   Proof.
-    intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
+    intros. exploit (Genv.find_funct_ptr_match TRANSL'); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
 
@@ -282,21 +296,21 @@ Section CORRECTNESS.
       exists tf,
         Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
   Proof.
-    intros. exploit (Genv.find_funct_match TRANSL); eauto.
+    intros. exploit (Genv.find_funct_match TRANSL'); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
 
   Lemma senv_preserved:
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
   Proof
-    (Genv.senv_transf_partial TRANSL).
+    (Genv.senv_transf_partial TRANSL').
   Hint Resolve senv_preserved : htlproof.
 
   Lemma eval_correct :
-    forall sp op rs args m v v' e asr asa f,
+    forall sp op rs args m v v' e asr asa f s s' i,
       Op.eval_operation ge sp op
 (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
-      tr_op op args e ->
+      translate_instr op args s = OK e s' i ->
       val_value_lessdef v v' ->
       Verilog.expr_runp f asr asa e v'.
   Admitted.
@@ -865,6 +879,7 @@ Section CORRECTNESS.
 
       assumption.
 
+    - admit.
     - (* Return *)
       econstructor. split.
       eapply Smallstep.plus_two.
@@ -979,6 +994,17 @@ Section CORRECTNESS.
   Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
+  Lemma main_tprog_internal :
+    forall b f,
+      Globalenvs.Genv.find_symbol tge tprog.(AST.prog_main) = Some b ->
+      Genv.find_funct_ptr (Genv.globalenv tprog) b = Some (AST.Internal f).
+  Admitted.
+
+  Lemma option_inv :
+    forall A x y,
+      @Some A x = Some y -> x = y.
+    Proof. intros. inversion H. trivial. Qed.
+
   (* Had to admit proof because currently there is no way to force main to be Internal. *)
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
@@ -987,20 +1013,33 @@ Section CORRECTNESS.
         Smallstep.initial_state (HTL.semantics tprog) s2 /\ match_states s1 s2.
   Proof.
     induction 1.
+    destruct TRANSL. unfold main_is_internal in H4.
+    repeat (unfold_match H4).
+    assert (f = AST.Internal f1). apply option_inv.
+    rewrite <- Heqo0. rewrite <- H1. replace b with b0.
+    auto. apply option_inv. rewrite <- H0. rewrite <- Heqo.
+    trivial.
     exploit function_ptr_translated; eauto.
     intros [tf [A B]].
     unfold transl_fundef, Errors.bind in B.
+    unfold AST.transf_partial_fundef, Errors.bind in B.
     repeat (unfold_match B). inversion B. subst.
     econstructor; split. econstructor.
-    apply (Genv.init_mem_transf_partial TRANSL); eauto.
+    apply (Genv.init_mem_transf_partial TRANSL'); eauto.
     replace (AST.prog_main tprog) with (AST.prog_main prog).
     rewrite symbols_preserved; eauto.
     symmetry; eapply Linking.match_program_main; eauto.
-    Admitted.
-    (*eexact A. trivial.
+    apply main_tprog_internal. replace ge0 with ge in * by auto.
+    replace b0 with b in *. rewrite symbols_preserved.
+    replace (AST.prog_main tprog) with (AST.prog_main prog).
+    assumption.
+    symmetry; eapply Linking.match_program_main; eauto.
+    apply option_inv. rewrite <- H0. rewrite <- Heqo.
+    trivial.
+
     constructor.
-    apply transl_module_correct. auto.
-  Qed.*)
+    apply transl_module_correct. eassumption.
+  Qed.
   Hint Resolve transl_initial_states : htlproof.
 
   Lemma transl_final_states :
@@ -1013,16 +1052,16 @@ Section CORRECTNESS.
   Proof.
     intros. inv H0. inv H. inv H4. inv MS. constructor. trivial.
   Qed.
-  Hint Resolve transl_final_states : htlproof.*)
+  Hint Resolve transl_final_states : htlproof.
 
 Theorem transf_program_correct:
   Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).
 Proof.
-(*  eapply Smallstep.forward_simulation_plus.
+  eapply Smallstep.forward_simulation_plus.
   apply senv_preserved.
   eexact transl_initial_states.
   eexact transl_final_states.
-  exact transl_step_correct.*)
-Admitted.
+  exact transl_step_correct.
+Qed.
 
 End CORRECTNESS.

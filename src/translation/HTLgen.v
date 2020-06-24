@@ -542,7 +542,7 @@ Definition transl_module (f : function) : Errors.res module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p.
+(* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
 
 (*Definition transl_main_fundef f : Errors.res HTL.fundef :=
   match f with
@@ -559,11 +559,18 @@ Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
                              (fun i v => Errors.OK v) p.
 *)
 
-(*Definition main_is_internal (p : RTL.program): Prop :=
+Definition main_is_internal {A B : Type} (p : AST.program A B) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
-  forall b m,
-  Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-  Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m).
+  match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
+  | Some b =>
+    match Globalenvs.Genv.find_funct_ptr ge b with
+    | Some (AST.Internal _) => true
+    | _ => false
+    end
+  | _ => false
+  end.
 
-Definition tranls_program_with_proof (p : RTL.program) : Errors.res { p' : HTL.program | main_is_internal p }.
-*)
+Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
+  if main_is_internal p
+  then transform_partial_program transl_fundef p
+  else Errors.Error (Errors.msg "Main function is not Internal.").
