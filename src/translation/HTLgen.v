@@ -395,10 +395,6 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
     if (check_address_parameter off)
     then ret (Vvari stack (Vbinop Vdiv (boplitz Vadd r1 off) (Vlit (ZToValue 32 4))))
     else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
-  | Mint32, Op.Ascaled scale offset, r1::nil =>
-    if (check_address_parameter scale) && (check_address_parameter offset)
-    then ret (Vvari stack (Vbinop Vdiv (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset))) (Vlit (ZToValue 32 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter scale) && (check_address_parameter offset)
     then ret (Vvari stack

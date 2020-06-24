@@ -57,18 +57,6 @@ Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem 
                                  (Option.join (array_get_error (Z.to_nat ptr) stack)))) ->
     match_arrs m f sp mem asa.
 
-Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
-| match_stacks_nil :
-    match_stacks mem nil nil
-| match_stacks_cons :
-    forall cs lr r f sp pc rs m asr asa
-           (TF : tr_module f m)
-           (ST: match_stacks mem cs lr)
-           (MA: match_assocmaps f rs asr)
-           (MARR : match_arrs m f sp mem asa),
-      match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
-                       (HTL.Stackframe r m pc asr asa :: lr).
-
 Definition stack_based (v : Values.val) (sp : Values.block) : Prop :=
    match v with
    | Values.Vptr sp' off => sp' = sp
@@ -87,6 +75,21 @@ Definition arr_stack_based_pointers (spb : Values.block) (m : mem) (stack_length
                    (Mem.loadv AST.Mint32 m
                               (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr)))))
                 spb.
+
+Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
+| match_stacks_nil :
+    match_stacks mem nil nil
+| match_stacks_cons :
+    forall cs lr r f sp sp' pc rs m asr asa
+           (TF : tr_module f m)
+           (ST: match_stacks mem cs lr)
+           (MA: match_assocmaps f rs asr)
+           (MARR : match_arrs m f sp mem asa)
+           (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
+           (RSBP: reg_stack_based_pointers sp' rs)
+           (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp),
+      match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
+                       (HTL.Stackframe r m pc asr asa :: lr).
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
@@ -707,11 +710,6 @@ Section CORRECTNESS.
 
         rewrite Registers.Regmap.gso; auto.
 
-      + (* FIXME: Why is this degenerate? Should we support this mode? *)
-        unfold Op.eval_addressing in H0.
-        destruct (Archi.ptr64) eqn:ARCHI; simplify.
-        destruct (Registers.Regmap.get r0 rs) eqn:EQr0; discriminate.
-
       + (** Preamble *)
         invert MARR. simplify.
 
@@ -1115,12 +1113,6 @@ Section CORRECTNESS.
       + admit.
       + admit.
 
-      (* + eexists. split. *)
-      (*   eapply Smallstep.plus_one. *)
-      (*   eapply HTL.step_module; eauto. *)
-      (*   econstructor. econstructor. econstructor. simplify. *)
-      + admit.
-
     - eexists. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
       eapply Verilog.stmnt_runp_Vnonblock_reg with
@@ -1139,37 +1131,95 @@ Section CORRECTNESS.
       constructor.
       apply boolToValue_ValueToBool.
       constructor.
+      unfold Verilog.merge_regs.
       unfold_merge.
       apply AssocMap.gss.
 
       destruct b.
       rewrite assumption_32bit.
-      apply match_state.
+      simplify.
+      apply match_state with (sp' := sp'); eauto.
+      unfold Verilog.merge_regs.
       unfold_merge.
       apply regs_lessdef_add_greater. apply greater_than_max_func.
-      assumption. assumption.
-
-      unfold state_st_wf. intros. inversion H1.
-      subst. unfold_merge.
-      apply AssocMap.gss.
       assumption.
 
+      unfold state_st_wf. intros.
+      invert H3.
+      unfold Verilog.merge_regs. unfold_merge.
+      apply AssocMap.gss.
+
+      (** Match arrays *)
+      invert MARR. simplify.
+      econstructor.
+      repeat split; simplify.
+      unfold HTL.empty_stack.
+      simplify.
+      unfold Verilog.merge_arrs.
+
+      rewrite AssocMap.gcombine.
+      2: { reflexivity. }
+      rewrite AssocMap.gss.
+      unfold Verilog.merge_arr.
+      setoid_rewrite H4.
+      reflexivity.
+
+      rewrite combine_length.
+      unfold arr_repeat. simplify.
+      rewrite list_repeat_len.
+      reflexivity.
+
+      unfold arr_repeat. simplify.
+      rewrite list_repeat_len.
+      congruence.
+
+      intros.
+      erewrite array_get_error_equal.
+      eauto. apply combine_none.
       assumption.
 
       rewrite assumption_32bit.
-      apply match_state.
-      unfold_merge.
-      apply regs_lessdef_add_greater. apply greater_than_max_func. assumption.
+      apply match_state with (sp' := sp'); eauto.
+      unfold Verilog.merge_regs. unfold_merge.
+      apply regs_lessdef_add_greater. apply greater_than_max_func.
       assumption.
 
-      unfold state_st_wf. intros. inversion H1.
-      subst. unfold_merge.
+      unfold state_st_wf. intros.
+      invert H1.
+      unfold Verilog.merge_regs. unfold_merge.
       apply AssocMap.gss.
-      assumption.
 
+      (** Match arrays *)
+      invert MARR. simplify.
+      econstructor.
+      repeat split; simplify.
+      unfold HTL.empty_stack.
+      simplify.
+      unfold Verilog.merge_arrs.
+
+      rewrite AssocMap.gcombine.
+      2: { reflexivity. }
+      rewrite AssocMap.gss.
+      unfold Verilog.merge_arr.
+      setoid_rewrite H2.
+      reflexivity.
+
+      rewrite combine_length.
+      unfold arr_repeat. simplify.
+      rewrite list_repeat_len.
+      reflexivity.
+
+      unfold arr_repeat. simplify.
+      rewrite list_repeat_len.
+      congruence.
+
+      intros.
+      erewrite array_get_error_equal.
+      eauto. apply combine_none.
       assumption.
 
     - admit.
+
     - (* Return *)
       econstructor. split.
       eapply Smallstep.plus_two.
@@ -1184,6 +1234,7 @@ Section CORRECTNESS.
 
       constructor. constructor.
 
+      unfold Verilog.merge_regs.
       unfold_merge. simpl.
       rewrite AssocMap.gso.
       rewrite AssocMap.gso.
@@ -1191,6 +1242,7 @@ Section CORRECTNESS.
       apply st_greater_than_res. apply st_greater_than_res.
 
       apply HTL.step_finish.
+      unfold Verilog.merge_regs.
       unfold_merge; simpl.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
@@ -1214,6 +1266,7 @@ Section CORRECTNESS.
       constructor.
       econstructor; simpl; trivial.
       apply Verilog.erun_Vvar. trivial.
+      unfold Verilog.merge_regs.
       unfold_merge. simpl.
       rewrite AssocMap.gso.
       rewrite AssocMap.gso.
@@ -1221,6 +1274,7 @@ Section CORRECTNESS.
       apply st_greater_than_res. apply st_greater_than_res. trivial.
 
       apply HTL.step_finish.
+      unfold Verilog.merge_regs.
       unfold_merge.
       rewrite AssocMap.gso.
       apply AssocMap.gss.
@@ -1238,21 +1292,26 @@ Section CORRECTNESS.
 
     - inversion MSTATE; subst. inversion TF; subst.
       econstructor. split. apply Smallstep.plus_one.
-      eapply HTL.step_call. simpl.
+      eapply HTL.step_call. simplify.
 
-      constructor. apply regs_lessdef_add_greater.
+      apply match_state with (sp' := stk); eauto.
+
+      apply regs_lessdef_add_greater.
       apply greater_than_max_func.
-      apply init_reg_assoc_empty. assumption. unfold state_st_wf.
-      intros. inv H1. apply AssocMap.gss. constructor.
+      apply init_reg_assoc_empty.
+      unfold state_st_wf.
+      intros. inv H3. apply AssocMap.gss. constructor.
 
-      econstructor; simpl.
-      reflexivity.
-      rewrite AssocMap.gss. reflexivity.
+      econstructor. simplify.
+      repeat split. unfold HTL.empty_stack.
+      simplify. apply AssocMap.gss.
+      unfold arr_repeat. simplify.
+      apply list_repeat_len.
       intros.
       destruct (Mem.load AST.Mint32 m' stk
                          (Integers.Ptrofs.unsigned (Integers.Ptrofs.add
                                                       Integers.Ptrofs.zero
-                                                      (Integers.Ptrofs.repr ptr)))) eqn:LOAD.
+                                                      (Integers.Ptrofs.repr (4 * ptr))))) eqn:LOAD.
       pose proof Mem.load_alloc_same as LOAD_ALLOC.
       pose proof H as ALLOC.
       eapply LOAD_ALLOC in ALLOC.
@@ -1261,19 +1320,41 @@ Section CORRECTNESS.
       repeat constructor.
       constructor.
 
-    - inversion MSTATE; subst. inversion MS; subst. econstructor.
+      unfold reg_stack_based_pointers. intros.
+      unfold RTL.init_regs; simplify.
+      destruct (RTL.fn_params f);
+      rewrite Registers.Regmap.gi; constructor.
+
+      unfold arr_stack_based_pointers. intros.
+      simplify.
+      destruct (Mem.load AST.Mint32 m' stk
+                         (Integers.Ptrofs.unsigned (Integers.Ptrofs.add
+                                                      Integers.Ptrofs.zero
+                                                      (Integers.Ptrofs.repr (4 * ptr))))) eqn:LOAD.
+      pose proof Mem.load_alloc_same as LOAD_ALLOC.
+      pose proof H as ALLOC.
+      eapply LOAD_ALLOC in ALLOC.
+      2: { exact LOAD. }
+      rewrite ALLOC.
+      repeat constructor.
+      constructor.
+
+    - invert MSTATE. invert MS.
+      econstructor.
       split. apply Smallstep.plus_one.
       constructor.
 
-      constructor; auto. constructor; auto. apply regs_lessdef_add_match; auto.
+      constructor; auto.
+      econstructor; auto.
+      apply regs_lessdef_add_match; auto.
       apply regs_lessdef_add_greater. apply greater_than_max_func. auto.
 
       unfold state_st_wf. intros. inv H. rewrite AssocMap.gso.
       rewrite AssocMap.gss. trivial. apply st_greater_than_res.
 
+      admit.
+
       Unshelve.
-      exact (AssocMap.empty value).
-      exact (AssocMap.empty value).
       exact (AssocMap.empty value).
       exact (AssocMap.empty value).
       (* exact (ZToValue 32 0). *)
