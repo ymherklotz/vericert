@@ -17,8 +17,8 @@
  *)
 
 From compcert Require Import Smallstep Linking.
-From coqup Require Import Veriloggen.
-From coqup Require HTL Verilog.
+From coqup Require HTL.
+From coqup Require Import Coquplib Veriloggen Verilog.
 
 Definition match_prog (prog : HTL.program) (tprog : Verilog.program) :=
   match_program (fun cu f tf => tf = transl_fundef f) eq prog tprog.
@@ -29,47 +29,52 @@ Proof.
   intros. eapply match_transform_program_contextual. auto.
 Qed.
 
-Inductive match_stacks : list HTL.stackframe -> list Verilog.stackframe -> Prop :=
+Inductive match_stacks : list HTL.stackframe -> list stackframe -> Prop :=
 | match_stack :
     forall res m pc reg_assoc arr_assoc hstk vstk,
       match_stacks hstk vstk ->
       match_stacks (HTL.Stackframe res m pc reg_assoc arr_assoc :: hstk)
-                   (Verilog.Stackframe res (transl_module m) pc
+                   (Stackframe res (transl_module m) pc
                                        reg_assoc arr_assoc :: vstk)
 | match_stack_nil : match_stacks nil nil.
 
-Inductive match_states : HTL.state -> Verilog.state -> Prop :=
+Inductive match_states : HTL.state -> state -> Prop :=
 | match_state :
     forall m st reg_assoc arr_assoc hstk vstk,
       match_stacks hstk vstk ->
       match_states (HTL.State hstk m st reg_assoc arr_assoc)
-                   (Verilog.State vstk (transl_module m) st reg_assoc arr_assoc)
+                   (State vstk (transl_module m) st reg_assoc arr_assoc)
 | match_returnstate :
     forall v hstk vstk,
       match_stacks hstk vstk ->
-      match_states (HTL.Returnstate hstk v) (Verilog.Returnstate vstk v)
+      match_states (HTL.Returnstate hstk v) (Returnstate vstk v)
 | match_initial_call :
     forall m,
-      match_states (HTL.Callstate nil m nil) (Verilog.Callstate nil (transl_module m) nil).
+      match_states (HTL.Callstate nil m nil) (Callstate nil (transl_module m) nil).
 
 Section CORRECTNESS.
 
   Variable prog: HTL.program.
-  Variable tprog: Verilog.program.
+  Variable tprog: program.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
   Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
-  Let tge : Verilog.genv := Globalenvs.Genv.globalenv tprog.
+  Let tge : genv := Globalenvs.Genv.globalenv tprog.
 
-  Theorem transl_step_correct:
+  Lemma stmnt_in_case :
+    exists e st,
+
+  Theorem transl_step_correct :
     forall (S1 : HTL.state) t S2,
       HTL.step ge S1 t S2 ->
-      forall (R1 : Verilog.state),
+      forall (R1 : state),
         match_states S1 R1 ->
-        exists R2, Smallstep.plus Verilog.step tge R1 t R2 /\ match_states S2 R2.
+        exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1; intros R1 MSTATE.
+    induction 1; intros R1 MSTATE; inv MSTATE; econstructor; split.
+    - apply Smallstep.plus_one. econstructor. econstructor.
+      * econstructor.
 
   Theorem transf_program_correct:
     forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).

@@ -99,12 +99,14 @@ Inductive state : Type :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g m st sf ctrl data
+    forall g m st sf ctrl data ist
       asr asa
       basr1 basa1 nasr1 nasa1
       basr2 basa2 nasr2 nasa2
       asr' asa'
       f stval pstval,
+      asr!(m.(mod_st)) = Some ist ->
+      valueToPos ist = st ->
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
