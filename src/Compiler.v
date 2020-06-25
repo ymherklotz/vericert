@@ -76,10 +76,26 @@ Qed.
 
 Definition transf_backend (r : RTL.program) : res Verilog.program :=
   OK r
+  @@ Tailcall.transf_program
+  @@@ Inlining.transf_program
+  @@ Renumber.transf_program
+  @@ Constprop.transf_program
+  @@ Renumber.transf_program
+  @@@ CSE.transf_program
+  @@@ Deadcode.transf_program
+  @@@ Unusedglob.transform_program
+  @@ print (print_RTL 1)
+  @@@ HTLgen.transl_program
+  @@ Veriloggen.transl_program.
+
+(* Unoptimised below: *)
+(*Definition transf_backend (r : RTL.program) : res Verilog.program :=
+  OK r
   @@@ Inlining.transf_program
   @@ print (print_RTL 1)
   @@@ HTLgen.transl_program
   @@ Veriloggen.transl_program.
+*)
 
 Definition transf_frontend (p: Csyntax.program) : res RTL.program :=
   OK p
