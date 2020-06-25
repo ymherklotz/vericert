@@ -279,7 +279,8 @@ Inductive stackframe : Type :=
     forall  (res : reg)
             (m : module)
             (pc : node)
-            (assoc : assocmap),
+            (reg_assoc : assocmap_reg)
+            (arr_assoc : assocmap_arr),
       stackframe.
 
 Inductive state : Type :=
@@ -735,9 +736,9 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
            (init_params args m.(mod_args)))
           (empty_stack m))
 | step_return :
-    forall g m asr i r sf pc mst,
+    forall g m asr i r sf pc mst asa,
     mst = mod_st m ->
-    step g (Returnstate (Stackframe r m pc asr :: sf) i) Events.E0
+    step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
          (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
                 (empty_stack m)).
 Hint Constructors step : verilog.

@@ -1424,7 +1424,7 @@ Section CORRECTNESS.
     assert (Some (AST.Internal x) = Some (AST.Internal m)).
     replace (AST.fundef HTL.module) with (HTL.fundef).
     rewrite <- H6. setoid_rewrite <- A. trivial.
-    trivial. inversion H7.
+    trivial. inv H7. assumption.
   Qed.
   Hint Resolve transl_initial_states : htlproof.
 
