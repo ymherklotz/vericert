@@ -354,83 +354,13 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
     1448, 128, -624, 48, 212, -44, -44, 12
   };
 
-  int xl, xh;
 
   /* variables for receive quadrature mirror filter here */
   int accumc[11], accumd[11];
 
-  /* outputs of decode() */
-  int xout1, xout2;
-
-  int xs, xd;
-
-  /* variables for encoder (hi and lo) here */
-
-  int il, szl, spl, sl, el;
-
-  int delay_bpl[6];
-
-  int delay_dltx[6];
-
-  int nbl;			/* delay line */
-  int al1, al2;
-  int plt, plt1, plt2;
-  int dlt;
-  int rlt, rlt1, rlt2;
-
-  int detl;
-
-  int deth;
-  int sh;				/* this comes from adaptive predictor */
-  int eh;
-
   const int qq2_code2_table[4] = {
     -7408, -1616, 7408, 1616
   };
-
-
-  int dh, ih;
-  int nbh, szh;
-  int sph, ph, yh, rh;
-
-  int delay_dhx[6];
-
-  int delay_bph[6];
-
-  int ah1, ah2;
-  int ph1, ph2;
-  int rh1, rh2;
-
-  /* variables for decoder here */
-  int ilr, rl;
-  int dec_deth, dec_detl, dec_dlt;
-
-  int dec_del_bpl[6];
-
-  int dec_del_dltx[6];
-
-  int dec_plt, dec_plt1, dec_plt2;
-  int dec_szl, dec_spl, dec_sl;
-  int dec_rlt1, dec_rlt2, dec_rlt;
-  int dec_al1, dec_al2;
-  int dl;
-  int dec_nbl, dec_dh, dec_nbh;
-
-  /* variables used in filtez */
-  int dec_del_bph[6];
-
-  int dec_del_dhx[6];
-
-  int dec_szh;
-  /* variables used in filtep */
-  int dec_rh1, dec_rh2;
-  int dec_ah1, dec_ah2;
-  int dec_ph, dec_sph;
-
-  int dec_sh;
-
-  int dec_ph1, dec_ph2;
-  int i, j;
 
   const int qq4_code4_table[16] = {
     0, -20456, -12896, -8968, -6288, -4240, -2584, -1200,
@@ -446,6 +376,74 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
     4944, 4464, 4008, 3576, 3168, 2776, 2400, 2032,
     1688, 1360, 1040, 728, 432, 136, -432, -136
   };
+
+
+  int delay_dhx[6];
+
+  int delay_bph[6];
+
+  int dec_del_bpl[6];
+
+  int dec_del_dltx[6];
+
+  /* variables used in filtez */
+  int dec_del_bph[6];
+
+  int dec_del_dhx[6];
+
+  int delay_bpl[6];
+
+  int delay_dltx[6];
+  /* outputs of decode() */
+  int xout1, xout2;
+
+  int xs, xd;
+
+  /* variables for encoder (hi and lo) here */
+
+  int il, szl, spl, sl, el;
+
+
+  int nbl;			/* delay line */
+  int al1, al2;
+  int plt, plt1, plt2;
+  int dlt;
+  int rlt, rlt1, rlt2;
+
+  int detl;
+
+  int deth;
+  int sh;				/* this comes from adaptive predictor */
+  int eh;
+
+  int ah1, ah2;
+  int ph1, ph2;
+  int rh1, rh2;
+
+  int dh, ih;
+  int nbh, szh;
+  int sph, ph, yh, rh;
+
+  /* variables for decoder here */
+  int ilr, rl;
+  int dec_deth, dec_detl, dec_dlt;
+  int dec_plt, dec_plt1, dec_plt2;
+  int dec_szl, dec_spl, dec_sl;
+  int dec_rlt1, dec_rlt2, dec_rlt;
+  int dec_al1, dec_al2;
+  int dl;
+  int dec_nbl, dec_dh, dec_nbh;
+
+  int dec_szh;
+  /* variables used in filtep */
+  int dec_rh1, dec_rh2;
+  int dec_ah1, dec_ah2;
+  int dec_ph, dec_sph;
+
+  int dec_sh;
+
+  int dec_ph1, dec_ph2;
+  int i, j;
 
   /* reset, initialize required memory */
 
@@ -843,13 +841,13 @@ main ()
     {
       main_result += 1;
     }
-  }
+  }/*
   for (i = 0; i < IN_END; i++)
   {
     if (result[i] != test_result[i])
     {
       main_result += 1;
     }
-  }
+  }*/
   return main_result;
 }
