@@ -62,9 +62,6 @@ Section CORRECTNESS.
   Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
   Let tge : genv := Globalenvs.Genv.globalenv tprog.
 
-  Lemma stmnt_in_case :
-    exists e st,
-
   Theorem transl_step_correct :
     forall (S1 : HTL.state) t S2,
       HTL.step ge S1 t S2 ->
@@ -73,8 +70,8 @@ Section CORRECTNESS.
         exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1; intros R1 MSTATE; inv MSTATE; econstructor; split.
-    - apply Smallstep.plus_one. econstructor. econstructor.
-      * econstructor.
+    - apply Smallstep.plus_one. econstructor. eassumption. trivial.
+      * econstructor. econstructor.
 
   Theorem transf_program_correct:
     forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).

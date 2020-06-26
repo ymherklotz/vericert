@@ -712,7 +712,7 @@ Definition empty_stack (m : module) : assocmap_arr :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
-      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g,
+      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
       mis_stepp f (mkassociations asr empty_assocmap)

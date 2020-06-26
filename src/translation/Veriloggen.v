@@ -43,10 +43,10 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := transl_list (PTree.elements m.(mod_controllogic)) in
   let case_el_data := transl_list (PTree.elements m.(mod_datapath)) in
   let body :=
-      Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
-      :: Valways (Vposedge m.(mod_clk)) (Vcond (Vbinop Veq (Vvar m.(mod_reset)) (ZToValue 1 1))
+      Valways (Vposedge m.(mod_clk)) (Vcond (Vbinop Veq (Vvar m.(mod_reset)) (ZToValue 1 1))
                                                (Vnonblock (Vvar m.(mod_st)) (posToValue 32 m.(mod_entrypoint)))
                                                (Vcase (Vvar m.(mod_st)) case_el_ctrl (Some Vskip)))
+      :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
       :: (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
   Verilog.mkmodule m.(mod_start)
