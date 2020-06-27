@@ -103,9 +103,9 @@ abs (int n)
 filtez (int *bpl, int *dlt)
 {
   int i;
-  int zl;
-  zl = (int) (*bpl++) * (*dlt++);
-  for (i = 1; i < 6; i++)
+  int zl = 0;
+  //zl = (int) (*bpl++) * (*dlt++);
+  for (i = 1; i < 7; i++)
     zl += (int) (*bpl++) * (*dlt++);
 
   return ((int) (zl >> 14));	/* x2 here */
@@ -118,9 +118,9 @@ filtez (int *bpl, int *dlt)
 filtep (int rlt1, int al1, int rlt2, int al2)
 {
   int pl, pl2;
-  pl = 2 * rlt1;
+  pl = rlt1 << 1 ;
   pl = (int) al1 *pl;
-  pl2 = 2 * rlt2;
+  pl2 = rlt2 << 1 ;
   pl += (int) al2 *pl2;
   return ((int) (pl >> 15));
 }
@@ -188,7 +188,10 @@ logscl (int il, int nbl)
   };
 
   int wd;
-  wd = ((int) nbl * 127L) >> 7L;	/* leak factor 127/128 */
+  int tmp = nbl;
+  int val = tmp << 7;
+  val -= tmp; 
+  wd = (val) >> 7L;	/* leak factor 127/128 */
   nbl = (int) wd + wl_code_table[il >> 2];
   if (nbl < 0)
     nbl = 0;
@@ -228,7 +231,10 @@ upzero (int dlt, int *dlti, int *bli)
   {
     for (i = 0; i < 6; i++)
     {
-      bli[i] = (int) ((255L * bli[i]) >> 8L);	/* leak factor of 255/256 */
+      int tmp = bli[i];
+      int val = tmp << 8;
+      val -= tmp; 
+      bli[i] = (int) (val) >> 8L;	/* leak factor of 255/256 */
     }
   }
   else
@@ -239,7 +245,10 @@ upzero (int dlt, int *dlti, int *bli)
         wd2 = 128;
       else
         wd2 = -128;
-      wd3 = (int) ((255L * bli[i]) >> 8L);	/* leak factor of 255/256 */
+      int tmp = bli[i];
+      int val = tmp << 8;
+      val -= tmp; 
+      wd3 = (int) (val) >> 8L;	/* leak factor of 255/256 */
       bli[i] = wd2 + wd3;
     }
   }
@@ -260,7 +269,7 @@ uppol2 (int al1, int al2, int plt, int plt1, int plt2)
 {
   int wd2, wd4;
   int apl2;
-  wd2 = 4L * (int) al1;
+  wd2 = (int) al1 << 2;
   if ((int) plt * plt1 >= 0L)
     wd2 = -wd2;			/* check same sign */
   wd2 = wd2 >> 7;		/* gain of 1/128 */
@@ -272,7 +281,10 @@ uppol2 (int al1, int al2, int plt, int plt1, int plt2)
   {
     wd4 = wd2 - 128;
   }
-  apl2 = wd4 + (127L * (int) al2 >> 7L);	/* leak factor of 127/128 */
+  int tmp = al2;
+  int val = tmp << 7;
+  val -= tmp; 
+  apl2 = wd4 + (val >> 7L);	/* leak factor of 127/128 */
 
   /* apl2 is limited to +-.75 */
   if (apl2 > 12288)
@@ -290,7 +302,10 @@ uppol1 (int al1, int apl2, int plt, int plt1)
 {
   int wd2;
   int wd3, apl1;
-  wd2 = ((int) al1 * 255L) >> 8L;	/* leak factor of 255/256 */
+  int tmp = al1;
+  int val = tmp << 8;
+  val -= tmp; 
+  wd2 = (val) >> 8L;	/* leak factor of 255/256 */
   if ((int) plt * plt1 >= 0L)
   {
     apl1 = (int) wd2 + 192;	/* same sign case */
@@ -319,7 +334,10 @@ logsch (int ih, int nbh)
     798, -214, 798, -214
   };
 
-  wd = ((int) nbh * 127L) >> 7L;	/* leak factor 127/128 */
+  int tmp = nbh;
+  int val = tmp << 7;
+  val -= tmp; 
+  wd = (val) >> 7L;	/* leak factor 127/128 */
   nbh = wd + wh_code_table[ih];
   if (nbh < 0)
     nbh = 0;
@@ -485,23 +503,32 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
     int xin2 = test_data[i + 1];
     const int *h_ptr;
     int *tqmf_ptr, *tqmf_ptr1;
-    int xa, xb;
+    int xa = 0, xb = 0;
     int decis;
 
     /* transmit quadrature mirror filters implemented here */
     h_ptr = h;
     tqmf_ptr = tqmf;
-    xa = (int) (*tqmf_ptr++) * (*h_ptr++);
-    xb = (int) (*tqmf_ptr++) * (*h_ptr++);
     /* main multiply accumulate loop for samples and coefficients */
-    for (int j = 0; j < 10; j++)
+    for (int j = 0; j < 12; j++)
     {
-      xa += (int) (*tqmf_ptr++) * (*h_ptr++);
-      xb += (int) (*tqmf_ptr++) * (*h_ptr++);
+      int opA1, opB1;
+      int opA2, opB2;
+      if(j==11){
+        opA1 = (*tqmf_ptr++);
+        opB1 = (*h_ptr++);
+        opA2 = (*tqmf_ptr);
+        opB2 = (*h_ptr++);
+      }
+      else{
+        opA1 = (*tqmf_ptr++);
+        opB1 = (*h_ptr++);
+        opA2 = (*tqmf_ptr++);
+        opB2 = (*h_ptr++);
+      }
+      xa += (int) opA1 * opB1;
+      xb += (int) opA2 * opB2;
     }
-    /* final mult/accumulate */
-    xa += (int) (*tqmf_ptr++) * (*h_ptr++);
-    xb += (int) (*tqmf_ptr) * (*h_ptr++);
 
     /* update delay line tqmf */
     tqmf_ptr1 = tqmf_ptr - 2;
@@ -511,8 +538,8 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
     *tqmf_ptr = xin2;
 
     /* scale outputs */
-    xl = (xa + xb) >> 15;
-    xh = (xa - xb) >> 15;
+    int xl = (xa + xb) >> 15;
+    int xh = (xa - xb) >> 15;
 
     /* end of quadrature mirror filter code */
 
@@ -738,17 +765,32 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
     h_ptr = h;
     ac_ptr = accumc;
     ad_ptr = accumd;
-    xa1 = (int) xd *(*h_ptr++);
-    xa2 = (int) xs *(*h_ptr++);
     /* main multiply accumulate loop for samples and coefficients */
-    for (int j = 0; j < 10; j++)
+    for (int j = 0; j < 12; j++)
     {
-      xa1 += (int) (*ac_ptr++) * (*h_ptr++);
-      xa2 += (int) (*ad_ptr++) * (*h_ptr++);
+      int opA1, opB1;
+      int opA2, opB2;
+      if(i==0){
+        opA1 = xd;
+        opB1 = (*h_ptr++);
+        opA2 = xs;
+        opB2 = (*h_ptr++);
+      }
+      else if(i==11){
+        opA1 = (*ac_ptr++);
+        opB1 = (*h_ptr++);
+        opA2 = (*ad_ptr++);
+        opB2 = (*h_ptr++);
+      }
+      else{
+        opA1 = (*ac_ptr);
+        opB1 = (*h_ptr++);
+        opA2 = (*ad_ptr);
+        opB2 = (*h_ptr++);
+      }
+      xa1 += (int) opA1 * opB1;
+      xa2 += (int) opA2 * opB2;
     }
-    /* final mult/accumulate */
-    xa1 += (int) (*ac_ptr) * (*h_ptr++);
-    xa2 += (int) (*ad_ptr) * (*h_ptr++);
 
     /* scale by 2^14 */
     xout1 = xa1 >> 14;
