@@ -69,45 +69,52 @@ Ltac kill_bools :=
 
 Ltac unfold_constants :=
   repeat match goal with
-         | [ _ : _ |- context[Integers.Ptrofs.modulus] ] =>
+         | [ |- context[Integers.Ptrofs.modulus] ] =>
            replace Integers.Ptrofs.modulus with 4294967296 by reflexivity
          | [ H : context[Integers.Ptrofs.modulus] |- _ ] =>
            replace Integers.Ptrofs.modulus with 4294967296 in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Ptrofs.min_signed] ] =>
+         | [ |- context[Integers.Ptrofs.min_signed] ] =>
            replace Integers.Ptrofs.min_signed with (-2147483648) by reflexivity
          | [ H : context[Integers.Ptrofs.min_signed] |- _ ] =>
            replace Integers.Ptrofs.min_signed with (-2147483648) in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Ptrofs.max_signed] ] =>
+         | [ |- context[Integers.Ptrofs.max_signed] ] =>
            replace Integers.Ptrofs.max_signed with 2147483647 by reflexivity
          | [ H : context[Integers.Ptrofs.max_signed] |- _ ] =>
            replace Integers.Ptrofs.max_signed with 2147483647 in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Ptrofs.max_unsigned] ] =>
+         | [ |- context[Integers.Ptrofs.max_unsigned] ] =>
            replace Integers.Ptrofs.max_unsigned with 4294967295 by reflexivity
          | [ H : context[Integers.Ptrofs.max_unsigned] |- _ ] =>
            replace Integers.Ptrofs.max_unsigned with 4294967295 in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Int.modulus] ] =>
+         | [ |- context[Integers.Int.modulus] ] =>
            replace Integers.Int.modulus with 4294967296 by reflexivity
          | [ H : context[Integers.Int.modulus] |- _ ] =>
            replace Integers.Int.modulus with 4294967296 in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Int.min_signed] ] =>
+         | [ |- context[Integers.Int.min_signed] ] =>
            replace Integers.Int.min_signed with (-2147483648) by reflexivity
          | [ H : context[Integers.Int.min_signed] |- _ ] =>
            replace Integers.Int.min_signed with (-2147483648) in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Int.max_signed] ] =>
+         | [ |- context[Integers.Int.max_signed] ] =>
            replace Integers.Int.max_signed with 2147483647 by reflexivity
          | [ H : context[Integers.Int.max_signed] |- _ ] =>
            replace Integers.Int.max_signed with 2147483647 in H by reflexivity
 
-         | [ _ : _ |- context[Integers.Int.max_unsigned] ] =>
+         | [ |- context[Integers.Int.max_unsigned] ] =>
            replace Integers.Int.max_unsigned with 4294967295 by reflexivity
          | [ H : context[Integers.Int.max_unsigned] |- _ ] =>
            replace Integers.Int.max_unsigned with 4294967295 in H by reflexivity
+
+         | [ |- context[Integers.Ptrofs.unsigned (Integers.Ptrofs.repr ?x) ] ] =>
+           match (eval compute in (0 <=? x)) with
+           | true => replace (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr x))
+                    with x by reflexivity
+           | false => idtac
+           end
          end.
 
 Ltac simplify := unfold_constants; simpl in *;
@@ -116,6 +123,9 @@ Ltac simplify := unfold_constants; simpl in *;
 
 Global Opaque Nat.div.
 Global Opaque Z.mul.
+
+Infix "==nat" := eq_nat_dec (no associativity, at level 50).
+Infix "==Z" := Z.eq_dec (no associativity, at level 50).
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 

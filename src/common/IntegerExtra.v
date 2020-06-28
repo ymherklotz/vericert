@@ -51,6 +51,23 @@ Module PtrofsExtra.
   Ltac ptrofs_mod_tac m :=
     repeat (ptrofs_mod_match m); lia.
 
+  Lemma signed_mod_unsigned_mod :
+    forall x m,
+      0 < m ->
+      Ptrofs.modulus mod m = 0 ->
+      Ptrofs.signed x mod m = 0 ->
+      Ptrofs.unsigned x mod m = 0.
+  Proof.
+    intros.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
+           end; try (simplify; lia); ptrofs_mod_tac m.
+  Qed.
+
   Lemma of_int_mod :
     forall x m,
       Int.signed x mod m = 0 ->
@@ -88,10 +105,10 @@ Module PtrofsExtra.
       (m | Ptrofs.modulus) ->
       Ptrofs.signed x mod m = 0 ->
       Ptrofs.signed y mod m = 0 ->
-      (Ptrofs.signed (Ptrofs.add x y)) mod m = 0.
+      (Ptrofs.unsigned (Ptrofs.add x y)) mod m = 0.
   Proof.
     intros. unfold Ptrofs.add.
-    rewrite Ptrofs.signed_repr_eq.
+    rewrite Ptrofs.unsigned_repr_eq.
 
     repeat match goal with
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
@@ -101,24 +118,45 @@ Module PtrofsExtra.
            end; try (simplify; lia); ptrofs_mod_tac m.
   Qed.
 
-  Lemma mul_divs :
+  Lemma mul_divu :
     forall x y,
-      0 <= Ptrofs.signed y ->
-      0 < Ptrofs.signed x ->
-      Ptrofs.signed y mod Ptrofs.signed x = 0 ->
-      (Integers.Ptrofs.mul x (Integers.Ptrofs.divs y x)) = y.
+      0 < Ptrofs.unsigned x ->
+      Ptrofs.unsigned y mod Ptrofs.unsigned x = 0 ->
+      (Integers.Ptrofs.mul x (Integers.Ptrofs.divu y x)) = y.
   Proof.
     intros.
 
-    pose proof (Ptrofs.mods_divs_Euclid y x).
-    pose proof (Zquot.Zrem_Zmod_zero (Ptrofs.signed y) (Ptrofs.signed x)).
-    apply <- H3 in H1; try lia; clear H3.
-    unfold Ptrofs.mods in H2.
-    rewrite H1 in H2.
-    replace (Ptrofs.repr 0) with (Ptrofs.zero) in H2 by reflexivity.
+    assert (x <> Ptrofs.zero).
+    { intro.
+      rewrite H1 in H.
+      replace (Ptrofs.unsigned Ptrofs.zero) with 0 in H by reflexivity.
+      lia. }
+
+    exploit (Ptrofs.modu_divu_Euclid y x); auto; intros.
+    unfold Ptrofs.modu in H2. rewrite H0 in H2.
+    replace (Ptrofs.repr 0) with Ptrofs.zero in H2 by reflexivity.
     rewrite Ptrofs.add_zero in H2.
     rewrite Ptrofs.mul_commut.
     congruence.
+  Qed.
+
+  Lemma divu_unsigned :
+    forall x y,
+      0 < Ptrofs.unsigned y ->
+      Ptrofs.unsigned x < Ptrofs.max_unsigned ->
+      Ptrofs.unsigned (Ptrofs.divu x y) = Ptrofs.unsigned x / Ptrofs.unsigned y.
+  Proof.
+    intros.
+    unfold Ptrofs.divu.
+    rewrite Ptrofs.unsigned_repr; auto.
+    split.
+    apply Z.div_pos; auto.
+    apply Ptrofs.unsigned_range.
+    apply Z.div_le_upper_bound; auto.
+    eapply Z.le_trans.
+    apply Z.lt_le_incl. exact H0.
+    rewrite Z.mul_comm.
+    apply Z.le_mul_diag_r; simplify; lia.
   Qed.
 
   Lemma mul_unsigned :
@@ -129,6 +167,20 @@ Module PtrofsExtra.
     intros; unfold Ptrofs.mul.
     apply Ptrofs.eqm_samerepr.
     apply Ptrofs.eqm_mult; exists 0; lia.
+  Qed.
+
+  Lemma pos_signed_unsigned :
+    forall x,
+      0 <= Ptrofs.signed x ->
+      Ptrofs.signed x = Ptrofs.unsigned x.
+  Proof.
+    intros.
+    rewrite Ptrofs.unsigned_signed.
+    destruct (Ptrofs.lt x Ptrofs.zero) eqn:EQ.
+    unfold Ptrofs.lt in EQ.
+    destruct (zlt (Ptrofs.signed x) (Ptrofs.signed Ptrofs.zero)); try discriminate.
+    replace (Ptrofs.signed (Ptrofs.zero)) with 0 in l by reflexivity. lia.
+    reflexivity.
   Qed.
 End PtrofsExtra.
 
