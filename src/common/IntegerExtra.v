@@ -140,23 +140,23 @@ Module PtrofsExtra.
     congruence.
   Qed.
 
-  Lemma divs_unsigned :
+  Lemma divu_unsigned :
     forall x y,
-      0 <= Ptrofs.signed x ->
-      0 < Ptrofs.signed y ->
-      Ptrofs.unsigned (Ptrofs.divs x y) = Ptrofs.signed x / Ptrofs.signed y.
+      0 < Ptrofs.unsigned y ->
+      Ptrofs.unsigned x < Ptrofs.max_unsigned ->
+      Ptrofs.unsigned (Ptrofs.divu x y) = Ptrofs.unsigned x / Ptrofs.unsigned y.
   Proof.
     intros.
-    unfold Ptrofs.divs.
-    rewrite Ptrofs.unsigned_repr.
-    apply Z.quot_div_nonneg; lia.
+    unfold Ptrofs.divu.
+    rewrite Ptrofs.unsigned_repr; auto.
     split.
-    apply Z.quot_pos; lia.
-    apply Zquot.Zquot_le_upper_bound; try lia.
+    apply Z.div_pos; auto.
+    apply Ptrofs.unsigned_range.
+    apply Z.div_le_upper_bound; auto.
     eapply Z.le_trans.
-    2: { apply ZBinary.Z.le_mul_diag_r; simplify; try lia. }
-    pose proof (Ptrofs.signed_range x).
-    simplify; lia.
+    apply Z.lt_le_incl. exact H0.
+    rewrite Z.mul_comm.
+    apply Z.le_mul_diag_r; simplify; lia.
   Qed.
 
   Lemma mul_unsigned :
