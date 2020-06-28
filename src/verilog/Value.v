@@ -345,6 +345,18 @@ Proof.
   simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
 Qed.
 
+Lemma valueToPos_posToValue :
+  forall p, valueToPos (posToValueAuto p) = p.
+Proof.
+  intros. unfold valueToPos, posToValueAuto.
+  rewrite uvalueToZ_ZToValue. auto. rewrite positive_nat_Z.
+  split. apply Zle_0_pos.
+
+  assert (p < 2 ^ (Pos.size p))%positive by apply Pos.size_gt.
+  inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
+  simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
+Qed.
+
 Lemma valueToInt_intToValue :
   forall v,
   valueToInt (intToValue v) = v.

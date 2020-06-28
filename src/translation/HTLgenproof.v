@@ -18,7 +18,7 @@
 
 From compcert Require RTL Registers AST Integers.
 From compcert Require Import Globalenvs Memory.
-From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra ZExtra.
+From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra.
 From coqup Require HTL Verilog.
 
 Require Import Lia.
@@ -427,6 +427,7 @@ Section CORRECTNESS.
       split.
       apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
+      apply assumption_32bit.
       (* processing of state *)
       econstructor.
       simplify.
@@ -646,6 +647,7 @@ Section CORRECTNESS.
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
+        apply assumption_32bit.
         econstructor. econstructor. econstructor. simplify.
         econstructor. econstructor. econstructor. simplify.
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ1]). (* FIXME: These will be shelved and cause sadness. *)
@@ -859,6 +861,7 @@ Section CORRECTNESS.
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
+        apply assumption_32bit.
         econstructor. econstructor. econstructor. simplify.
         econstructor. econstructor. econstructor. simplify.
         eapply Verilog.erun_Vbinop with (EQ := ?[EQ3]). (* FIXME: These will be shelved and cause sadness. *)
@@ -1037,6 +1040,7 @@ Section CORRECTNESS.
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
+        apply assumption_32bit.
         econstructor. econstructor. econstructor. simplify.
         econstructor. econstructor. econstructor. econstructor. simplify.
 
@@ -1201,6 +1205,7 @@ Section CORRECTNESS.
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
+        apply assumption_32bit.
         econstructor. econstructor. econstructor.
         eapply Verilog.stmnt_runp_Vnonblock_arr. simplify.
         econstructor.
@@ -1454,6 +1459,7 @@ Section CORRECTNESS.
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
+        apply assumption_32bit.
         econstructor. econstructor. econstructor.
         eapply Verilog.stmnt_runp_Vnonblock_arr. simplify.
         econstructor.
@@ -1672,6 +1678,7 @@ Section CORRECTNESS.
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
+        apply assumption_32bit.
         econstructor. econstructor. econstructor.
         eapply Verilog.stmnt_runp_Vnonblock_arr. simplify.
         econstructor. econstructor. econstructor. econstructor.
@@ -1856,6 +1863,7 @@ Section CORRECTNESS.
 
     - eexists. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
+      apply assumption_32bit.
       eapply Verilog.stmnt_runp_Vnonblock_reg with
           (rhsval := if b then posToValue 32 ifso else posToValue 32 ifnot).
 
@@ -1966,6 +1974,7 @@ Section CORRECTNESS.
       eapply Smallstep.plus_two.
       
       eapply HTL.step_module; eauto.
+      apply assumption_32bit.
       constructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
@@ -1998,6 +2007,7 @@ Section CORRECTNESS.
     - econstructor. split.
       eapply Smallstep.plus_two.
       eapply HTL.step_module; eauto.
+      apply assumption_32bit.
       constructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
