@@ -41,6 +41,15 @@ Proof.
 Qed.
 Hint Resolve list_set_spec2 : array.
 
+Lemma list_set_spec3 {A : Type} :
+  forall l i1 i2 (x : A),
+    i1 <> i2 ->
+    nth_error (list_set i1 x l) i2 = nth_error l i2.
+Proof.
+  induction l; intros; destruct i1; destruct i2; simplify; try lia; try reflexivity; firstorder.
+Qed.
+Hint Resolve list_set_spec3 : array.
+
 Lemma array_set_wf {A : Type} :
   forall l ln i (x : A),
     length l = ln -> length (list_set i x l) = ln.
@@ -80,6 +89,13 @@ Proof.
 Qed.
 Hint Resolve array_set_spec2 : array.
 
+Lemma array_set_len {A : Type} :
+  forall a i (x : A),
+    a.(arr_length) = (array_set i x a).(arr_length).
+Proof.
+  unfold array_set. simplify. reflexivity.
+Qed.
+
 Definition array_get_error {A : Type} (i : nat) (a : Array A) : option A :=
   nth_error a.(arr_contents) i.
 
@@ -117,6 +133,19 @@ Proof.
   eauto with array.
 Qed.
 
+Lemma array_gso {A : Type} :
+  forall (a : Array A) i1 i2 x,
+    i1 <> i2 ->
+    array_get_error i2 (array_set i1 x a) = array_get_error i2 a.
+Proof.
+  intros.
+
+  unfold array_get_error.
+  unfold array_set.
+  simplify.
+  eauto with array.
+Qed.
+
 Definition array_get {A : Type} (i : nat) (x : A) (a : Array A) : A :=
   nth i a.(arr_contents) x.
 
@@ -128,6 +157,17 @@ Proof.
 
   unfold array_get.
   info_eauto with array.
+Qed.
+
+Lemma array_get_get_error {A : Type} :
+  forall (a : Array A) i x d,
+    array_get_error i a = Some x ->
+    array_get i d a = x.
+Proof.
+  intros.
+  unfold array_get.
+  unfold array_get_error in H.
+  auto using nth_error_nth.
 Qed.
 
 (** Tail recursive version of standard library function. *)
@@ -229,6 +269,19 @@ Proof.
 
   unfold list_repeat.
   apply list_repeat'_cons.
+Qed.
+
+Lemma list_repeat_lookup {A : Type} :
+  forall n i (a : A),
+    i < n ->
+    nth_error (list_repeat a n) i = Some a.
+Proof.
+  induction n; intros.
+
+  destruct i; simplify; lia.
+
+  rewrite list_repeat_cons.
+  destruct i; simplify; firstorder.
 Qed.
 
 Definition arr_repeat {A : Type} (a : A) (n : nat) : Array A := make_array (list_repeat a n).

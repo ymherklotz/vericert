@@ -51,6 +51,23 @@ Module PtrofsExtra.
   Ltac ptrofs_mod_tac m :=
     repeat (ptrofs_mod_match m); lia.
 
+  Lemma signed_mod_unsigned_mod :
+    forall x m,
+      0 < m ->
+      Ptrofs.modulus mod m = 0 ->
+      Ptrofs.signed x mod m = 0 ->
+      Ptrofs.unsigned x mod m = 0.
+  Proof.
+    intros.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
+           end; try (simplify; lia); ptrofs_mod_tac m.
+  Qed.
+
   Lemma of_int_mod :
     forall x m,
       Int.signed x mod m = 0 ->
@@ -121,6 +138,25 @@ Module PtrofsExtra.
     congruence.
   Qed.
 
+  Lemma divs_unsigned :
+    forall x y,
+      0 <= Ptrofs.signed x ->
+      0 < Ptrofs.signed y ->
+      Ptrofs.unsigned (Ptrofs.divs x y) = Ptrofs.signed x / Ptrofs.signed y.
+  Proof.
+    intros.
+    unfold Ptrofs.divs.
+    rewrite Ptrofs.unsigned_repr.
+    apply Z.quot_div_nonneg; lia.
+    split.
+    apply Z.quot_pos; lia.
+    apply Zquot.Zquot_le_upper_bound; try lia.
+    eapply Z.le_trans.
+    2: { apply ZBinary.Z.le_mul_diag_r; simplify; try lia. }
+    pose proof (Ptrofs.signed_range x).
+    simplify; lia.
+  Qed.
+
   Lemma mul_unsigned :
     forall x y,
       Ptrofs.mul x y =
@@ -129,6 +165,20 @@ Module PtrofsExtra.
     intros; unfold Ptrofs.mul.
     apply Ptrofs.eqm_samerepr.
     apply Ptrofs.eqm_mult; exists 0; lia.
+  Qed.
+
+  Lemma pos_signed_unsigned :
+    forall x,
+      0 <= Ptrofs.signed x ->
+      Ptrofs.signed x = Ptrofs.unsigned x.
+  Proof.
+    intros.
+    rewrite Ptrofs.unsigned_signed.
+    destruct (Ptrofs.lt x Ptrofs.zero) eqn:EQ.
+    unfold Ptrofs.lt in EQ.
+    destruct (zlt (Ptrofs.signed x) (Ptrofs.signed Ptrofs.zero)); try discriminate.
+    replace (Ptrofs.signed (Ptrofs.zero)) with 0 in l by reflexivity. lia.
+    reflexivity.
   Qed.
 End PtrofsExtra.
 

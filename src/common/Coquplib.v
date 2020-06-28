@@ -117,6 +117,9 @@ Ltac simplify := unfold_constants; simpl in *;
 Global Opaque Nat.div.
 Global Opaque Z.mul.
 
+Infix "==nat" := eq_nat_dec (no associativity, at level 50).
+Infix "==Z" := Z.eq_dec (no associativity, at level 50).
+
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
 Definition compose (A B C : Type) (f : B -> C) (g : A -> B) (x : A) : C := f (g x). *)
