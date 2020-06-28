@@ -1197,6 +1197,7 @@ Section CORRECTNESS.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
         }
 
+        (** Start of proof proper *)
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
@@ -1396,31 +1397,41 @@ Section CORRECTNESS.
 
         unfold reg_stack_based_pointers in RSBP.
         pose proof (RSBP r0) as RSBPr0.
+        pose proof (RSBP r1) as RSBPr1.
 
-        destruct (Registers.Regmap.get r0 rs) eqn:EQr0; simplify.
+        destruct (Registers.Regmap.get r0 rs) eqn:EQr0;
+        destruct (Registers.Regmap.get r1 rs) eqn:EQr1; simplify.
 
         rewrite ARCHI in H1. simplify.
         subst.
+        clear RSBPr1.
 
         pose proof MASSOC as MASSOC'.
         invert MASSOC'.
         pose proof (H0 r0).
+        pose proof (H0 r1).
         assert (HPler0 : Ple r0 (RTL.max_reg_function f))
           by (eapply RTL.max_reg_function_use; eauto; simplify; eauto).
+        assert (HPler1 : Ple r1 (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
         apply H6 in HPler0.
-        invert HPler0; try congruence.
-        rewrite EQr0 in H8.
-        invert H8.
-        clear H0. clear H6.
+        apply H8 in HPler1.
+        invert HPler0; invert HPler1; try congruence.
+        rewrite EQr0 in H10.
+        rewrite EQr1 in H12.
+        invert H10. invert H12.
+        clear H0. clear H6. clear H8.
 
-        unfold check_address_parameter_unsigned in *;
-        unfold check_address_parameter_signed in *; simplify.
+        unfold check_address_parameter_signed in *;
+        unfold check_address_parameter_unsigned in *; simplify.
 
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
-                                      (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
+                                      (Integers.Ptrofs.of_int
+                                         (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
+                                                           (Integers.Int.repr z0)))) as OFFSET.
 
         (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH by admit.
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
         (** Modular preservation proof *)
         assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
@@ -1430,19 +1441,29 @@ Section CORRECTNESS.
           rewrite Integers.Ptrofs.signed_repr; try assumption.
           admit. (* FIXME: Register bounds. *)
           apply PtrofsExtra.of_int_mod.
+          apply IntExtra.add_mod; simplify; try lia.
+          exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
+          apply IntExtra.mul_mod; simplify; try lia.
+          exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
+          admit. (* FIXME: Register bounds. *)
+          rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
         }
 
+        (** Start of proof proper *)
         eexists. split.
         eapply Smallstep.plus_one.
         eapply HTL.step_module; eauto.
         econstructor. econstructor. econstructor.
         eapply Verilog.stmnt_runp_Vnonblock_arr. simplify.
         econstructor.
-        eapply Verilog.erun_Vbinop with (EQ := ?[EQ7]).
-        eapply Verilog.erun_Vbinop with (EQ := ?[EQ8]).
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ9]).
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ10]).
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ11]).
+        econstructor. econstructor. econstructor. econstructor.
         econstructor.
-        econstructor.
+        eapply Verilog.erun_Vbinop with (EQ := ?[EQ12]).
+        econstructor. econstructor. econstructor. econstructor.
         econstructor. econstructor. econstructor. econstructor.
         econstructor. econstructor. econstructor. econstructor.
 
@@ -1479,7 +1500,9 @@ Section CORRECTNESS.
                         OFFSET
                         (Integers.Ptrofs.repr 4)))
                 =
-                valueToNat (vdiv (vplus asr # r0 (ZToValue 32 z) ?EQ8) (ZToValue 32 4) ?EQ7))
+                valueToNat (vdiv
+                              (vplus (vplus asr # r0 (ZToValue 32 z0) ?EQ11) (vmul asr # r1 (ZToValue 32 z) ?EQ12)
+                                     ?EQ10) (ZToValue 32 4) ?EQ9))
           as EXPR_OK by admit.
 
         assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -1525,19 +1548,19 @@ Section CORRECTNESS.
         simpl.
         assert (Ple src (RTL.max_reg_function f))
           by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
-        apply H0 in H14.
-        destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H14; eauto.
+        apply H0 in H21.
+        destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H21; eauto.
 
         rewrite <- array_set_len.
         unfold arr_repeat. simplify.
         rewrite list_repeat_len. auto.
 
         assert (4 * ptr / 4 = Integers.Ptrofs.unsigned OFFSET / 4) by (f_equal; assumption).
-        rewrite Z.mul_comm in H14.
-        rewrite Z_div_mult in H14; try lia.
-        replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H14 by reflexivity.
-        rewrite <- PtrofsExtra.divu_unsigned in H14; unfold_constants; try lia.
-        rewrite H14. rewrite EXPR_OK.
+        rewrite Z.mul_comm in H21.
+        rewrite Z_div_mult in H21; try lia.
+        replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H21 by reflexivity.
+        rewrite <- PtrofsExtra.divu_unsigned in H21; unfold_constants; try lia.
+        rewrite H21. rewrite EXPR_OK.
         rewrite array_get_error_set_bound.
         reflexivity.
         unfold arr_length, arr_repeat. simpl.
@@ -1554,10 +1577,10 @@ Section CORRECTNESS.
              right.
              apply ZExtra.mod_0_bounds; try lia.
              apply ZLib.Z_mod_mult'.
-             invert H13.
-             rewrite Z2Nat.id in H19; try lia.
-             apply Zmult_lt_compat_r with (p := 4) in H19; try lia.
-             rewrite ZLib.div_mul_undo in H19; try lia.
+             invert H20.
+             rewrite Z2Nat.id in H22; try lia.
+             apply Zmult_lt_compat_r with (p := 4) in H22; try lia.
+             rewrite ZLib.div_mul_undo in H22; try lia.
              split; try lia.
              apply Z.le_trans with (m := RTL.fn_stacksize f); simplify; lia.
         }
@@ -1581,7 +1604,7 @@ Section CORRECTNESS.
         lia.
         unfold_constants.
         intro.
-        apply Z2Nat.inj_iff in H14; try lia.
+        apply Z2Nat.inj_iff in H21; try lia.
         apply Z.div_pos; try lia.
         apply Integers.Ptrofs.unsigned_range.
 
@@ -1617,14 +1640,12 @@ Section CORRECTNESS.
              apply ZExtra.mod_0_bounds; try lia.
              apply ZLib.Z_mod_mult'.
              invert H0.
-             apply Zmult_lt_compat_r with (p := 4) in H14; try lia.
-             rewrite ZLib.div_mul_undo in H14; try lia.
+             apply Zmult_lt_compat_r with (p := 4) in H21; try lia.
+             rewrite ZLib.div_mul_undo in H21; try lia.
              split; try lia.
              apply Z.le_trans with (m := RTL.fn_stacksize f); simplify; lia.
         }
         apply ASBP; assumption.
-
-
 
       + admit.
 
