@@ -594,17 +594,17 @@ Section CORRECTNESS.
         invert H8.
         clear H0. clear H6.
 
-        unfold check_address_parameter in *. simplify.
+        unfold check_address_parameter_signed in *;
+        unfold check_address_parameter_unsigned in *; simplify.
 
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
                                       (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
         (** Read bounds assumption *)
-        assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
-        assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
         (** Modular preservation proof *)
-        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE.
+        assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
         { rewrite HeqOFFSET.
           apply PtrofsExtra.add_mod; simplify; try lia.
           exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
@@ -617,34 +617,28 @@ Section CORRECTNESS.
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
                   (4 * Integers.Ptrofs.unsigned
-                         (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
+                         (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
           as NORMALISE.
         { replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) at 1 by reflexivity.
           rewrite <- PtrofsExtra.mul_unsigned.
-          apply PtrofsExtra.mul_divs; auto.
-          rewrite Integers.Ptrofs.signed_repr; simplify; lia. }
+          apply PtrofsExtra.mul_divu; simplify; auto; lia. }
 
         (** Normalised bounds proof *)
         assert (0 <=
-                Integers.Ptrofs.unsigned (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))
+                Integers.Ptrofs.unsigned (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))
                 < (RTL.fn_stacksize f / 4))
         as NORMALISE_BOUND.
         { split.
           apply Integers.Ptrofs.unsigned_range_2.
-          assert (forall x y, Integers.Ptrofs.divs x y = Integers.Ptrofs.divs x y ) by reflexivity.
-          unfold Integers.Ptrofs.divs at 2 in H0.
+          assert (forall x y, Integers.Ptrofs.divu x y = Integers.Ptrofs.divu x y ) by reflexivity.
+          unfold Integers.Ptrofs.divu at 2 in H0.
           rewrite H0. clear H0.
           rewrite Integers.Ptrofs.unsigned_repr; simplify.
-          rewrite Integers.Ptrofs.signed_repr; simplify; try lia.
-          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
           apply Zmult_lt_reg_r with (p := 4); try lia.
           repeat rewrite ZLib.div_mul_undo; try lia.
-          rewrite Integers.Ptrofs.signed_repr.
-          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
           split.
-          apply Z.div_pos; try (rewrite <- HeqOFFSET; assumption); try lia.
-          apply Z.div_le_upper_bound; simplify; try (rewrite <- HeqOFFSET; lia); try lia.
-          simplify; lia. }
+          apply Z.div_pos; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          apply Z.div_le_upper_bound; lia. }
 
         inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
         clear NORMALISE_BOUND.
@@ -687,7 +681,7 @@ Section CORRECTNESS.
         setoid_rewrite Integers.Ptrofs.add_zero_l in H7.
 
         specialize (H7 (Integers.Ptrofs.unsigned
-                          (Integers.Ptrofs.divs
+                          (Integers.Ptrofs.divu
                              OFFSET
                              (Integers.Ptrofs.repr 4)))).
 
@@ -699,11 +693,11 @@ Section CORRECTNESS.
 
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.divs
+                     (Integers.Ptrofs.divu
                         OFFSET
                         (Integers.Ptrofs.repr 4)))
                 =
-                valueToNat (vdivs (vplus asr # r0 (ZToValue 32 z) ?EQ2) (ZToValue 32 4) ?EQ1))
+                valueToNat (vdiv (vplus asr # r0 (ZToValue 32 z) ?EQ2) (ZToValue 32 4) ?EQ1))
           as EXPR_OK by admit.
         rewrite <- EXPR_OK.
         rewrite NORMALISE in I.
@@ -757,7 +751,7 @@ Section CORRECTNESS.
         rewrite Registers.Regmap.gss.
         unfold arr_stack_based_pointers in ASBP.
         specialize (ASBP (Integers.Ptrofs.unsigned
-                            (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4)))).
+                            (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
         exploit ASBP; auto; intros I.
 
         rewrite NORMALISE in I.
@@ -804,7 +798,8 @@ Section CORRECTNESS.
         invert H10. invert H12.
         clear H0. clear H6. clear H8.
 
-        unfold check_address_parameter in *. simplify.
+        unfold check_address_parameter_signed in *;
+        unfold check_address_parameter_unsigned in *; simplify.
 
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
                                       (Integers.Ptrofs.of_int
@@ -812,11 +807,10 @@ Section CORRECTNESS.
                                                            (Integers.Int.repr z0)))) as OFFSET.
 
         (** Read bounds assumption *)
-        assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
-        assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
         (** Modular preservation proof *)
-        assert (Integers.Ptrofs.signed OFFSET mod 4 = 0) as MOD_PRESERVE.
+        assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
         { rewrite HeqOFFSET.
           apply PtrofsExtra.add_mod; simplify; try lia.
           exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
@@ -835,34 +829,28 @@ Section CORRECTNESS.
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
                   (4 * Integers.Ptrofs.unsigned
-                         (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
+                         (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
           as NORMALISE.
         { replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) at 1 by reflexivity.
           rewrite <- PtrofsExtra.mul_unsigned.
-          apply PtrofsExtra.mul_divs; auto.
-          rewrite Integers.Ptrofs.signed_repr; simplify; lia. }
+          apply PtrofsExtra.mul_divu; simplify; auto; lia. }
 
         (** Normalised bounds proof *)
         assert (0 <=
-                Integers.Ptrofs.unsigned (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))
+                Integers.Ptrofs.unsigned (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))
                 < (RTL.fn_stacksize f / 4))
         as NORMALISE_BOUND.
         { split.
           apply Integers.Ptrofs.unsigned_range_2.
-          assert (forall x y, Integers.Ptrofs.divs x y = Integers.Ptrofs.divs x y ) by reflexivity.
-          unfold Integers.Ptrofs.divs at 2 in H0.
+          assert (forall x y, Integers.Ptrofs.divu x y = Integers.Ptrofs.divu x y ) by reflexivity.
+          unfold Integers.Ptrofs.divu at 2 in H0.
           rewrite H0. clear H0.
           rewrite Integers.Ptrofs.unsigned_repr; simplify.
-          rewrite Integers.Ptrofs.signed_repr; simplify; try lia.
-          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
           apply Zmult_lt_reg_r with (p := 4); try lia.
           repeat rewrite ZLib.div_mul_undo; try lia.
-          rewrite Integers.Ptrofs.signed_repr.
-          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
           split.
-          apply Z.div_pos; try (rewrite <- HeqOFFSET; assumption); try lia.
-          apply Z.div_le_upper_bound; simplify; try (rewrite <- HeqOFFSET; lia); try lia.
-          simplify; lia. }
+          apply Z.div_pos; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          apply Z.div_le_upper_bound; lia. }
 
         inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
         clear NORMALISE_BOUND.
@@ -911,7 +899,7 @@ Section CORRECTNESS.
         setoid_rewrite Integers.Ptrofs.add_zero_l in H7.
 
         specialize (H7 (Integers.Ptrofs.unsigned
-                          (Integers.Ptrofs.divs
+                          (Integers.Ptrofs.divu
                              OFFSET
                              (Integers.Ptrofs.repr 4)))).
 
@@ -922,12 +910,12 @@ Section CORRECTNESS.
         intros I.
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.divs
+                     (Integers.Ptrofs.divu
                         OFFSET
                         (Integers.Ptrofs.repr 4)))
                 = valueToNat
-                    (vdivs (vplus (vplus asr # r0 (ZToValue 32 z0) ?EQ5)
-                                  (vmul asr # r1 (ZToValue 32 z) ?EQ6) ?EQ4) (ZToValue 32 4) ?EQ3))
+                    (vdiv (vplus (vplus asr # r0 (ZToValue 32 z0) ?EQ5)
+                                 (vmul asr # r1 (ZToValue 32 z) ?EQ6) ?EQ4) (ZToValue 32 4) ?EQ3))
           as EXPR_OK by admit.
         rewrite <- EXPR_OK.
         rewrite NORMALISE in I.
@@ -981,7 +969,7 @@ Section CORRECTNESS.
         rewrite Registers.Regmap.gss.
         unfold arr_stack_based_pointers in ASBP.
         specialize (ASBP (Integers.Ptrofs.unsigned
-                            (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4)))).
+                            (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
         exploit ASBP; auto; intros I.
 
         rewrite NORMALISE in I.
@@ -1001,7 +989,8 @@ Section CORRECTNESS.
         destruct (Archi.ptr64) eqn:ARCHI; simplify.
         rewrite ARCHI in H0. simplify.
 
-        unfold check_address_parameter in EQ; simplify.
+        unfold check_address_parameter_unsigned in *;
+        unfold check_address_parameter_signed in *; simplify.
 
         assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
         rewrite ZERO in H1. clear ZERO.
@@ -1010,43 +999,36 @@ Section CORRECTNESS.
         remember i0 as OFFSET.
 
         (** Read bounds assumption *)
-        assert (0 <= Integers.Ptrofs.signed OFFSET) as READ_BOUND_LOW by admit.
-        assert (Integers.Ptrofs.signed OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
 
         (** Modular preservation proof *)
-        rename H8 into MOD_PRESERVE.
+        rename H0 into MOD_PRESERVE.
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
                   (4 * Integers.Ptrofs.unsigned
-                         (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
+                         (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))) = OFFSET)
           as NORMALISE.
         { replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) at 1 by reflexivity.
           rewrite <- PtrofsExtra.mul_unsigned.
-          apply PtrofsExtra.mul_divs; auto.
-          rewrite Integers.Ptrofs.signed_repr; simplify; lia. }
+          apply PtrofsExtra.mul_divu; simplify; auto; try lia. }
 
         (** Normalised bounds proof *)
         assert (0 <=
-                Integers.Ptrofs.unsigned (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4))
+                Integers.Ptrofs.unsigned (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))
                 < (RTL.fn_stacksize f / 4))
         as NORMALISE_BOUND.
         { split.
           apply Integers.Ptrofs.unsigned_range_2.
-          assert (forall x y, Integers.Ptrofs.divs x y = Integers.Ptrofs.divs x y ) by reflexivity.
-          unfold Integers.Ptrofs.divs at 2 in H0.
+          assert (forall x y, Integers.Ptrofs.divu x y = Integers.Ptrofs.divu x y ) by reflexivity.
+          unfold Integers.Ptrofs.divu at 2 in H0.
           rewrite H0. clear H0.
           rewrite Integers.Ptrofs.unsigned_repr; simplify.
-          rewrite Integers.Ptrofs.signed_repr; simplify; try lia.
-          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
           apply Zmult_lt_reg_r with (p := 4); try lia.
           repeat rewrite ZLib.div_mul_undo; try lia.
-          rewrite Integers.Ptrofs.signed_repr.
-          rewrite Z.quot_div_nonneg; try (rewrite <- HeqOFFSET; assumption); try lia.
           split.
-          apply Z.div_pos; try (rewrite <- HeqOFFSET; assumption); try lia.
-          apply Z.div_le_upper_bound; simplify; try (rewrite <- HeqOFFSET; lia); try lia.
-          simplify; lia. }
+          apply Z.div_pos; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          apply Z.div_le_upper_bound; lia. }
 
         inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
         clear NORMALISE_BOUND.
@@ -1086,7 +1068,7 @@ Section CORRECTNESS.
         setoid_rewrite Integers.Ptrofs.add_zero_l in H7.
 
         specialize (H7 (Integers.Ptrofs.unsigned
-                          (Integers.Ptrofs.divs
+                          (Integers.Ptrofs.divu
                              OFFSET
                              (Integers.Ptrofs.repr 4)))).
 
@@ -1097,11 +1079,11 @@ Section CORRECTNESS.
         intros I.
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.divs
+                     (Integers.Ptrofs.divu
                         OFFSET
                         (Integers.Ptrofs.repr 4)))
                   =
-                  valueToNat (ZToValue 32 (Integers.Ptrofs.signed OFFSET / 4)))
+                  valueToNat (ZToValue 32 (Integers.Ptrofs.unsigned OFFSET / 4)))
           as EXPR_OK by admit.
         rewrite <- EXPR_OK.
         rewrite NORMALISE in I.
@@ -1155,7 +1137,7 @@ Section CORRECTNESS.
         rewrite Registers.Regmap.gss.
         unfold arr_stack_based_pointers in ASBP.
         specialize (ASBP (Integers.Ptrofs.unsigned
-                            (Integers.Ptrofs.divs OFFSET (Integers.Ptrofs.repr 4)))).
+                            (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
         exploit ASBP; auto; intros I.
 
         rewrite NORMALISE in I.
