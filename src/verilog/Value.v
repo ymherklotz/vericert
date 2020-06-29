@@ -397,15 +397,15 @@ Proof. destruct b; auto. Qed.
 
 Local Open Scope Z.
 
-Ltac eq_op H :=
+Ltac word_op_value H :=
   intros; unfold uvalueToZ, ZToValue; simpl; rewrite unify_word_unfold;
-  rewrite <- H; rewrite uwordToZ_ZToWord; auto.
+  rewrite <- H; rewrite uwordToZ_ZToWord_full; auto; omega.
 
 Lemma zadd_vplus :
-  forall z1 z2,
-  0 <= z1 + z2 < 2 ^ 32 ->
-  uvalueToZ (vplus (ZToValue 32 z1) (ZToValue 32 z2) eq_refl) = z1 + z2.
-Proof. eq_op ZToWord_plus. Qed.
+  forall sz z1 z2,
+  (sz > 0)%nat ->
+  uvalueToZ (vplus (ZToValue sz z1) (ZToValue sz z2) eq_refl) = (z1 + z2) mod 2 ^ Z.of_nat sz.
+Proof. word_op_value ZToWord_plus. Qed.
 
 Lemma zadd_vplus2 :
   forall z1 z2,
@@ -415,26 +415,30 @@ Proof.
   rewrite ZToWord_plus; auto.
 Qed.
 
+Lemma wordsize_32 :
+  Int.wordsize = 32%nat.
+Proof. auto. Qed.
+
 Lemma intadd_vplus :
   forall i1 i2,
   valueToInt (vplus (intToValue i1) (intToValue i2) eq_refl) = Int.add i1 i2.
 Proof.
-  intros. unfold Int.add, valueToInt, intToValue. rewrite zadd_vplus2.
-  rewrite uvalueToZ_ZToValue_full. rewrite <- Int.unsigned_repr_eq.
-  rewrite Int.repr_unsigned. auto. omega.
+  intros. unfold Int.add, valueToInt, intToValue. rewrite zadd_vplus.
+  rewrite <- Int.unsigned_repr_eq.
+  rewrite Int.repr_unsigned. auto. rewrite wordsize_32. omega.
 Qed.
 
 Lemma zsub_vminus :
-  forall z1 z2,
-  0 <= z1 - z2 < 2 ^ 32 ->
-  uvalueToZ (vminus (ZToValue 32 z1) (ZToValue 32 z2) eq_refl) = z1 - z2.
-Proof. eq_op ZToWord_minus. Qed.
+  forall sz z1 z2,
+  (sz > 0)%nat ->
+  uvalueToZ (vminus (ZToValue sz z1) (ZToValue sz z2) eq_refl) = (z1 - z2) mod 2 ^ Z.of_nat sz.
+Proof. word_op_value ZToWord_minus. Qed.
 
 Lemma zmul_vmul :
-  forall z1 z2,
-  0 <= z1 * z2 < 2 ^ 32 ->
-  uvalueToZ (vmul (ZToValue 32 z1) (ZToValue 32 z2) eq_refl) = z1 * z2.
-Proof. eq_op ZToWord_mult. Qed.
+  forall sz z1 z2,
+  (sz > 0)%nat ->
+  uvalueToZ (vmul (ZToValue sz z1) (ZToValue sz z2) eq_refl) = (z1 * z2) mod 2 ^ Z.of_nat sz.
+Proof. word_op_value ZToWord_mult. Qed.
 
 Local Open Scope N.
 Lemma zdiv_vdiv :
