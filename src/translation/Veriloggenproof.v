@@ -72,9 +72,11 @@ Section CORRECTNESS.
     induction 1; intros R1 MSTATE; inv MSTATE; econstructor; split.
     - apply Smallstep.plus_one. econstructor. eassumption. trivial.
       * econstructor. econstructor.
+        Admitted.
 
   Theorem transf_program_correct:
     forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).
+    Admitted.
 
 
 End CORRECTNESS.

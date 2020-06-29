@@ -420,7 +420,7 @@ Section CORRECTNESS.
         match_states S1 R1 ->
         exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1; intros R1 MSTATE; try inv_state.
+(*    induction 1; intros R1 MSTATE; try inv_state.
     - (* Inop *)
       unfold match_prog in TRANSL.
       econstructor.
@@ -2112,7 +2112,7 @@ Section CORRECTNESS.
       (* exact (AssocMap.empty value). *)
       (* exact (AssocMap.empty value). *)
       (* exact (AssocMap.empty value). *)
-      (* exact (AssocMap.empty value). *)
+      (* exact (AssocMap.empty value). *)*)
   Admitted.
   Hint Resolve transl_step_correct : htlproof.
 

@@ -292,26 +292,16 @@ Definition check_address_parameter_unsigned (p : Z) : bool :=
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (boplitz Vadd r1 off)
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    ret (boplitz Vadd r1 off)
   | Op.Ascaled scale offset, r1::nil =>
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
   | Op.Aindexed2 offset, r1::r2::nil =>
-    if (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vlit (ZToValue 32 a))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    ret (Vlit (ZToValue 32 a))
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
