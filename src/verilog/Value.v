@@ -19,7 +19,7 @@
 (* begin hide *)
 From bbv Require Import Word.
 From bbv Require HexNotation WordScope.
-From Coq Require Import ZArith.ZArith FSets.FMapPositive.
+From Coq Require Import ZArith.ZArith FSets.FMapPositive Lia.
 From compcert Require Import lib.Integers common.Values.
 (* end hide *)
 
@@ -294,7 +294,17 @@ Inductive val_value_lessdef: val -> value -> Prop :=
     forall i v',
     i = valueToInt v' ->
     val_value_lessdef (Vint i) v'
+| val_value_lessdef_ptr:
+    forall b off v',
+    off = Ptrofs.repr (valueToZ v') ->
+    (Z.modulo (valueToZ v') 4) = 0%Z ->
+    val_value_lessdef (Vptr b off) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
+
+Inductive opt_val_value_lessdef: option val -> value -> Prop :=
+| opt_lessdef_some:
+    forall v v', val_value_lessdef v v' -> opt_val_value_lessdef (Some v) v'
+| opt_lessdef_none: forall v, opt_val_value_lessdef None v.
 
 Lemma valueToZ_ZToValue :
   forall n z,
@@ -330,7 +340,19 @@ Proof.
   rewrite uvalueToZ_ZToValue. auto. rewrite positive_nat_Z.
   split. apply Zle_0_pos.
 
-  assert (p < 2 ^ (Pos.size p))%positive. apply Pos.size_gt.
+  assert (p < 2 ^ (Pos.size p))%positive by apply Pos.size_gt.
+  inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
+  simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
+Qed.
+
+Lemma valueToPos_posToValue :
+  forall p, valueToPos (posToValueAuto p) = p.
+Proof.
+  intros. unfold valueToPos, posToValueAuto.
+  rewrite uvalueToZ_ZToValue. auto. rewrite positive_nat_Z.
+  split. apply Zle_0_pos.
+
+  assert (p < 2 ^ (Pos.size p))%positive by apply Pos.size_gt.
   inversion H. rewrite <- Z.compare_lt_iff. rewrite <- H1.
   simpl. rewrite <- Pos2Z.inj_pow_pos. trivial.
 Qed.
@@ -361,3 +383,18 @@ Lemma boolToValue_ValueToBool :
   forall b,
   valueToBool (boolToValue 32 b) = b.
 Proof. destruct b; unfold valueToBool, boolToValue; simpl; trivial. Qed.
+
+(*Lemma ZToValue_valueToNat :
+  forall x sz,
+  sz > 0 ->
+  (x < 2^(Z.of_nat sz))%Z ->
+  valueToNat (ZToValue sz x) = Z.to_nat x.
+Proof.
+  destruct x; intros; unfold ZToValue, valueToNat; simpl.
+  - rewrite wzero'_def. apply wordToNat_wzero.
+  - rewrite posToWord_nat. rewrite wordToNat_natToWord_2. trivial.
+    unfold Z.of_nat in *. destruct sz eqn:?. omega. simpl in H0.
+    rewrite <- Pos2Z.inj_pow_pos in H0. Search (Z.pos _ < Z.pos _)%Z.
+    Search Pos.to_nat (_ < _). (* Pos2Nat.inj_lt *)
+    Search "inj" positive nat.
+*)

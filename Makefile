@@ -28,7 +28,7 @@ all: lib/COMPCERTSTAMP
 	$(MAKE) compile
 
 lib/COMPCERTSTAMP:
-	(cd lib/CompCert && ./configure $(ARCH))
+	(cd lib/CompCert && ./configure --ignore-coq-version $(ARCH))
 	$(MAKE) -C lib/CompCert
 	touch $@
 
