@@ -108,6 +108,12 @@ Definition boolToValue (sz : nat) (b : bool) : value :=
 Definition unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
 intros; subst; assumption. Defined.
 
+Lemma unify_word_unfold :
+  forall sz w,
+  unify_word sz sz w eq_refl = w.
+Proof.
+  intros. unfold unify_word. Admitted.
+
 Definition value_eq_size:
   forall v1 v2 : value, { vsize v1 = vsize v2 } + { True }.
 Proof.
@@ -382,7 +388,21 @@ Qed.
 Lemma boolToValue_ValueToBool :
   forall b,
   valueToBool (boolToValue 32 b) = b.
-Proof. destruct b; unfold valueToBool, boolToValue; simpl; trivial. Qed.
+Proof. destruct b; auto. Qed.
+
+Lemma intToValue_eq_size :
+  forall n1 n2,
+  vsize (intToValue n1) = vsize (intToValue n2).
+Proof. auto. Qed.
+
+Local Open Scope Z.
+
+Lemma zadd_vplus :
+  forall z1 z2,
+  valueToZ (vplus (ZToValue 32 z1) (ZToValue 32 z2) eq_refl) = z1 + z2.
+Proof.
+  intros. unfold valueToZ, ZToValue. simpl.
+  Admitted.
 
 (*Lemma ZToValue_valueToNat :
   forall x sz,
