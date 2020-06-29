@@ -294,24 +294,24 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Aindexed off, r1::nil =>
     if (check_address_parameter_signed off)
     then ret (boplitz Vadd r1 off)
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address misaligned")
   | Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address misaligned")
   | Op.Aindexed2 offset, r1::r2::nil =>
     if (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address misaligned")
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address misaligned")
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
     then ret (Vlit (ZToValue 32 a))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address misaligned")
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 

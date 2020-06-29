@@ -67,3 +67,4 @@ clean:: Makefile.coq
 
 clean::
 	rm -f */*.v.d */*.glob */*.vo */*~ *~
+	rm -f src/extraction/*.ml src/extraction/*.mli

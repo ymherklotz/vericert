@@ -18,7 +18,7 @@
 
 From compcert Require RTL Registers AST Integers.
 From compcert Require Import Globalenvs Memory.
-From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra.
+From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra ZExtra.
 From coqup Require HTL Verilog.
 
 Require Import Lia.
