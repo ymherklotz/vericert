@@ -143,7 +143,7 @@ Module PtrofsExtra.
   Lemma divu_unsigned :
     forall x y,
       0 < Ptrofs.unsigned y ->
-      Ptrofs.unsigned x < Ptrofs.max_unsigned ->
+      Ptrofs.unsigned x <= Ptrofs.max_unsigned ->
       Ptrofs.unsigned (Ptrofs.divu x y) = Ptrofs.unsigned x / Ptrofs.unsigned y.
   Proof.
     intros.
@@ -154,7 +154,7 @@ Module PtrofsExtra.
     apply Ptrofs.unsigned_range.
     apply Z.div_le_upper_bound; auto.
     eapply Z.le_trans.
-    apply Z.lt_le_incl. exact H0.
+    exact H0.
     rewrite Z.mul_comm.
     apply Z.le_mul_diag_r; simplify; lia.
   Qed.
