@@ -18,7 +18,7 @@
 
 From compcert Require RTL Registers AST Integers.
 From compcert Require Import Globalenvs Memory.
-From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra.
+From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra ZExtra.
 From coqup Require HTL Verilog.
 
 Require Import Lia.
@@ -76,6 +76,13 @@ Definition arr_stack_based_pointers (spb : Values.block) (m : mem) (stack_length
                               (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr)))))
                 spb.
 
+Definition stack_bounds (sp : Values.val) (hi : Z) (m : mem) : Prop :=
+  forall ptr v,
+    hi <= ptr <= Integers.Ptrofs.max_unsigned ->
+    Z.modulo ptr 4 = 0 ->
+    Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) = None /\
+    Mem.storev AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) v = None.
+
 Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
 | match_stacks_nil :
     match_stacks mem nil nil
@@ -87,7 +94,8 @@ Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe 
            (MARR : match_arrs m f sp mem asa)
            (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
            (RSBP: reg_stack_based_pointers sp' rs)
-           (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp),
+           (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
+           (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem),
       match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
                        (HTL.Stackframe r m pc asr asa :: lr).
 
@@ -99,8 +107,9 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     (MS : match_stacks mem sf res)
     (MARR : match_arrs m f sp mem asa)
     (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
-    (RSBP: reg_stack_based_pointers sp' rs)
-    (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp),
+    (RSBP : reg_stack_based_pointers sp' rs)
+    (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
+    (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem),
     match_states (RTL.State sf f sp st rs mem)
                  (HTL.State res m st asr asa)
 | match_returnstate :
@@ -601,9 +610,6 @@ Section CORRECTNESS.
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
                                       (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
-        (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
-
         (** Modular preservation proof *)
         assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
         { rewrite HeqOFFSET.
@@ -614,6 +620,18 @@ Section CORRECTNESS.
           apply PtrofsExtra.of_int_mod.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
         }
+
+        (** Read bounds proof *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
+        { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; simplify; auto.
+          unfold stack_bounds in BOUNDS.
+          exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET)); auto.
+          split; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          simplify.
+          replace (Integers.Ptrofs.repr 0) with (Integers.Ptrofs.zero) by reflexivity.
+          rewrite Integers.Ptrofs.add_zero_l.
+          rewrite Integers.Ptrofs.unsigned_repr. intros. simplify. congruence.
+          apply Integers.Ptrofs.unsigned_range_2. }
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
@@ -808,9 +826,6 @@ Section CORRECTNESS.
                                          (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
                                                            (Integers.Int.repr z0)))) as OFFSET.
 
-        (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
-
         (** Modular preservation proof *)
         assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
         { rewrite HeqOFFSET.
@@ -827,6 +842,18 @@ Section CORRECTNESS.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
         }
+
+        (** Read bounds proof *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
+        { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; simplify; auto.
+          unfold stack_bounds in BOUNDS.
+          exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET)); auto.
+          split; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          simplify.
+          replace (Integers.Ptrofs.repr 0) with (Integers.Ptrofs.zero) by reflexivity.
+          rewrite Integers.Ptrofs.add_zero_l.
+          rewrite Integers.Ptrofs.unsigned_repr. intros. simplify. congruence.
+          apply Integers.Ptrofs.unsigned_range_2. }
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
@@ -1001,11 +1028,19 @@ Section CORRECTNESS.
 
         remember i0 as OFFSET.
 
-        (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
-
         (** Modular preservation proof *)
         rename H0 into MOD_PRESERVE.
+
+        (** Read bounds proof *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
+        { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; simplify; auto.
+          unfold stack_bounds in BOUNDS.
+          exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET)); auto.
+          simplify.
+          replace (Integers.Ptrofs.repr 0) with (Integers.Ptrofs.zero) by reflexivity.
+          rewrite Integers.Ptrofs.add_zero_l.
+          rewrite Integers.Ptrofs.unsigned_repr. intros. simplify. congruence.
+          apply Integers.Ptrofs.unsigned_range_2. }
 
         (** Normalisation proof *)
         assert (Integers.Ptrofs.repr
@@ -1187,9 +1222,6 @@ Section CORRECTNESS.
         remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
                                       (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
-        (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH by admit.
-
         (** Modular preservation proof *)
         assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
         { rewrite HeqOFFSET.
@@ -1200,6 +1232,18 @@ Section CORRECTNESS.
           apply PtrofsExtra.of_int_mod.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
         }
+
+        (** Write bounds proof *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH.
+        { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; simplify; auto.
+          unfold stack_bounds in BOUNDS.
+          exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET) (Registers.Regmap.get src rs)); auto.
+          split; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          simplify.
+          replace (Integers.Ptrofs.repr 0) with (Integers.Ptrofs.zero) by reflexivity.
+          rewrite Integers.Ptrofs.add_zero_l.
+          rewrite Integers.Ptrofs.unsigned_repr. intros. simplify. congruence.
+          apply Integers.Ptrofs.unsigned_range_2. }
 
         (** Start of proof proper *)
         eexists. split.
@@ -1353,7 +1397,7 @@ Section CORRECTNESS.
         intro.
         apply Z2Nat.inj_iff in H14; try lia.
         apply Z.div_pos; try lia.
-        apply Integers.Ptrofs.unsigned_range.
+        apply Integers.Ptrofs.unsigned_range_2.
 
         assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
         unfold arr_stack_based_pointers.
@@ -1371,8 +1415,7 @@ Section CORRECTNESS.
         simplify.
         destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; try constructor.
         destruct (Archi.ptr64); try discriminate.
-        pose proof (RSBP src). rewrite EQ_SRC in H0.
-        assumption.
+        pose proof (RSBP src). rewrite EQ_SRC in H0. assumption.
 
         simpl.
         erewrite Mem.load_store_other with (m1 := m).
@@ -1393,6 +1436,33 @@ Section CORRECTNESS.
              apply Z.le_trans with (m := RTL.fn_stacksize f); simplify; lia.
         }
         apply ASBP; assumption.
+
+        unfold stack_bounds in *. intros.
+        simpl.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        erewrite Mem.load_store_other with (m1 := m).
+        2: { exact H1. }
+        2: { right. right. simpl.
+             rewrite ZERO.
+             rewrite Integers.Ptrofs.add_zero_l.
+             rewrite Integers.Ptrofs.unsigned_repr; simplify; try lia.
+             apply ZExtra.mod_0_bounds; simplify; try lia. }
+        simplify. split.
+        exploit (BOUNDS ptr); try lia. intros. simplify. assumption.
+        exploit (BOUNDS ptr v); try lia. intros.
+        invert H0.
+        match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
+        assert (Mem.valid_access m AST.Mint32 sp'
+                                 (Integers.Ptrofs.unsigned
+                                    (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
+                                                         (Integers.Ptrofs.repr ptr))) Writable).
+        { pose proof H1. eapply Mem.store_valid_access_2 in H0.
+          exact H0. eapply Mem.store_valid_access_3. eassumption. }
+        pose proof (Mem.valid_access_store m AST.Mint32 sp'
+                                           (Integers.Ptrofs.unsigned
+                                              (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
+                                                                   (Integers.Ptrofs.repr ptr))) v).
+        apply X in H0. invert H0. congruence.
 
       + (** Preamble *)
         invert MARR. simplify.
@@ -1435,9 +1505,6 @@ Section CORRECTNESS.
                                          (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
                                                            (Integers.Int.repr z0)))) as OFFSET.
 
-        (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
-
         (** Modular preservation proof *)
         assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
         { rewrite HeqOFFSET.
@@ -1454,6 +1521,18 @@ Section CORRECTNESS.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
           rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
         }
+
+        (** Write bounds proof *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH.
+        { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; simplify; auto.
+          unfold stack_bounds in BOUNDS.
+          exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET) (Registers.Regmap.get src rs)); auto.
+          split; try lia; apply Integers.Ptrofs.unsigned_range_2.
+          simplify.
+          replace (Integers.Ptrofs.repr 0) with (Integers.Ptrofs.zero) by reflexivity.
+          rewrite Integers.Ptrofs.add_zero_l.
+          rewrite Integers.Ptrofs.unsigned_repr. intros. simplify. congruence.
+          apply Integers.Ptrofs.unsigned_range_2. }
 
         (** Start of proof proper *)
         eexists. split.
@@ -1653,6 +1732,33 @@ Section CORRECTNESS.
         }
         apply ASBP; assumption.
 
+        unfold stack_bounds in *. intros.
+        simpl.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        erewrite Mem.load_store_other with (m1 := m).
+        2: { exact H1. }
+        2: { right. right. simpl.
+             rewrite ZERO.
+             rewrite Integers.Ptrofs.add_zero_l.
+             rewrite Integers.Ptrofs.unsigned_repr; simplify; try lia.
+             apply ZExtra.mod_0_bounds; simplify; try lia. }
+        simplify. split.
+        exploit (BOUNDS ptr); try lia. intros. simplify. assumption.
+        exploit (BOUNDS ptr v); try lia. intros.
+        invert H0.
+        match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
+        assert (Mem.valid_access m AST.Mint32 sp'
+                                 (Integers.Ptrofs.unsigned
+                                    (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
+                                                         (Integers.Ptrofs.repr ptr))) Writable).
+        { pose proof H1. eapply Mem.store_valid_access_2 in H0.
+          exact H0. eapply Mem.store_valid_access_3. eassumption. }
+        pose proof (Mem.valid_access_store m AST.Mint32 sp'
+                                           (Integers.Ptrofs.unsigned
+                                              (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
+                                                                   (Integers.Ptrofs.repr ptr))) v).
+        apply X in H0. invert H0. congruence.
+
       + invert MARR. simplify.
 
         unfold Op.eval_addressing in H0.
@@ -1668,11 +1774,19 @@ Section CORRECTNESS.
 
         remember i0 as OFFSET.
 
-        (** Read bounds assumption *)
-        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH by admit.
-
         (** Modular preservation proof *)
         rename H0 into MOD_PRESERVE.
+
+        (** Write bounds proof *)
+        assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH.
+        { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; simplify; auto.
+          unfold stack_bounds in BOUNDS.
+          exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET) (Registers.Regmap.get src rs)); auto.
+          simplify.
+          replace (Integers.Ptrofs.repr 0) with (Integers.Ptrofs.zero) by reflexivity.
+          rewrite Integers.Ptrofs.add_zero_l.
+          rewrite Integers.Ptrofs.unsigned_repr. intros. simplify. congruence.
+          apply Integers.Ptrofs.unsigned_range_2. }
 
         (** Start of proof proper *)
         eexists. split.
@@ -1860,6 +1974,33 @@ Section CORRECTNESS.
              apply Z.le_trans with (m := RTL.fn_stacksize f); simplify; lia.
         }
         apply ASBP; assumption.
+
+        unfold stack_bounds in *. intros.
+        simpl.
+        assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
+        erewrite Mem.load_store_other with (m1 := m).
+        2: { exact H1. }
+        2: { right. right. simpl.
+             rewrite ZERO.
+             rewrite Integers.Ptrofs.add_zero_l.
+             rewrite Integers.Ptrofs.unsigned_repr; simplify; try lia.
+             apply ZExtra.mod_0_bounds; simplify; try lia. }
+        simplify. split.
+        exploit (BOUNDS ptr); try lia. intros. simplify. assumption.
+        exploit (BOUNDS ptr v); try lia. intros.
+        invert H0.
+        match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
+        assert (Mem.valid_access m AST.Mint32 sp'
+                                 (Integers.Ptrofs.unsigned
+                                    (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
+                                                         (Integers.Ptrofs.repr ptr))) Writable).
+        { pose proof H1. eapply Mem.store_valid_access_2 in H0.
+          exact H0. eapply Mem.store_valid_access_3. eassumption. }
+        pose proof (Mem.valid_access_store m AST.Mint32 sp'
+                                           (Integers.Ptrofs.unsigned
+                                              (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
+                                                                   (Integers.Ptrofs.repr ptr))) v).
+        apply X in H0. invert H0. congruence.
 
     - eexists. split. apply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
@@ -2090,6 +2231,49 @@ Section CORRECTNESS.
       repeat constructor.
       constructor.
 
+      Transparent Mem.alloc. (* TODO: Since there are opaque there's probably a lemma. *)
+      Transparent Mem.load.
+      Transparent Mem.store.
+      unfold stack_bounds.
+      split.
+
+      unfold Mem.alloc in H.
+      invert H.
+      simplify.
+      unfold Mem.load.
+      intros.
+      match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence.
+      invert v0. unfold Mem.range_perm in H3.
+      unfold Mem.perm in H3. simplify.
+      unfold Mem.perm_order' in H3.
+      rewrite Integers.Ptrofs.add_zero_l in H3.
+      rewrite Integers.Ptrofs.unsigned_repr in H3; simplify; try lia.
+      exploit (H3 ptr). lia. intros.
+      rewrite Maps.PMap.gss in H8.
+      match goal with | H8 : context[if ?x then _ else _] |- _ => destruct x eqn:EQ end; try contradiction.
+      simplify.
+      apply proj_sumbool_true in H10. lia.
+
+      unfold Mem.alloc in H.
+      invert H.
+      simplify.
+      unfold Mem.store.
+      intros.
+      match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence.
+      invert v0. unfold Mem.range_perm in H3.
+      unfold Mem.perm in H3. simplify.
+      unfold Mem.perm_order' in H3.
+      rewrite Integers.Ptrofs.add_zero_l in H3.
+      rewrite Integers.Ptrofs.unsigned_repr in H3; simplify; try lia.
+      exploit (H3 ptr). lia. intros.
+      rewrite Maps.PMap.gss in H8.
+      match goal with | H8 : context[if ?x then _ else _] |- _ => destruct x eqn:EQ end; try contradiction.
+      simplify.
+      apply proj_sumbool_true in H10. lia.
+      Opaque Mem.alloc.
+      Opaque Mem.load.
+      Opaque Mem.store.
+
     - invert MSTATE. invert MS.
       econstructor.
       split. apply Smallstep.plus_one.
@@ -2115,7 +2299,6 @@ Section CORRECTNESS.
       (* exact (AssocMap.empty value). *)*)
   Admitted.
   Hint Resolve transl_step_correct : htlproof.
-
 
   Lemma option_inv :
     forall A x y,

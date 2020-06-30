@@ -69,10 +69,10 @@ Section CORRECTNESS.
         match_states S1 R1 ->
         exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1; intros R1 MSTATE; inv MSTATE; econstructor; split.
+(*    induction 1; intros R1 MSTATE; inv MSTATE; econstructor; split.
     - apply Smallstep.plus_one. econstructor. eassumption. trivial.
-      * econstructor. econstructor.
-        Admitted.
+      * econstructor. econstructor.*)
+    Admitted.
 
   Theorem transf_program_correct:
     forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).

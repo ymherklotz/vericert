@@ -108,6 +108,11 @@ Definition boolToValue (sz : nat) (b : bool) : value :=
 Definition unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
 intros; subst; assumption. Defined.
 
+Lemma unify_word_unfold :
+  forall sz w,
+  unify_word sz sz w eq_refl = w.
+Proof. auto. Qed.
+
 Definition value_eq_size:
   forall v1 v2 : value, { vsize v1 = vsize v2 } + { True }.
 Proof.
@@ -324,6 +329,12 @@ Proof.
   auto using uwordToZ_ZToWord.
 Qed.
 
+Lemma uvalueToZ_ZToValue_full :
+  forall sz : nat,
+  (0 < sz)%nat ->
+  forall z : Z, uvalueToZ (ZToValue sz z) = (z mod 2 ^ Z.of_nat sz)%Z.
+Proof. unfold uvalueToZ, ZToValue. simpl. auto using uwordToZ_ZToWord_full. Qed.
+
 Lemma ZToValue_uvalueToZ :
   forall v,
   ZToValue (vsize v) (uvalueToZ v) = v.
@@ -382,7 +393,64 @@ Qed.
 Lemma boolToValue_ValueToBool :
   forall b,
   valueToBool (boolToValue 32 b) = b.
-Proof. destruct b; unfold valueToBool, boolToValue; simpl; trivial. Qed.
+Proof. destruct b; auto. Qed.
+
+Local Open Scope Z.
+
+Ltac word_op_value H :=
+  intros; unfold uvalueToZ, ZToValue; simpl; rewrite unify_word_unfold;
+  rewrite <- H; rewrite uwordToZ_ZToWord_full; auto; omega.
+
+Lemma zadd_vplus :
+  forall sz z1 z2,
+  (sz > 0)%nat ->
+  uvalueToZ (vplus (ZToValue sz z1) (ZToValue sz z2) eq_refl) = (z1 + z2) mod 2 ^ Z.of_nat sz.
+Proof. word_op_value ZToWord_plus. Qed.
+
+Lemma zadd_vplus2 :
+  forall z1 z2,
+  vplus (ZToValue 32 z1) (ZToValue 32 z2) eq_refl = ZToValue 32 (z1 + z2).
+Proof.
+  intros. unfold vplus, ZToValue, map_word2. rewrite unify_word_unfold. simpl.
+  rewrite ZToWord_plus; auto.
+Qed.
+
+Lemma wordsize_32 :
+  Int.wordsize = 32%nat.
+Proof. auto. Qed.
+
+Lemma intadd_vplus :
+  forall i1 i2,
+  valueToInt (vplus (intToValue i1) (intToValue i2) eq_refl) = Int.add i1 i2.
+Proof.
+  intros. unfold Int.add, valueToInt, intToValue. rewrite zadd_vplus.
+  rewrite <- Int.unsigned_repr_eq.
+  rewrite Int.repr_unsigned. auto. rewrite wordsize_32. omega.
+Qed.
+
+Lemma zsub_vminus :
+  forall sz z1 z2,
+  (sz > 0)%nat ->
+  uvalueToZ (vminus (ZToValue sz z1) (ZToValue sz z2) eq_refl) = (z1 - z2) mod 2 ^ Z.of_nat sz.
+Proof. word_op_value ZToWord_minus. Qed.
+
+Lemma zmul_vmul :
+  forall sz z1 z2,
+  (sz > 0)%nat ->
+  uvalueToZ (vmul (ZToValue sz z1) (ZToValue sz z2) eq_refl) = (z1 * z2) mod 2 ^ Z.of_nat sz.
+Proof. word_op_value ZToWord_mult. Qed.
+
+Local Open Scope N.
+Lemma zdiv_vdiv :
+  forall n1 n2,
+  n1 < 2 ^ 32 ->
+  n2 < 2 ^ 32 ->
+  n1 / n2 < 2 ^ 32 ->
+  valueToN (vdiv (NToValue 32 n1) (NToValue 32 n2) eq_refl) = n1 / n2.
+Proof.
+  intros; unfold valueToN, NToValue; simpl; rewrite unify_word_unfold. unfold wdiv.
+  unfold wordBin. repeat (rewrite wordToN_NToWord_2); auto.
+Qed.
 
 (*Lemma ZToValue_valueToNat :
   forall x sz,
