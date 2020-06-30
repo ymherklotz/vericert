@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+val pprint_stmnt : int -> Verilog.stmnt -> string
+
 val print_value : out_channel -> Value.value -> unit
 
 val print_program : bool -> out_channel -> Verilog.program -> unit

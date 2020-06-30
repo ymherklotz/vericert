@@ -78,7 +78,7 @@ let rec pprint_expr = function
   | Vvari (s, i) -> concat [register s; "["; pprint_expr i; "]"]
   | Vinputvar s -> register s
   | Vunop (u, e) -> concat ["("; unop u; pprint_expr e; ")"]
-  | Vbinop (op, a, b) -> concat ["("; pprint_binop (pprint_expr a) (pprint_expr b) op; ")"]
+  | Vbinop (op, a, b) -> concat [pprint_binop (pprint_expr a) (pprint_expr b) op]
   | Vternary (c, t, f) -> concat ["("; pprint_expr c; " ? "; pprint_expr t; " : "; pprint_expr f; ")"]
 
 let rec pprint_stmnt i =
