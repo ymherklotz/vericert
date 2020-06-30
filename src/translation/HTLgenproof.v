@@ -83,28 +83,28 @@ Definition stack_bounds (sp : Values.val) (hi : Z) (m : mem) : Prop :=
     Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) = None /\
     Mem.storev AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) v = None.
 
-Inductive match_stacks (mem : mem) : list RTL.stackframe -> list HTL.stackframe -> Prop :=
-| match_stacks_nil :
-    match_stacks mem nil nil
-| match_stacks_cons :
-    forall cs lr r f sp sp' pc rs m asr asa
-           (TF : tr_module f m)
-           (ST: match_stacks mem cs lr)
-           (MA: match_assocmaps f rs asr)
-           (MARR : match_arrs m f sp mem asa)
-           (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
-           (RSBP: reg_stack_based_pointers sp' rs)
-           (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
-           (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem),
-      match_stacks mem (RTL.Stackframe r f sp pc rs :: cs)
-                       (HTL.Stackframe r m pc asr asa :: lr).
+Inductive match_frames : list RTL.stackframe -> list HTL.stackframe -> Prop :=
+| match_frames_nil :
+    match_frames nil nil.
+(* | match_frames_cons : *)
+(*     forall cs lr r f sp sp' pc rs m asr asa *)
+(*            (TF : tr_module f m) *)
+(*            (ST: match_frames mem cs lr) *)
+(*            (MA: match_assocmaps f rs asr) *)
+(*            (MARR : match_arrs m f sp mem asa) *)
+(*            (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0)) *)
+(*            (RSBP: reg_stack_based_pointers sp' rs) *)
+(*            (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp) *)
+(*            (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem), *)
+(*       match_frames mem (RTL.Stackframe r f sp pc rs :: cs) *)
+(*                        (HTL.Stackframe r m pc asr asa :: lr). *)
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
     (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module f m)
     (WF : state_st_wf m (HTL.State res m st asr asa))
-    (MS : match_stacks mem sf res)
+    (MF : match_frames sf res)
     (MARR : match_arrs m f sp mem asa)
     (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
     (RSBP : reg_stack_based_pointers sp' rs)
@@ -115,7 +115,7 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_returnstate :
     forall
       v v' stack mem res
-      (MS : match_stacks mem stack res),
+      (MF : match_frames stack res),
       val_value_lessdef v v' ->
       match_states (RTL.Returnstate stack v mem) (HTL.Returnstate res v')
 | match_initial_call :
@@ -1283,9 +1283,6 @@ Section CORRECTNESS.
         unfold_merge.
         apply AssocMap.gss.
 
-        (** Match stacks *)
-        admit.
-
         (** Equality proof *)
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
@@ -1575,9 +1572,6 @@ Section CORRECTNESS.
         unfold_merge.
         apply AssocMap.gss.
 
-        (** Match stacks *)
-        admit.
-
         (** Equality proof *)
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
@@ -1819,9 +1813,6 @@ Section CORRECTNESS.
         unfold Verilog.merge_regs.
         unfold_merge.
         apply AssocMap.gss.
-
-        (** Match stacks *)
-        admit.
 
         (** Equality proof *)
         assert (Z.to_nat
@@ -2140,9 +2131,8 @@ Section CORRECTNESS.
       apply finish_not_return.
       apply AssocMap.gss.
       rewrite Events.E0_left. reflexivity.
-      constructor.
 
-      admit.
+      constructor; auto.
       constructor.
 
     - econstructor. split.
@@ -2174,8 +2164,7 @@ Section CORRECTNESS.
       apply AssocMap.gss.
       rewrite Events.E0_left. trivial.
 
-      constructor.
-      admit.
+      constructor; auto.
 
       simpl. inversion MASSOC. subst.
       unfold find_assocmap, AssocMapExt.get_default. rewrite AssocMap.gso.
@@ -2192,7 +2181,9 @@ Section CORRECTNESS.
       apply greater_than_max_func.
       apply init_reg_assoc_empty.
       unfold state_st_wf.
-      intros. inv H3. apply AssocMap.gss. constructor.
+      intros. inv H3. apply AssocMap.gss.
+
+      constructor.
 
       econstructor. simplify.
       repeat split. unfold HTL.empty_stack.
@@ -2274,20 +2265,8 @@ Section CORRECTNESS.
       Opaque Mem.load.
       Opaque Mem.store.
 
-    - invert MSTATE. invert MS.
-      econstructor.
-      split. apply Smallstep.plus_one.
-      constructor.
-
-      constructor; auto.
-      econstructor; auto.
-      apply regs_lessdef_add_match; auto.
-      apply regs_lessdef_add_greater. apply greater_than_max_func. auto.
-
-      unfold state_st_wf. intros. inv H. rewrite AssocMap.gso.
-      rewrite AssocMap.gss. trivial. apply st_greater_than_res.
-
-      admit.
+    - inversion MSTATE.
+      inversion MF.
   Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
@@ -2361,7 +2340,7 @@ Section CORRECTNESS.
       Smallstep.final_state (RTL.semantics prog) s1 r ->
       Smallstep.final_state (HTL.semantics tprog) s2 r.
   Proof.
-    intros. inv H0. inv H. inv H4. inv MS. constructor. trivial.
+    intros. inv H0. inv H. inv H4. invert MF. constructor. reflexivity.
   Qed.
   Hint Resolve transl_final_states : htlproof.
 
