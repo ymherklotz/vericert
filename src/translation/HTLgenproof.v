@@ -335,6 +335,17 @@ Proof.
     constructor.
 Qed.
 
+Lemma arr_lookup_some:
+  forall (z : Z) (r0 : Registers.reg) (r : Verilog.reg) (asr : assocmap) (asa : Verilog.assocmap_arr)
+    (stack : Array (option value)) (H5 : asa ! r = Some stack) n,
+    exists x, Verilog.arr_assocmap_lookup asa r n = Some x.
+Proof.
+  intros z r0 r asr asa stack H5 n.
+  eexists.
+  unfold Verilog.arr_assocmap_lookup. rewrite H5. reflexivity.
+Qed.
+Hint Resolve arr_lookup_some : htlproof.
+
 Section CORRECTNESS.
 
   Variable prog : RTL.program.
@@ -421,6 +432,42 @@ Section CORRECTNESS.
       exists asr' asa',
         HTL.step tge (HTL.State res m st asr asa) Events.E0 (HTL.State res m st asr' asa').
 
+  Ltac big_tac :=
+    repeat (simplify;
+            match goal with
+            | [ |- context[Verilog.merge_regs _ _] ] =>
+              unfold Verilog.merge_regs; simplify; unfold_merge
+            | [ |- context[_ # ?d <- _ ! ?d] ] => apply AssocMap.gss
+            | [ |- context[_ # ?d <- _ ! ?s] ] => rewrite AssocMap.gso; try apply st_greater_than_res
+            | [ |- context[valueToPos (posToValue 32 _)] ] => rewrite assumption_32bit
+            | [ |- context[match_states _ _] ] => econstructor; eauto
+            | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr; simplify
+            | [ |- context[(AssocMap.empty _) ! _] ] => rewrite AssocMap.gempty; simplify
+
+            | [ H : ?asa ! ?r = Some _ |- Verilog.arr_assocmap_lookup ?asa ?r _ = Some _ ] =>
+              unfold Verilog.arr_assocmap_lookup; setoid_rewrite H; f_equal
+
+            | [ |- match_assocmaps _ _ _ # _ <- (posToValue 32 _) ] =>
+              apply regs_lessdef_add_greater; [> apply greater_than_max_func | assumption]
+
+            | [  |- state_st_wf _ _ ] => unfold state_st_wf; inversion 1; simplify
+
+            | [ |- match_arrs _ _ _ _ _ ] => econstructor; simplify
+            | [ |- context[HTL.empty_stack] ] => unfold HTL.empty_stack; simplify
+            | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs; simplify
+            | [ |- context[(AssocMap.combine _ _ _) ! _] ] =>
+              try (rewrite AssocMap.gcombine; [> | reflexivity])
+
+            | [ |- context[reg_stack_based_pointers] ] => unfold reg_stack_based_pointers; intros
+            | [ |- context[Registers.Regmap.get ?d (Registers.Regmap.set ?d _ _)] ] =>
+              rewrite Registers.Regmap.gss
+            | [ |- context[Registers.Regmap.get ?s (Registers.Regmap.set ?d _ _)] ] =>
+              destruct (Pos.eq_dec s d) as [EQ|EQ];
+              [> rewrite EQ | rewrite Registers.Regmap.gso; auto]
+
+            | [ H : _ ! _ = Some _ |- _] => try (setoid_rewrite H; simplify)
+            end).
+
   Lemma transl_inop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
       (rs : RTL.regset) (m : mem) (pc' : RTL.node),
@@ -445,46 +492,8 @@ Section CORRECTNESS.
     econstructor.
     econstructor.
     econstructor.
-    simplify.
 
-    unfold Verilog.merge_regs.
-    unfold_merge. apply AssocMap.gss.
-
-    (* prove match_state *)
-    rewrite assumption_32bit.
-    econstructor; simplify; eauto.
-
-    unfold Verilog.merge_regs.
-    unfold_merge. simpl. apply regs_lessdef_add_greater. apply greater_than_max_func.
-    assumption.
-    unfold Verilog.merge_regs.
-    unfold state_st_wf. inversion 1. subst. unfold_merge. apply AssocMap.gss.
-
-    (* prove match_arrs *)
-    invert MARR. simplify.
-    unfold HTL.empty_stack. simplify. unfold Verilog.merge_arrs.
-    econstructor.
-    simplify. repeat split.
-
-    rewrite AssocMap.gcombine.
-    2: { reflexivity. }
-    rewrite AssocMap.gss.
-    unfold Verilog.merge_arr.
-    setoid_rewrite H5.
-    reflexivity.
-
-    rewrite combine_length.
-    unfold arr_repeat. simplify.
-    rewrite list_repeat_len.
-    reflexivity.
-
-    unfold arr_repeat. simplify.
-    rewrite list_repeat_len; auto.
-    intros.
-    erewrite array_get_error_equal.
-    eauto. apply combine_none.
-
-    assumption.
+    all: invert MARR; big_tac.
 
     Unshelve.
     constructor.
@@ -598,6 +607,12 @@ Section CORRECTNESS.
            | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
            end.
 
+  Ltac inv_arr_access :=
+    match goal with
+    | [ _ : translate_arr_access ?chunk ?addr ?args _ _ = OK ?c _ _ |- _] =>
+      destruct c, chunk, addr, args; simplify; tac; simplify
+    end.
+
   Lemma transl_iload_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
       (rs : Registers.Regmap.t Values.val) (m : mem) (chunk : AST.memory_chunk)
@@ -613,9 +628,7 @@ Section CORRECTNESS.
           match_states (RTL.State s f sp pc' (Registers.Regmap.set dst v rs) m) R2.
   Proof.
     intros s f sp pc rs m chunk addr args dst pc' a v H H0 H1 R1 MSTATE.
-    inv_state.
-
-    destruct c, chunk, addr, args; simplify; tac; simplify.
+    inv_state. inv_arr_access.
 
     + (** Preamble *)
       invert MARR. simplify.
@@ -656,8 +669,7 @@ Section CORRECTNESS.
         rewrite Integers.Ptrofs.signed_repr; try assumption.
         admit. (* FIXME: Register bounds. *)
         apply PtrofsExtra.of_int_mod.
-        rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
-      }
+        rewrite Integers.Int.signed_repr; simplify; try split; try assumption. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
@@ -693,13 +705,13 @@ Section CORRECTNESS.
         rewrite Integers.Ptrofs.unsigned_repr; simplify.
         apply Zmult_lt_reg_r with (p := 4); try lia.
         repeat rewrite ZLib.div_mul_undo; try lia.
-        split.
         apply Z.div_pos; try lia; apply Integers.Ptrofs.unsigned_range_2.
         apply Z.div_le_upper_bound; lia. }
 
       inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
       clear NORMALISE_BOUND.
 
+      (** Start of proof proper *)
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
@@ -711,27 +723,10 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: simplify.
-
-      (** Verilog array lookup *)
-      unfold Verilog.arr_assocmap_lookup. setoid_rewrite H5.
-      f_equal.
-
-      (** State Lookup *)
-      unfold Verilog.merge_regs.
-      simplify.
-      unfold_merge.
-      rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply st_greater_than_res.
-
-      (** Match states *)
-      rewrite assumption_32bit.
-      econstructor; eauto.
+      all: big_tac.
 
       (** Match assocmaps *)
-      unfold Verilog.merge_regs. simplify. unfold_merge.
-      apply regs_lessdef_add_match.
+      apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -762,51 +757,7 @@ Section CORRECTNESS.
       rewrite H1 in I.
       invert I. assumption.
 
-      (** PC match *)
-      apply regs_lessdef_add_greater.
-      apply greater_than_max_func.
-      assumption.
-
-      (** States well formed *)
-      unfold state_st_wf. inversion 1. simplify.
-      unfold Verilog.merge_regs.
-      unfold_merge. rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply st_greater_than_res.
-
-      (** Match arrays *)
-      econstructor.
-      repeat split; simplify.
-      unfold HTL.empty_stack.
-      simplify.
-      unfold Verilog.merge_arrs.
-
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
-      rewrite AssocMap.gss.
-      unfold Verilog.merge_arr.
-      setoid_rewrite H5.
-      reflexivity.
-
-      rewrite combine_length.
-      unfold arr_repeat. simplify.
-      rewrite list_repeat_len.
-      reflexivity.
-
-      unfold arr_repeat. simplify.
-      rewrite list_repeat_len.
-      congruence.
-
-      intros.
-      erewrite array_get_error_equal.
-      eauto. apply combine_none.
-      assumption.
-
       (** RSBP preservation *)
-      unfold reg_stack_based_pointers. intros.
-      destruct (Pos.eq_dec r1 dst); try rewrite e. (* FIXME: Prepare this for automation *)
-
-      rewrite Registers.Regmap.gss.
       unfold arr_stack_based_pointers in ASBP.
       specialize (ASBP (Integers.Ptrofs.unsigned
                           (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
@@ -819,9 +770,6 @@ Section CORRECTNESS.
       rewrite Integers.Ptrofs.add_zero_l in I.
       rewrite H1 in I.
       assumption.
-      simplify.
-
-      rewrite Registers.Regmap.gso; auto.
 
     + (** Preamble *)
       invert MARR. simplify.
@@ -878,8 +826,7 @@ Section CORRECTNESS.
         exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
         admit. (* FIXME: Register bounds. *)
         rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
-        rewrite Integers.Int.signed_repr; simplify; try split; try assumption.
-      }
+        rewrite Integers.Int.signed_repr; simplify; try split; try assumption. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
@@ -915,7 +862,6 @@ Section CORRECTNESS.
         rewrite Integers.Ptrofs.unsigned_repr; simplify.
         apply Zmult_lt_reg_r with (p := 4); try lia.
         repeat rewrite ZLib.div_mul_undo; try lia.
-        split.
         apply Z.div_pos; try lia; apply Integers.Ptrofs.unsigned_range_2.
         apply Z.div_le_upper_bound; lia. }
 
@@ -939,27 +885,10 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor.
 
-      all: simplify.
-
-      (** Verilog array lookup *)
-      unfold Verilog.arr_assocmap_lookup. setoid_rewrite H5.
-      f_equal.
-
-      (** State Lookup *)
-      unfold Verilog.merge_regs.
-      simplify.
-      unfold_merge.
-      rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply st_greater_than_res.
-
-      (** Match states *)
-      rewrite assumption_32bit.
-      econstructor; eauto.
+      all: big_tac.
 
       (** Match assocmaps *)
-      unfold Verilog.merge_regs. simplify. unfold_merge.
-      apply regs_lessdef_add_match.
+      apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -990,51 +919,7 @@ Section CORRECTNESS.
       rewrite H1 in I.
       invert I. assumption.
 
-      (** PC match *)
-      apply regs_lessdef_add_greater.
-      apply greater_than_max_func.
-      assumption.
-
-      (** States well formed *)
-      unfold state_st_wf. inversion 1. simplify.
-      unfold Verilog.merge_regs.
-      unfold_merge. rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply st_greater_than_res.
-
-      (** Match arrays *)
-      econstructor.
-      repeat split; simplify.
-      unfold HTL.empty_stack.
-      simplify.
-      unfold Verilog.merge_arrs.
-
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
-      rewrite AssocMap.gss.
-      unfold Verilog.merge_arr.
-      setoid_rewrite H5.
-      reflexivity.
-
-      rewrite combine_length.
-      unfold arr_repeat. simplify.
-      rewrite list_repeat_len.
-      reflexivity.
-
-      unfold arr_repeat. simplify.
-      rewrite list_repeat_len.
-      congruence.
-
-      intros.
-      erewrite array_get_error_equal.
-      eauto. apply combine_none.
-      assumption.
-
       (** RSBP preservation *)
-      unfold reg_stack_based_pointers. intros.
-      destruct (Pos.eq_dec r2 dst); try rewrite e. (* FIXME: Prepare this for automation *)
-
-      rewrite Registers.Regmap.gss.
       unfold arr_stack_based_pointers in ASBP.
       specialize (ASBP (Integers.Ptrofs.unsigned
                           (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
@@ -1047,9 +932,6 @@ Section CORRECTNESS.
       rewrite Integers.Ptrofs.add_zero_l in I.
       rewrite H1 in I.
       assumption.
-      simplify.
-
-      rewrite Registers.Regmap.gso; auto.
 
     + invert MARR. simplify.
 
@@ -1102,7 +984,6 @@ Section CORRECTNESS.
         rewrite Integers.Ptrofs.unsigned_repr; simplify.
         apply Zmult_lt_reg_r with (p := 4); try lia.
         repeat rewrite ZLib.div_mul_undo; try lia.
-        split.
         apply Z.div_pos; try lia; apply Integers.Ptrofs.unsigned_range_2.
         apply Z.div_le_upper_bound; lia. }
 
@@ -1117,27 +998,10 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. simplify.
       econstructor. econstructor. econstructor. econstructor. simplify.
 
-      all: simplify.
-
-      (** Verilog array lookup *)
-      unfold Verilog.arr_assocmap_lookup. setoid_rewrite H5.
-      f_equal.
-
-      (** State Lookup *)
-      unfold Verilog.merge_regs.
-      simplify.
-      unfold_merge.
-      rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply st_greater_than_res.
-
-      (** Match states *)
-      rewrite assumption_32bit.
-      econstructor; eauto.
+      all: big_tac.
 
       (** Match assocmaps *)
-      unfold Verilog.merge_regs. simplify. unfold_merge.
-      apply regs_lessdef_add_match.
+      apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -1167,51 +1031,7 @@ Section CORRECTNESS.
       rewrite H1 in I.
       invert I. assumption.
 
-      (** PC match *)
-      apply regs_lessdef_add_greater.
-      apply greater_than_max_func.
-      assumption.
-
-      (** States well formed *)
-      unfold state_st_wf. inversion 1. simplify.
-      unfold Verilog.merge_regs.
-      unfold_merge. rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply st_greater_than_res.
-
-      (** Match arrays *)
-      econstructor.
-      repeat split; simplify.
-      unfold HTL.empty_stack.
-      simplify.
-      unfold Verilog.merge_arrs.
-
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
-      rewrite AssocMap.gss.
-      unfold Verilog.merge_arr.
-      setoid_rewrite H5.
-      reflexivity.
-
-      rewrite combine_length.
-      unfold arr_repeat. simplify.
-      rewrite list_repeat_len.
-      reflexivity.
-
-      unfold arr_repeat. simplify.
-      rewrite list_repeat_len.
-      congruence.
-
-      intros.
-      erewrite array_get_error_equal.
-      eauto. apply combine_none.
-      assumption.
-
       (** RSBP preservation *)
-      unfold reg_stack_based_pointers. intros.
-      destruct (Pos.eq_dec r0 dst); try rewrite e. (* FIXME: Prepare this for automation *)
-
-      rewrite Registers.Regmap.gss.
       unfold arr_stack_based_pointers in ASBP.
       specialize (ASBP (Integers.Ptrofs.unsigned
                           (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
@@ -1224,9 +1044,6 @@ Section CORRECTNESS.
       rewrite Integers.Ptrofs.add_zero_l in I.
       rewrite H1 in I.
       assumption.
-      simplify.
-
-      rewrite Registers.Regmap.gso; auto.
   Admitted.
   Hint Resolve transl_iload_correct : htlproof.
 
@@ -1244,9 +1061,8 @@ Section CORRECTNESS.
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m') R2.
   Proof.
     intros s f sp pc rs m chunk addr args src pc' a m' H H0 H1 R1 MSTATES.
-    inv_state.
+    inv_state. inv_arr_access.
 
-    destruct c, chunk, addr, args; simplify; tac; simplify.
     + (** Preamble *)
       invert MARR. simplify.
 
@@ -1500,8 +1316,8 @@ Section CORRECTNESS.
            rewrite Integers.Ptrofs.add_zero_l.
            rewrite Integers.Ptrofs.unsigned_repr; simplify; try lia.
            apply ZExtra.mod_0_bounds; simplify; try lia. }
-      simplify. split.
-      exploit (BOUNDS ptr); try lia. intros. simplify. assumption.
+      simplify.
+      exploit (BOUNDS ptr); try lia. intros. simplify.
       exploit (BOUNDS ptr v); try lia. intros.
       invert H0.
       match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
@@ -1792,8 +1608,8 @@ Section CORRECTNESS.
            rewrite Integers.Ptrofs.add_zero_l.
            rewrite Integers.Ptrofs.unsigned_repr; simplify; try lia.
            apply ZExtra.mod_0_bounds; simplify; try lia. }
-      simplify. split.
-      exploit (BOUNDS ptr); try lia. intros. simplify. assumption.
+      simplify.
+      exploit (BOUNDS ptr); try lia. intros. simplify.
       exploit (BOUNDS ptr v); try lia. intros.
       invert H0.
       match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
@@ -2032,8 +1848,8 @@ Section CORRECTNESS.
            rewrite Integers.Ptrofs.add_zero_l.
            rewrite Integers.Ptrofs.unsigned_repr; simplify; try lia.
            apply ZExtra.mod_0_bounds; simplify; try lia. }
-      simplify. split.
-      exploit (BOUNDS ptr); try lia. intros. simplify. assumption.
+      simplify.
+      exploit (BOUNDS ptr); try lia. intros. simplify.
       exploit (BOUNDS ptr v); try lia. intros.
       invert H0.
       match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
@@ -2071,7 +1887,6 @@ Section CORRECTNESS.
     apply assumption_32bit.
     eapply Verilog.stmnt_runp_Vnonblock_reg with
         (rhsval := if b then posToValue 32 ifso else posToValue 32 ifnot).
-
     constructor.
 
     simpl.
@@ -2085,6 +1900,7 @@ Section CORRECTNESS.
     constructor.
     apply boolToValue_ValueToBool.
     constructor.
+
     unfold Verilog.merge_regs.
     unfold_merge.
     apply AssocMap.gss.
@@ -2144,33 +1960,7 @@ Section CORRECTNESS.
     apply AssocMap.gss.
 
     (** Match arrays *)
-    invert MARR. simplify.
-    econstructor.
-    repeat split; simplify.
-    unfold HTL.empty_stack.
-    simplify.
-    unfold Verilog.merge_arrs.
-
-    rewrite AssocMap.gcombine.
-    2: { reflexivity. }
-    rewrite AssocMap.gss.
-    unfold Verilog.merge_arr.
-    setoid_rewrite H2.
-    reflexivity.
-
-    rewrite combine_length.
-    unfold arr_repeat. simplify.
-    rewrite list_repeat_len.
-    reflexivity.
-
-    unfold arr_repeat. simplify.
-    rewrite list_repeat_len.
-    congruence.
-
-    intros.
-    erewrite array_get_error_equal.
-    eauto. apply combine_none.
-    assumption.
+    all: invert MARR. big_tac.
 
     Unshelve.
     constructor.
@@ -2222,12 +2012,7 @@ Section CORRECTNESS.
 
       constructor. constructor.
 
-      unfold Verilog.merge_regs.
-      unfold_merge. simpl.
-      rewrite AssocMap.gso.
-      rewrite AssocMap.gso.
-      unfold state_st_wf in WF. eapply WF. reflexivity.
-      apply st_greater_than_res. apply st_greater_than_res.
+      unfold state_st_wf in WF; big_tac; eauto.
 
       apply HTL.step_finish.
       unfold Verilog.merge_regs.
@@ -2249,18 +2034,10 @@ Section CORRECTNESS.
       constructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
+      constructor. constructor. constructor.
+      constructor. constructor. constructor.
 
-      constructor. constructor.
-
-      constructor.
-      econstructor; simpl; trivial.
-      apply Verilog.erun_Vvar. trivial.
-      unfold Verilog.merge_regs.
-      unfold_merge. simpl.
-      rewrite AssocMap.gso.
-      rewrite AssocMap.gso.
-      unfold state_st_wf in WF. eapply WF. trivial.
-      apply st_greater_than_res. apply st_greater_than_res. trivial.
+      unfold state_st_wf in WF; big_tac; eauto.
 
       apply HTL.step_finish.
       unfold Verilog.merge_regs.
@@ -2303,18 +2080,14 @@ Section CORRECTNESS.
 
     apply match_state with (sp' := stk); eauto.
 
+    all: big_tac.
+
     apply regs_lessdef_add_greater.
     apply greater_than_max_func.
     apply init_reg_assoc_empty.
-    unfold state_st_wf.
-    intros. inv H3. apply AssocMap.gss.
 
     constructor.
 
-    econstructor. simplify.
-    repeat split. unfold HTL.empty_stack.
-    simplify. apply AssocMap.gss.
-    unfold arr_repeat. simplify.
     apply list_repeat_len.
     intros.
     destruct (Mem.load AST.Mint32 m' stk

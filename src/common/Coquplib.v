@@ -51,6 +51,13 @@ Ltac clear_obvious :=
          | [ H : _ /\ _ |- _ ] => invert H
          end.
 
+Ltac nicify_goals :=
+  repeat match goal with
+         | [ |- _ /\ _ ] => split
+         | [ |- Some _ = Some _ ] => try reflexivity
+         | [ _ : ?x |- ?x ] => assumption
+         end.
+
 Ltac kill_bools :=
   repeat match goal with
          | [ H : _ && _ = true |- _ ] => apply andb_prop in H
@@ -118,7 +125,7 @@ Ltac unfold_constants :=
          end.
 
 Ltac simplify := unfold_constants; simpl in *;
-                 repeat (clear_obvious; kill_bools);
+                 repeat (clear_obvious; nicify_goals; kill_bools);
                  simpl in *; try discriminate.
 
 Global Opaque Nat.div.
