@@ -22,8 +22,11 @@ open Datatypes
 
 open Camlcoq
 open AST
+open Clflags
 
 open Printf
+
+open CoqupClflags
 
 let concat = String.concat ""
 
@@ -187,6 +190,12 @@ let debug_always i clk state = concat [
     indent i; "end\n"
   ]
 
+let print_initial i n stk = concat [
+    indent i; "integer i;\n";
+    indent i; "initial for(i = 0; i < "; sprintf "%d" n; "; i++)\n";
+    indent (i+1); register stk; "[i] = 0;\n"
+  ]
+
 let pprint_module debug i n m =
   if (extern_atom n) = "main" then
     let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
@@ -194,6 +203,7 @@ let pprint_module debug i n m =
     concat [ indent i; "module "; (extern_atom n);
              "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
              fold_map (pprint_module_item (i+1)) m.mod_body;
+             if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
              if debug then debug_always i m.mod_clk m.mod_st else "";
              indent i; "endmodule\n\n"
            ]
