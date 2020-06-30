@@ -36,11 +36,7 @@ open Coqup.Frontend
 open Coqup.Assembler
 open Coqup.Linker
 open Coqup.Diagnostics
-
-(* Coqup flags *)
-let option_simulate = ref false
-let option_hls = ref true
-let option_debug_hls = ref false
+open Coqup.CoqupClflags
 
 (* Name used for version string etc. *)
 let tool_name = "C verified high-level synthesis"
@@ -215,6 +211,7 @@ Processing options:
   --no-hls       Do not use HLS and generate standard flow.
   --simulate     Simulate the result with the Verilog semantics.
   --debug-hls    Add debug logic to the Verilog.
+  --initialise-stack initialise the stack to all 0s.
 |} ^
   prepro_help ^
   language_support_help ^
@@ -316,6 +313,7 @@ let cmdline_actions =
   [Exact "--no-hls", Unset option_hls;
    Exact "--simulate", Set option_simulate;
    Exact "--debug-hls", Set option_debug_hls;
+   Exact "--initialise-stack", Set option_initial;
   ]
 (* Getting version info *)
   @ version_options tool_name @
