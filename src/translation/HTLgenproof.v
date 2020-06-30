@@ -465,8 +465,10 @@ Section CORRECTNESS.
               destruct (Pos.eq_dec s d) as [EQ|EQ];
               [> rewrite EQ | rewrite Registers.Regmap.gso; auto]
 
+            | [ |- context[Verilog.arr_assocmap_set _ _ _ _] ] => unfold Verilog.arr_assocmap_set
+
             | [ H : _ ! _ = Some _ |- _] => try (setoid_rewrite H; simplify)
-            end).
+            end); simplify.
 
   Lemma transl_inop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -718,8 +720,7 @@ Section CORRECTNESS.
       apply assumption_32bit.
       econstructor. econstructor. econstructor. simplify.
       econstructor. econstructor. econstructor. simplify.
-      eapply Verilog.erun_Vbinop with (EQ := ?[EQ1]). (* FIXME: These will be shelved and cause sadness. *)
-      eapply Verilog.erun_Vbinop with (EQ := ?[EQ2]).
+      econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
 
@@ -744,14 +745,18 @@ Section CORRECTNESS.
 
       intros I.
 
-      assert (Z.to_nat
-                (Integers.Ptrofs.unsigned
-                   (Integers.Ptrofs.divu
-                      OFFSET
-                      (Integers.Ptrofs.repr 4)))
-              =
-              valueToNat (vdiv (vplus asr # r0 (ZToValue 32 z) ?EQ2) (ZToValue 32 4) ?EQ1))
-        as EXPR_OK by admit.
+      match goal with
+      | [ |- context [valueToNat ?x] ] =>
+        assert (Z.to_nat
+                  (Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.divu
+                        OFFSET
+                        (Integers.Ptrofs.repr 4)))
+                =
+                valueToNat x)
+          as EXPR_OK by admit
+      end.
+
       rewrite <- EXPR_OK.
       rewrite NORMALISE in I.
       rewrite H1 in I.
@@ -875,9 +880,7 @@ Section CORRECTNESS.
       apply assumption_32bit.
       econstructor. econstructor. econstructor. simplify.
       econstructor. econstructor. econstructor. simplify.
-      eapply Verilog.erun_Vbinop with (EQ := ?[EQ3]). (* FIXME: These will be shelved and cause sadness. *)
-      eapply Verilog.erun_Vbinop with (EQ := ?[EQ4]).
-      eapply Verilog.erun_Vbinop with (EQ := ?[EQ5]).
+      econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
       econstructor.
       eapply Verilog.erun_Vbinop with (EQ := ?[EQ6]).
@@ -905,15 +908,17 @@ Section CORRECTNESS.
       apply Z.div_pos; lia.
 
       intros I.
-      assert (Z.to_nat
-                (Integers.Ptrofs.unsigned
-                   (Integers.Ptrofs.divu
-                      OFFSET
-                      (Integers.Ptrofs.repr 4)))
-              = valueToNat
-                  (vdiv (vplus (vplus asr # r0 (ZToValue 32 z0) ?EQ5)
-                               (vmul asr # r1 (ZToValue 32 z) ?EQ6) ?EQ4) (ZToValue 32 4) ?EQ3))
-        as EXPR_OK by admit.
+      match goal with
+      | [ |- context [valueToNat ?x] ] =>
+        assert (Z.to_nat
+                  (Integers.Ptrofs.unsigned
+                     (Integers.Ptrofs.divu
+                        OFFSET
+                        (Integers.Ptrofs.repr 4)))
+                =
+                valueToNat x)
+          as EXPR_OK by admit
+      end.
       rewrite <- EXPR_OK.
       rewrite NORMALISE in I.
       rewrite H1 in I.
