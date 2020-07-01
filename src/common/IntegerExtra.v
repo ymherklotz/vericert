@@ -27,7 +27,7 @@ Module PtrofsExtra.
       rewrite Zmod_mod
     | [ _ : _ |- context[(_ mod Ptrofs.modulus) mod m ] ] =>
       rewrite <- Zmod_div_mod;
-      try (simplify; lia || assumption)
+      try (crush; lia || assumption)
 
     | [ _ : _ |- context[Ptrofs.modulus mod m] ] =>
       rewrite Zdivide_mod with (a := Ptrofs.modulus);
@@ -65,7 +65,7 @@ Module PtrofsExtra.
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
            | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
-           end; try (simplify; lia); ptrofs_mod_tac m.
+           end; try crush; ptrofs_mod_tac m.
   Qed.
 
   Lemma of_int_mod :
@@ -96,7 +96,7 @@ Module PtrofsExtra.
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
            | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
-           end; try (simplify; lia); ptrofs_mod_tac m.
+           end; try(crush; lia); ptrofs_mod_tac m.
   Qed.
 
   Lemma add_mod :
@@ -115,7 +115,7 @@ Module PtrofsExtra.
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
            | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
-           end; try (simplify; lia); ptrofs_mod_tac m.
+           end; try (crush; lia); ptrofs_mod_tac m.
   Qed.
 
   Lemma mul_divu :
@@ -156,7 +156,7 @@ Module PtrofsExtra.
     eapply Z.le_trans.
     exact H0.
     rewrite Z.mul_comm.
-    apply Z.le_mul_diag_r; simplify; lia.
+    apply Z.le_mul_diag_r; crush.
   Qed.
 
   Lemma mul_unsigned :
@@ -184,6 +184,23 @@ Module PtrofsExtra.
   Qed.
 End PtrofsExtra.
 
+Ltac ptrofs :=
+  repeat match goal with
+         | [ |- context[Ptrofs.add (Ptrofs.zero) _] ] => setoid_rewrite Ptrofs.add_zero_l
+         | [ H : context[Ptrofs.add (Ptrofs.zero) _] |- _ ] => setoid_rewrite Ptrofs.add_zero_l in H
+
+         | [ |- context[Ptrofs.repr 0] ] => replace (Ptrofs.repr 0) with Ptrofs.zero by reflexivity
+         | [ H : context[Ptrofs.repr 0] |- _ ] =>
+           replace (Ptrofs.repr 0) with Ptrofs.zero in H by reflexivity
+
+         | [ H: context[Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned _))] |- _ ] =>
+           setoid_rewrite Ptrofs.unsigned_repr in H; [>| apply Ptrofs.unsigned_range_2]
+         | [ |- context[Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned _))] ] =>
+           rewrite Ptrofs.unsigned_repr; [>| apply Ptrofs.unsigned_range_2]
+
+         | [ |- context[0 <= Ptrofs.unsigned _] ] => apply Ptrofs.unsigned_range_2
+         end.
+
 Module IntExtra.
 
   Ltac int_mod_match m :=
@@ -202,7 +219,7 @@ Module IntExtra.
       rewrite Zmod_mod
     | [ _ : _ |- context[(_ mod Int.modulus) mod m ] ] =>
       rewrite <- Zmod_div_mod;
-      try (simplify; lia || assumption)
+      try (crush; lia || assumption)
 
     | [ _ : _ |- context[Int.modulus mod m] ] =>
       rewrite Zdivide_mod with (a := Int.modulus);
@@ -242,7 +259,7 @@ Module IntExtra.
            | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
            | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
-           end; try (simplify; lia); int_mod_tac m.
+           end; try (crush; lia); int_mod_tac m.
   Qed.
 
   Lemma add_mod :
@@ -261,6 +278,6 @@ Module IntExtra.
            | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
            | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
-           end; try (simplify; lia); int_mod_tac m.
+           end; try (crush; lia); int_mod_tac m.
   Qed.
 End IntExtra.

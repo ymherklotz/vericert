@@ -426,7 +426,7 @@ Proof.
   destruct (0 <=? RTL.fn_stacksize f) eqn:STACK_BOUND_LOW;
     destruct (RTL.fn_stacksize f <? Integers.Ptrofs.modulus) eqn:STACK_BOUND_HIGH;
     destruct (RTL.fn_stacksize f mod 4 =? 0) eqn:STACK_ALIGN;
-    simplify;
+    crush;
     monadInv Heqr.
 
   (* TODO: We should be able to fold this into the automation. *)

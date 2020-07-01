@@ -23,12 +23,14 @@ From Coq Require Export
      List
      Bool.
 
+Require Import Lia.
+
 From coqup Require Import Show.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
 From compcert.lib Require Export Coqlib.
-From compcert Require Integers.
+From compcert Require Import Integers.
 
 Ltac unfold_rec c := unfold c; fold c.
 
@@ -44,18 +46,21 @@ Ltac solve_by_invert := solve_by_inverts 1.
 
 Ltac invert x := inversion x; subst; clear x.
 
+Ltac destruct_match :=
+  match goal with | [ |- context[match ?x with | _ => _ end ] ] => destruct x end.
+
 Ltac clear_obvious :=
   repeat match goal with
          | [ H : ex _ |- _ ] => invert H
-         | [ H : ?C _ = ?C _ |- _ ] => invert H
+         | [ H : Some _ = Some _ |- _ ] => invert H
          | [ H : _ /\ _ |- _ ] => invert H
          end.
 
 Ltac nicify_goals :=
   repeat match goal with
          | [ |- _ /\ _ ] => split
-         | [ |- Some _ = Some _ ] => try reflexivity
-         | [ _ : ?x |- ?x ] => assumption
+         | [ |- Some _ = Some _ ] => f_equal
+         | [ |- S _ = S _ ] => f_equal
          end.
 
 Ltac kill_bools :=
@@ -124,9 +129,9 @@ Ltac unfold_constants :=
            end
          end.
 
-Ltac simplify := unfold_constants; simpl in *;
-                 repeat (clear_obvious; nicify_goals; kill_bools);
-                 simpl in *; try discriminate.
+Ltac crush := intros; unfold_constants; simpl in *;
+              repeat (clear_obvious; nicify_goals; kill_bools);
+              simpl in *; try discriminate; try congruence; try lia; try assumption.
 
 Global Opaque Nat.div.
 Global Opaque Z.mul.
