@@ -436,44 +436,41 @@ Section CORRECTNESS.
 
   Ltac tac0 :=
     match goal with
-    | [ |- context[Verilog.merge_regs _ _] ] =>
-      unfold Verilog.merge_regs; crush; unfold_merge
+    | [ |- context[valueToPos (posToValue 32 _)] ] => rewrite assumption_32bit
+
+    | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs
+    | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr
+    | [ |- context[Verilog.merge_regs _ _] ] => unfold Verilog.merge_regs; crush; unfold_merge
+    | [ |- context[reg_stack_based_pointers] ] => unfold reg_stack_based_pointers; intros
+    | [ |- context[Verilog.arr_assocmap_set _ _ _ _] ] => unfold Verilog.arr_assocmap_set
+
+    | [ |- context[HTL.empty_stack] ] => unfold HTL.empty_stack
+
     | [ |- context[_ # ?d <- _ ! ?d] ] => rewrite AssocMap.gss
     | [ |- context[_ # ?d <- _ ! ?s] ] => rewrite AssocMap.gso
-    | [ |- context[valueToPos (posToValue 32 _)] ] => rewrite assumption_32bit
-    | [ |- context[match_states _ _] ] => econstructor; auto
-    | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr
     | [ |- context[(AssocMap.empty _) ! _] ] => rewrite AssocMap.gempty
 
-    | [ H : ?asa ! ?r = Some _ |- Verilog.arr_assocmap_lookup ?asa ?r _ = Some _ ] =>
-      unfold Verilog.arr_assocmap_lookup; setoid_rewrite H; f_equal
+    | [ |- context[array_get_error _ (combine Verilog.merge_cell (arr_repeat None _) _)] ] =>
+      rewrite combine_lookup_first
 
+    | [ |- state_st_wf _ _ ] => unfold state_st_wf; inversion 1
+    | [ |- context[match_states _ _] ] => econstructor; auto
+    | [ |- match_arrs _ _ _ _ _ ] => econstructor; auto
     | [ |- match_assocmaps _ _ _ # _ <- (posToValue 32 _) ] =>
       apply regs_lessdef_add_greater; [> apply greater_than_max_func | assumption]
 
-    | [  |- state_st_wf _ _ ] => unfold state_st_wf; inversion 1
-
-    | [ |- match_arrs _ _ _ _ _ ] => econstructor; auto
-    | [ |- context[HTL.empty_stack] ] => unfold HTL.empty_stack
-    | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs
+    | [ H : ?asa ! ?r = Some _ |- Verilog.arr_assocmap_lookup ?asa ?r _ = Some _ ] =>
+      unfold Verilog.arr_assocmap_lookup; setoid_rewrite H; f_equal
     | [ |- context[(AssocMap.combine _ _ _) ! _] ] =>
       try (rewrite AssocMap.gcombine; [> | reflexivity])
 
-    | [ |- context[reg_stack_based_pointers] ] => unfold reg_stack_based_pointers; intros
     | [ |- context[Registers.Regmap.get ?d (Registers.Regmap.set ?d _ _)] ] =>
       rewrite Registers.Regmap.gss
     | [ |- context[Registers.Regmap.get ?s (Registers.Regmap.set ?d _ _)] ] =>
       destruct (Pos.eq_dec s d) as [EQ|EQ];
       [> rewrite EQ | rewrite Registers.Regmap.gso; auto]
 
-    | [ |- context[Verilog.arr_assocmap_set _ _ _ _] ] => unfold Verilog.arr_assocmap_set
-
-    | [ |- context[array_get_error _ (combine Verilog.merge_cell
-                                             (arr_repeat None _) _)] ] =>
-      rewrite combine_lookup_first
-
     | [ H : opt_val_value_lessdef _ _ |- _ ] => invert H
-
     | [ H : context[Z.of_nat (Z.to_nat _)] |- _ ] => rewrite Z2Nat.id in H; [> solve crush |]
     | [ H : _ ! _ = Some _ |- _] => setoid_rewrite H
     end.
