@@ -39,6 +39,8 @@ Record value : Type :=
     vword: word vsize
   }.
 
+Search N.of_nat.
+
 (** ** Value conversions
 
 Various conversions to different number types such as [N], [Z], [positive] and

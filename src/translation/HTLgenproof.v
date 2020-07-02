@@ -767,9 +767,9 @@ Section CORRECTNESS.
       apply H6 in HPler0.
       apply H8 in HPler1.
       invert HPler0; invert HPler1; try congruence.
-      rewrite EQr0 in H10.
-      rewrite EQr1 in H12.
-      invert H10. invert H12.
+      rewrite EQr0 in H9.
+      rewrite EQr1 in H11.
+      invert H9. invert H11.
       clear H0. clear H6. clear H8.
 
       unfold check_address_parameter_signed in *;
@@ -849,8 +849,16 @@ Section CORRECTNESS.
 
       all: big_tac.
 
-      1: { apply st_greater_than_res. }
-      2: { apply st_greater_than_res. }
+      1: {
+        assert (HPle : Ple dst (RTL.max_reg_function f)).
+        eapply RTL.max_reg_function_def. eassumption. auto.
+        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
+      }
+      2: {
+        assert (HPle : Ple dst (RTL.max_reg_function f)).
+        eapply RTL.max_reg_function_def. eassumption. auto.
+        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
+      }
 
       (** Match assocmaps *)
       apply regs_lessdef_add_match; big_tac.
@@ -944,8 +952,16 @@ Section CORRECTNESS.
 
       all: big_tac.
 
-      1: { apply st_greater_than_res. }
-      2: { apply st_greater_than_res. }
+      1: {
+        assert (HPle : Ple dst (RTL.max_reg_function f)).
+        eapply RTL.max_reg_function_def. eassumption. auto.
+        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
+      }
+      2: {
+        assert (HPle : Ple dst (RTL.max_reg_function f)).
+        eapply RTL.max_reg_function_def. eassumption. auto.
+        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
+      }
 
       (** Match assocmaps *)
       apply regs_lessdef_add_match; big_tac.
@@ -1072,7 +1088,8 @@ Section CORRECTNESS.
 
       (** Match assocmaps *)
       unfold Verilog.merge_regs. crush. unfold_merge.
-      apply regs_lessdef_add_greater. apply greater_than_max_func.
+      apply regs_lessdef_add_greater.
+      unfold Plt; lia.
       assumption.
 
       (** States well formed *)
@@ -1168,9 +1185,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H19; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H19; try lia.
-           rewrite ZLib.div_mul_undo in H19; try lia.
+           rewrite Z2Nat.id in H15; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H15; try lia.
+           rewrite ZLib.div_mul_undo in H15; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1292,9 +1309,9 @@ Section CORRECTNESS.
       apply H6 in HPler0.
       apply H8 in HPler1.
       invert HPler0; invert HPler1; try congruence.
-      rewrite EQr0 in H10.
-      rewrite EQr1 in H12.
-      invert H10. invert H12.
+      rewrite EQr0 in H9.
+      rewrite EQr1 in H11.
+      invert H9. invert H11.
       clear H0. clear H6. clear H8.
 
       unfold check_address_parameter_signed in *;
@@ -1362,7 +1379,8 @@ Section CORRECTNESS.
 
       (** Match assocmaps *)
       unfold Verilog.merge_regs. crush. unfold_merge.
-      apply regs_lessdef_add_greater. apply greater_than_max_func.
+      apply regs_lessdef_add_greater.
+      unfold Plt; lia.
       assumption.
 
       (** States well formed *)
@@ -1429,19 +1447,19 @@ Section CORRECTNESS.
       simpl.
       assert (Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
-      apply H0 in H20.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H20; eauto.
+      apply H0 in H16.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H16; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
       rewrite list_repeat_len. auto.
 
       assert (4 * ptr / 4 = Integers.Ptrofs.unsigned OFFSET / 4) by (f_equal; assumption).
-      rewrite Z.mul_comm in H20.
-      rewrite Z_div_mult in H20; try lia.
-      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H20 by reflexivity.
-      rewrite <- PtrofsExtra.divu_unsigned in H20; unfold_constants; try lia.
-      rewrite H20. rewrite EXPR_OK.
+      rewrite Z.mul_comm in H16.
+      rewrite Z_div_mult in H16; try lia.
+      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H16 by reflexivity.
+      rewrite <- PtrofsExtra.divu_unsigned in H16; unfold_constants; try lia.
+      rewrite H16. rewrite EXPR_OK.
       rewrite array_get_error_set_bound.
       reflexivity.
       unfold arr_length, arr_repeat. simpl.
@@ -1458,9 +1476,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H22; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H22; try lia.
-           rewrite ZLib.div_mul_undo in H22; try lia.
+           rewrite Z2Nat.id in H18; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H18; try lia.
+           rewrite ZLib.div_mul_undo in H18; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1484,7 +1502,7 @@ Section CORRECTNESS.
       lia.
       unfold_constants.
       intro.
-      apply Z2Nat.inj_iff in H20; try lia.
+      apply Z2Nat.inj_iff in H13; try lia.
       apply Z.div_pos; try lia.
       apply Integers.Ptrofs.unsigned_range.
 
