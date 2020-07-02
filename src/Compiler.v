@@ -51,6 +51,7 @@ From coqup Require
      HTLgen.
 
 Parameter print_RTL: Z -> RTL.program -> unit.
+Parameter print_HTL: HTL.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -86,6 +87,7 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@@ Unusedglob.transform_program
   @@ print (print_RTL 1)
   @@@ HTLgen.transl_program
+  @@ print print_HTL
   @@ Veriloggen.transl_program.
 
 (* Unoptimised below: *)

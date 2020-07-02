@@ -17,7 +17,7 @@
  *)
 
 From compcert Require Import Maps.
-From compcert Require Errors Globalenvs.
+From compcert Require Errors Globalenvs Integers.
 From compcert Require Import AST RTL.
 From coqup Require Import Verilog HTL Coquplib AssocMap Value Statemonad.
 
@@ -131,7 +131,7 @@ Lemma declare_reg_state_incr :
        s.(st_st)
        s.(st_freshreg)
        s.(st_freshstate)
-       (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
+       (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
@@ -142,7 +142,7 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_st)
                 s.(st_freshreg)
                 s.(st_freshstate)
-                (AssocMap.set r (i, Scalar sz) s.(st_scldecls))
+                (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
                 s.(st_arrdecls)
                 s.(st_datapath)
                 s.(st_controllogic))
@@ -280,19 +280,39 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
   | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
+Definition check_address_parameter_signed (p : Z) : bool :=
+  Z.eqb (Z.modulo p 4) 0
+  && Z.leb Integers.Ptrofs.min_signed p
+  && Z.leb p Integers.Ptrofs.max_signed.
+
+Definition check_address_parameter_unsigned (p : Z) : bool :=
+  Z.eqb (Z.modulo p 4) 0
+  && Z.leb p Integers.Ptrofs.max_unsigned.
+
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
-  match a, args with
-  | Op.Aindexed off, r1::nil => ret (boplitz Vadd r1 off)
-  | Op.Aindexed2 off, r1::r2::nil => ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 off))
+  match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Op.Aindexed off, r1::nil =>
+    if (check_address_parameter_signed off)
+    then ret (boplitz Vadd r1 off)
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address misaligned")
   | Op.Ascaled scale offset, r1::nil =>
-    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
-  | Op.Aindexed2scaled scale offset, r1::r2::nil =>
-    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-  (* Stack arrays/referenced variables *)
+    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
+    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address misaligned")
+  | Op.Aindexed2 offset, r1::r2::nil =>
+    if (check_address_parameter_signed offset)
+    then ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address misaligned")
+  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
+    then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address misaligned")
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
-    ret (Vlit (ZToValue 32 a))
-  | _, _ => error (Errors.msg "Htlgen: eff_addressing instruction not implemented: other")
+    let a := Integers.Ptrofs.unsigned a in
+    if (check_address_parameter_unsigned a)
+    then ret (Vlit (ZToValue 32 a))
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address misaligned")
+  | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
 (** Translate an instruction to a statement. FIX mulhs mulhu *)
@@ -374,24 +394,24 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
-  match addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Op.Aindexed off, r1::nil => (* FIXME: Cannot guarantee alignment *)
-    ret (Vvari stack (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (off / 4)))))
-  | Op.Ascaled scale offset, r1::nil =>
-    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
-    then ret (Vvari stack (Vbinop Vadd (boplitz Vmul r1 (scale / 4)) (Vlit (ZToValue 32 (offset / 4)))))
-    else error (Errors.msg "Htlgen: translate_arr_access address misaligned")
-  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if ((Z.eqb (Z.modulo scale 4) 0) && (Z.eqb (Z.modulo offset 4) 0))
+  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Mint32, Op.Aindexed off, r1::nil =>
+    if (check_address_parameter_signed off)
+    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 32 4))))
+    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
+  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vvari stack
-                    (Vbinop Vadd (Vbinop Vadd (boplitz Vdiv r1 4) (Vlit (ZToValue 32 (offset / 4))))
-                                 (boplitz Vmul r2 (scale / 4))))
-    else error (Errors.msg "Htlgen: translate_arr_access address misaligned")
-  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in (* FIXME: Assuming stack offsets are +ve; is this ok? *)
-    if (Z.eq_dec (Z.modulo a 4) 0) then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
-    else error (Errors.msg "Htlgen: eff_addressing misaligned stack offset")
-  | _, _ => error (Errors.msg "Htlgen: translate_arr_access unsupported addressing")
+                    (Vbinop Vdivu
+                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+                            (ZToValue 32 4)))
+    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
+  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in
+    if (check_address_parameter_unsigned a)
+    then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
+    else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset")
+  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
   end.
 
 Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
@@ -418,10 +438,10 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Iload mem addr args dst n' =>
       do src <- translate_arr_access mem addr args stack;
       do _ <- declare_reg None dst 32;
-      add_instr n n' (block dst src)
+      add_instr n n' (nonblock dst src)
     | Istore mem addr args src n' =>
       do dst <- translate_arr_access mem addr args stack;
-      add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -447,7 +467,7 @@ Lemma create_reg_state_incr:
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
+         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
          s.(st_arrdecls)
          (st_datapath s)
          (st_controllogic s)).
@@ -459,7 +479,7 @@ Definition create_reg (i : option io) (sz : nat) : mon reg :=
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, Scalar sz) s.(st_scldecls))
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
                    (st_arrdecls s)
                    (st_datapath s)
                    (st_controllogic s))
@@ -472,27 +492,31 @@ Lemma create_arr_state_incr:
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
          s.(st_scldecls)
-         (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
+         (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
 
-Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon reg :=
+Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
   fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
+           OK (r, ln) (mkstate
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
                    s.(st_scldecls)
-                   (AssocMap.set s.(st_freshreg) (i, Array sz ln) s.(st_arrdecls))
+                   (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
                    (st_datapath s)
                    (st_controllogic s))
               (create_arr_state_incr s sz ln i).
 
+Definition stack_correct (sz : Z) : bool :=
+  (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
+
 Definition transf_module (f: function) : mon module :=
+  if stack_correct f.(fn_stacksize) then
   do fin <- create_reg (Some Voutput) 1;
   do rtrn <- create_reg (Some Voutput) 32;
-  do stack <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
+  do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
   do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
   do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
   do start <- create_reg (Some Vinput) 1;
@@ -506,20 +530,22 @@ Definition transf_module (f: function) : mon module :=
          f.(fn_entrypoint)
          current_state.(st_st)
          stack
+         stack_len
          fin
          rtrn
          start
          rst
          clk
          current_state.(st_scldecls)
-         current_state.(st_arrdecls)).
+         current_state.(st_arrdecls))
+  else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
-          (AssocMap.set st (None, Scalar 32) (st_scldecls (init_state st)))
+          (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
@@ -529,7 +555,7 @@ Definition transl_module (f : function) : Errors.res module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p.
+(* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
 
 (*Definition transl_main_fundef f : Errors.res HTL.fundef :=
   match f with
@@ -546,11 +572,18 @@ Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
                              (fun i v => Errors.OK v) p.
 *)
 
-(*Definition main_is_internal (p : RTL.program): Prop :=
+Definition main_is_internal (p : RTL.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
-  forall b m,
-  Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-  Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m).
+  match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
+  | Some b =>
+    match Globalenvs.Genv.find_funct_ptr ge b with
+    | Some (AST.Internal _) => true
+    | _ => false
+    end
+  | _ => false
+  end.
 
-Definition tranls_program_with_proof (p : RTL.program) : Errors.res { p' : HTL.program | main_is_internal p }.
-*)
+Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
+  if main_is_internal p
+  then transform_partial_program transl_fundef p
+  else Errors.Error (Errors.msg "Main function is not Internal.").

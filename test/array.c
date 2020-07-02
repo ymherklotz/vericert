@@ -1,4 +1,7 @@
 int main() {
-        int x[5] = {1, 2, 3, 4, 5};
-        return x[2];
+    int x[3] = {1, 2, 3};
+    int sum = 0, incr = 1;
+    for (int i = 0; i < 3; i=i+incr)
+        sum += x[i];
+    return sum;
 }

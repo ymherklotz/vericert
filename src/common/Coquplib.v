@@ -23,11 +23,14 @@ From Coq Require Export
      List
      Bool.
 
+Require Import Lia.
+
 From coqup Require Import Show.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
 From compcert.lib Require Export Coqlib.
+From compcert Require Import Integers.
 
 Ltac unfold_rec c := unfold c; fold c.
 
@@ -40,6 +43,101 @@ Ltac solve_by_inverts n :=
   end.
 
 Ltac solve_by_invert := solve_by_inverts 1.
+
+Ltac invert x := inversion x; subst; clear x.
+
+Ltac destruct_match :=
+  match goal with | [ |- context[match ?x with | _ => _ end ] ] => destruct x end.
+
+Ltac clear_obvious :=
+  repeat match goal with
+         | [ H : ex _ |- _ ] => invert H
+         | [ H : Some _ = Some _ |- _ ] => invert H
+         | [ H : _ /\ _ |- _ ] => invert H
+         end.
+
+Ltac nicify_goals :=
+  repeat match goal with
+         | [ |- _ /\ _ ] => split
+         | [ |- Some _ = Some _ ] => f_equal
+         | [ |- S _ = S _ ] => f_equal
+         end.
+
+Ltac kill_bools :=
+  repeat match goal with
+         | [ H : _ && _ = true |- _ ] => apply andb_prop in H
+         | [ H : _ || _ = false |- _ ] => apply orb_false_elim in H
+
+         | [ H : _ <=? _ = true |- _ ] => apply Z.leb_le in H
+         | [ H : _ <=? _ = false |- _ ] => apply Z.leb_gt in H
+         | [ H : _ <? _ = true |- _ ] => apply Z.ltb_lt in H
+         | [ H : _ <? _ = false |- _ ] => apply Z.ltb_ge in H
+         | [ H : _ >=? _ = _ |- _ ] => rewrite Z.geb_leb in H
+         | [ H : _ >? _ = _ |- _ ] => rewrite Z.gtb_ltb in H
+
+         | [ H : _ =? _ = true |- _ ] => apply Z.eqb_eq in H
+         | [ H : _ =? _ = false |- _ ] => apply Z.eqb_neq in H
+         end.
+
+Ltac unfold_constants :=
+  repeat match goal with
+         | [ |- context[Integers.Ptrofs.modulus] ] =>
+           replace Integers.Ptrofs.modulus with 4294967296 by reflexivity
+         | [ H : context[Integers.Ptrofs.modulus] |- _ ] =>
+           replace Integers.Ptrofs.modulus with 4294967296 in H by reflexivity
+
+         | [ |- context[Integers.Ptrofs.min_signed] ] =>
+           replace Integers.Ptrofs.min_signed with (-2147483648) by reflexivity
+         | [ H : context[Integers.Ptrofs.min_signed] |- _ ] =>
+           replace Integers.Ptrofs.min_signed with (-2147483648) in H by reflexivity
+
+         | [ |- context[Integers.Ptrofs.max_signed] ] =>
+           replace Integers.Ptrofs.max_signed with 2147483647 by reflexivity
+         | [ H : context[Integers.Ptrofs.max_signed] |- _ ] =>
+           replace Integers.Ptrofs.max_signed with 2147483647 in H by reflexivity
+
+         | [ |- context[Integers.Ptrofs.max_unsigned] ] =>
+           replace Integers.Ptrofs.max_unsigned with 4294967295 by reflexivity
+         | [ H : context[Integers.Ptrofs.max_unsigned] |- _ ] =>
+           replace Integers.Ptrofs.max_unsigned with 4294967295 in H by reflexivity
+
+         | [ |- context[Integers.Int.modulus] ] =>
+           replace Integers.Int.modulus with 4294967296 by reflexivity
+         | [ H : context[Integers.Int.modulus] |- _ ] =>
+           replace Integers.Int.modulus with 4294967296 in H by reflexivity
+
+         | [ |- context[Integers.Int.min_signed] ] =>
+           replace Integers.Int.min_signed with (-2147483648) by reflexivity
+         | [ H : context[Integers.Int.min_signed] |- _ ] =>
+           replace Integers.Int.min_signed with (-2147483648) in H by reflexivity
+
+         | [ |- context[Integers.Int.max_signed] ] =>
+           replace Integers.Int.max_signed with 2147483647 by reflexivity
+         | [ H : context[Integers.Int.max_signed] |- _ ] =>
+           replace Integers.Int.max_signed with 2147483647 in H by reflexivity
+
+         | [ |- context[Integers.Int.max_unsigned] ] =>
+           replace Integers.Int.max_unsigned with 4294967295 by reflexivity
+         | [ H : context[Integers.Int.max_unsigned] |- _ ] =>
+           replace Integers.Int.max_unsigned with 4294967295 in H by reflexivity
+
+         | [ |- context[Integers.Ptrofs.unsigned (Integers.Ptrofs.repr ?x) ] ] =>
+           match (eval compute in (0 <=? x)) with
+           | true => replace (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr x))
+                    with x by reflexivity
+           | false => idtac
+           end
+         end.
+
+Ltac crush := intros; unfold_constants; simpl in *;
+              repeat (clear_obvious; nicify_goals; kill_bools);
+              simpl in *; try discriminate; try congruence; try lia; try assumption.
+
+Global Opaque Nat.div.
+Global Opaque Z.mul.
+
+Infix "==nat" := eq_nat_dec (no associativity, at level 50).
+Infix "==Z" := Z.eq_dec (no associativity, at level 50).
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
@@ -69,6 +167,12 @@ Definition bind {A B : Type} (f : option A) (g : A -> option B) : option B :=
   match f with
   | Some a => g a
   | _ => None
+  end.
+
+Definition join {A : Type} (a : option (option A)) : option A :=
+  match a with
+  | None => None
+  | Some a' => a'
   end.
 
 Module Notation.
