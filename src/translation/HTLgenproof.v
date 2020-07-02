@@ -2110,7 +2110,7 @@ Section CORRECTNESS.
     repeat (unfold_match B). inversion B. subst.
     exploit main_tprog_internal; eauto; intros.
     rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
-    Apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
+    apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
     inversion H5.
     econstructor; split. econstructor.
     apply (Genv.init_mem_transf_partial TRANSL'); eauto.
