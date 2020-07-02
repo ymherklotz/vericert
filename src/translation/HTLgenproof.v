@@ -2023,9 +2023,9 @@ Section CORRECTNESS.
     unfold Mem.load.
     intros.
     match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence.
-    invert v0. unfold Mem.range_perm in H3.
-    unfold Mem.perm in H3. crush.
-    unfold Mem.perm_order' in H3.
+    invert v0. unfold Mem.range_perm in H4.
+    unfold Mem.perm in H4. crush.
+    unfold Mem.perm_order' in H4.
     small_tac.
     exploit (H4 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros.
     rewrite Maps.PMap.gss in H8.
@@ -2039,11 +2039,11 @@ Section CORRECTNESS.
     unfold Mem.store.
     intros.
     match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence.
-    invert v0. unfold Mem.range_perm in H3.
-    unfold Mem.perm in H3. crush.
-    unfold Mem.perm_order' in H3.
+    invert v0. unfold Mem.range_perm in H4.
+    unfold Mem.perm in H4. crush.
+    unfold Mem.perm_order' in H4.
     small_tac.
-    exploit (H3 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros.
+    exploit (H4 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros.
     rewrite Maps.PMap.gss in H8.
     match goal with | H8 : context[if ?x then _ else _] |- _ => destruct x eqn:EQ end; try contradiction.
     crush.
