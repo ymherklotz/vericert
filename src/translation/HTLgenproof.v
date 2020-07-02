@@ -1502,7 +1502,7 @@ Section CORRECTNESS.
       lia.
       unfold_constants.
       intro.
-      apply Z2Nat.inj_iff in H13; try lia.
+      apply Z2Nat.inj_iff in H16; try lia.
       apply Z.div_pos; try lia.
       apply Integers.Ptrofs.unsigned_range.
 
@@ -1538,8 +1538,8 @@ Section CORRECTNESS.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
            invert H0.
-           apply Zmult_lt_compat_r with (p := 4) in H21; try lia.
-           rewrite ZLib.div_mul_undo in H21; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H17; try lia.
+           rewrite ZLib.div_mul_undo in H17; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1622,7 +1622,8 @@ Section CORRECTNESS.
 
       (** Match assocmaps *)
       unfold Verilog.merge_regs. crush. unfold_merge.
-      apply regs_lessdef_add_greater. apply greater_than_max_func.
+      apply regs_lessdef_add_greater.
+      unfold Plt; lia.
       assumption.
 
       (** States well formed *)
@@ -1713,9 +1714,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H12; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H12; try lia.
-           rewrite ZLib.div_mul_undo in H12; try lia.
+           rewrite Z2Nat.id in H11; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H11; try lia.
+           rewrite ZLib.div_mul_undo in H11; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1775,8 +1776,8 @@ Section CORRECTNESS.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
            invert H0.
-           apply Zmult_lt_compat_r with (p := 4) in H10; try lia.
-           rewrite ZLib.div_mul_undo in H10; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H9; try lia.
+           rewrite ZLib.div_mul_undo in H9; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1901,15 +1902,12 @@ Section CORRECTNESS.
       constructor. constructor.
 
       unfold state_st_wf in WF; big_tac; eauto.
-      apply st_greater_than_res.
-      apply st_greater_than_res.
 
       apply HTL.step_finish.
       unfold Verilog.merge_regs.
       unfold_merge; simpl.
       rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply finish_not_return.
+      apply AssocMap.gss. lia.
       apply AssocMap.gss.
       rewrite Events.E0_left. reflexivity.
 
@@ -1928,15 +1926,12 @@ Section CORRECTNESS.
       constructor. constructor. constructor.
 
       unfold state_st_wf in WF; big_tac; eauto.
-      apply st_greater_than_res.
-      apply st_greater_than_res.
 
       apply HTL.step_finish.
       unfold Verilog.merge_regs.
       unfold_merge.
       rewrite AssocMap.gso.
-      apply AssocMap.gss.
-      apply finish_not_return.
+      apply AssocMap.gss. simpl; lia.
       apply AssocMap.gss.
       rewrite Events.E0_left. trivial.
 
@@ -1945,7 +1940,9 @@ Section CORRECTNESS.
       simpl. inversion MASSOC. subst.
       unfold find_assocmap, AssocMapExt.get_default. rewrite AssocMap.gso.
       apply H1. eapply RTL.max_reg_function_use. eauto. simpl; tauto.
-      apply st_greater_than_res.
+      assert (HPle : Ple r (RTL.max_reg_function f)).
+      eapply RTL.max_reg_function_use. eassumption. simpl; auto.
+      apply ZExtra.Ple_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
 
       Unshelve.
       all: constructor.
@@ -1975,7 +1972,7 @@ Section CORRECTNESS.
     all: big_tac.
 
     apply regs_lessdef_add_greater.
-    apply greater_than_max_func.
+    unfold Plt; lia.
     apply init_reg_assoc_empty.
 
     constructor.
@@ -2030,7 +2027,7 @@ Section CORRECTNESS.
     unfold Mem.perm in H3. crush.
     unfold Mem.perm_order' in H3.
     small_tac.
-    exploit (H3 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros.
+    exploit (H4 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros.
     rewrite Maps.PMap.gss in H8.
     match goal with | H8 : context[if ?x then _ else _] |- _ => destruct x eqn:EQ end; try contradiction.
     crush.
