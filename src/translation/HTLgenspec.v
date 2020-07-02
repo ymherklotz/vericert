@@ -19,6 +19,7 @@
 From compcert Require RTL Op Maps Errors.
 From compcert Require Import Maps.
 From coqup Require Import Coquplib Verilog Value HTL HTLgen AssocMap.
+Require Import Lia.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 Hint Resolve Maps.PTree.elements_correct : htlspec.
@@ -161,16 +162,23 @@ Hint Constructors tr_code : htlspec.
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
     forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls,
-      (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-               tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
-      stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
-      Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
-      0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
                         st stk stk_len fin rtrn start rst clk scldecls arrdecls) ->
+      (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
+               tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
+      stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
+      Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
+      0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
+      st = ((RTL.max_reg_function f) + 1)%positive ->
+      fin = ((RTL.max_reg_function f) + 2)%positive ->
+      rtrn = ((RTL.max_reg_function f) + 3)%positive ->
+      stk = ((RTL.max_reg_function f) + 4)%positive ->
+      start = ((RTL.max_reg_function f) + 5)%positive ->
+      rst = ((RTL.max_reg_function f) + 6)%positive ->
+      clk = ((RTL.max_reg_function f) + 7)%positive ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
@@ -201,6 +209,13 @@ Lemma declare_reg_controllogic_trans :
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_controllogic_trans : htlspec.
+
+Lemma declare_reg_freshreg_trans :
+  forall sz s s' x i iop r,
+    declare_reg iop r sz s = OK x s' i ->
+    s.(st_freshreg) = s'.(st_freshreg).
+Proof. inversion 1; auto. Qed.
+Hint Resolve declare_reg_freshreg_trans : htlspec.
 
 Lemma create_arr_datapath_trans :
   forall sz ln s s' x i iop,
@@ -268,6 +283,16 @@ Proof.
   - apply H in EQ. rewrite EQ. eauto.
 Qed.
 
+Lemma collect_freshreg_trans :
+  forall A f l cs cs' ci,
+  (forall s s' x i y, f y s = OK x s' i -> s.(st_freshreg) = s'.(st_freshreg)) ->
+  @HTLMonadExtra.collectlist A f l cs = OK tt cs' ci -> cs.(st_freshreg) = cs'.(st_freshreg).
+Proof.
+  induction l; intros; monadInv H0.
+  - trivial.
+  - apply H in EQ. rewrite EQ. eauto.
+Qed.
+
 Lemma collect_declare_controllogic_trans :
   forall io n l s s' i,
   HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
@@ -286,17 +311,136 @@ Proof.
   intros. eapply declare_reg_datapath_trans. simpl in H0. eassumption.
 Qed.
 
+Lemma collect_declare_freshreg_trans :
+  forall io n l s s' i,
+  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  intros. eapply collect_freshreg_trans; try eassumption.
+  inversion 1. auto.
+Qed.
+
+Ltac unfold_match H :=
+  match type of H with
+  | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
+  end.
+
+Lemma translate_eff_addressing_freshreg_trans :
+  forall op args s r s' i,
+  translate_eff_addressing op args s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
+Qed.
+Hint Resolve translate_eff_addressing_freshreg_trans : htlspec.
+
+Lemma translate_comparison_freshreg_trans :
+  forall op args s r s' i,
+  translate_comparison op args s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
+Qed.
+Hint Resolve translate_comparison_freshreg_trans : htlspec.
+
+Lemma translate_comparison_imm_freshreg_trans :
+  forall op args s r s' i n,
+  translate_comparison_imm op args n s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
+Qed.
+Hint Resolve translate_comparison_imm_freshreg_trans : htlspec.
+
+Lemma translate_condition_freshreg_trans :
+  forall op args s r s' i,
+  translate_condition op args s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; eauto with htlspec.
+Qed.
+Hint Resolve translate_condition_freshreg_trans : htlspec.
+
+Lemma translate_instr_freshreg_trans :
+  forall op args s r s' i,
+  translate_instr op args s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; eauto with htlspec.
+  monadInv H1. eauto with htlspec.
+Qed.
+Hint Resolve translate_instr_freshreg_trans : htlspec.
+
+Lemma translate_arr_access_freshreg_trans :
+  forall mem addr args st s r s' i,
+  translate_arr_access mem addr args st s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  intros. unfold translate_arr_access in H. repeat (unfold_match H); inv H; eauto with htlspec.
+Qed.
+Hint Resolve translate_arr_access_freshreg_trans : htlspec.
+
+Lemma add_instr_freshreg_trans :
+  forall n n' st s r s' i,
+  add_instr n n' st s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Qed.
+Hint Resolve add_instr_freshreg_trans : htlspec.
+
+Lemma add_branch_instr_freshreg_trans :
+  forall n n0 n1 e s r s' i,
+  add_branch_instr e n n0 n1 s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold add_branch_instr in H. repeat (unfold_match H). inv H. auto. Qed.
+Hint Resolve add_branch_instr_freshreg_trans : htlspec.
+
+Lemma add_node_skip_freshreg_trans :
+  forall n1 n2 s r s' i,
+  add_node_skip n1 n2 s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold add_node_skip in H. repeat (unfold_match H). inv H. auto. Qed.
+Hint Resolve add_node_skip_freshreg_trans : htlspec.
+
+Lemma add_instr_skip_freshreg_trans :
+  forall n1 n2 s r s' i,
+  add_instr_skip n1 n2 s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold add_instr_skip in H. repeat (unfold_match H). inv H. auto. Qed.
+Hint Resolve add_instr_skip_freshreg_trans : htlspec.
+
+Lemma transf_instr_freshreg_trans :
+  forall fin ret st instr s v s' i,
+    transf_instr fin ret st instr s = OK v s' i ->
+    s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  intros. destruct instr eqn:?. subst. unfold transf_instr in H.
+  destruct i0; try (monadInv H); try (unfold_match H); eauto with htlspec.
+  - apply add_instr_freshreg_trans in EQ2. apply translate_instr_freshreg_trans in EQ.
+    apply declare_reg_freshreg_trans in EQ1. congruence.
+  - apply add_instr_freshreg_trans in EQ2. apply translate_arr_access_freshreg_trans in EQ.
+    apply declare_reg_freshreg_trans in EQ1. congruence.
+  - apply add_instr_freshreg_trans in EQ0. apply translate_arr_access_freshreg_trans in EQ. congruence.
+  - apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
+    congruence.
+  - inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.
+Qed.
+Hint Resolve transf_instr_freshreg_trans : htlspec.
+
+Lemma collect_trans_instr_freshreg_trans :
+  forall fin ret st l s s' i,
+  HTLMonadExtra.collectlist (transf_instr fin ret st) l s = OK tt s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  intros. eapply collect_freshreg_trans; try eassumption.
+  eauto with htlspec.
+Qed.
+
 Ltac rewrite_states :=
   match goal with
   | [ H: ?x ?s = ?x ?s' |- _ ] =>
     let c1 := fresh "c" in
     let c2 := fresh "c" in
     remember (?x ?s) as c1; remember (?x ?s') as c2; try subst
-  end.
-
-Ltac unfold_match H :=
-  match type of H with
-  | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
   end.
 
 Ltac inv_add_instr' H :=
@@ -405,9 +549,17 @@ Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma create_arr_inv : forall w x y z a b c d,
-    create_arr w x y z = OK (a, b) c d -> y = b.
+    create_arr w x y z = OK (a, b) c d ->
+    y = b /\ a = z.(st_freshreg) /\ c.(st_freshreg) = Pos.succ (z.(st_freshreg)).
 Proof.
-  inversion 1. reflexivity.
+  inversion 1; split; auto.
+Qed.
+
+Lemma create_reg_inv : forall a b s r s' i,
+    create_reg a b s = OK r s' i ->
+    r = s.(st_freshreg) /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg)).
+Proof.
+  inversion 1; auto.
 Qed.
 
 Theorem transl_module_correct :
@@ -430,20 +582,27 @@ Proof.
     monadInv Heqr.
 
   (* TODO: We should be able to fold this into the automation. *)
-  pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN.
-  rewrite <- STK_LEN.
-
-  econstructor; simpl; auto.
-  intros.
+  pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN. inv STK_LEN. inv H5.
+  pose proof (create_reg_inv _ _ _ _ _ _ EQ) as FIN_VAL. inv FIN_VAL.
+  pose proof (create_reg_inv _ _ _ _ _ _ EQ1) as RET_VAL. inv RET_VAL.
+  destruct x3. destruct x4.
+  pose proof (collect_trans_instr_freshreg_trans _ _ _ _ _ _ _ EQ2) as TR_INSTR.
+  pose proof (collect_declare_freshreg_trans _ _ _ _ _ _ EQ3) as TR_DEC.
+  pose proof (create_reg_inv _ _ _ _ _ _ EQ4) as START_VAL. inv START_VAL.
+  pose proof (create_reg_inv _ _ _ _ _ _ EQ5) as RESET_VAL. inv RESET_VAL.
+  pose proof (create_reg_inv _ _ _ _ _ _ EQ6) as CLK_VAL. inv CLK_VAL.
+  simpl.
+  rewrite H9 in *. rewrite H8 in *. replace (st_freshreg s4) with (st_freshreg s2) in * by congruence.
+  rewrite H6 in *. rewrite H7 in *. rewrite H5 in *. simpl in *.
   inv_incr.
+  econstructor; simpl; auto; try lia.
+  intros.
   assert (EQ3D := EQ3).
-  destruct x4.
   apply collect_declare_datapath_trans in EQ3.
   apply collect_declare_controllogic_trans in EQ3D.
-  assert (STC: st_controllogic s10 = st_controllogic s3) by congruence.
-  assert (STD: st_datapath s10 = st_datapath s3) by congruence.
-  assert (STST: st_st s10 = st_st s3) by congruence.
-  rewrite STC. rewrite STD. rewrite STST.
+  replace (st_controllogic s10) with (st_controllogic s3) by congruence.
+  replace (st_datapath s10) with (st_datapath s3) by congruence.
+  replace (st_st s10) with (st_st s3) by congruence.
   eapply iter_expand_instr_spec; eauto with htlspec.
   apply PTree.elements_complete.
 Qed.

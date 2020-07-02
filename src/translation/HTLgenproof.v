@@ -86,18 +86,6 @@ Definition stack_bounds (sp : Values.val) (hi : Z) (m : mem) : Prop :=
 Inductive match_frames : list RTL.stackframe -> list HTL.stackframe -> Prop :=
 | match_frames_nil :
     match_frames nil nil.
-(* | match_frames_cons : *)
-(*     forall cs lr r f sp sp' pc rs m asr asa *)
-(*            (TF : tr_module f m) *)
-(*            (ST: match_frames mem cs lr) *)
-(*            (MA: match_assocmaps f rs asr) *)
-(*            (MARR : match_arrs m f sp mem asa) *)
-(*            (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0)) *)
-(*            (RSBP: reg_stack_based_pointers sp' rs) *)
-(*            (ASBP: arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp) *)
-(*            (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem), *)
-(*       match_frames mem (RTL.Stackframe r f sp pc rs :: cs) *)
-(*                        (HTL.Stackframe r m pc asr asa :: lr). *)
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
@@ -2098,7 +2086,6 @@ Section CORRECTNESS.
     trivial. symmetry; eapply Linking.match_program_main; eauto.
   Qed.
 
-  (* Had to admit proof because currently there is no way to force main to be Internal. *)
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
@@ -2119,7 +2106,7 @@ Section CORRECTNESS.
     repeat (unfold_match B). inversion B. subst.
     exploit main_tprog_internal; eauto; intros.
     rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
-    apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
+    Apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
     inversion H5.
     econstructor; split. econstructor.
     apply (Genv.init_mem_transf_partial TRANSL'); eauto.
