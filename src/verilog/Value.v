@@ -21,6 +21,7 @@ From bbv Require Import Word.
 From bbv Require HexNotation WordScope.
 From Coq Require Import ZArith.ZArith FSets.FMapPositive Lia.
 From compcert Require Import lib.Integers common.Values.
+From coqup Require Import Coquplib.
 (* end hide *)
 
 (** * Value
@@ -454,17 +455,25 @@ Proof.
   unfold wordBin. repeat (rewrite wordToN_NToWord_2); auto.
 Qed.
 
-(*Lemma ZToValue_valueToNat :
+Lemma ZToValue_valueToNat :
   forall x sz,
-  sz > 0 ->
-  (x < 2^(Z.of_nat sz))%Z ->
+  (sz > 0)%nat ->
+  (0 <= x < 2^(Z.of_nat sz))%Z ->
   valueToNat (ZToValue sz x) = Z.to_nat x.
 Proof.
-  destruct x; intros; unfold ZToValue, valueToNat; simpl.
+  destruct x; intros; unfold ZToValue, valueToNat; crush.
   - rewrite wzero'_def. apply wordToNat_wzero.
   - rewrite posToWord_nat. rewrite wordToNat_natToWord_2. trivial.
-    unfold Z.of_nat in *. destruct sz eqn:?. omega. simpl in H0.
-    rewrite <- Pos2Z.inj_pow_pos in H0. Search (Z.pos _ < Z.pos _)%Z.
-    Search Pos.to_nat (_ < _). (* Pos2Nat.inj_lt *)
-    Search "inj" positive nat.
-*)
+    clear H1.
+    lazymatch goal with
+    | [ H : context[(_ < ?x)%Z] |- _ ] => replace x with (Z.of_nat (Z.to_nat x)) in H
+    end.
+    2: { apply Z2Nat.id; apply Z.pow_nonneg; lia. }
+
+    rewrite Z2Nat.inj_pow in H2; crush.
+    replace (Pos.to_nat 2) with 2%nat in H2 by reflexivity.
+    rewrite Nat2Z.id in H2.
+    rewrite <- positive_nat_Z in H2.
+    apply Nat2Z.inj_lt in H2.
+    assumption.
+Qed.

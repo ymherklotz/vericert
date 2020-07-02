@@ -849,16 +849,13 @@ Section CORRECTNESS.
 
       all: big_tac.
 
-      1: {
-        assert (HPle : Ple dst (RTL.max_reg_function f)).
-        eapply RTL.max_reg_function_def. eassumption. auto.
-        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
-      }
-      2: {
-        assert (HPle : Ple dst (RTL.max_reg_function f)).
-        eapply RTL.max_reg_function_def. eassumption. auto.
-        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
-      }
+      1: { assert (HPle : Ple dst (RTL.max_reg_function f)).
+           eapply RTL.max_reg_function_def. eassumption. auto.
+           apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption. }
+
+      2: { assert (HPle : Ple dst (RTL.max_reg_function f)).
+           eapply RTL.max_reg_function_def. eassumption. auto.
+           apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption. }
 
       (** Match assocmaps *)
       apply regs_lessdef_add_match; big_tac.
@@ -952,22 +949,19 @@ Section CORRECTNESS.
 
       all: big_tac.
 
-      1: {
-        assert (HPle : Ple dst (RTL.max_reg_function f)).
-        eapply RTL.max_reg_function_def. eassumption. auto.
-        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
-      }
-      2: {
-        assert (HPle : Ple dst (RTL.max_reg_function f)).
-        eapply RTL.max_reg_function_def. eassumption. auto.
-        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
-      }
+      1: { assert (HPle : Ple dst (RTL.max_reg_function f)).
+           eapply RTL.max_reg_function_def. eassumption. auto.
+           apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption. }
+
+      2: { assert (HPle : Ple dst (RTL.max_reg_function f)).
+           eapply RTL.max_reg_function_def. eassumption. auto.
+           apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption. }
 
       (** Match assocmaps *)
       apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
-      match goal with
+      match goal with (* Prevents issues with evars *)
       | [ |- context [valueToNat ?x] ] =>
         assert (Z.to_nat
                   (Integers.Ptrofs.unsigned
@@ -2110,7 +2104,7 @@ Section CORRECTNESS.
     repeat (unfold_match B). inversion B. subst.
     exploit main_tprog_internal; eauto; intros.
     rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
-    Apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
+    apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
     inversion H5.
     econstructor; split. econstructor.
     apply (Genv.init_mem_transf_partial TRANSL'); eauto.
