@@ -32,6 +32,8 @@ From coqup Require Import Show.
 From compcert.lib Require Export Coqlib.
 From compcert Require Import Integers.
 
+Local Open Scope Z_scope.
+
 Ltac unfold_rec c := unfold c; fold c.
 
 Ltac solve_by_inverts n :=
@@ -129,15 +131,27 @@ Ltac unfold_constants :=
            end
          end.
 
-Ltac crush := intros; unfold_constants; simpl in *;
-              repeat (clear_obvious; nicify_goals; kill_bools);
-              simpl in *; try discriminate; try congruence; try lia; try assumption.
-
-Global Opaque Nat.div.
-Global Opaque Z.mul.
+Ltac simplify := intros; unfold_constants; simpl in *;
+                 repeat (clear_obvious; nicify_goals; kill_bools);
+                 simpl in *.
 
 Infix "==nat" := eq_nat_dec (no associativity, at level 50).
 Infix "==Z" := Z.eq_dec (no associativity, at level 50).
+
+Ltac liapp :=
+  match goal with
+  | [ |- (?x | ?y) ] =>
+    match (eval compute in (Z.rem y x ==Z 0)) with
+    | left _ => let q := (eval compute in (Z.div y x)) in exists q; reflexivity
+    | _ => idtac
+    end
+  | _ => idtac
+  end.
+
+Ltac crush := simplify; try discriminate; try congruence; try lia; liapp; try assumption.
+
+Global Opaque Nat.div.
+Global Opaque Z.mul.
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 

@@ -635,18 +635,18 @@ Section CORRECTNESS.
       unfold check_address_parameter_signed in *;
       unfold check_address_parameter_unsigned in *; crush.
 
-      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
       (** Modular preservation proof *)
       assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
       { rewrite HeqOFFSET.
-        apply PtrofsExtra.add_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        rewrite Integers.Ptrofs.signed_repr; try assumption.
-        admit. (* FIXME: Register bounds. *)
+        apply PtrofsExtra.add_mod; crush.
+        rewrite Integers.Ptrofs.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush.
         apply PtrofsExtra.of_int_mod.
-        rewrite Integers.Int.signed_repr; crush. }
+        rewrite Integers.Int.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
@@ -775,7 +775,7 @@ Section CORRECTNESS.
       unfold check_address_parameter_signed in *;
       unfold check_address_parameter_unsigned in *; crush.
 
-      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int
                                        (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
                                                          (Integers.Int.repr z0)))) as OFFSET.
@@ -784,17 +784,15 @@ Section CORRECTNESS.
       assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
       { rewrite HeqOFFSET.
         apply PtrofsExtra.add_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        rewrite Integers.Ptrofs.signed_repr; try assumption.
-        admit. (* FIXME: Register bounds. *)
+        rewrite Integers.Ptrofs.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush.
         apply PtrofsExtra.of_int_mod.
-        apply IntExtra.add_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        apply IntExtra.mul_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        admit. (* FIXME: Register bounds. *)
-        rewrite Integers.Int.signed_repr; crush.
-        rewrite Integers.Int.signed_repr; crush. }
+        apply IntExtra.add_mod; crush.
+        apply IntExtra.mul_mod2; crush.
+        rewrite Integers.Int.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush.
+        rewrite Integers.Int.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
@@ -1033,18 +1031,18 @@ Section CORRECTNESS.
       unfold check_address_parameter_unsigned in *;
       unfold check_address_parameter_signed in *; crush.
 
-      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
       (** Modular preservation proof *)
       assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
       { rewrite HeqOFFSET.
         apply PtrofsExtra.add_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        rewrite Integers.Ptrofs.signed_repr; try assumption.
-        admit. (* FIXME: Register bounds. *)
+        rewrite Integers.Ptrofs.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush.
         apply PtrofsExtra.of_int_mod.
-        rewrite Integers.Int.signed_repr; crush. }
+        rewrite Integers.Int.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush. }
 
       (** Write bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH.
@@ -1133,7 +1131,7 @@ Section CORRECTNESS.
       rewrite list_repeat_len.
       rewrite H4. reflexivity.
 
-      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
       destruct (4 * ptr ==Z Integers.Ptrofs.unsigned OFFSET).
@@ -1311,7 +1309,7 @@ Section CORRECTNESS.
       unfold check_address_parameter_signed in *;
       unfold check_address_parameter_unsigned in *; crush.
 
-      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int
                                        (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
                                                          (Integers.Int.repr z0)))) as OFFSET.
@@ -1320,18 +1318,15 @@ Section CORRECTNESS.
       assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
       { rewrite HeqOFFSET.
         apply PtrofsExtra.add_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        rewrite Integers.Ptrofs.signed_repr; try assumption.
-        admit. (* FIXME: Register bounds. *)
+        rewrite Integers.Ptrofs.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush.
         apply PtrofsExtra.of_int_mod.
-        apply IntExtra.add_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        apply IntExtra.mul_mod; crush; try lia.
-        exists 1073741824. reflexivity. (* FIXME: This is sadness inducing. *)
-        admit. (* FIXME: Register bounds. *)
-        rewrite Integers.Int.signed_repr; crush; try split; try assumption.
-        rewrite Integers.Int.signed_repr; crush; try split; try assumption.
-      }
+        apply IntExtra.add_mod; crush.
+        apply IntExtra.mul_mod2; crush.
+        rewrite Integers.Int.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush.
+        rewrite Integers.Int.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod; crush. }
 
       (** Write bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH.
@@ -1423,7 +1418,7 @@ Section CORRECTNESS.
       rewrite list_repeat_len.
       rewrite H4. reflexivity.
 
-      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (valueToZ asr # r0))
+      remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int
                                        (Integers.Int.add (Integers.Int.mul (valueToInt asr # r1) (Integers.Int.repr z))
                                                          (Integers.Int.repr z0)))) as OFFSET.

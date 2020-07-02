@@ -70,22 +70,21 @@ Module PtrofsExtra.
 
   Lemma of_int_mod :
     forall x m,
-      Int.signed x mod m = 0 ->
-      Ptrofs.signed (Ptrofs.of_int x) mod m = 0.
+      Int.unsigned x mod m = 0 ->
+      Ptrofs.unsigned (Ptrofs.of_int x) mod m = 0.
   Proof.
     intros.
-    pose proof (Integers.Ptrofs.agree32_of_int eq_refl x) as A.
-    pose proof Ptrofs.agree32_signed.
-    apply H0 in A; try reflexivity.
-    rewrite A. assumption.
+    unfold Ptrofs.of_int.
+    rewrite Ptrofs.unsigned_repr; crush;
+      apply Int.unsigned_range_2.
   Qed.
 
   Lemma mul_mod :
     forall x y m,
       0 < m ->
       (m | Ptrofs.modulus) ->
-      Ptrofs.signed x mod m = 0 ->
-      Ptrofs.signed y mod m = 0 ->
+      Ptrofs.unsigned x mod m = 0 ->
+      Ptrofs.unsigned y mod m = 0 ->
       (Ptrofs.signed (Ptrofs.mul x y)) mod m = 0.
   Proof.
     intros. unfold Ptrofs.mul.
@@ -95,7 +94,6 @@ Module PtrofsExtra.
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
            end; try(crush; lia); ptrofs_mod_tac m.
   Qed.
 
@@ -103,8 +101,8 @@ Module PtrofsExtra.
     forall x y m,
       0 < m ->
       (m | Ptrofs.modulus) ->
-      Ptrofs.signed x mod m = 0 ->
-      Ptrofs.signed y mod m = 0 ->
+      Ptrofs.unsigned x mod m = 0 ->
+      Ptrofs.unsigned y mod m = 0 ->
       (Ptrofs.unsigned (Ptrofs.add x y)) mod m = 0.
   Proof.
     intros. unfold Ptrofs.add.
@@ -114,7 +112,6 @@ Module PtrofsExtra.
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
            end; try (crush; lia); ptrofs_mod_tac m.
   Qed.
 
@@ -243,22 +240,37 @@ Module IntExtra.
   Ltac int_mod_tac m :=
     repeat (int_mod_match m); lia.
 
-  Lemma mul_mod :
+  Lemma mul_mod1 :
     forall x y m,
       0 < m ->
       (m | Int.modulus) ->
-      Int.signed x mod m = 0 ->
-      Int.signed y mod m = 0 ->
-      (Int.signed (Int.mul x y)) mod m = 0.
+      Int.unsigned x mod m = 0 ->
+      (Int.unsigned (Int.mul x y)) mod m = 0.
   Proof.
     intros. unfold Int.mul.
-    rewrite Int.signed_repr_eq.
+    rewrite Int.unsigned_repr_eq.
 
     repeat match goal with
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
+           end; try (crush; lia); int_mod_tac m.
+  Qed.
+
+  Lemma mul_mod2 :
+    forall x y m,
+      0 < m ->
+      (m | Int.modulus) ->
+      Int.unsigned y mod m = 0 ->
+      (Int.unsigned (Int.mul x y)) mod m = 0.
+  Proof.
+    intros. unfold Int.mul.
+    rewrite Int.unsigned_repr_eq.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
            end; try (crush; lia); int_mod_tac m.
   Qed.
 
@@ -266,18 +278,17 @@ Module IntExtra.
     forall x y m,
       0 < m ->
       (m | Int.modulus) ->
-      Int.signed x mod m = 0 ->
-      Int.signed y mod m = 0 ->
-      (Int.signed (Int.add x y)) mod m = 0.
+      Int.unsigned x mod m = 0 ->
+      Int.unsigned y mod m = 0 ->
+      (Int.unsigned (Int.add x y)) mod m = 0.
   Proof.
     intros. unfold Int.add.
-    rewrite Int.signed_repr_eq.
+    rewrite Int.unsigned_repr_eq.
 
     repeat match goal with
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
            end; try (crush; lia); int_mod_tac m.
   Qed.
 End IntExtra.
