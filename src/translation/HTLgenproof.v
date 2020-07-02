@@ -260,26 +260,6 @@ Lemma assumption_32bit :
     valueToPos (posToValue 32 v) = v.
 Admitted.
 
-Lemma st_greater_than_res :
-  forall m res : positive,
-    m <> res.
-Admitted.
-
-Lemma finish_not_return :
-  forall r f : positive,
-    r <> f.
-Admitted.
-
-Lemma finish_not_res :
-  forall f r : positive,
-    f <> r.
-Admitted.
-
-Lemma greater_than_max_func :
-  forall f st,
-    Plt (RTL.max_reg_function f) st.
-Proof. Admitted.
-
 Ltac inv_state :=
   match goal with
     MSTATE : match_states _ _ |- _ =>
@@ -445,7 +425,7 @@ Section CORRECTNESS.
     | [ |- context[match_states _ _] ] => econstructor; auto
     | [ |- match_arrs _ _ _ _ _ ] => econstructor; auto
     | [ |- match_assocmaps _ _ _ # _ <- (posToValue 32 _) ] =>
-      apply regs_lessdef_add_greater; [> apply greater_than_max_func | assumption]
+      apply regs_lessdef_add_greater; [> unfold Plt; lia | assumption]
 
     | [ H : ?asa ! ?r = Some _ |- Verilog.arr_assocmap_lookup ?asa ?r _ = Some _ ] =>
       unfold Verilog.arr_assocmap_lookup; setoid_rewrite H; f_equal
@@ -717,8 +697,17 @@ Section CORRECTNESS.
 
       all: big_tac.
 
-      1: { apply st_greater_than_res. }
-      2: { apply st_greater_than_res. }
+      1: {
+        assert (HPle : Ple dst (RTL.max_reg_function f)).
+        eapply RTL.max_reg_function_def. eassumption. auto.
+        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
+      }
+
+      2: {
+        assert (HPle : Ple dst (RTL.max_reg_function f)).
+        eapply RTL.max_reg_function_def. eassumption. auto.
+        apply ZExtra.Pge_not_eq. apply ZExtra.Ple_Plt_Succ. assumption.
+      }
 
       (** Match assocmaps *)
       apply regs_lessdef_add_match; big_tac.
