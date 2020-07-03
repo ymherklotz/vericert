@@ -19,7 +19,7 @@
 From compcert Require Import Maps.
 From compcert Require Errors Globalenvs Integers.
 From compcert Require Import AST RTL.
-From coqup Require Import Verilog HTL Coquplib AssocMap Value Statemonad.
+From coqup Require Import Verilog HTL Coquplib AssocMap ValueInt Statemonad.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
@@ -88,7 +88,7 @@ Import HTLMonadExtra.
 Export MonadNotation.
 
 Definition state_goto (st : reg) (n : node) : stmnt :=
-  Vnonblock (Vvar st) (Vlit (posToValue 32 n)).
+  Vnonblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
   Vnonblock (Vvar st) (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)).

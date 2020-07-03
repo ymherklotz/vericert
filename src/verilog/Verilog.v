@@ -29,11 +29,9 @@ Require Import Lia.
 
 Import ListNotations.
 
-From coqup Require Import common.Coquplib common.Show verilog.Value AssocMap Array.
-From compcert Require Integers Events.
-From compcert Require Import Errors Smallstep Globalenvs.
-
-Import HexNotationValue.
+From coqup Require Import common.Coquplib common.Show verilog.ValueInt AssocMap Array.
+From compcert Require Events.
+From compcert Require Import Integers Errors Smallstep Globalenvs.
 
 Local Open Scope assocmap.
 
@@ -80,7 +78,7 @@ Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
   | None => None
-  | Some arr => Some (Option.default (NToValue 32 0) (Option.join (array_get_error i arr)))
+  | Some arr => Some (Option.default (NToValue 0) (Option.join (array_get_error i arr)))
   end.
 
 Definition arr_assocmap_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
@@ -164,8 +162,8 @@ Inductive expr : Type :=
 | Vunop : unop -> expr -> expr
 | Vternary : expr -> expr -> expr -> expr.
 
-Definition posToExpr (sz : nat) (p : positive) : expr :=
-  Vlit (posToValue sz p).
+Definition posToExpr (p : positive) : expr :=
+  Vlit (posToValue p).
 
 (** ** Statements *)
 
@@ -245,7 +243,7 @@ Definition program := AST.program fundef unit.
 (** Convert a [positive] to an expression directly, setting it to the right
     size. *)
 Definition posToLit (p : positive) : expr :=
-  Vlit (posToValueAuto p).
+  Vlit (posToValue p).
 
 Coercion Vlit : value >-> expr.
 Coercion Vvar : reg >-> expr.
@@ -298,37 +296,43 @@ Inductive state : Type :=
            (m : module)
            (args : list value), state.
 
-Definition binop_run (op : binop) : forall v1 v2 : value, vsize v1 = vsize v2 -> value :=
+Definition binop_run (op : binop) (v1 v2 : value) : option value :=
   match op with
-  | Vadd => vplus
-  | Vsub => vminus
-  | Vmul => vmul
-  | Vdiv => vdivs
-  | Vdivu => vdiv
-  | Vmod => vmods
-  | Vmodu => vmod
-  | Vlt => vlts
-  | Vltu => vlt
-  | Vgt => vgts
-  | Vgtu => vgt
-  | Vle => vles
-  | Vleu => vle
-  | Vge => vges
-  | Vgeu => vge
-  | Veq => veq
-  | Vne => vne
-  | Vand => vand
-  | Vor => vor
-  | Vxor => vxor
-  | Vshl => vshl
-  | Vshr => vshr
-  | Vshru => vshr (* FIXME: should not be the same operation. *)
+  | Vadd => Some (Int.add v1 v2)
+  | Vsub => Some (Int.sub v1 v2)
+  | Vmul => Some (Int.mul v1 v2)
+  | Vdiv => if Int.eq v2 Int.zero
+               || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
+            then None
+            else Some (Int.divs v1 v2)
+  | Vdivu => if Int.eq v2 Int.zero then None else Some (Int.divu v1 v2)
+  | Vmod => if Int.eq v2 Int.zero
+               || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
+            then None
+            else Some (Int.mods v1 v2)
+  | Vmodu => if Int.eq v2 Int.zero then None else Some (Int.modu v1 v2)
+  | Vlt => Some (boolToValue (Int.lt v1 v2))
+  | Vltu => Some (boolToValue (Int.ltu v1 v2))
+  | Vgt => Some (boolToValue (Int.lt v2 v1))
+  | Vgtu => Some (boolToValue (Int.ltu v2 v1))
+  | Vle => Some (boolToValue (negb (Int.lt v2 v1)))
+  | Vleu => Some (boolToValue (negb (Int.ltu v2 v1)))
+  | Vge => Some (boolToValue (negb (Int.lt v1 v2)))
+  | Vgeu => Some (boolToValue (negb (Int.ltu v1 v2)))
+  | Veq => Some (boolToValue (Int.eq v1 v2))
+  | Vne => Some (boolToValue (negb (Int.eq v1 v2)))
+  | Vand => Some (Int.and v1 v2)
+  | Vor => Some (Int.or v1 v2)
+  | Vxor => Some (Int.xor v1 v2)
+  | Vshl => Some (Int.shl v1 v2)
+  | Vshr => Some (Int.shr v1 v2)
+  | Vshru => Some (Int.shru v1 v2)
   end.
 
-Definition unop_run (op : unop) : value -> value :=
+Definition unop_run (op : unop) (v1 : value) : value :=
   match op with
-  | Vneg => vnot
-  | Vnot => vbitneg
+  | Vneg => Int.notbool v1
+  | Vnot => Int.not v1
   end.
 
 Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop :=
@@ -349,11 +353,10 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       fext!r = Some v ->
       expr_runp fext reg stack (Vinputvar r) v
   | erun_Vbinop :
-      forall fext reg stack op l r lv rv oper EQ resv,
+      forall fext reg stack op l r lv rv resv,
       expr_runp fext reg stack l lv ->
       expr_runp fext reg stack r rv ->
-      oper = binop_run op ->
-      resv = oper lv rv EQ ->
+      Some resv = binop_run op lv rv ->
       expr_runp fext reg stack (Vbinop op l r) resv
   | erun_Vunop :
       forall fext reg stack u vu op oper resv,
@@ -394,7 +397,7 @@ Local Open Scope error_monad_scope.
 Definition access_fext (f : fext) (r : reg) : res value :=
   match AssocMap.get r f with
   | Some v => OK v
-  | _ => OK (ZToValue 1 0)
+  | _ => OK (ZToValue 0)
   end.
 
 (* TODO FIX Vvar case without default *)
@@ -652,8 +655,8 @@ other arguments to the module are also to be supported. *)
 
 Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
-           | S O => (AssocMap.set (mod_reset m) (ZToValue 1 1) empty_assocmap)
-           | _ => (AssocMap.set (mod_reset m) (ZToValue 1 0) empty_assocmap)
+           | S O => (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)
+           | _ => (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)
            end.
 
 (*Definition module_run (n : nat) (m : module) : res assocmap :=
@@ -727,21 +730,21 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall asr asa sf retval m st g,
-    asr!(m.(mod_finish)) = Some (1'h"1") ->
+    asr!(m.(mod_finish)) = Some (ZToValue 1) ->
     asr!(m.(mod_return)) = Some retval ->
     step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
 | step_call :
     forall g res m args,
     step g (Callstate res m args) Events.E0
          (State res m m.(mod_entrypoint)
-          (AssocMap.set m.(mod_st) (posToValue 32 m.(mod_entrypoint))
+          (AssocMap.set m.(mod_st) (posToValue m.(mod_entrypoint))
            (init_params args m.(mod_args)))
           (empty_stack m))
 | step_return :
     forall g m asr i r sf pc mst asa,
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
-         (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
+         (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i)
                 (empty_stack m)).
 Hint Constructors step : verilog.
 

@@ -466,16 +466,9 @@ Proof.
   rewrite ZToWord_plus; auto.
 Qed.
 
-Lemma zadd_vplus3 :
-  forall w1 w2,
-  (wordToN w1 + wordToN w2 < Npow2 32)%N ->
-  valueToN (vplus (mkvalue 32 w1) (mkvalue 32 w2) eq_refl) =
-  (valueToN (mkvalue 32 w1) + valueToN (mkvalue 32 w2))%N.
-Proof.
-  intros. unfold vplus, map_word2. rewrite unify_word_unfold. unfold valueToN.
-  simplify. unfold wplus. unfold wordBin.
-  rewrite wordToN_NToWord_2. trivial. assumption.
-Qed.
+Lemma ZToValue_eq :
+  forall w1,
+  (mkvalue 32 w1) = (ZToValue 32 (wordToZ w1)). Admitted.
 
 Lemma wordsize_32 :
   Int.wordsize = 32%nat.
@@ -490,13 +483,7 @@ Proof.
   rewrite Int.repr_unsigned. auto. rewrite wordsize_32. omega.
 Qed.
 
-Lemma vadd_vplus :
-  forall v1 v2 EQ,
-  uvalueToZ v1 + uvalueToZ v2 = uvalueToZ (vplus v1 v2 EQ).
-Proof.
-  Admitted.
-
-Lemma intadd_vplus2 :
+(*Lemma intadd_vplus2 :
   forall v1 v2 EQ,
   vsize v1 = 32%nat ->
   Int.add (valueToInt v1) (valueToInt v2) = valueToInt (vplus v1 v2 EQ).
@@ -504,7 +491,7 @@ Proof.
   intros. unfold Int.add, valueToInt, intToValue. repeat (rewrite Int.unsigned_repr).
   rewrite (@vadd_vplus v1 v2 EQ). trivial.
   unfold uvalueToZ. Search word "bound". pose proof (@uwordToZ_bound (vsize v2) (vword v2)).
-  rewrite H in EQ. rewrite <- EQ in H0.
+  rewrite H in EQ. rewrite <- EQ in H0 at 3.*)
   (*rewrite zadd_vplus3. trivia*)
 
 Lemma valadd_vplus :
