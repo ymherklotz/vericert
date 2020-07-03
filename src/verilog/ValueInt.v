@@ -138,6 +138,21 @@ Lemma uvalueToZ_ZToValue :
   uvalueToZ (ZToValue z) = z.
 Proof. auto using Int.unsigned_repr. Qed.
 
+Lemma valueToPos_posToValue :
+  forall v,
+  0 <= Z.pos v <= Int.max_unsigned ->
+  valueToPos (posToValue v) = v.
+Proof.
+  unfold valueToPos, posToValue.
+  intros. rewrite Int.unsigned_repr.
+  apply Pos2Z.id. assumption.
+Qed.
+
+Lemma valueToInt_intToValue :
+  forall v,
+  valueToInt (intToValue v) = v.
+Proof. auto. Qed.
+
 Lemma valToValue_lessdef :
   forall v v',
     valToValue v = Some v' ->
@@ -152,9 +167,3 @@ Proof.
   inv H. destruct (uvalueToZ (ptrToValue i) mod 4 =? 0) eqn:?; try discriminate.
   inv H1. apply Z.eqb_eq. apply Heqb0.
 Qed.
-
-Local Open Scope Z.
-
-Ltac word_op_value H :=
-  intros; unfold uvalueToZ, ZToValue; simpl; rewrite unify_word_unfold;
-  rewrite <- H; rewrite uwordToZ_ZToWord_full; auto; omega.

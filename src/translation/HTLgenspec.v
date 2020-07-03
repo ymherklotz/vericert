@@ -18,7 +18,7 @@
 
 From compcert Require RTL Op Maps Errors.
 From compcert Require Import Maps.
-From coqup Require Import Coquplib Verilog Value HTL HTLgen AssocMap.
+From coqup Require Import Coquplib Verilog ValueInt HTL HTLgen AssocMap.
 Require Import Lia.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
@@ -127,12 +127,12 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
       translate_condition cond args s = OK c s' i ->
       tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-    tr_instr fin rtrn st stk (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z)))
-                                                  (block rtrn (Vlit (ZToValue 1%nat 0%Z)))) Vskip
+    tr_instr fin rtrn st stk (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%Z)))
+                                                  (block rtrn (Vlit (ZToValue 0%Z)))) Vskip
 | tr_instr_Ireturn_Some :
     forall r,
       tr_instr fin rtrn st stk (RTL.Ireturn (Some r))
-               (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r))) Vskip
+               (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r))) Vskip
 | tr_instr_Iload :
     forall mem addr args s s' i c dst n,
       translate_arr_access mem addr args stk s = OK c s' i ->

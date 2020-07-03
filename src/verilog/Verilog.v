@@ -331,7 +331,7 @@ Definition binop_run (op : binop) (v1 v2 : value) : option value :=
 
 Definition unop_run (op : unop) (v1 : value) : value :=
   match op with
-  | Vneg => Int.notbool v1
+  | Vneg => Int.neg v1
   | Vnot => Int.not v1
   end.
 

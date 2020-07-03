@@ -91,7 +91,7 @@ Definition state_goto (st : reg) (n : node) : stmnt :=
   Vnonblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
-  Vnonblock (Vvar st) (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)).
+  Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
@@ -244,7 +244,7 @@ Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
   Vbinop op (Vvar r) (Vlit (intToValue l)).
 
 Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
-  Vbinop op (Vvar r) (Vlit (ZToValue 32%nat l)).
+  Vbinop op (Vvar r) (Vlit (ZToValue l)).
 
 Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
@@ -297,7 +297,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
     else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address misaligned")
   | Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
+    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
     else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address misaligned")
   | Op.Aindexed2 offset, r1::r2::nil =>
     if (check_address_parameter_signed offset)
@@ -310,7 +310,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
-    then ret (Vlit (ZToValue 32 a))
+    then ret (Vlit (ZToValue a))
     else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address misaligned")
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
@@ -342,7 +342,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshr, r1::r2::nil => ret (bop Vshr r1 r2)
   | Op.Oshrimm n, r::nil => ret (boplit Vshr r n)
   | Op.Oshrximm n, r::nil => ret (Vbinop Vdiv (Vvar r)
-                                         (Vbinop Vshl (Vlit (ZToValue 32 1))
+                                         (Vbinop Vshl (Vlit (ZToValue 1))
                                                  (Vlit (intToValue n))))
   | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
@@ -395,19 +395,19 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
   match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Mint32, Op.Aindexed off, r1::nil =>
     if (check_address_parameter_signed off)
-    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 32 4))))
+    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
     else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vvari stack
                     (Vbinop Vdivu
                             (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-                            (ZToValue 32 4)))
+                            (ZToValue 4)))
     else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
-    then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
+    then ret (Vvari stack (Vlit (ZToValue (a / 4))))
     else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset")
   | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
   end.
@@ -420,7 +420,7 @@ Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
 
 Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
   List.map (fun a => match a with
-                    (i, n) => (Vlit (natToValue 32 i), Vnonblock (Vvar st) (Vlit (posToValue 32 n)))
+                    (i, n) => (Vlit (natToValue i), Vnonblock (Vvar st) (Vlit (posToValue n)))
                   end)
            (enumerate 0 ns).
 
@@ -452,9 +452,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Ireturn r =>
       match r with
       | Some r' =>
-        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r')))
+        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r')))
       | None =>
-        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z))))
+        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z))))
       end
     end
   end.

@@ -16,9 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require RTL Registers AST Integers.
-From compcert Require Import Globalenvs Memory.
-From coqup Require Import Coquplib HTLgenspec HTLgen Value AssocMap Array IntegerExtra ZExtra.
+From compcert Require RTL Registers AST.
+From compcert Require Import Integers Globalenvs Memory.
+From coqup Require Import Coquplib HTLgenspec HTLgen ValueInt AssocMap Array IntegerExtra ZExtra.
 From coqup Require HTL Verilog.
 
 Require Import Lia.
@@ -41,7 +41,7 @@ Hint Constructors match_assocmaps : htlproof.
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
   forall st asa asr res,
   s = HTL.State res m st asa asr ->
-  asa!(m.(HTL.mod_st)) = Some (posToValue 32 st).
+  asa!(m.(HTL.mod_st)) = Some (posToValue st).
 Hint Unfold state_st_wf : htlproof.
 
 Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem : mem) :
@@ -53,7 +53,7 @@ Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem 
         0 <= ptr < Z.of_nat m.(HTL.mod_stk_len) ->
         opt_val_value_lessdef (Mem.loadv AST.Mint32 mem
                                          (Values.Val.offset_ptr sp (Integers.Ptrofs.repr (4 * ptr))))
-                              (Option.default (NToValue 32 0)
+                              (Option.default (NToValue 0)
                                  (Option.join (array_get_error (Z.to_nat ptr) stack)))) ->
     match_arrs m f sp mem asa.
 
@@ -254,12 +254,6 @@ Proof.
   assumption.
 Qed.
 
-(* Need to eventually move posToValue 32 to posToValueAuto, as that has this proof. *)
-Lemma assumption_32bit :
-  forall v,
-    valueToPos (posToValue 32 v) = v.
-Admitted.
-
 Ltac inv_state :=
   match goal with
     MSTATE : match_states _ _ |- _ =>
@@ -358,6 +352,14 @@ Section CORRECTNESS.
     (Genv.senv_transf_partial TRANSL').
   Hint Resolve senv_preserved : htlproof.
 
+  Lemma ptrofs_inj :
+    forall a b,
+      Ptrofs.unsigned a = Ptrofs.unsigned b -> a = b.
+  Proof.
+    intros. rewrite <- Ptrofs.repr_unsigned. symmetry. rewrite <- Ptrofs.repr_unsigned.
+    rewrite H. auto.
+  Qed.
+
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
       match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
@@ -373,12 +375,29 @@ Section CORRECTNESS.
     - inv Heql.
       assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
       apply H in HPle. eexists. split; try constructor; eauto.
-    - eexists. split. constructor. constructor. symmetry. apply valueToInt_intToValue.
+    - eexists. split. constructor. constructor. auto.
     - inv Heql.
       assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
       apply H in HPle.
       eexists. split. econstructor; eauto. constructor. trivial.
-      unfold Verilog.unop_run.
+      unfold Verilog.unop_run. unfold Values.Val.neg. destruct (Registers.Regmap.get r rs) eqn:?; constructor.
+      inv HPle. auto.
+    - inv Heql.
+      assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+      assert (HPle0 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+      apply H in HPle. apply H in HPle0.
+      eexists. split. econstructor; eauto. constructor. trivial.
+      constructor. trivial. simplify. inv HPle. inv HPle0; constructor; auto.
+      + inv HPle0. constructor. unfold valueToPtr. Search Integers.Ptrofs.sub Integers.int.
+        pose proof Integers.Ptrofs.agree32_sub. unfold Integers.Ptrofs.agree32 in H3.
+        Print Integers.Ptrofs.agree32. unfold Ptrofs.of_int. simpl.
+        apply ptrofs_inj. assert (Archi.ptr64 = false) by auto. eapply H3 in H4.
+        rewrite Ptrofs.unsigned_repr. apply H4. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+        apply Int.unsigned_range_2.
+        auto. rewrite Ptrofs.unsigned_repr. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+        apply Int.unsigned_range_2. rewrite Ptrofs.unsigned_repr. auto.
+        replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+        apply Int.unsigned_range_2.
 
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f asr asa,

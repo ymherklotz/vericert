@@ -17,12 +17,10 @@
  *)
 
 From Coq Require Import FSets.FMapPositive.
-From coqup Require Import Coquplib Value AssocMap Array.
+From coqup Require Import Coquplib ValueInt AssocMap Array.
 From coqup Require Verilog.
 From compcert Require Events Globalenvs Smallstep Integers Values.
 From compcert Require Import Maps.
-
-Import HexNotationValue.
 
 (** The purpose of the hardware transfer language (HTL) is to create a more
 hardware-like layout that is still similar to the register transfer language
@@ -128,21 +126,21 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall g m st asr asa retval sf,
-    asr!(m.(mod_finish)) = Some (1'h"1") ->
+    asr!(m.(mod_finish)) = Some (ZToValue 1) ->
     asr!(m.(mod_return)) = Some retval ->
     step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
 | step_call :
     forall g m args res,
       step g (Callstate res m args) Events.E0
            (State res m m.(mod_entrypoint)
-             (AssocMap.set (mod_st m) (posToValue 32 m.(mod_entrypoint))
+             (AssocMap.set (mod_st m) (posToValue m.(mod_entrypoint))
                            (init_regs args m.(mod_params)))
              (empty_stack m))
 | step_return :
     forall g m asr asa i r sf pc mst,
       mst = mod_st m ->
       step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
-           (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i) asa).
+           (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
