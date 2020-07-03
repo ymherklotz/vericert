@@ -353,8 +353,6 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
     do tc <- translate_condition c rl;
     ret (Vternary tc (Vvar r1) (Vvar r2))
   | Op.Olea a, _ => translate_eff_addressing a args
-  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
-  | Op.Ocast32signed, r::nil => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
   | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
 

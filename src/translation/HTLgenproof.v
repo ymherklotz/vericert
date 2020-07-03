@@ -359,22 +359,35 @@ Section CORRECTNESS.
   Hint Resolve senv_preserved : htlproof.
 
   Lemma eval_correct :
-    forall sp op rs args m v v' e asr asa f s s' i,
+    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       Op.eval_operation ge sp op
-(List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
+                        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
       translate_instr op args s = OK e s' i ->
-      val_value_lessdef v v' ->
-      Verilog.expr_runp f asr asa e v'.
-  Admitted.
+      exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
+  Proof.
+    intros s sp op rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st MSTATE INSTR EVAL TR_INSTR.
+    inv MSTATE. inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
+    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); simplify.
+    - inv Heql.
+      assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+      apply H in HPle. eexists. split; try constructor; eauto.
+    - eexists. split. constructor. constructor. symmetry. apply valueToInt_intToValue.
+    - inv Heql.
+      assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+      apply H in HPle.
+      eexists. split. econstructor; eauto. constructor. trivial.
+      unfold Verilog.unop_run.
 
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f asr asa,
-    translate_condition cond args s1 = OK c s' i ->
-    Op.eval_condition
-      cond
-      (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
-      m = Some b ->
-    Verilog.expr_runp f asr asa c (boolToValue 32 b).
+      translate_condition cond args s1 = OK c s' i ->
+      Op.eval_condition
+        cond
+        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
+        m = Some b ->
+      Verilog.expr_runp f asr asa c (boolToValue 32 b).
   Admitted.
 
   (** The proof of semantic preservation for the translation of instructions
@@ -489,84 +502,83 @@ Section CORRECTNESS.
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
           match_states (RTL.State s f sp pc' (Registers.Regmap.set res0 v rs) m) R2.
   Proof.
-    intros s f sp pc rs m op args res0 pc' v H H0.
+    intros s f sp pc rs m op args res0 pc' v H H0 R1 MSTATE.
+    inv_state.
+    exploit eval_correct; eauto. intros. inversion H1. inversion H2.
+    econstructor. split.
+    apply Smallstep.plus_one.
+    eapply HTL.step_module; eauto.
+    apply assumption_32bit.
+    econstructor; simpl; trivial.
+    constructor; trivial.
+    econstructor; simpl; eauto.
+    simpl. econstructor. econstructor.
+    apply H3. simplify.
 
-    (* Iop *)
-    (* destruct v eqn:?; *)
-    (*          try ( *)
-    (*            destruct op eqn:?; inversion H21; simpl in H0; repeat (unfold_match H0); *)
-    (*            inversion H0; subst; simpl in *; try (unfold_func H4); try (unfold_func H5); *)
-    (*            try (unfold_func H6); *)
-    (*            try (unfold Op.eval_addressing32 in H6; repeat (unfold_match H6); inversion H6; *)
-    (*                 unfold_func H3); *)
+    all: big_tac.
 
-    (*            inversion Heql; inversion MASSOC; subst; *)
-    (*            assert (HPle : Ple r (RTL.max_reg_function f)) *)
-    (*              by (eapply RTL.max_reg_function_use; eauto; simpl; auto); *)
-    (*            apply H1 in HPle; inversion HPle; *)
-    (*            rewrite H2 in *; discriminate *)
-    (*          ). *)
+    assert (Ple res0 (RTL.max_reg_function f))
+        by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
 
-    (* + econstructor. split. *)
-    (* apply Smallstep.plus_one. *)
-    (* eapply HTL.step_module; eauto. *)
-    (* econstructor; simpl; trivial. *)
-    (* constructor; trivial. *)
-    (* econstructor; simpl; eauto. *)
-    (* eapply eval_correct; eauto. constructor. *)
-    (* unfold_merge. simpl. *)
-    (* rewrite AssocMap.gso. *)
-    (* apply AssocMap.gss. *)
-    (* apply st_greater_than_res. *)
+    unfold Ple in H10. lia.
+    apply regs_lessdef_add_match. assumption.
+    apply regs_lessdef_add_greater. unfold Plt; lia. assumption.
+    assert (Ple res0 (RTL.max_reg_function f))
+        by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+    unfold Ple in H12; lia.
+    unfold_merge. simpl.
+    rewrite AssocMap.gso.
+    apply AssocMap.gss.
+    apply st_greater_than_res.
 
-    (* (* match_states *) *)
-    (* assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit. *)
-    (* rewrite <- H1. *)
-    (* constructor; auto. *)
-    (* unfold_merge. *)
-    (* apply regs_lessdef_add_match. *)
-    (* constructor. *)
-    (* apply regs_lessdef_add_greater. *)
-    (* apply greater_than_max_func. *)
-    (* assumption. *)
+    (*match_states*)
+      assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
+    rewrite <- H1.
+    constructor; auto.
+    unfold_merge.
+    apply regs_lessdef_add_match.
+    constructor.
+    apply regs_lessdef_add_greater.
+    apply greater_than_max_func.
+    assumption.
 
-    (* unfold state_st_wf. intros. inversion H2. subst. *)
-    (* unfold_merge. *)
-    (* rewrite AssocMap.gso. *)
-    (* apply AssocMap.gss. *)
-    (* apply st_greater_than_res. *)
+    unfold state_st_wf. intros. inversion H2. subst.
+    unfold_merge.
+    rewrite AssocMap.gso.
+    apply AssocMap.gss.
+    apply st_greater_than_res.
 
-    (* + econstructor. split. *)
-    (* apply Smallstep.plus_one. *)
-    (* eapply HTL.step_module; eauto. *)
-    (* econstructor; simpl; trivial. *)
-    (* constructor; trivial. *)
-    (* econstructor; simpl; eauto. *)
-    (* eapply eval_correct; eauto. *)
-    (* constructor. rewrite valueToInt_intToValue. trivial. *)
-    (* unfold_merge. simpl. *)
-    (* rewrite AssocMap.gso. *)
-    (* apply AssocMap.gss. *)
-    (* apply st_greater_than_res. *)
+     + econstructor. split.
+     apply Smallstep.plus_one.
+     eapply HTL.step_module; eauto.
+     econstructor; simpl; trivial.
+     constructor; trivial.
+     econstructor; simpl; eauto.
+     eapply eval_correct; eauto.
+     constructor. rewrite valueToInt_intToValue. trivial.
+     unfold_merge. simpl.
+     rewrite AssocMap.gso.
+     apply AssocMap.gss.
+     apply st_greater_than_res.
 
-    (* (* match_states *) *)
-    (* assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit. *)
-    (* rewrite <- H1. *)
-    (* constructor. *)
-    (* unfold_merge. *)
-    (* apply regs_lessdef_add_match. *)
-    (* constructor. *)
-    (* symmetry. apply valueToInt_intToValue. *)
-    (* apply regs_lessdef_add_greater. *)
-    (* apply greater_than_max_func. *)
-    (* assumption. assumption. *)
+      match_states
+     assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
+     rewrite <- H1.
+     constructor.
+     unfold_merge.
+     apply regs_lessdef_add_match.
+     constructor.
+     symmetry. apply valueToInt_intToValue.
+     apply regs_lessdef_add_greater.
+     apply greater_than_max_func.
+     assumption. assumption.
 
-    (* unfold state_st_wf. intros. inversion H2. subst. *)
-    (* unfold_merge. *)
-    (* rewrite AssocMap.gso. *)
-    (* apply AssocMap.gss. *)
-    (* apply st_greater_than_res. *)
-    (* assumption. *)
+     unfold state_st_wf. intros. inversion H2. subst.
+     unfold_merge.
+     rewrite AssocMap.gso.
+     apply AssocMap.gss.
+     apply st_greater_than_res.
+     assumption.
   Admitted.
   Hint Resolve transl_iop_correct : htlproof.
 

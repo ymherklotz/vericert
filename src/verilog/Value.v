@@ -88,9 +88,18 @@ Definition intToValue (i : Integers.int) : value :=
 Definition valueToInt (i : value) : Integers.int :=
   Int.repr (uvalueToZ i).
 
+Definition ptrToValue (i : Integers.ptrofs) : value :=
+  ZToValue Ptrofs.wordsize (Ptrofs.unsigned i).
+
+Definition valueToPtr (i : value) : Integers.ptrofs :=
+  Ptrofs.repr (uvalueToZ i).
+
 Definition valToValue (v : Values.val) : option value :=
   match v with
   | Values.Vint i => Some (intToValue i)
+  | Values.Vptr b off => if Z.eqb (Z.modulo (uvalueToZ (ptrToValue off)) 4) 0%Z
+                         then Some (ptrToValue off)
+                         else None
   | Values.Vundef => Some (ZToValue 32 0%Z)
   | _ => None
   end.
@@ -304,7 +313,7 @@ Inductive val_value_lessdef: val -> value -> Prop :=
     val_value_lessdef (Vint i) v'
 | val_value_lessdef_ptr:
     forall b off v',
-    off = Ptrofs.repr (uvalueToZ v') ->
+    off = valueToPtr v' ->
     (Z.modulo (uvalueToZ v') 4) = 0%Z ->
     val_value_lessdef (Vptr b off) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
@@ -382,6 +391,41 @@ Proof.
   apply Z.lt_le_pred in H. apply H.
 Qed.
 
+Lemma valueToPtr_ptrToValue :
+  forall v,
+  valueToPtr (ptrToValue v) = v.
+Proof.
+  intros.
+  unfold valueToPtr, ptrToValue. rewrite uvalueToZ_ZToValue. auto using Ptrofs.repr_unsigned.
+  split. apply Ptrofs.unsigned_range_2.
+  assert ((Ptrofs.unsigned v <= Ptrofs.max_unsigned)%Z) by apply Ptrofs.unsigned_range_2.
+  apply Z.lt_le_pred in H. apply H.
+Qed.
+
+Lemma intToValue_valueToInt :
+  forall v,
+  vsize v = 32%nat ->
+  intToValue (valueToInt v) = v.
+Proof.
+  intros. unfold valueToInt, intToValue. rewrite Int.unsigned_repr_eq.
+  unfold ZToValue, uvalueToZ. unfold Int.modulus. unfold Int.wordsize. unfold Wordsize_32.wordsize.
+  pose proof (uwordToZ_bound (vword v)).
+  rewrite Z.mod_small. rewrite <- H. rewrite ZToWord_uwordToZ. destruct v; auto.
+  rewrite <- H. rewrite two_power_nat_equiv. apply H0.
+Qed.
+
+Lemma ptrToValue_valueToPtr :
+  forall v,
+  vsize v = 32%nat ->
+  ptrToValue (valueToPtr v) = v.
+Proof.
+  intros. unfold valueToPtr, ptrToValue. rewrite Ptrofs.unsigned_repr_eq.
+  unfold ZToValue, uvalueToZ. unfold Ptrofs.modulus. unfold Ptrofs.wordsize. unfold Wordsize_Ptrofs.wordsize.
+  pose proof (uwordToZ_bound (vword v)).
+  rewrite Z.mod_small. rewrite <- H. rewrite ZToWord_uwordToZ. destruct v; auto.
+  rewrite <- H. rewrite two_power_nat_equiv. apply H0.
+Qed.
+
 Lemma valToValue_lessdef :
   forall v v',
     valToValue v = Some v' ->
@@ -391,6 +435,10 @@ Proof.
   destruct v; try discriminate; constructor.
   unfold valToValue in H. inversion H.
   symmetry. apply valueToInt_intToValue.
+  inv H. destruct (uvalueToZ (ptrToValue i) mod 4 =? 0); try discriminate.
+  inv H1. symmetry. apply valueToPtr_ptrToValue.
+  inv H. destruct (uvalueToZ (ptrToValue i) mod 4 =? 0) eqn:?; try discriminate.
+  inv H1. apply Z.eqb_eq. apply Heqb0.
 Qed.
 
 Lemma boolToValue_ValueToBool :
@@ -418,6 +466,17 @@ Proof.
   rewrite ZToWord_plus; auto.
 Qed.
 
+Lemma zadd_vplus3 :
+  forall w1 w2,
+  (wordToN w1 + wordToN w2 < Npow2 32)%N ->
+  valueToN (vplus (mkvalue 32 w1) (mkvalue 32 w2) eq_refl) =
+  (valueToN (mkvalue 32 w1) + valueToN (mkvalue 32 w2))%N.
+Proof.
+  intros. unfold vplus, map_word2. rewrite unify_word_unfold. unfold valueToN.
+  simplify. unfold wplus. unfold wordBin. Search wordToN NToWord.
+  rewrite wordToN_NToWord_2. trivial. assumption.
+Qed.
+
 Lemma wordsize_32 :
   Int.wordsize = 32%nat.
 Proof. auto. Qed.
@@ -430,6 +489,24 @@ Proof.
   rewrite <- Int.unsigned_repr_eq.
   rewrite Int.repr_unsigned. auto. rewrite wordsize_32. omega.
 Qed.
+
+Lemma intadd_vplus2 :
+  forall v1 v2 EQ,
+  Int.add (valueToInt v1) (valueToInt v2) = valueToInt (vplus v1 v2 EQ).
+Proof.
+  intros. unfold Int.add, valueToInt, intToValue. repeat (rewrite Int.unsigned_repr).
+  rewrite zadd_vplus3. trivial.
+
+Lemma valadd_vplus :
+  forall v1 v2 v1' v2' v v' EQ,
+  val_value_lessdef v1 v1' ->
+  val_value_lessdef v2 v2' ->
+  Val.add v1 v2 = v ->
+  vplus v1' v2' EQ = v' ->
+  val_value_lessdef v v'.
+Proof.
+  intros. inv H; inv H0; constructor; simplify.
+  -
 
 Lemma zsub_vminus :
   forall sz z1 z2,
