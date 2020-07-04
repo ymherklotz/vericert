@@ -522,7 +522,7 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     forall f st1 st2 asr0 asa0 asr1 asa1 asr2 asa2,
     stmnt_runp f asr0 asa0 st1 asr1 asa1 ->
     stmnt_runp f asr1 asa1 st2 asr2 asa2 ->
-    stmnt_runp f asr0 asa1 (Vseq st1 st2) asr2 asa2
+    stmnt_runp f asr0 asa0 (Vseq st1 st2) asr2 asa2
 | stmnt_runp_Vcond_true:
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
@@ -602,7 +602,7 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
                      module_item -> reg_associations -> arr_associations -> Prop :=
 | mi_stepp_Valways :
     forall f sr0 sa0 st sr1 sa1 c,
-    stmnt_runp f sr0 sa0 st sr1 sa0 ->
+    stmnt_runp f sr0 sa0 st sr1 sa1 ->
     mi_stepp f sr0 sa0 (Valways c st) sr1 sa1
 | mi_stepp_Valways_ff :
     forall f sr0 sa0 st sr1 sa1 c,
@@ -716,6 +716,7 @@ Definition empty_stack (m : module) : assocmap_arr :=
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
       forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
+      asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
       mis_stepp f (mkassociations asr empty_assocmap)
@@ -764,3 +765,133 @@ Inductive final_state : state -> Integers.int -> Prop :=
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
+
+Lemma expr_runp_determinate :
+  forall f e asr asa v,
+  expr_runp f asr asa e v ->
+  forall v',
+  expr_runp f asr asa e v' ->
+  v' = v.
+Proof.
+  induction e; intros;
+
+  repeat (try match goal with
+              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => invert H
+
+              | [ H1 : forall asr asa v, expr_runp _ asr asa ?e v -> _,
+                  H2 : expr_runp _ _ _ ?e _ |- _ ] =>
+                learn (H1 _ _ _ H2)
+              | [ H1 : forall v, expr_runp _ ?asr ?asa ?e v -> _,
+                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
+                learn (H1 _ H2)
+              end; crush).
+Qed.
+Hint Resolve expr_runp_determinate : verilog.
+
+Lemma location_is_determinate :
+  forall f asr asa e l,
+  location_is f asr asa e l ->
+  forall l',
+  location_is f asr asa e l' ->
+  l' = l.
+Proof.
+  induction 1; intros;
+
+  repeat (try match goal with
+              | [ H : location_is _ _ _ _ _ |- _ ] => invert H
+              | [ H1 : expr_runp _ ?asr ?asa ?e _,
+                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
+                learn (expr_runp_determinate H1 H2)
+              end; crush).
+Qed.
+
+Lemma stmnt_runp_determinate :
+  forall f s asr0 asa0 asr1 asa1,
+  stmnt_runp f asr0 asa0 s asr1 asa1 ->
+  forall asr1' asa1',
+  stmnt_runp f asr0 asa0 s asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+  induction 1; intros;
+
+  repeat (try match goal with
+             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (_ :: _) _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ []  _) _ _ |- _ ] => invert H
+
+             | [ H1 : expr_runp _ ?asr ?asa ?e _,
+                 H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
+               learn (expr_runp_determinate H1 H2)
+
+             | [ H1 : location_is _ ?asr ?asa ?e _,
+                 H2 : location_is _ ?asr ?asa ?e _ |- _ ] =>
+               learn (location_is_determinate H1 H2)
+
+             | [ H1 : forall asr1 asa1, stmnt_runp _ ?asr0 ?asa0 ?s asr1 asa1 -> _,
+                 H2 : stmnt_runp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+               learn (H1 _ _ H2)
+              end; crush).
+Qed.
+Hint Resolve stmnt_runp_determinate : verilog.
+
+Lemma mi_stepp_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mi_stepp f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mi_stepp f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  intros. destruct m; invert H; invert H0;
+
+  repeat (try match goal with
+              | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
+                  H2 : stmnt_runp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (stmnt_runp_determinate H1 H2)
+              end; crush).
+Qed.
+
+Lemma mis_stepp_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mis_stepp f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mis_stepp f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  induction 1; intros;
+
+  repeat (try match goal with
+              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] => invert H
+              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+
+              | [ H1 : mi_stepp _ ?asr0 ?asa0 ?s _ _,
+                  H2 : mi_stepp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (mi_stepp_determinate H1 H2)
+
+             | [ H1 : forall asr1 asa1, mis_stepp _ ?asr0 ?asa0 ?m asr1 asa1 -> _,
+                 H2 : mis_stepp _ ?asr0 ?asa0 ?m _ _ |- _ ] =>
+               learn (H1 _ _ H2)
+              end; crush).
+Qed.
+
+Lemma semantics_determinate :
+  forall (p: program), Smallstep.determinate (semantics p).
+Proof.
+  intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
+  - invert H; invert H0; constructor. (* Traces are always empty *)
+  - invert H; invert H0; crush.
+    pose proof (mis_stepp_determinate H4 H13)
+    admit.
+  - constructor. invert H; crush.
+  - invert H; invert H0; unfold ge0, ge1 in *; crush.
+  - red; simplify; intro; invert H0; invert H; crush.
+  - invert H; invert H0; crush.
+Admitted.
