@@ -199,7 +199,7 @@ Ltac ptrofs :=
          end.
 
 Module IntExtra.
-
+  Import Int.
   Ltac int_mod_match m :=
     match goal with
     | [ H : ?x = 0 |- context[?x] ] => rewrite H
@@ -291,4 +291,75 @@ Module IntExtra.
              rewrite <- Zmod_div_mod; try lia; try assumption
            end; try (crush; lia); int_mod_tac m.
   Qed.
+
+  Definition ofbytes (a b c d : byte) : int :=
+    or (shl (repr (Byte.unsigned a)) (repr (3 * Byte.zwordsize)))
+       (or (shl (repr (Byte.unsigned b)) (repr (2 * Byte.zwordsize)))
+           (or (shl (repr (Byte.unsigned c)) (repr Byte.zwordsize))
+               (repr (Byte.unsigned d)))).
+
+  Definition byte1 (n: int) : byte := Byte.repr (unsigned n).
+
+  Definition byte2 (n: int) : byte := Byte.repr (unsigned (shru n (repr Byte.zwordsize))).
+
+  Definition byte3 (n: int) : byte := Byte.repr (unsigned (shru n (repr (2 * Byte.zwordsize)))).
+
+  Definition byte4 (n: int) : byte := Byte.repr (unsigned (shru n (repr (3 * Byte.zwordsize)))).
+
+  Lemma bits_byte1:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte1 n) i = testbit n i.
+  Proof.
+    intros. unfold byte1. rewrite Byte.testbit_repr; auto.
+  Qed.
+
+  Lemma bits_byte2:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte2 n) i = testbit n (i + Byte.zwordsize).
+  Proof.
+    intros. unfold byte2. rewrite Byte.testbit_repr; auto.
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    fold (testbit (shru n (repr Byte.zwordsize)) i). rewrite bits_shru.
+    change (unsigned (repr Byte.zwordsize)) with Byte.zwordsize.
+    apply zlt_true. omega. omega.
+  Qed.
+
+  Lemma bits_byte3:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte3 n) i = testbit n (i + (2 * Byte.zwordsize)).
+  Proof.
+    intros. unfold byte3. rewrite Byte.testbit_repr; auto.
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    fold (testbit (shru n (repr (2 * Byte.zwordsize))) i). rewrite bits_shru.
+    change (unsigned (repr (2 * Byte.zwordsize))) with (2 * Byte.zwordsize).
+    apply zlt_true. omega. omega.
+  Qed.
+
+  Lemma bits_byte4:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte4 n) i = testbit n (i + (3 * Byte.zwordsize)).
+  Proof.
+    intros. unfold byte4. rewrite Byte.testbit_repr; auto.
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    fold (testbit (shru n (repr (3 * Byte.zwordsize))) i). rewrite bits_shru.
+    change (unsigned (repr (3 * Byte.zwordsize))) with (3 * Byte.zwordsize).
+    apply zlt_true. omega. omega.
+  Qed.
+
+  Lemma bits_ofwords:
+    forall b4 b3 b2 b1 i, 0 <= i < zwordsize ->
+                          testbit (ofbytes b4 b3 b2 b1) i =
+                          if zlt i Byte.zwordsize
+                          then Byte.testbit b1 i
+                          else (if zlt i (2 * Byte.zwordsize)
+                                then Byte.testbit b2 (i - Byte.zwordsize)
+                                else (if zlt i (3 * Byte.zwordsize)
+                                      then Byte.testbit b2 (i - 2 * Byte.zwordsize)
+                                      else Byte.testbit b2 (i - 3 * Byte.zwordsize))).
+  Proof.
+    intros. unfold ofbytes. repeat (rewrite bits_or; auto). repeat (rewrite bits_shl; auto).
+    change (unsigned (repr Byte.zwordsize)) with Byte.zwordsize.
+    change (unsigned (repr (2 * Byte.zwordsize))) with (2 * Byte.zwordsize).
+    change (unsigned (repr (3 * Byte.zwordsize))) with (3 * Byte.zwordsize).
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    destruct (zlt i Byte.zwordsize).
+    rewrite testbit_repr; auto.
+    Abort.
+
 End IntExtra.
