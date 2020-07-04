@@ -87,6 +87,12 @@ Inductive match_frames : list RTL.stackframe -> list HTL.stackframe -> Prop :=
 | match_frames_nil :
     match_frames nil nil.
 
+  Lemma assumption_32bit :
+    forall v,
+      valueToPos (posToValue v) = v.
+  Proof.
+  Admitted.
+
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
     (MASSOC : match_assocmaps f rs asr)
@@ -336,6 +342,7 @@ Section CORRECTNESS.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
 
+
   Lemma functions_translated:
     forall (v: Values.val) (f: RTL.fundef),
       Genv.find_funct ge v = Some f ->
@@ -398,6 +405,7 @@ Section CORRECTNESS.
         apply Int.unsigned_range_2. rewrite Ptrofs.unsigned_repr. auto.
         replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
         apply Int.unsigned_range_2.
+        Admitted.
 
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f asr asa,
@@ -406,7 +414,7 @@ Section CORRECTNESS.
         cond
         (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
         m = Some b ->
-      Verilog.expr_runp f asr asa c (boolToValue 32 b).
+      Verilog.expr_runp f asr asa c (boolToValue b).
   Admitted.
 
   (** The proof of semantic preservation for the translation of instructions
@@ -436,7 +444,7 @@ Section CORRECTNESS.
 
   Ltac tac0 :=
     match goal with
-    | [ |- context[valueToPos (posToValue 32 _)] ] => rewrite assumption_32bit
+    | [ |- context[valueToPos (posToValue _)] ] => rewrite assumption_32bit
 
     | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs
     | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr
@@ -456,7 +464,7 @@ Section CORRECTNESS.
     | [ |- state_st_wf _ _ ] => unfold state_st_wf; inversion 1
     | [ |- context[match_states _ _] ] => econstructor; auto
     | [ |- match_arrs _ _ _ _ _ ] => econstructor; auto
-    | [ |- match_assocmaps _ _ _ # _ <- (posToValue 32 _) ] =>
+    | [ |- match_assocmaps _ _ _ # _ <- (posToValue _) ] =>
       apply regs_lessdef_add_greater; [> unfold Plt; lia | assumption]
 
     | [ H : ?asa ! ?r = Some _ |- Verilog.arr_assocmap_lookup ?asa ?r _ = Some _ ] =>
