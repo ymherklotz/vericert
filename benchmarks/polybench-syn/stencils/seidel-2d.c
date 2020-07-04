@@ -53,6 +53,7 @@ void kernel_seidel_2d(int tsteps,
   int t, i, j;
   int ONE = 1;
   int TWO = 2;
+  int NINE = 9;
 
 #pragma scop
  for (t = 0; t <= tsteps - ONE; plus(t))
@@ -60,7 +61,7 @@ void kernel_seidel_2d(int tsteps,
       for (j = ONE; j <= n - TWO; plus(j))
  A[i][j] = (A[i-ONE][j-ONE] + A[i-ONE][j] + A[i-ONE][j+ONE]
      + A[i][j-ONE] + A[i][j] + A[i][j+ONE]
-     + A[i+ONE][j-ONE] + A[i+ONE][j] + A[i+ONE][j+ONE])/9;
+     + A[i+ONE][j-ONE] + A[i+ONE][j] + A[i+ONE][j+ONE])/NINE;
 #pragma endscop
 
 }
