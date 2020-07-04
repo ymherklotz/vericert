@@ -20,17 +20,18 @@ void init_array(int m, int n,
 {
   int i, j;
   int ONE = 1;
+  int HUND = 100;
 
   *alpha = 3;
   *beta = 2;
   for (i = 0; i < m; plus(i))
     for (j = 0; j < n; plus(j)) {
-      C[i][j] = (int) ((i+j) % 100) / m;
-      B[i][j] = (int) ((n+i-j) % 100) / m;
+      C[i][j] = (int) ((i+j) % HUND) / m;
+      B[i][j] = (int) ((n+i-j) % HUND) / m;
     }
   for (i = 0; i < m; plus(i)) {
     for (j = 0; j <=i; plus(j))
-      A[i][j] = (int) ((i+j) % 100) / m;
+      A[i][j] = (int) ((i+j) % HUND) / m;
     for (j = i+ONE; j < m; plus(j))
       A[i][j] = -999;
   }
