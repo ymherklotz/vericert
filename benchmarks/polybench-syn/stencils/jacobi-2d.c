@@ -59,6 +59,7 @@ void kernel_jacobi_2d(int tsteps,
 {
   int t, i, j;
   int ONE = 1;
+  int TWO = 2;
 
 #pragma scop
   for (t = 0; t < tsteps; plus(t))
@@ -66,12 +67,12 @@ void kernel_jacobi_2d(int tsteps,
     for (i = 1; i < n - ONE; plus(i))
       for (j = 1; j < n - ONE; plus(j)){
         B[i][j] = (A[i][j] + A[i][j-ONE] + A[i][ONE+j] + A[ONE+i][j] + A[i-ONE][j]);
-        B[i][j] = B[i][j] >> 2;
+        B[i][j] = B[i][j] >> TWO;
       }
     for (i = 1; i < n - ONE; plus(i))
       for (j = 1; j < n - ONE; plus(j)){
         A[i][j] = (B[i][j] + B[i][j-ONE] + B[i][ONE+j] + B[ONE+i][j] + B[i-ONE][j]);
-        A[i][j] = A[i][j] >> 2; 
+        A[i][j] = A[i][j] >> TWO; 
       }
   }
 #pragma endscop
@@ -83,7 +84,7 @@ int main()
 {
 
   int n = 30;
-  int tsteps = 20;
+  int tsteps = 5;
 
 
   int A[30 + 0][30 + 0];
