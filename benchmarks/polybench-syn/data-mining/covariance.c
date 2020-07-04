@@ -17,12 +17,13 @@ void init_array (int m, int n,
 {
   int i, j;
   int ONE = 1;
+  int DIV = 28;
 
   *float_n = (int)n;
 
   for (i = 0; i < 32; plus(i))
     for (j = 0; j < 28; plus(j))
-      data[i][j] = ((int) i*j) / 28;
+      data[i][j] = ((int) i*j) / DIV;
 }
 
 
