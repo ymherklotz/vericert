@@ -36,6 +36,11 @@ Definition node := positive.
 Definition datapath := PTree.t Verilog.stmnt.
 Definition controllogic := PTree.t Verilog.stmnt.
 
+Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
+  forall p0 : positive,
+    In p0 (map fst (Maps.PTree.elements m)) ->
+    Z.pos p0 <= Integers.Int.max_unsigned.
+
 Record module: Type :=
   mkmodule {
     mod_params : list reg;
@@ -52,6 +57,7 @@ Record module: Type :=
     mod_clk : reg;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
+    mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
   }.
 
 Definition fundef := AST.fundef module.
@@ -97,16 +103,15 @@ Inductive state : Type :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g m st sf ctrl data ist
+    forall g m st sf ctrl data
       asr asa
       basr1 basa1 nasr1 nasa1
       basr2 basa2 nasr2 nasa2
       asr' asa'
-      f stval pstval,
+      f pstval,
       asr!(mod_reset m) = Some (ZToValue 0) ->
       asr!(mod_finish m) = Some (ZToValue 0) ->
-      asr!(m.(mod_st)) = Some ist ->
-      valueToPos ist = st ->
+      asr!(m.(mod_st)) = Some (posToValue st) ->
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
@@ -115,8 +120,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         ctrl
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1) ->
-      basr1!(m.(mod_st)) = Some ist ->
-      valueToPos ist = st ->
+      basr1!(m.(mod_st)) = Some (posToValue st) ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1)
@@ -125,8 +129,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         (Verilog.mkassociations basa2 nasa2) ->
       asr' = Verilog.merge_regs nasr2 basr2 ->
       asa' = Verilog.merge_arrs nasa2 basa2 ->
-      asr'!(m.(mod_st)) = Some stval ->
-      valueToPos stval = pstval ->
+      asr'!(m.(mod_st)) = Some (posToValue pstval) ->
+      Z.pos pstval <= Integers.Int.max_unsigned ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall g m st asr asa retval sf,

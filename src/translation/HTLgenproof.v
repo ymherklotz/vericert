@@ -342,7 +342,6 @@ Section CORRECTNESS.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
 
-
   Lemma functions_translated:
     forall (v: Values.val) (f: RTL.fundef),
       Genv.find_funct ge v = Some f ->

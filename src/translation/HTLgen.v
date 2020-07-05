@@ -402,7 +402,7 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
     then ret (Vvari stack
                     (Vbinop Vdivu
                             (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-                            (ZToValue 4)))
+                            (Vlit (ZToValue 4))))
     else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
@@ -510,32 +510,67 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
 
+Definition max_pc_map (m : Maps.PTree.t stmnt) :=
+  PTree.fold (fun m pc i => Pos.max m pc) m 1%positive.
+
+Lemma max_pc_map_sound:
+  forall m pc i, m!pc = Some i -> Ple pc (max_pc_map m).
+Proof.
+  intros until i. unfold max_pc_function.
+  apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
+  (* extensionality *)
+  intros. apply H0. rewrite H; auto.
+  (* base case *)
+  rewrite PTree.gempty. congruence.
+  (* inductive case *)
+  intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
+  inv H2. xomega.
+  apply Ple_trans with a. auto. xomega.
+Qed.
+
+Lemma max_pc_wf :
+  forall m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+            map_well_formed m.
+Proof.
+  unfold map_well_formed. intros.
+  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
+  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
+  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
+  simplify. transitivity (Z.pos (max_pc_map m)); eauto.
+Qed.
+
 Definition transf_module (f: function) : mon module :=
   if stack_correct f.(fn_stacksize) then
-  do fin <- create_reg (Some Voutput) 1;
-  do rtrn <- create_reg (Some Voutput) 32;
-  do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-  do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
-  do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
-  do start <- create_reg (Some Vinput) 1;
-  do rst <- create_reg (Some Vinput) 1;
-  do clk <- create_reg (Some Vinput) 1;
-  do current_state <- get;
-  ret (mkmodule
-         f.(RTL.fn_params)
-         current_state.(st_datapath)
-         current_state.(st_controllogic)
-         f.(fn_entrypoint)
-         current_state.(st_st)
-         stack
-         stack_len
-         fin
-         rtrn
-         start
-         rst
-         clk
-         current_state.(st_scldecls)
-         current_state.(st_arrdecls))
+    do fin <- create_reg (Some Voutput) 1;
+    do rtrn <- create_reg (Some Voutput) 32;
+    do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
+    do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+    do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
+    do start <- create_reg (Some Vinput) 1;
+    do rst <- create_reg (Some Vinput) 1;
+    do clk <- create_reg (Some Vinput) 1;
+    do current_state <- get;
+    match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
+          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
+    | left LEDATA, left LECTRL =>
+        ret (mkmodule
+           f.(RTL.fn_params)
+           current_state.(st_datapath)
+           current_state.(st_controllogic)
+           f.(fn_entrypoint)
+           current_state.(st_st)
+           stack
+           stack_len
+           fin
+           rtrn
+           start
+           rst
+           clk
+           current_state.(st_scldecls)
+           current_state.(st_arrdecls)
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
+    | _, _ => error (Errors.msg "More than 2^32 states.")
+    end
   else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=

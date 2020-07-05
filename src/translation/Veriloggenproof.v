@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require Import Smallstep Linking Integers.
+From compcert Require Import Smallstep Linking Integers Globalenvs.
 From coqup Require HTL.
 From coqup Require Import Coquplib Veriloggen Verilog ValueInt AssocMap.
 Require Import Lia.
@@ -89,6 +89,14 @@ Proof.
   rewrite H1. auto.
 Qed.
 
+Lemma unsigned_posToValue_le :
+  forall p,
+    Z.pos p <= Int.max_unsigned ->
+    0 < Int.unsigned (posToValue p).
+Proof.
+  intros. unfold posToValue. rewrite Int.unsigned_repr; lia.
+Qed.
+
 Lemma transl_list_fun_fst :
   forall p1 p2 a b,
     0 <= Z.pos p1 <= Int.max_unsigned ->
@@ -102,10 +110,17 @@ Proof.
   rewrite H1; auto.
 Qed.
 
+Lemma Zle_relax :
+  forall p q r,
+  p < q <= r ->
+  p <= q <= r.
+Proof. lia. Qed.
+Hint Resolve Zle_relax : verilogproof.
+
 Lemma transl_in :
   forall l p,
   0 <= Z.pos p <= Int.max_unsigned ->
-  (forall p0, In p0 (List.map fst l) -> 0 <= Z.pos p0 <= Int.max_unsigned) ->
+  (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
   In (Vlit (posToValue p)) (map fst (map transl_list_fun l)) ->
   In p (map fst l).
 Proof.
@@ -113,13 +128,14 @@ Proof.
   - simplify. auto.
   - intros. destruct a. simplify. destruct (peq p0 p); auto.
     right. inv H1. apply Vlit_inj in H. apply posToValue_inj in H; auto. contradiction.
+    auto with verilogproof.
     apply IHl; auto.
 Qed.
 
 Lemma transl_notin :
   forall l p,
     0 <= Z.pos p <= Int.max_unsigned ->
-    (forall p0, In p0 (List.map fst l) -> 0 <= Z.pos p0 <= Int.max_unsigned) ->
+    (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
     ~ In p (List.map fst l) -> ~ In (Vlit (posToValue p)) (List.map fst (transl_list l)).
 Proof.
   induction l; auto. intros. destruct a. unfold not in *. intros.
@@ -127,23 +143,87 @@ Proof.
   destruct (peq p0 p). apply H1. auto. apply H1.
   unfold transl_list in *. inv H2. apply Vlit_inj in H. apply posToValue_inj in H.
   contradiction.
-  apply H0; auto. auto.
+  auto with verilogproof. auto.
   right. apply transl_in; auto.
 Qed.
 
 Lemma transl_norepet :
   forall l,
-    (forall p0, In p0 (List.map fst l) -> 0 <= Z.pos p0 <= Int.max_unsigned) ->
+    (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
     list_norepet (List.map fst l) -> list_norepet (List.map fst (transl_list l)).
 Proof.
   induction l.
   - intros. simpl. apply list_norepet_nil.
   - destruct a. intros. simpl. apply list_norepet_cons.
-    inv H0. apply transl_notin. apply H. simplify; auto.
+    inv H0. apply transl_notin. apply Zle_relax. apply H. simplify; auto.
     intros. apply H. destruct (peq p0 p); subst; simplify; auto.
     assumption. apply IHl. intros. apply H. destruct (peq p0 p); subst; simplify; auto.
     simplify. inv H0. assumption.
 Qed.
+
+Lemma transl_list_correct :
+  forall l v ev f asr asa asrn asan asr' asa' asrn' asan',
+    (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
+    list_norepet (List.map fst l) ->
+    asr!ev = Some v ->
+    (forall p s,
+        In (p, s) l ->
+        v = posToValue p ->
+        stmnt_runp f
+                   {| assoc_blocking := asr; assoc_nonblocking := asrn |}
+                   {| assoc_blocking := asa; assoc_nonblocking := asan |}
+                   s
+                   {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
+                   {| assoc_blocking := asa'; assoc_nonblocking := asan' |} ->
+        stmnt_runp f
+                   {| assoc_blocking := asr; assoc_nonblocking := asrn |}
+                   {| assoc_blocking := asa; assoc_nonblocking := asan |}
+                   (Vcase (Vvar ev) (transl_list l) (Some Vskip))
+                   {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
+                   {| assoc_blocking := asa'; assoc_nonblocking := asan' |}).
+Proof.
+  induction l as [| a l IHl].
+  - contradiction.
+  - intros v ev f asr asa asrn asan asr' asa' asrn' asan' BOUND NOREP ASSOC p s IN EQ SRUN.
+    destruct a as [p' s']. simplify.
+    destruct (peq p p'); subst. eapply stmnt_runp_Vcase_match.
+    constructor. simplify. unfold AssocMap.find_assocmap, AssocMapExt.get_default.
+    rewrite ASSOC. trivial. constructor. auto.
+    inversion IN as [INV | INV]. inversion INV as [INV2]; subst. assumption.
+    inv NOREP. eapply in_map with (f := fst) in INV. contradiction.
+
+    eapply stmnt_runp_Vcase_nomatch. constructor. simplify.
+    unfold AssocMap.find_assocmap, AssocMapExt.get_default. rewrite ASSOC.
+    trivial. constructor. unfold not. intros. apply n. apply posToValue_inj.
+    apply Zle_relax. apply BOUND. right. inv IN. inv H0; contradiction.
+    eapply in_map with (f := fst) in H0. auto.
+    apply Zle_relax. apply BOUND; auto. auto.
+
+    eapply IHl. auto. inv NOREP. auto. eassumption. inv IN. inv H. contradiction. apply H.
+    trivial. assumption.
+Qed.
+Hint Resolve transl_list_correct : verilogproof.
+
+Lemma pc_wf :
+  forall A m p v,
+  (forall p0, In p0 (List.map fst (@AssocMap.elements A m)) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
+  m!p = Some v ->
+  0 <= Z.pos p <= Int.max_unsigned.
+Proof.
+  intros A m p v LT S. apply Zle_relax. apply LT.
+  apply AssocMap.elements_correct in S. remember (p, v) as x.
+  exploit in_map. apply S. instantiate (1 := fst). subst. simplify. auto.
+Qed.
+
+Lemma mis_stepp_decl :
+  forall l asr asa f,
+    mis_stepp f asr asa (map Vdeclaration l) asr asa.
+Proof.
+  induction l.
+  - intros. constructor.
+  - intros. simplify. econstructor. constructor. auto.
+Qed.
+Hint Resolve mis_stepp_decl : verilogproof.
 
 Section CORRECTNESS.
 
@@ -152,58 +232,42 @@ Section CORRECTNESS.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
-  Lemma transl_list_correct :
-  forall l v ev f asr asa asrn asan asr' asa' asrn' asan',
-    (forall p0, In p0 (List.map fst l) -> 0 <= Z.pos p0 <= Int.max_unsigned) ->
-    list_norepet (List.map fst l) ->
-    asr!ev = Some v ->
-    (forall p s,
-      In (p, s) l ->
-      v = posToValue p ->
-      stmnt_runp f
-                 {| assoc_blocking := asr; assoc_nonblocking := asrn |}
-                 {| assoc_blocking := asa; assoc_nonblocking := asan |}
-                 s
-                 {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
-                 {| assoc_blocking := asa'; assoc_nonblocking := asan' |} ->
-      stmnt_runp f
-                 {| assoc_blocking := asr; assoc_nonblocking := asrn |}
-                 {| assoc_blocking := asa; assoc_nonblocking := asan |}
-                 (Vcase (Vvar ev) (transl_list l) (Some Vskip))
-                 {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
-                 {| assoc_blocking := asa'; assoc_nonblocking := asan' |}).
-  Proof.
-    induction l as [| a l IHl].
-    - contradiction.
-    - intros v ev f asr asa asrn asan asr' asa' asrn' asan' BOUND NOREP ASSOC p s IN EQ SRUN.
-      destruct a as [p' s']. simplify.
-      destruct (peq p p'); subst. eapply stmnt_runp_Vcase_match.
-      constructor. simplify. unfold AssocMap.find_assocmap, AssocMapExt.get_default.
-      rewrite ASSOC. trivial. constructor. auto.
-      inversion IN as [INV | INV]. inversion INV as [INV2]; subst. assumption.
-      inv NOREP. eapply in_map with (f := fst) in INV. contradiction.
-
-      eapply stmnt_runp_Vcase_nomatch. constructor. simplify.
-      unfold AssocMap.find_assocmap, AssocMapExt.get_default. rewrite ASSOC.
-      trivial. constructor. unfold not. intros. apply n. apply posToValue_inj.
-      apply BOUND. right. inv IN. inv H0; contradiction. eapply in_map with (f := fst) in H0. auto.
-      apply BOUND; auto. auto.
-
-      eapply IHl. auto. inv NOREP. auto. eassumption. inv IN. inv H. contradiction. apply H.
-      trivial. assumption.
-  Qed.
-
-  Lemma mis_stepp_decl :
-    forall l asr asa f,
-      mis_stepp f asr asa (map Vdeclaration l) asr asa.
-  Proof.
-    induction l.
-    - intros. constructor.
-    - intros. simplify. econstructor. constructor. auto.
-  Qed.
-
   Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
   Let tge : genv := Globalenvs.Genv.globalenv tprog.
+
+  Lemma symbols_preserved:
+    forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+  Proof. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
+  Hint Resolve symbols_preserved : verilogproof.
+
+  Lemma function_ptr_translated:
+    forall (b: Values.block) (f: HTL.fundef),
+      Genv.find_funct_ptr ge b = Some f ->
+      exists tf,
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = tf.
+  Proof.
+    intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+  Hint Resolve function_ptr_translated : verilogproof.
+
+  Lemma functions_translated:
+    forall (v: Values.val) (f: HTL.fundef),
+      Genv.find_funct ge v = Some f ->
+      exists tf,
+        Genv.find_funct tge v = Some tf /\ transl_fundef f = tf.
+  Proof.
+    intros. exploit (Genv.find_funct_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+  Hint Resolve functions_translated : verilogproof.
+
+  Lemma senv_preserved:
+    Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
+  Proof.
+    intros. eapply (Genv.senv_match TRANSL).
+  Qed.
+  Hint Resolve senv_preserved : verilogproof.
 
   Theorem transl_step_correct :
     forall (S1 : HTL.state) t S2,
@@ -214,7 +278,10 @@ Section CORRECTNESS.
   Proof.
     induction 1; intros R1 MSTATE; inv MSTATE.
     - econstructor; split. apply Smallstep.plus_one. econstructor.
-      assumption. assumption. eassumption. trivial.
+      assumption. assumption. eassumption. apply valueToPos_posToValue.
+      split. lia.
+      eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
+      split. lia. apply HP. eassumption. eassumption.
       econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor.
       simpl. unfold find_assocmap. unfold AssocMapExt.get_default.
       rewrite H. trivial.
@@ -222,25 +289,33 @@ Section CORRECTNESS.
       econstructor. simpl. auto. auto.
 
       eapply transl_list_correct.
-      assert (forall p0 : positive, In p0 (map fst (Maps.PTree.elements (HTL.mod_controllogic m)))
-                                    -> 0 <= Z.pos p0 <= Int.max_unsigned) by admit; auto.
+      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _]. auto.
       apply Maps.PTree.elements_keys_norepet. eassumption.
-      2: { apply valueToPos_inj. assert (0 < Int.unsigned ist) by admit; auto.
-      admit. rewrite valueToPos_posToValue.  trivial. admit. }
+      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
+           eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
+           split. lia. apply HP. eassumption. eassumption.
+           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP.
+           destruct HP as [HP _].
+           split. lia. apply HP. eassumption. eassumption. trivial.
+      }
       apply Maps.PTree.elements_correct. eassumption. eassumption.
 
       econstructor. econstructor.
 
       eapply transl_list_correct.
-      assert (forall p0 : positive, In p0 (map fst (Maps.PTree.elements (HTL.mod_datapath m)))
-                                    -> 0 <= Z.pos p0 <= Int.max_unsigned) by admit; auto.
+      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP]. auto.
       apply Maps.PTree.elements_keys_norepet. eassumption.
-      2: { apply valueToPos_inj. assert (0 < Int.unsigned ist) by admit; auto.
-      admit. rewrite valueToPos_posToValue.  trivial. admit. }
+      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
+           eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
+           split. lia. apply HP. eassumption. eassumption.
+           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP.
+           destruct HP as [HP _].
+           split. lia. apply HP. eassumption. eassumption. trivial.
+      }
       apply Maps.PTree.elements_correct. eassumption. eassumption.
 
       apply mis_stepp_decl. trivial. trivial. simpl. eassumption. auto.
-      constructor; assumption.
+      rewrite valueToPos_posToValue. constructor; assumption. lia.
 
     - econstructor; split. apply Smallstep.plus_one. apply step_finish. assumption. eassumption.
       constructor; assumption.
@@ -250,12 +325,44 @@ Section CORRECTNESS.
     - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
 
       apply match_state. assumption.
-  Admitted.
+  Qed.
+  Hint Resolve transl_step_correct : verilogproof.
+
+  Lemma transl_initial_states :
+    forall s1 : Smallstep.state (HTL.semantics prog),
+      Smallstep.initial_state (HTL.semantics prog) s1 ->
+      exists s2 : Smallstep.state (Verilog.semantics tprog),
+        Smallstep.initial_state (Verilog.semantics tprog) s2 /\ match_states s1 s2.
+  Proof.
+    induction 1.
+    econstructor; split. econstructor.
+    apply (Genv.init_mem_transf TRANSL); eauto.
+    rewrite symbols_preserved.
+    replace (AST.prog_main tprog) with (AST.prog_main prog); eauto.
+    symmetry; eapply Linking.match_program_main; eauto.
+    exploit function_ptr_translated; eauto. intros [tf [A B]].
+    inv B. eauto.
+    constructor.
+  Qed.
+  Hint Resolve transl_initial_states : verilogproof.
+
+  Lemma transl_final_states :
+    forall (s1 : Smallstep.state (HTL.semantics prog))
+           (s2 : Smallstep.state (Verilog.semantics tprog))
+           (r : Integers.Int.int),
+      match_states s1 s2 ->
+      Smallstep.final_state (HTL.semantics prog) s1 r ->
+      Smallstep.final_state (Verilog.semantics tprog) s2 r.
+  Proof.
+    intros. inv H0. inv H. inv H3. constructor. reflexivity.
+  Qed.
+  Hint Resolve transl_final_states : verilogproof.
 
   Theorem transf_program_correct:
     forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).
-    Admitted.
-
+  Proof.
+    eapply Smallstep.forward_simulation_plus; eauto with verilogproof.
+    apply senv_preserved.
+  Qed.
 
 End CORRECTNESS.
-
