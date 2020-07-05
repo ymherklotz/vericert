@@ -103,6 +103,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       basr2 basa2 nasr2 nasa2
       asr' asa'
       f stval pstval,
+      asr!(mod_reset m) = Some (ZToValue 0) ->
+      asr!(mod_finish m) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
       m.(mod_controllogic)!st = Some ctrl ->
@@ -113,6 +115,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         ctrl
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1) ->
+      basr1!(m.(mod_st)) = Some ist ->
+      valueToPos ist = st ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1)

@@ -94,7 +94,7 @@ of [bool], so if they are in a condition, they will have to be converted before
 they can be used. *)
 
 Definition valueToBool (v : value) : bool :=
-  if Z.eqb (uvalueToZ v) 0 then true else false.
+  if Z.eqb (uvalueToZ v) 0 then false else true.
 
 Definition boolToValue (b : bool) : value :=
   natToValue (if b then 1 else 0).

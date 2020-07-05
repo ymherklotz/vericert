@@ -245,9 +245,6 @@ Definition program := AST.program fundef unit.
 Definition posToLit (p : positive) : expr :=
   Vlit (posToValue p).
 
-Coercion Vlit : value >-> expr.
-Coercion Vvar : reg >-> expr.
-
 Definition fext := assocmap.
 Definition fextclk := nat -> fext.
 
@@ -533,7 +530,7 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
     valueToBool vc = false ->
-    stmnt_runp f asr0 asa0 stt asr1 asa1 ->
+    stmnt_runp f asr0 asa0 stf asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
 | stmnt_runp_Vcase_nomatch:
     forall e ve asr0 asa0 f asr1 asa1 me mve sc cs def,
@@ -716,6 +713,7 @@ Definition empty_stack (m : module) : assocmap_arr :=
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
       forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
+      asr!(m.(mod_reset)) = Some (ZToValue 0) ->
       asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
@@ -746,7 +744,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
          (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i)
-                (empty_stack m)).
+                asa).
 Hint Constructors step : verilog.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -888,7 +886,7 @@ Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
   - invert H; invert H0; crush.
-    pose proof (mis_stepp_determinate H4 H13)
+    (*pose proof (mis_stepp_determinate H4 H13)*)
     admit.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.
