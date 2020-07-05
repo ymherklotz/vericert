@@ -161,12 +161,12 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls,
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf,
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk scldecls arrdecls) ->
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls wf) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
@@ -581,6 +581,8 @@ Proof.
     crush;
     monadInv Heqr.
 
+  repeat unfold_match EQ9. monadInv EQ9.
+
   (* TODO: We should be able to fold this into the automation. *)
   pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN. inv STK_LEN. inv H5.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ) as FIN_VAL. inv FIN_VAL.
@@ -591,7 +593,6 @@ Proof.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ4) as START_VAL. inv START_VAL.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ5) as RESET_VAL. inv RESET_VAL.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ6) as CLK_VAL. inv CLK_VAL.
-  simpl.
   rewrite H9 in *. rewrite H8 in *. replace (st_freshreg s4) with (st_freshreg s2) in * by congruence.
   rewrite H6 in *. rewrite H7 in *. rewrite H5 in *. simpl in *.
   inv_incr.
