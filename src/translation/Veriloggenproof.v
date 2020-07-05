@@ -195,8 +195,12 @@ Section CORRECTNESS.
 
   Lemma mis_stepp_decl :
     forall l asr asa f,
-      mis_stepp f asr asa l asr asa.
-  Admitted.
+      mis_stepp f asr asa (map Vdeclaration l) asr asa.
+  Proof.
+    induction l.
+    - intros. constructor.
+    - intros. simplify. econstructor. constructor. auto.
+  Qed.
 
   Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
   Let tge : genv := Globalenvs.Genv.globalenv tprog.

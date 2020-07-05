@@ -610,8 +610,8 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
     stmnt_runp f sr0 sa0 st sr1 sa1 ->
     mi_stepp f sr0 sa0 (Valways_comb c st) sr1 sa1
 | mi_stepp_Vdecl :
-    forall f sr sa lhs rhs io,
-    mi_stepp f sr sa (Vdeclaration (Vdecl io lhs rhs)) sr sa.
+    forall f sr sa d,
+    mi_stepp f sr sa (Vdeclaration d) sr sa.
 Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
@@ -743,8 +743,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     forall g m asr i r sf pc mst asa,
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
-         (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i)
-                asa).
+         (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
 Hint Constructors step : verilog.
 
 Inductive initial_state (p: program): state -> Prop :=

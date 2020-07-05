@@ -28,12 +28,12 @@ Definition transl_list_fun (a : node * Verilog.stmnt) :=
 Definition transl_list st := map transl_list_fun st.
 
 Definition scl_to_Vdecl_fun (a : reg * (option io * scl_decl)) :=
-  match a with (r, (io, VScalar sz)) => Vdeclaration (Vdecl io r sz) end.
+  match a with (r, (io, VScalar sz)) => (Vdecl io r sz) end.
 
 Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
 
 Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
-  match a with (r, (io, VArray sz l)) => Vdeclaration (Vdeclarr io r sz l) end.
+  match a with (r, (io, VArray sz l)) => (Vdeclarr io r sz l) end.
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
@@ -45,7 +45,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                                                (Vnonblock (Vvar m.(mod_st)) (Vlit (posToValue m.(mod_entrypoint))))
                                                (Vcase (Vvar m.(mod_st)) case_el_ctrl (Some Vskip)))
       :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
-      :: (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+      :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
   Verilog.mkmodule m.(mod_start)
                    m.(mod_reset)
