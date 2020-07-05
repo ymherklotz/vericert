@@ -428,24 +428,35 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
   match ni with
     (n, i) =>
     match i with
-    | Inop n' => add_instr n n' Vskip
+    | Inop n' =>
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        add_instr n n' Vskip
+      else error (Errors.msg "State is larger than 2^32.")
     | Iop op args dst n' =>
-      do instr <- translate_instr op args;
-      do _ <- declare_reg None dst 32;
-      add_instr n n' (nonblock dst instr)
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        do instr <- translate_instr op args;
+        do _ <- declare_reg None dst 32;
+        add_instr n n' (nonblock dst instr)
+      else error (Errors.msg "State is larger than 2^32.")
     | Iload mem addr args dst n' =>
-      do src <- translate_arr_access mem addr args stack;
-      do _ <- declare_reg None dst 32;
-      add_instr n n' (nonblock dst src)
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        do src <- translate_arr_access mem addr args stack;
+        do _ <- declare_reg None dst 32;
+        add_instr n n' (nonblock dst src)
+      else error (Errors.msg "State is larger than 2^32.")
     | Istore mem addr args src n' =>
-      do dst <- translate_arr_access mem addr args stack;
-      add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        do dst <- translate_arr_access mem addr args stack;
+        add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      else error (Errors.msg "State is larger than 2^32.")
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
     | Icond cond args n1 n2 =>
-      do e <- translate_condition cond args;
-      add_branch_instr e n n1 n2
+      if Z.leb (Z.pos n1) Integers.Int.max_unsigned && Z.leb (Z.pos n2) Integers.Int.max_unsigned then
+        do e <- translate_condition cond args;
+        add_branch_instr e n n1 n2
+      else error (Errors.msg "State is larger than 2^32.")
     | Ijumptable r tbl =>
       do s <- get;
       add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))

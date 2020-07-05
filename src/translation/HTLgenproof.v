@@ -87,11 +87,12 @@ Inductive match_frames : list RTL.stackframe -> list HTL.stackframe -> Prop :=
 | match_frames_nil :
     match_frames nil nil.
 
-  Lemma assumption_32bit :
-    forall v,
-      valueToPos (posToValue v) = v.
-  Proof.
-  Admitted.
+Inductive match_constants : HTL.module -> assocmap -> Prop :=
+  match_constant :
+    forall m asr,
+      asr!(HTL.mod_reset m) = Some (ZToValue 0) ->
+      asr!(HTL.mod_finish m) = Some (ZToValue 0) ->
+      match_constants m asr.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
@@ -103,7 +104,8 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
     (RSBP : reg_stack_based_pointers sp' rs)
     (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
-    (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem),
+    (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
+    (CONST : match_constants m asr),
     match_states (RTL.State sf f sp st rs mem)
                  (HTL.State res m st asr asa)
 | match_returnstate :
@@ -443,8 +445,6 @@ Section CORRECTNESS.
 
   Ltac tac0 :=
     match goal with
-    | [ |- context[valueToPos (posToValue _)] ] => rewrite assumption_32bit
-
     | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs
     | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr
     | [ |- context[Verilog.merge_regs _ _] ] => unfold Verilog.merge_regs; crush; unfold_merge
@@ -502,7 +502,8 @@ Section CORRECTNESS.
     split.
     apply Smallstep.plus_one.
     eapply HTL.step_module; eauto.
-    apply assumption_32bit.
+    inv CONST; assumption.
+    inv CONST; assumption. 
     (* processing of state *)
     econstructor.
     crush.
@@ -511,8 +512,10 @@ Section CORRECTNESS.
     econstructor.
 
     all: invert MARR; big_tac.
-    Unshelve.
-    constructor.
+
+    inv CONST; constructor; simplify; rewrite AssocMap.gso; auto; lia.
+
+    Unshelve. auto.
   Qed.
   Hint Resolve transl_inop_correct : htlproof.
 
