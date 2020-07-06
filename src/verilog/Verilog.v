@@ -164,7 +164,8 @@ Inductive expr : Type :=
 | Vinputvar : reg -> expr
 | Vbinop : binop -> expr -> expr -> expr
 | Vunop : unop -> expr -> expr
-| Vternary : expr -> expr -> expr -> expr.
+| Vternary : expr -> expr -> expr -> expr
+| Vload : reg -> expr -> expr.    (** 4-byte concatenation load *)
 
 Definition posToExpr (p : positive) : expr :=
   Vlit (posToValue p).
@@ -338,61 +339,61 @@ Definition unop_run (op : unop) (v1 : value) : value :=
 
 Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop :=
   | erun_Vlit :
-      forall fext reg stack v,
-      expr_runp fext reg stack (Vlit v) v
+      forall fext asr asa v,
+      expr_runp fext asr asa (Vlit v) v
   | erun_Vvar :
-      forall fext reg stack v r,
-      reg#r = v ->
-      expr_runp fext reg stack (Vvar r) v
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvar r) v
   | erun_Vvarb0 :
-      forall fext reg stack v r,
-      reg#r = v ->
-      expr_runp fext reg stack (Vvarb0 r) (IntExtra.ibyte0 v)
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb0 r) (IntExtra.ibyte0 v)
   | erun_Vvarb1 :
-      forall fext reg stack v r,
-      reg#r = v ->
-      expr_runp fext reg stack (Vvarb1 r) (IntExtra.ibyte1 v)
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb1 r) (IntExtra.ibyte1 v)
   | erun_Vvarb2 :
-      forall fext reg stack v r,
-      reg#r = v ->
-      expr_runp fext reg stack (Vvarb2 r) (IntExtra.ibyte2 v)
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb2 r) (IntExtra.ibyte2 v)
   | erun_Vvarb3 :
-      forall fext reg stack v r,
-      reg#r = v ->
-      expr_runp fext reg stack (Vvarb3 r) (IntExtra.ibyte3 v)
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb3 r) (IntExtra.ibyte3 v)
   | erun_Vvari :
-      forall fext reg stack v iexp i r,
-      expr_runp fext reg stack iexp i ->
-      arr_assocmap_lookup stack r (valueToNat i) = Some v ->
-      expr_runp fext reg stack (Vvari r iexp) v
+      forall fext asr asa v iexp i r,
+      expr_runp fext asr asa iexp i ->
+      arr_assocmap_lookup asa r (valueToNat i) = Some v ->
+      expr_runp fext asr asa (Vvari r iexp) v
   | erun_Vinputvar :
-      forall fext reg stack r v,
+      forall fext asr asa r v,
       fext!r = Some v ->
-      expr_runp fext reg stack (Vinputvar r) v
+      expr_runp fext asr asa (Vinputvar r) v
   | erun_Vbinop :
-      forall fext reg stack op l r lv rv resv,
-      expr_runp fext reg stack l lv ->
-      expr_runp fext reg stack r rv ->
+      forall fext asr asa op l r lv rv resv,
+      expr_runp fext asr asa l lv ->
+      expr_runp fext asr asa r rv ->
       Some resv = binop_run op lv rv ->
-      expr_runp fext reg stack (Vbinop op l r) resv
+      expr_runp fext asr asa (Vbinop op l r) resv
   | erun_Vunop :
-      forall fext reg stack u vu op oper resv,
-      expr_runp fext reg stack u vu ->
+      forall fext asr asa u vu op oper resv,
+      expr_runp fext asr asa u vu ->
       oper = unop_run op ->
       resv = oper vu ->
-      expr_runp fext reg stack (Vunop op u) resv
+      expr_runp fext asr asa (Vunop op u) resv
   | erun_Vternary_true :
-      forall fext reg stack c ts fs vc vt,
-      expr_runp fext reg stack c vc ->
-      expr_runp fext reg stack ts vt ->
+      forall fext asr asa c ts fs vc vt,
+      expr_runp fext asr asa c vc ->
+      expr_runp fext asr asa ts vt ->
       valueToBool vc = true ->
-      expr_runp fext reg stack (Vternary c ts fs) vt
+      expr_runp fext asr asa (Vternary c ts fs) vt
   | erun_Vternary_false :
-      forall fext reg stack c ts fs vc vf,
-      expr_runp fext reg stack c vc ->
-      expr_runp fext reg stack fs vf ->
+      forall fext asr asa c ts fs vc vf,
+      expr_runp fext asr asa c vc ->
+      expr_runp fext asr asa fs vf ->
       valueToBool vc = false ->
-      expr_runp fext reg stack (Vternary c ts fs) vf.
+      expr_runp fext asr asa (Vternary c ts fs) vf.
 Hint Constructors expr_runp : verilog.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
@@ -449,12 +450,11 @@ Definition access_fext (f : fext) (r : reg) : res value :=
 
 Inductive location : Type :=
 | LocReg (_ : reg)
-| LocRegB (_ : reg) (_ : nat)
 | LocArray (_ : reg) (_ : nat).
 
 Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> Prop :=
-| Base : forall f asr asa r, location_is f asr asa (Vvar r) (LocReg r)
-| Indexed : forall f asr asa r iexp iv,
+| Reg : forall f asr asa r, location_is f asr asa (Vvar r) (LocReg r)
+| RegIndexed : forall f asr asa r iexp iv,
   expr_runp f asr asa iexp iv ->
   location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).
 
@@ -807,6 +807,7 @@ Proof.
               | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vload _ _) _ |- _ ] => invert H
 
               | [ H1 : forall asr asa v, expr_runp _ asr asa ?e v -> _,
                   H2 : expr_runp _ _ _ ?e _ |- _ ] =>

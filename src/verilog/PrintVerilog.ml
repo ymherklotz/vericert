@@ -72,9 +72,16 @@ let register a = sprintf "reg_%d" (P.to_int a)
 
 let literal l = sprintf "32'd%d" (Z.to_int (uvalueToZ l))
 
+let literal_int i = sprintf "32'd%d" i
+
 let byte n s = sprintf "reg_%d[%d:%d]" (P.to_int s) (7 + n * 8) (n * 8)
 
-let rec pprint_expr = function
+
+let rec pprint_expr =
+  let array_byte r i = function
+     | 0 -> concat [register r; "["; pprint_expr i; "]"]
+     | n -> concat [register r; "["; pprint_expr i; " + "; literal_int n; "][7:0]"]
+  in function
   | Vlit l -> literal l
   | Vvar s -> register s
   | Vvarb0 s -> byte 0 s
@@ -86,6 +93,7 @@ let rec pprint_expr = function
   | Vunop (u, e) -> concat ["("; unop u; pprint_expr e; ")"]
   | Vbinop (op, a, b) -> concat [pprint_binop (pprint_expr a) (pprint_expr b) op]
   | Vternary (c, t, f) -> concat ["("; pprint_expr c; " ? "; pprint_expr t; " : "; pprint_expr f; ")"]
+  | Vload (s, i) -> concat ["{"; array_byte s i 3; ", "; array_byte s i 2; ", "; array_byte s i 1; ", "; array_byte s i 0; "}"]
 
 let rec pprint_stmnt i =
   let pprint_case (e, s) = concat [ indent (i + 1); pprint_expr e; ": begin\n"; pprint_stmnt (i + 2) s;

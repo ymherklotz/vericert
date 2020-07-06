@@ -427,17 +427,13 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
            (enumerate 0 ns).
 
 Definition create_single_cycle_load (stack : reg) (addr : expr) (dst : reg) : stmnt :=
-  let l0   := Vnonblock (Vvarb0 dst) (Vvari stack addr) in
-  let l1   := Vnonblock (Vvarb1 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) in
-  let l2   := Vnonblock (Vvarb2 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) in
-  let l3   := Vnonblock (Vvarb3 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2))
-  in Vseq l0 $ Vseq l1 $ Vseq l2 $ l3.
+  Vnonblock (Vvar dst) (Vload stack addr).
 
 Definition create_single_cycle_store (stack : reg) (addr : expr) (src : reg) : stmnt :=
   let l0   := Vnonblock (Vvari stack addr) (Vvarb0 src) in
   let l1   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) (Vvarb1 src) in
   let l2   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb2 src) in
-  let l3   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb3 src)
+  let l3   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 3)) (Vvarb3 src)
   in Vseq l0 $ Vseq l1 $ Vseq l2 $ l3.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
