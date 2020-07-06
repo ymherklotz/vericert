@@ -29,7 +29,7 @@ Require Import Lia.
 
 Import ListNotations.
 
-From coqup Require Import common.Coquplib common.Show verilog.ValueInt AssocMap Array.
+From coqup Require Import common.Coquplib common.Show verilog.ValueInt IntegerExtra AssocMap Array.
 From compcert Require Events.
 From compcert Require Import Integers Errors Smallstep Globalenvs.
 
@@ -154,9 +154,13 @@ Inductive unop : Type :=
 (** ** Expressions *)
 
 Inductive expr : Type :=
-| Vlit : value -> expr
-| Vvar : reg -> expr
-| Vvari : reg -> expr -> expr
+| Vlit : value -> expr                    (** literal *)
+| Vvar : reg -> expr                      (** reg *)
+| Vvarb0 : reg -> expr                    (** 1st byte projection of reg *)
+| Vvarb1 : reg -> expr
+| Vvarb2 : reg -> expr
+| Vvarb3 : reg -> expr
+| Vvari : reg -> expr -> expr              (** array *)
 | Vinputvar : reg -> expr
 | Vbinop : binop -> expr -> expr -> expr
 | Vunop : unop -> expr -> expr
@@ -340,6 +344,22 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       forall fext reg stack v r,
       reg#r = v ->
       expr_runp fext reg stack (Vvar r) v
+  | erun_Vvarb0 :
+      forall fext reg stack v r,
+      reg#r = v ->
+      expr_runp fext reg stack (Vvarb0 r) (IntExtra.ibyte0 v)
+  | erun_Vvarb1 :
+      forall fext reg stack v r,
+      reg#r = v ->
+      expr_runp fext reg stack (Vvarb1 r) (IntExtra.ibyte1 v)
+  | erun_Vvarb2 :
+      forall fext reg stack v r,
+      reg#r = v ->
+      expr_runp fext reg stack (Vvarb2 r) (IntExtra.ibyte2 v)
+  | erun_Vvarb3 :
+      forall fext reg stack v r,
+      reg#r = v ->
+      expr_runp fext reg stack (Vvarb3 r) (IntExtra.ibyte3 v)
   | erun_Vvari :
       forall fext reg stack v iexp i r,
       expr_runp fext reg stack iexp i ->
@@ -429,6 +449,7 @@ Definition access_fext (f : fext) (r : reg) : res value :=
 
 Inductive location : Type :=
 | LocReg (_ : reg)
+| LocRegB (_ : reg) (_ : nat)
 | LocArray (_ : reg) (_ : nat).
 
 Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> Prop :=
@@ -775,6 +796,10 @@ Proof.
   repeat (try match goal with
               | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb0 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb1 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb2 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb3 _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H

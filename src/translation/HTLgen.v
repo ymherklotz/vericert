@@ -292,26 +292,16 @@ Definition check_address_parameter_unsigned (p : Z) : bool :=
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (boplitz Vadd r1 off)
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address misaligned")
+    ret (boplitz Vadd r1 off)
   | Op.Ascaled scale offset, r1::nil =>
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address misaligned")
+    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
   | Op.Aindexed2 offset, r1::r2::nil =>
-    if (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address misaligned")
+    ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address misaligned")
+    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vlit (ZToValue a))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address misaligned")
+    ret (Vlit (ZToValue a))
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
@@ -390,27 +380,27 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
     | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
-Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
-           (args : list reg) (stack : reg) : mon expr :=
-  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Mint32, Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
-  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vvari stack
-                    (Vbinop Vdivu
-                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-                            (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
-  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vvari stack (Vlit (ZToValue (a / 4))))
-    else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset")
-  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
-  end.
+(* Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing) *)
+(*            (args : list reg) (stack : reg) : mon expr := *)
+(*   match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*) *)
+(*   | Mint32, Op.Aindexed off, r1::nil => *)
+(*     if (check_address_parameter_signed off) *)
+(*     then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4)))) *)
+(*     else error (Errors.msg "HTLgen: translate_arr_access address misaligned") *)
+(*   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *) *)
+(*     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset) *)
+(*     then ret (Vvari stack *)
+(*                     (Vbinop Vdivu *)
+(*                             (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale)) *)
+(*                             (Vlit (ZToValue 4)))) *)
+(*     else error (Errors.msg "HTLgen: translate_arr_access address misaligned") *)
+(*   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *) *)
+(*     let a := Integers.Ptrofs.unsigned a in *)
+(*     if (check_address_parameter_unsigned a) *)
+(*     then ret (Vvari stack (Vlit (ZToValue (a / 4)))) *)
+(*     else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset") *)
+(*   | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing") *)
+(*   end. *)
 
 Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
   match ns with
@@ -424,6 +414,22 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
+Definition add_single_cycle_load (n n' : node) (stack : reg) (addr : expr) (dst : reg) : mon unit :=
+  let l0   := Vnonblock (Vvarb0 dst) (Vvari stack addr) in
+  let l1   := Vnonblock (Vvarb1 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) in
+  let l2   := Vnonblock (Vvarb2 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) in
+  let l3   := Vnonblock (Vvarb3 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) in
+  let instr := Vseq l0 $ Vseq l1 $ Vseq l2 $ l3
+  in add_instr n n' instr.
+
+Definition add_single_cycle_store (n n' : node) (stack : reg) (addr : expr) (src : reg) : mon unit :=
+  let l0   := Vnonblock (Vvari stack addr) (Vvarb0 src) in
+  let l1   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) (Vvarb1 src) in
+  let l2   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb2 src) in
+  let l3   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb3 src) in
+  let instr := Vseq l0 $ Vseq l1 $ Vseq l2 $ l3
+  in add_instr n n' instr.
+
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
@@ -434,12 +440,12 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       do _ <- declare_reg None dst 32;
       add_instr n n' (nonblock dst instr)
     | Iload mem addr args dst n' =>
-      do src <- translate_arr_access mem addr args stack;
+      do addr' <- translate_eff_addressing addr args;
       do _ <- declare_reg None dst 32;
-      add_instr n n' (nonblock dst src)
+      add_single_cycle_load n n' stack addr' dst
     | Istore mem addr args src n' =>
-      do dst <- translate_arr_access mem addr args stack;
-      add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      do addr' <- translate_eff_addressing addr args;
+      add_single_cycle_store n n' stack addr' src
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -543,7 +549,7 @@ Definition transf_module (f: function) : mon module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
-    do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
+    do (stack, stack_len) <- create_arr None 8 (Z.to_nat f.(fn_stacksize));
     do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;

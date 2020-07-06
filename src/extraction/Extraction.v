@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Verilog Value Compiler.
+From coqup Require Verilog ValueInt Compiler.
 
 From Coq Require DecidableClass.
 
@@ -167,7 +167,7 @@ Set Extraction AccessOpaque.
 
 Cd "src/extraction".
 Separate Extraction
-         Verilog.module Value.uvalueToZ coqup.Compiler.transf_hls
+         Verilog.module ValueInt.uvalueToZ coqup.Compiler.transf_hls
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

@@ -235,3 +235,5 @@ Definition debug_show {A B : Type} `{Show A} (a : A) (b : B) : B :=
 
 Definition debug_show_msg {A B : Type} `{Show A} (s : string) (a : A) (b : B) : B :=
   let unused := debug_print (s ++ show a) in b.
+
+Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).

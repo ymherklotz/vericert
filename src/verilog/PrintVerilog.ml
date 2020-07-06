@@ -17,7 +17,7 @@
  *)
 
 open Verilog
-open Value
+open ValueInt
 open Datatypes
 
 open Camlcoq
@@ -70,11 +70,17 @@ let unop = function
 
 let register a = sprintf "reg_%d" (P.to_int a)
 
-let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))
+let literal l = sprintf "32'd%d" (Z.to_int (uvalueToZ l))
+
+let byte n s = sprintf "reg_%d[%d:%d]" (P.to_int s) (7 + n * 8) (n * 8)
 
 let rec pprint_expr = function
   | Vlit l -> literal l
   | Vvar s -> register s
+  | Vvarb0 s -> byte 0 s
+  | Vvarb1 s -> byte 1 s
+  | Vvarb2 s -> byte 2 s
+  | Vvarb3 s -> byte 3 s
   | Vvari (s, i) -> concat [register s; "["; pprint_expr i; "]"]
   | Vinputvar s -> register s
   | Vunop (u, e) -> concat ["("; unop u; pprint_expr e; ")"]
