@@ -141,14 +141,14 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
     forall chunk addr args s s' i e dst n,
       Z.pos n <= Int.max_unsigned ->
       chunk = AST.Mint32 ->
-      translate_eff_addressing addr args s = OK e s' i ->
+      translate_arr_addressing addr args s = OK e s' i ->
       tr_instr fin rtrn st stk (RTL.Iload chunk addr args dst n)
                                (create_single_cycle_load stk e dst) (state_goto st n)
 | tr_instr_Istore :
     forall chunk addr args s s' i e src n,
       Z.pos n <= Int.max_unsigned ->
       chunk = AST.Mint32 ->
-      translate_eff_addressing addr args s = OK e s' i ->
+      translate_arr_addressing addr args s = OK e s' i ->
       tr_instr fin rtrn st stk (RTL.Istore chunk addr args src n)
                                (create_single_cycle_store stk e src) (state_goto st n)
 | tr_instr_Ijumptable :
@@ -343,6 +343,15 @@ Proof.
 Qed.
 Hint Resolve translate_eff_addressing_freshreg_trans : htlspec.
 
+Lemma translate_arr_addressing_freshreg_trans :
+  forall op args s r s' i,
+  translate_arr_addressing op args s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
+Qed.
+Hint Resolve translate_eff_addressing_freshreg_trans : htlspec.
+
 Lemma translate_comparison_freshreg_trans :
   forall op args s r s' i,
   translate_comparison op args s = OK r s' i ->
@@ -419,11 +428,11 @@ Proof.
     apply declare_reg_freshreg_trans in EQ1. congruence.
   - destruct (Z.pos n0 <=? Int.max_unsigned); try discriminate.
     monadInv H. apply add_instr_freshreg_trans in EQ2.
-    apply translate_eff_addressing_freshreg_trans in EQ.
+    apply translate_arr_addressing_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
   - destruct (Z.pos n0 <=? Int.max_unsigned); try discriminate.
     monadInv H. apply add_instr_freshreg_trans in EQ0.
-    apply translate_eff_addressing_freshreg_trans in EQ. congruence.
+    apply translate_arr_addressing_freshreg_trans in EQ. congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ.
     apply add_branch_instr_freshreg_trans in EQ0.
     congruence.

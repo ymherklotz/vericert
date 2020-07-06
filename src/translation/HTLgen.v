@@ -402,6 +402,18 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
 (*   | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing") *)
 (*   end. *)
 
+Definition translate_arr_addressing (a: Op.addressing) (args: list reg) : mon expr :=
+  match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Op.Aindexed off, r1::nil =>
+    ret (boplitz Vadd r1 off)
+  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in
+    ret (Vlit (ZToValue a))
+  | _, _ => error (Errors.msg "Veriloggen: translate_arr_addressing unsuported addressing")
+  end.
+
 Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
   match ns with
   | n :: ns' => (i, n) :: enumerate (i+1) ns'
@@ -446,7 +458,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       match chunk with
       | Mint32 =>
         if Z.leb (Z.pos n') Integers.Int.max_unsigned
-        then do addr' <- translate_eff_addressing addr args;
+        then do addr' <- translate_arr_addressing addr args;
              do _ <- declare_reg None dst 32;
              add_instr n n' $ create_single_cycle_load stack addr' dst
         else error (Errors.msg "State is larger than 2^32.")
@@ -456,7 +468,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       match chunk with
       | Mint32 =>
         if Z.leb (Z.pos n') Integers.Int.max_unsigned
-        then do addr' <- translate_eff_addressing addr args;
+        then do addr' <- translate_arr_addressing addr args;
              add_instr n n' $ create_single_cycle_store stack addr' src
         else error (Errors.msg "State is larger than 2^32.")
       | _ => error (Errors.msg "Istore invalid chunk size.")
