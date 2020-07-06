@@ -77,13 +77,10 @@ Definition ptrToValue (i : ptrofs) : value := Ptrofs.to_int i.
 Definition valueToPtr (i : value) : Integers.ptrofs :=
   Ptrofs.of_int i.
 
-Search Ptrofs.of_int Ptrofs.to_int.
 Definition valToValue (v : Values.val) : option value :=
   match v with
   | Values.Vint i => Some (intToValue i)
-  | Values.Vptr b off => if Z.eqb (Z.modulo (uvalueToZ (ptrToValue off)) 4) 0%Z
-                         then Some (ptrToValue off)
-                         else None
+  | Values.Vptr b off => Some (ptrToValue off)
   | Values.Vundef => Some (ZToValue 0%Z)
   | _ => None
   end.
@@ -117,7 +114,6 @@ Inductive val_value_lessdef: val -> value -> Prop :=
 | val_value_lessdef_ptr:
     forall b off v',
     off = valueToPtr v' ->
-    (Z.modulo (uvalueToZ v') 4) = 0%Z ->
     val_value_lessdef (Vptr b off) v'
 | lessdef_undef: forall v, val_value_lessdef Vundef v.
 
@@ -162,8 +158,6 @@ Proof.
   destruct v; try discriminate; constructor.
   unfold valToValue in H. inversion H.
   unfold valueToInt. unfold intToValue in H1. auto.
-  inv H. destruct (uvalueToZ (ptrToValue i) mod 4 =? 0); try discriminate.
-  inv H1. symmetry. unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
-  inv H. destruct (uvalueToZ (ptrToValue i) mod 4 =? 0) eqn:?; try discriminate.
-  inv H1. apply Z.eqb_eq. apply Heqb0.
+  inv H. symmetry.
+  unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
 Qed.
