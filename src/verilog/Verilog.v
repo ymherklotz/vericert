@@ -736,8 +736,10 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     forall g res m args,
     step g (Callstate res m args) Events.E0
          (State res m m.(mod_entrypoint)
-          (AssocMap.set m.(mod_st) (posToValue m.(mod_entrypoint))
-           (init_params args m.(mod_args)))
+          (AssocMap.set (mod_reset m) (ZToValue 0)
+           (AssocMap.set (mod_finish m) (ZToValue 0)
+            (AssocMap.set m.(mod_st) (posToValue m.(mod_entrypoint))
+             (init_params args m.(mod_args)))))
           (empty_stack m))
 | step_return :
     forall g m asr i r sf pc mst asa,
@@ -884,9 +886,9 @@ Lemma semantics_determinate :
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
-  - invert H; invert H0; crush.
-    (*pose proof (mis_stepp_determinate H4 H13)*)
-    admit.
+  - invert H; invert H0; crush. assert (f = f0) by admit; subst.
+    pose proof (mis_stepp_determinate H5 H15).
+    crush.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.
   - red; simplify; intro; invert H0; invert H; crush.

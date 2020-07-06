@@ -48,7 +48,9 @@ From compcert.driver Require
 From coqup Require
      Verilog
      Veriloggen
-     HTLgen.
+     Veriloggenproof
+     HTLgen
+     HTLgenproof.
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: HTL.program -> unit.
@@ -107,6 +109,9 @@ Definition CompCert's_passes :=
   ::: mkpass Cminorgenproof.match_prog
   ::: mkpass Selectionproof.match_prog
   ::: mkpass RTLgenproof.match_prog
+  ::: mkpass Inliningproof.match_prog
+  ::: mkpass HTLgenproof.match_prog
+  ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
 Definition match_prog: Csyntax.program -> RTL.program -> Prop :=

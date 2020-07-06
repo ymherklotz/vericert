@@ -141,8 +141,10 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     forall g m args res,
       step g (Callstate res m args) Events.E0
            (State res m m.(mod_entrypoint)
-             (AssocMap.set (mod_st m) (posToValue m.(mod_entrypoint))
-                           (init_regs args m.(mod_params)))
+             (AssocMap.set (mod_reset m) (ZToValue 0)
+              (AssocMap.set (mod_finish m) (ZToValue 0)
+               (AssocMap.set (mod_st m) (posToValue m.(mod_entrypoint))
+                (init_regs args m.(mod_params)))))
              (empty_stack m))
 | step_return :
     forall g m asr asa i r sf pc mst,
