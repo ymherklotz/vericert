@@ -414,21 +414,19 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-Definition add_single_cycle_load (n n' : node) (stack : reg) (addr : expr) (dst : reg) : mon unit :=
+Definition create_single_cycle_load (stack : reg) (addr : expr) (dst : reg) : stmnt :=
   let l0   := Vnonblock (Vvarb0 dst) (Vvari stack addr) in
   let l1   := Vnonblock (Vvarb1 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) in
   let l2   := Vnonblock (Vvarb2 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) in
-  let l3   := Vnonblock (Vvarb3 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) in
-  let instr := Vseq l0 $ Vseq l1 $ Vseq l2 $ l3
-  in add_instr n n' instr.
+  let l3   := Vnonblock (Vvarb3 dst) (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2))
+  in Vseq l0 $ Vseq l1 $ Vseq l2 $ l3.
 
-Definition add_single_cycle_store (n n' : node) (stack : reg) (addr : expr) (src : reg) : mon unit :=
+Definition create_single_cycle_store (stack : reg) (addr : expr) (src : reg) : stmnt :=
   let l0   := Vnonblock (Vvari stack addr) (Vvarb0 src) in
   let l1   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) (Vvarb1 src) in
   let l2   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb2 src) in
-  let l3   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb3 src) in
-  let instr := Vseq l0 $ Vseq l1 $ Vseq l2 $ l3
-  in add_instr n n' instr.
+  let l3   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb3 src)
+  in Vseq l0 $ Vseq l1 $ Vseq l2 $ l3.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
@@ -442,10 +440,10 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Iload mem addr args dst n' =>
       do addr' <- translate_eff_addressing addr args;
       do _ <- declare_reg None dst 32;
-      add_single_cycle_load n n' stack addr' dst
+      add_instr n n' $ create_single_cycle_load stack addr' dst
     | Istore mem addr args src n' =>
       do addr' <- translate_eff_addressing addr args;
-      add_single_cycle_store n n' stack addr' src
+      add_instr n n' $ create_single_cycle_store stack addr' src
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
