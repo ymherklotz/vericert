@@ -17,7 +17,7 @@
  *)
 
 From compcert Require RTL Registers AST.
-From compcert Require Import Integers Globalenvs Memory.
+From compcert Require Import Integers Globalenvs Memory Linking.
 From coqup Require Import Coquplib HTLgenspec HTLgen ValueInt AssocMap Array IntegerExtra ZExtra.
 From coqup Require HTL Verilog.
 
@@ -124,11 +124,17 @@ Definition match_prog (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp /\
   main_is_internal p = true.
 
-Definition match_prog_matches :
-  forall p tp,
-    match_prog p tp ->
-    Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
-  Proof. intros. unfold match_prog in H. tauto. Qed.
+Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
+  TransfLink (fun (p1: RTL.program) (p2: HTL.program) => match_prog p1 p2).
+Proof.
+  Admitted.
+
+Definition match_prog' (p: RTL.program) (tp: HTL.program) :=
+  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+
+Lemma match_prog_matches :
+  forall p tp, match_prog p tp -> match_prog' p tp.
+Proof. unfold match_prog. tauto. Qed.
 
 Lemma transf_program_match:
   forall p tp, HTLgen.transl_program p = Errors.OK tp -> match_prog p tp.
@@ -368,6 +374,47 @@ Section CORRECTNESS.
     rewrite H. auto.
   Qed.
 
+  Lemma op_stack_based :
+    forall F V sp v m args rs op ge pc' res0 pc f e fin rtrn st stk,
+      tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
+               (Verilog.Vnonblock (Verilog.Vvar res0) e)
+               (state_goto st pc') ->
+      reg_stack_based_pointers sp rs ->
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
+      @Op.eval_operation F V ge (Values.Vptr sp Ptrofs.zero) op
+                        (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some v ->
+      stack_based v sp.
+  Proof.
+    Ltac solve_no_ptr :=
+      match goal with
+      | H: reg_stack_based_pointers ?sp ?rs |- stack_based (Registers.Regmap.get ?r ?rs) _ =>
+        solve [apply H]
+      | H1: reg_stack_based_pointers ?sp ?rs, H2: Registers.Regmap.get _ _ = Values.Vptr ?b ?i
+        |- context[Values.Vptr ?b _] =>
+        let H := fresh "H" in
+        assert (H: stack_based (Values.Vptr b i) sp) by (rewrite <- H2; apply H1); simplify; solve [auto]
+      | |- context[Registers.Regmap.get ?lr ?lrs] =>
+        destruct (Registers.Regmap.get lr lrs) eqn:?; simplify; auto
+      | |- stack_based (?f _) _ => unfold f
+      | |- stack_based (?f _ _) _ => unfold f
+      | |- stack_based (?f _ _ _) _ => unfold f
+      | |- stack_based (?f _ _ _ _) _ => unfold f
+      | H: ?f _ _ = Some _ |- _ =>
+        unfold f in H; repeat (unfold_match H); inv H
+      | H: ?f _ _ _ _ _ _ = Some _ |- _ =>
+        unfold f in H; repeat (unfold_match H); inv H
+      | H: map (fun r : positive => Registers.Regmap.get r _) ?args = _ |- _ =>
+        destruct args; inv H
+      | |- context[if ?c then _ else _] => destruct c; try discriminate
+      | H: match _ with _ => _ end = Some _ |- _ => repeat (unfold_match H)
+      | |- context[match ?g with _ => _ end] => destruct g; try discriminate
+      | |- _ => simplify; solve [auto]
+      end.
+    intros F V sp v m args rs op g pc' res0 pc f e fin rtrn st stk INSTR RSBP SEL EVAL.
+    inv INSTR. unfold translate_instr in H5.
+    unfold_match H5; repeat (unfold_match H5); repeat (simplify; solve_no_ptr).
+  Qed.
+
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
       match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
@@ -396,11 +443,11 @@ Section CORRECTNESS.
       apply H in HPle. apply H in HPle0.
       eexists. split. econstructor; eauto. constructor. trivial.
       constructor. trivial. simplify. inv HPle. inv HPle0; constructor; auto.
-      + inv HPle0. constructor. unfold valueToPtr. Search Integers.Ptrofs.sub Integers.int.
-        pose proof Integers.Ptrofs.agree32_sub. unfold Integers.Ptrofs.agree32 in H3.
-        Print Integers.Ptrofs.agree32. unfold Ptrofs.of_int. simpl.
-        apply ptrofs_inj. assert (Archi.ptr64 = false) by auto. eapply H3 in H4.
-        rewrite Ptrofs.unsigned_repr. apply H4. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+      + inv HPle0. constructor. unfold valueToPtr.
+        pose proof Integers.Ptrofs.agree32_sub. unfold Integers.Ptrofs.agree32 in H2.
+        unfold Ptrofs.of_int. simpl.
+        apply ptrofs_inj. assert (Archi.ptr64 = false) by auto. eapply H2 in H3.
+        rewrite Ptrofs.unsigned_repr. apply H3. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
         apply Int.unsigned_range_2.
         auto. rewrite Ptrofs.unsigned_repr. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
         apply Int.unsigned_range_2. rewrite Ptrofs.unsigned_repr. auto.
@@ -532,7 +579,7 @@ Section CORRECTNESS.
           match_states (RTL.State s f sp pc' (Registers.Regmap.set res0 v rs) m) R2.
   Proof.
     intros s f sp pc rs m op args res0 pc' v H H0 R1 MSTATE.
-    inv_state.
+    inv_state. inv MARR.
     exploit eval_correct; eauto. intros. inversion H1. inversion H2.
     econstructor. split.
     apply Smallstep.plus_one.
@@ -543,74 +590,32 @@ Section CORRECTNESS.
     constructor; trivial.
     econstructor; simpl; eauto.
     simpl. econstructor. econstructor.
-    apply H3. simplify.
+    apply H5. simplify.
 
     all: big_tac.
 
-    assert (Ple res0 (RTL.max_reg_function f))
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
 
-    unfold Ple in H10. lia.
+    unfold Ple in HPle. lia.
     apply regs_lessdef_add_match. assumption.
     apply regs_lessdef_add_greater. unfold Plt; lia. assumption.
-    assert (Ple res0 (RTL.max_reg_function f))
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-    unfold Ple in H12; lia.
-    Admitted.
-(*    unfold_merge. simpl.
-    rewrite AssocMap.gso.
-    apply AssocMap.gss.
-    apply st_greater_than_res.
-
-    (*match_states*)
-      assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
-    rewrite <- H1.
-    constructor; auto.
-    unfold_merge.
-    apply regs_lessdef_add_match.
-    constructor.
-    apply regs_lessdef_add_greater.
-    apply greater_than_max_func.
-    assumption.
-
-    unfold state_st_wf. intros. inversion H2. subst.
-    unfold_merge.
-    rewrite AssocMap.gso.
-    apply AssocMap.gss.
-    apply st_greater_than_res.
-
-     + econstructor. split.
-     apply Smallstep.plus_one.
-     eapply HTL.step_module; eauto.
-     econstructor; simpl; trivial.
-     constructor; trivial.
-     econstructor; simpl; eauto.
-     eapply eval_correct; eauto.
-     constructor. rewrite valueToInt_intToValue. trivial.
-     unfold_merge. simpl.
-     rewrite AssocMap.gso.
-     apply AssocMap.gss.
-     apply st_greater_than_res.
-
-      match_states
-     assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
-     rewrite <- H1.
-     constructor.
-     unfold_merge.
-     apply regs_lessdef_add_match.
-     constructor.
-     symmetry. apply valueToInt_intToValue.
-     apply regs_lessdef_add_greater.
-     apply greater_than_max_func.
-     assumption. assumption.
-
-     unfold state_st_wf. intros. inversion H2. subst.
-     unfold_merge.
-     rewrite AssocMap.gso.
-     apply AssocMap.gss.
-     apply st_greater_than_res.
-     assumption.
-  Admitted.*)
+    unfold Ple in HPle; lia.
+    eapply op_stack_based; eauto.
+    inv CONST. constructor; simplify. rewrite AssocMap.gso. rewrite AssocMap.gso.
+    assumption. lia.
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
+      by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+    unfold Ple in HPle. lia.
+    rewrite AssocMap.gso. rewrite AssocMap.gso.
+    assumption. lia.
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
+      by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+    unfold Ple in HPle. lia.
+    Unshelve. trivial.
+  Qed.
   Hint Resolve transl_iop_correct : htlproof.
 
   Ltac tac :=
