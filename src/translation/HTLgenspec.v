@@ -138,16 +138,18 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
       tr_instr fin rtrn st stk (RTL.Ireturn (Some r))
                (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r))) Vskip
 | tr_instr_Iload :
-    forall mem addr args s s' i e dst n,
+    forall chunk addr args s s' i e dst n,
       Z.pos n <= Int.max_unsigned ->
+      chunk = AST.Mint32 ->
       translate_eff_addressing addr args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n)
+      tr_instr fin rtrn st stk (RTL.Iload chunk addr args dst n)
                                (create_single_cycle_load stk e dst) (state_goto st n)
 | tr_instr_Istore :
-    forall mem addr args s s' i e src n,
+    forall chunk addr args s s' i e src n,
       Z.pos n <= Int.max_unsigned ->
+      chunk = AST.Mint32 ->
       translate_eff_addressing addr args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n)
+      tr_instr fin rtrn st stk (RTL.Istore chunk addr args src n)
                                (create_single_cycle_store stk e src) (state_goto st n)
 | tr_instr_Ijumptable :
     forall cexpr tbl r,
@@ -415,10 +417,12 @@ Proof.
   destruct i0; try (monadInv H); try (unfold_match H); eauto with htlspec.
   - monadInv H. apply add_instr_freshreg_trans in EQ2. apply translate_instr_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
-  - monadInv H. apply add_instr_freshreg_trans in EQ2.
+  - destruct (Z.pos n0 <=? Int.max_unsigned); try discriminate.
+    monadInv H. apply add_instr_freshreg_trans in EQ2.
     apply translate_eff_addressing_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
-  - monadInv H. apply add_instr_freshreg_trans in EQ0.
+  - destruct (Z.pos n0 <=? Int.max_unsigned); try discriminate.
+    monadInv H. apply add_instr_freshreg_trans in EQ0.
     apply translate_eff_addressing_freshreg_trans in EQ. congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ.
     apply add_branch_instr_freshreg_trans in EQ0.
@@ -491,7 +495,8 @@ Proof.
   destruct (peq pc pc1).
   - subst.
     destruct instr1 eqn:?; try discriminate;
-      try destruct_optional; inv_add_instr; econstructor; try assumption.
+      try destruct_optional; try (destruct m; try discriminate);
+        inv_add_instr; econstructor; try assumption.
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
@@ -508,6 +513,7 @@ Proof.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + inversion H2. inversion H14. rewrite <- e2. replace (st_st s2) with (st_st s0) by congruence.
       econstructor. apply Z.leb_le; assumption.
+      reflexivity.
       apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
@@ -516,7 +522,7 @@ Proof.
       * inversion H2.
         replace (st_st s2) with (st_st s0) by congruence.
         econstructor. apply Z.leb_le; assumption.
-        eauto with htlspec.
+        eauto with htlspec. eassumption.
       * apply in_map with (f := fst) in H2. contradiction.
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.

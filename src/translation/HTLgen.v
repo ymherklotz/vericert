@@ -442,17 +442,25 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
         do _ <- declare_reg None dst 32;
         add_instr n n' (nonblock dst instr)
       else error (Errors.msg "State is larger than 2^32.")
-    | Iload mem addr args dst n' =>
-      if Z.leb (Z.pos n') Integers.Int.max_unsigned
-      then do addr' <- translate_eff_addressing addr args;
-           do _ <- declare_reg None dst 32;
-           add_instr n n' $ create_single_cycle_load stack addr' dst
-      else error (Errors.msg "State is larger than 2^32.")
-    | Istore mem addr args src n' =>
-      if Z.leb (Z.pos n') Integers.Int.max_unsigned
-      then do addr' <- translate_eff_addressing addr args;
-           add_instr n n' $ create_single_cycle_store stack addr' src
-      else error (Errors.msg "State is larger than 2^32.")
+    | Iload chunk addr args dst n' =>
+      match chunk with
+      | Mint32 =>
+        if Z.leb (Z.pos n') Integers.Int.max_unsigned
+        then do addr' <- translate_eff_addressing addr args;
+             do _ <- declare_reg None dst 32;
+             add_instr n n' $ create_single_cycle_load stack addr' dst
+        else error (Errors.msg "State is larger than 2^32.")
+      | _ => error (Errors.msg "Iload invalid chunk size.")
+      end
+    | Istore chunk addr args src n' =>
+      match chunk with
+      | Mint32 =>
+        if Z.leb (Z.pos n') Integers.Int.max_unsigned
+        then do addr' <- translate_eff_addressing addr args;
+             add_instr n n' $ create_single_cycle_store stack addr' src
+        else error (Errors.msg "State is larger than 2^32.")
+      | _ => error (Errors.msg "Istore invalid chunk size.")
+      end
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
