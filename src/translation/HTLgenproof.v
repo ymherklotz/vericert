@@ -127,7 +127,20 @@ Definition match_prog (p: RTL.program) (tp: HTL.program) :=
 Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
   TransfLink (fun (p1: RTL.program) (p2: HTL.program) => match_prog p1 p2).
 Proof.
-  Admitted.
+  red. intros. exfalso. destruct (link_linkorder _ _ _ H) as [LO1 LO2].
+  apply link_prog_inv in H.
+
+  unfold match_prog in *.
+  unfold main_is_internal in *. simplify. repeat (unfold_match H4).
+  repeat (unfold_match H3). simplify.
+  subst. rewrite H0 in *. specialize (H (AST.prog_main p2)).
+  exploit H.
+  apply Genv.find_def_symbol. exists b. split.
+  assumption. Search Genv.find_def. apply Genv.find_funct_ptr_iff. eassumption.
+  apply Genv.find_def_symbol. exists b0. split.
+  assumption. Search Genv.find_def. apply Genv.find_funct_ptr_iff. eassumption.
+  intros. inv H3. inv H5. destruct H6. inv H5.
+Qed.
 
 Definition match_prog' (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
