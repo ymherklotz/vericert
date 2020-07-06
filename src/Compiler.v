@@ -222,18 +222,19 @@ Proof.
 Qed.
 
 Theorem separate_transf_c_program_correct:
-  forall c_units asm_units c_program,
-  nlist_forall2 (fun cu tcu => transf_hls cu = OK tcu) c_units asm_units ->
+  forall c_units verilog_units c_program,
+  nlist_forall2 (fun cu tcu => transf_hls cu = OK tcu) c_units verilog_units ->
   link_list c_units = Some c_program ->
-  exists asm_program,
-      link_list asm_units = Some asm_program
-   /\ backward_simulation (Csem.semantics c_program) (Verilog.semantics asm_program).
+  exists verilog_program,
+      link_list verilog_units = Some verilog_program
+   /\ backward_simulation (Csem.semantics c_program) (Verilog.semantics verilog_program).
 Proof.
   intros.
-  assert (nlist_forall2 match_prog c_units asm_units).
+  assert (nlist_forall2 match_prog c_units verilog_units).
   { eapply nlist_forall2_imply. eauto. simpl; intros. apply transf_hls_match; auto. }
-  assert (exists asm_program, link_list asm_units = Some asm_program /\ match_prog c_program asm_program).
+  assert (exists verilog_program, link_list verilog_units = Some verilog_program
+                                  /\ match_prog c_program verilog_program).
   { eapply link_list_compose_passes; eauto. }
-  destruct H2 as (asm_program & P & Q).
-  exists asm_program; split; auto. apply c_semantic_preservation; auto.
+  destruct H2 as (verilog_program & P & Q).
+  exists verilog_program; split; auto. apply c_semantic_preservation; auto.
 Qed.
