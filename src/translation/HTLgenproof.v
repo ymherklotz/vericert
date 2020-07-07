@@ -519,6 +519,8 @@ Section CORRECTNESS.
       end.
       Ltac solve_cond :=
         match goal with
+        | H : context[match _ with _ => _ end] |- _ => repeat (unfold_merge H)
+        | H : ?f = _ |- context[boolToValue ?f] => rewrite H; solve [auto]
         | H : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
               H2 : Registers.Regmap.get ?r ?rs = Values.Vint _ |- _ =>
           rewrite H2 in H; discriminate
@@ -526,10 +528,16 @@ Section CORRECTNESS.
               H2 : Registers.Regmap.get ?r ?rs = Values.Vint _ |- _ =>
           rewrite H2 in H; discriminate
         | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
-              H2 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _ |- _ =>
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vundef |- _ =>
           rewrite H2 in H; discriminate
         | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
-              H2 : Registers.Regmap.get ?r ?rs = Values.Vint _ _ |- _ =>
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _ |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vundef = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _ |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vundef |- _ =>
           rewrite H2 in H; discriminate
         | |- context[val_value_lessdef Values.Vundef _] =>
           econstructor; split; econstructor; econstructor; auto; solve [constructor]
@@ -538,8 +546,20 @@ Section CORRECTNESS.
           H3 : Registers.Regmap.get ?r0 ?rs = Values.Vint _,
           H4 : Values.Vint _ = Registers.Regmap.get ?r0 ?rs|- _ =>
           rewrite H1 in H2; rewrite H3 in H4; inv H2; inv H4; unfold valueToInt in *; constructor
+        | H1 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _,
+          H2 : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
+          H3 : Registers.Regmap.get ?r0 ?rs = Values.Vptr _ _,
+          H4 : Values.Vptr _ _ = Registers.Regmap.get ?r0 ?rs|- _ =>
+          rewrite H1 in H2; rewrite H3 in H4; inv H2; inv H4; unfold valueToInt in *; constructor;
+          unfold Ptrofs.ltu, Int.ltu in *; unfold Ptrofs.of_int in *;
+          repeat (rewrite Ptrofs.unsigned_repr in *; auto using Int.unsigned_range_2)
         | H : _ :: _ = _ :: _ |- _ => inv H
         | H : ret _ _ = OK _ _ _ |- _ => inv H
+        | |- _ =>
+          eexists; split; [ econstructor; econstructor; auto
+                          | simplify; inv_lessdef; repeat (unfold valueToPtr, valueToInt in *; solve_cond);
+                            unfold valueToPtr in *
+                          ]
         end.
     intros s sp op rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st MSTATE INSTR EVAL TR_INSTR.
     inv MSTATE. inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
@@ -657,63 +677,30 @@ Section CORRECTNESS.
       repeat (match goal with |- context[match ?d with _ => _ end] => destruct d eqn:? end;
       match goal with H : context[match ?d with _ => _ end] |- _ => repeat unfold_match H end);
       try (match goal with |- context[if ?d then _ else _] => destruct d eqn:? end);
+      simplify; repeat solve_cond;
+      try (match goal with H : ?f = _ |- context[boolToValue ?f] => rewrite H; solve [auto] end);
+      try (match goal with H : context[match ?d with _ => _ end] |- _ => repeat unfold_match H end);
       simplify; repeat solve_cond.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1. auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1. auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + eexists. split. econstructor; econstructor; auto.
-        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
-      + inv_lessdef; try solve_cond.
-        * unfold valueToInt, valueToPtr in *. rewrite H5 in H3. rewrite H4 in H2. inv H2. inv H3.
-          eexists. split. econstructor; econstructor; auto. simplify.
-          unfold Int.eq.
-      constructor. apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H2. inv H2. auto.
-    - rewrite H2. auto.
-    -
-      admit. (* eval_condition *)
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
+      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
     - admit. (* select *)
             Admitted.
 

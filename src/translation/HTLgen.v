@@ -271,8 +271,6 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
 
 Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
-  | Integers.Ceq, r1::r2::nil => ret (bop Veq r1 r2)
-  | Integers.Cne, r1::r2::nil => ret (bop Vne r1 r2)
   | Integers.Clt, r1::r2::nil => ret (bop Vltu r1 r2)
   | Integers.Cgt, r1::r2::nil => ret (bop Vgtu r1 r2)
   | Integers.Cle, r1::r2::nil => ret (bop Vleu r1 r2)
@@ -283,8 +281,6 @@ Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : m
 Definition translate_comparison_immu (c : Integers.comparison) (args : list reg) (i: Integers.int)
   : mon expr :=
   match c, args with
-  | Integers.Ceq, r1::nil => ret (boplit Veq r1 i)
-  | Integers.Cne, r1::nil => ret (boplit Vne r1 i)
   | Integers.Clt, r1::nil => ret (boplit Vltu r1 i)
   | Integers.Cgt, r1::nil => ret (boplit Vgtu r1 i)
   | Integers.Cle, r1::nil => ret (boplit Vleu r1 i)
