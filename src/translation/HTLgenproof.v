@@ -420,6 +420,7 @@ Section CORRECTNESS.
         destruct args; inv H
       | |- context[if ?c then _ else _] => destruct c; try discriminate
       | H: match _ with _ => _ end = Some _ |- _ => repeat (unfold_match H)
+      | H: match _ with _ => _ end = OK _ _ _ |- _ => repeat (unfold_match H)
       | |- context[match ?g with _ => _ end] => destruct g; try discriminate
       | |- _ => simplify; solve [auto]
       end.
@@ -451,10 +452,15 @@ Section CORRECTNESS.
       | |- context[valueToPtr] => unfold valueToPtr
       | |- context[valueToInt] => unfold valueToInt
       | |- context[bop] => unfold bop
+      | H : context[bop] |- _ => unfold bop in H
       | |- context[boplit] => unfold boplit
+      | H : context[boplit] |- _ => unfold boplit in H
+      | |- context[boplitz] => unfold boplitz
+      | H : context[boplitz] |- _ => unfold boplitz in H
       | |- val_value_lessdef Values.Vundef _ => solve [constructor]
       | H : val_value_lessdef _ _ |- val_value_lessdef (Values.Vint _) _ => constructor; inv H
       | |- val_value_lessdef (Values.Vint _) _ => constructor; auto
+      | H : ret _ _ = OK _ _ _ |- _ => inv H
       | H : context[RTL.max_reg_function ?f]
         |- context[_ (Registers.Regmap.get ?r ?rs) (Registers.Regmap.get ?r0 ?rs)] =>
         let HPle1 := fresh "HPle" in
@@ -471,6 +477,8 @@ Section CORRECTNESS.
         [econstructor; eauto; constructor; trivial | inv HPle1; try (constructor; auto)]
       | H : _ :: _ = _ :: _ |- _ => inv H
       | |- context[match ?d with _ => _ end] => destruct d eqn:?; try discriminate
+      | H : match ?d with _ => _ end = _ |- _ => repeat unfold_match H
+      | H : match ?d with _ => _ end _ = _ |- _ => repeat unfold_match H
       | |- Verilog.expr_runp _ _ _ _ _ => econstructor
       | |- val_value_lessdef (?f _ _) _ => unfold f
       | |- val_value_lessdef (?f _) _ => unfold f
@@ -490,7 +498,49 @@ Section CORRECTNESS.
         assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
         apply H in HPle; eexists; split; try constructor; eauto
       | |- context[if ?c then _ else _] => destruct c eqn:?; try discriminate
+      | H : ?b = _ |- _ = boolToValue ?b => rewrite H
       end.
+      Ltac inv_lessdef := lazymatch goal with
+      | H2 : context[RTL.max_reg_function ?f], H : Registers.Regmap.get ?r ?rs = _,
+                                                   H1 : Registers.Regmap.get ?r0 ?rs = _ |- _ =>
+        let HPle1 := fresh "HPle" in
+        assert (HPle1 : Ple r (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H2 in HPle1; inv HPle1;
+        let HPle2 := fresh "HPle" in
+        assert (HPle2 : Ple r0 (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H2 in HPle2; inv HPle2
+      | H2 : context[RTL.max_reg_function ?f], H : Registers.Regmap.get ?r ?rs = _ |- _ =>
+        let HPle1 := fresh "HPle" in
+        assert (HPle1 : Ple r (RTL.max_reg_function f))
+          by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H2 in HPle1; inv HPle1
+      end.
+      Ltac solve_cond :=
+        match goal with
+        | H : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vint _ |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vundef = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vint _ |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _ |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vint _ _ |- _ =>
+          rewrite H2 in H; discriminate
+        | |- context[val_value_lessdef Values.Vundef _] =>
+          econstructor; split; econstructor; econstructor; auto; solve [constructor]
+        | H1 : Registers.Regmap.get ?r ?rs = Values.Vint _,
+          H2 : Values.Vint _ = Registers.Regmap.get ?r ?rs,
+          H3 : Registers.Regmap.get ?r0 ?rs = Values.Vint _,
+          H4 : Values.Vint _ = Registers.Regmap.get ?r0 ?rs|- _ =>
+          rewrite H1 in H2; rewrite H3 in H4; inv H2; inv H4; unfold valueToInt in *; constructor
+        | H : _ :: _ = _ :: _ |- _ => inv H
+        | H : ret _ _ = OK _ _ _ |- _ => inv H
+        end.
     intros s sp op rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st MSTATE INSTR EVAL TR_INSTR.
     inv MSTATE. inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
     unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
@@ -513,16 +563,157 @@ Section CORRECTNESS.
       eapply H2 in ARCH. apply ARCH.
       pose proof Ptrofs.agree32_of_int. unfold Ptrofs.agree32 in H2.
       eapply H2 in ARCH. apply ARCH.
-    - admit. (* mulhs *)
-    - admit. (* mulhu *)
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
-    - admit.
-    - admit. (* ror *)
-    - admit. (* addressing *)
-    - admit. (* eval_condition *)
+    - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1).
+        destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
+        pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+        apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+        apply AGR. auto. rewrite H2 in H0. inv H0. unfold valueToPtr. unfold Ptrofs.of_int.
+        rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+        apply Int.unsigned_range_2.
+        rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+        apply Int.unsigned_range_2.
+        replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+        apply Int.unsigned_range_2.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        * inv Heqv. unfold valueToInt in *. inv H2. inv H0. unfold valueToInt in *. trivial.
+        * constructor. unfold valueToPtr, ZToValue in *.
+          pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+          apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+          apply AGR. auto. inv Heqv. rewrite Int.add_commut.
+          apply AGR. auto. inv H1. inv H0. unfold valueToPtr. unfold Ptrofs.of_int.
+          rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          unfold Ptrofs.of_int.
+          rewrite Ptrofs.unsigned_repr. inv H0. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          apply Int.unsigned_range_2.
+        * constructor. unfold valueToPtr, ZToValue in *.
+          pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+          apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+          apply AGR. auto. inv Heqv.
+          apply AGR. auto. inv H0. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto.
+          replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          inv H1. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto.
+          replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          rewrite Ptrofs.unsigned_repr. auto.
+          replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2. apply Int.unsigned_range_2.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv). inv Heqv. inv H3.
+          unfold valueToInt, ZToValue. auto.
+        * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv).
+        * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv).
+        * constructor. unfold valueToPtr, ZToValue. unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv).
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        unfold valueToPtr, ZToValue.
+        repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1.
+        inv Heqv1. inv Heqv0. unfold valueToInt in *.
+        assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+        apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H2. inv H2. auto.
+        rewrite Heqv2 in H2. inv H2.
+        rewrite Heqv2 in H3. discriminate.
+        repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1.
+        repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1.
+        constructor. unfold valueToPtr, ZToValue. inv Heqv0. inv Heqv1.
+        assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+        apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H3. inv H3.
+
+        pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+        apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+        apply AGR. auto. inv H2. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto.
+        replace Ptrofs.max_unsigned with Int.max_unsigned by auto. apply Int.unsigned_range_2.
+        apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2. apply Int.unsigned_range_2.
+
+        rewrite Heqv2 in H3. inv H3.
+
+        rewrite Heqv2 in H4. inv H4.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        eexists. split. constructor.
+        constructor. unfold valueToPtr, ZToValue. rewrite Ptrofs.add_zero_l. unfold Ptrofs.of_int.
+        rewrite Int.unsigned_repr. symmetry. apply Ptrofs.repr_unsigned.
+        unfold check_address_parameter_unsigned in *. apply Ptrofs.unsigned_range_2.
+    - unfold translate_condition in *; repeat unfold_match H1;
+      unfold translate_comparison in *; repeat unfold_match H1; inv H1;
+      unfold translate_comparisonu, translate_comparison_imm, translate_comparison_immu in *;
+      unfold Op.eval_condition, Values.Val.of_optbool, Values.Val.cmp_bool, Values.Val.cmpu_bool, bop in *;
+      simplify;
+      repeat (match goal with |- context[match ?d with _ => _ end] => destruct d eqn:? end;
+      match goal with H : context[match ?d with _ => _ end] |- _ => repeat unfold_match H end);
+      try (match goal with |- context[if ?d then _ else _] => destruct d eqn:? end);
+      simplify; repeat solve_cond.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1. auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1. auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + eexists. split. econstructor; econstructor; auto.
+        simplify. inv_lessdef; solve_cond. rewrite H1; auto.
+      + inv_lessdef; try solve_cond.
+        * unfold valueToInt, valueToPtr in *. rewrite H5 in H3. rewrite H4 in H2. inv H2. inv H3.
+          eexists. split. econstructor; econstructor; auto. simplify.
+          unfold Int.eq.
+      constructor. apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H2. inv H2. auto.
+    - rewrite H2. auto.
+    -
+      admit. (* eval_condition *)
     - admit. (* select *)
             Admitted.
 
