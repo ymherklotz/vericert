@@ -587,6 +587,9 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
+    (*- unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
+      Search Int.repr.
+      repeat (rewrite Int.unsigned_repr). auto.*)
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
         destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
@@ -811,7 +814,7 @@ Section CORRECTNESS.
 
     inv CONST; constructor; simplify; rewrite AssocMap.gso; auto; lia.
 
-    Unshelve. auto.
+    Unshelve. exact tt.
   Qed.
   Hint Resolve transl_inop_correct : htlproof.
 
@@ -863,7 +866,7 @@ Section CORRECTNESS.
     assert (HPle: Ple res0 (RTL.max_reg_function f))
       by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
     unfold Ple in HPle. lia.
-    Unshelve. trivial.
+    Unshelve. exact tt.
   Qed.
   Hint Resolve transl_iop_correct : htlproof.
 
