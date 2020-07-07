@@ -103,6 +103,7 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   @@@ Cminorgen.transl_program
   @@@ Selection.sel_program
   @@@ RTLgen.transl_program
+  @@ print (print_RTL 0)
   @@@ transf_backend.
 
 Local Open Scope linking_scope.
@@ -134,6 +135,7 @@ Proof.
   destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate.
   destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4; simpl in T; try discriminate.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
+  rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
   unfold transf_backend in T. simpl in T. rewrite ! compose_print_identity in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.

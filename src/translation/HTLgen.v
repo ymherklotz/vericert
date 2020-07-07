@@ -271,8 +271,6 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
 
 Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
-  | Integers.Ceq, r1::r2::nil => ret (bop Veq r1 r2)
-  | Integers.Cne, r1::r2::nil => ret (bop Vne r1 r2)
   | Integers.Clt, r1::r2::nil => ret (bop Vltu r1 r2)
   | Integers.Cgt, r1::r2::nil => ret (bop Vgtu r1 r2)
   | Integers.Cle, r1::r2::nil => ret (bop Vleu r1 r2)
@@ -283,8 +281,6 @@ Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : m
 Definition translate_comparison_immu (c : Integers.comparison) (args : list reg) (i: Integers.int)
   : mon expr :=
   match c, args with
-  | Integers.Ceq, r1::nil => ret (boplit Veq r1 i)
-  | Integers.Cne, r1::nil => ret (boplit Vne r1 i)
   | Integers.Clt, r1::nil => ret (boplit Vltu r1 i)
   | Integers.Cgt, r1::nil => ret (boplit Vgtu r1 i)
   | Integers.Cle, r1::nil => ret (boplit Vleu r1 i)
@@ -360,7 +356,9 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
     (Vlit (intToValue n))))*)
   | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
-  | Op.Ororimm n, r::nil => ret (boplit Vror r n)
+  | Op.Ororimm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Ororimm")
+  (*ret (Vbinop Vor (boplit Vshru r (Integers.Int.modu n (Integers.Int.repr 32)))
+                                        (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) (Integers.Int.modu n (Integers.Int.repr 32)))))*)
   | Op.Oshldimm n, r::nil => ret (Vbinop Vor (boplit Vshl r n) (boplit Vshr r (Integers.Int.sub (Integers.Int.repr 32) n)))
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>

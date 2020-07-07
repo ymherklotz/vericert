@@ -342,6 +342,7 @@ Section CORRECTNESS.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
+
 (*   Lemma TRANSL' : *)
 (*     Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq prog tprog. *)
 (*   Proof. intros; apply match_prog_matches; assumption. Qed. *)
