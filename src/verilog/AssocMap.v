@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Import Coquplib Value.
+From coqup Require Import Coquplib ValueInt.
 From compcert Require Import Maps.
 
 Definition reg := positive.
@@ -192,7 +192,7 @@ Import AssocMapExt.
 Definition assocmap := AssocMap.t value.
 
 Definition find_assocmap (n : nat) : reg -> assocmap -> value :=
-  get_default value (ZToValue n 0).
+  get_default value (ZToValue 0).
 
 Definition empty_assocmap : assocmap := AssocMap.empty value.
 

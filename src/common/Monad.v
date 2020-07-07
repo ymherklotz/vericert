@@ -20,6 +20,10 @@ Module MonadExtra(M : Monad).
 
   Module MonadNotation.
 
+    Notation "A ; B" :=
+      (bind A (fun _ => B))
+        (at level 200, B at level 200).
+
     Notation "'do' X <- A ; B" :=
       (bind A (fun X => B))
         (at level 200, X ident, A at level 100, B at level 200).

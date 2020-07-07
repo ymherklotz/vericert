@@ -18,8 +18,8 @@
 
 val pprint_stmnt : int -> Verilog.stmnt -> string
 
-val print_value : out_channel -> Value.value -> unit
+val print_value : out_channel -> ValueInt.value -> unit
 
 val print_program : bool -> out_channel -> Verilog.program -> unit
 
-val print_result : out_channel -> (BinNums.positive * Value.value) list -> unit
+val print_result : out_channel -> (BinNums.positive * ValueInt.value) list -> unit
