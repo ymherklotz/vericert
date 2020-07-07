@@ -269,14 +269,37 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
   | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
   end.
 
+Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : mon expr :=
+  match c, args with
+  | Integers.Ceq, r1::r2::nil => ret (bop Veq r1 r2)
+  | Integers.Cne, r1::r2::nil => ret (bop Vne r1 r2)
+  | Integers.Clt, r1::r2::nil => ret (bop Vltu r1 r2)
+  | Integers.Cgt, r1::r2::nil => ret (bop Vgtu r1 r2)
+  | Integers.Cle, r1::r2::nil => ret (bop Vleu r1 r2)
+  | Integers.Cge, r1::r2::nil => ret (bop Vgeu r1 r2)
+  | _, _ => error (Errors.msg "Htlgen: comparison instruction not implemented: other")
+  end.
+
+Definition translate_comparison_immu (c : Integers.comparison) (args : list reg) (i: Integers.int)
+  : mon expr :=
+  match c, args with
+  | Integers.Ceq, r1::nil => ret (boplit Veq r1 i)
+  | Integers.Cne, r1::nil => ret (boplit Vne r1 i)
+  | Integers.Clt, r1::nil => ret (boplit Vltu r1 i)
+  | Integers.Cgt, r1::nil => ret (boplit Vgtu r1 i)
+  | Integers.Cle, r1::nil => ret (boplit Vleu r1 i)
+  | Integers.Cge, r1::nil => ret (boplit Vgeu r1 i)
+  | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
+  end.
+
 Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :=
   match c, args with
   | Op.Ccomp c, _ => translate_comparison c args
-  | Op.Ccompu c, _ => translate_comparison c args
+  | Op.Ccompu c, _ => translate_comparisonu c args
   | Op.Ccompimm c i, _ => translate_comparison_imm c args i
-  | Op.Ccompuimm c i, _ => translate_comparison_imm c args i
-  | Op.Cmaskzero n, r::nil => ret (Vbinop Veq (boplit Vand r n) (Vlit (ZToValue 0)))
-  | Op.Cmasknotzero n, r::nil => ret (Vbinop Vne (boplit Vand r n) (Vlit (ZToValue 0)))
+  | Op.Ccompuimm c i, _ => translate_comparison_immu c args i
+  | Op.Cmaskzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmaskzero")
+  | Op.Cmasknotzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmasknotzero")
   | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
@@ -296,9 +319,9 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon ex
   | Op.Ascaled scale offset, r1::nil =>
     ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
   | Op.Aindexed2 offset, r1::r2::nil =>
-    ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
+    ret (Vbinop Vadd (bop Vadd r1 r2) (Vlit (ZToValue offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+    ret (Vbinop Vadd (Vvar r1) (Vbinop Vadd (boplitz Vmul r2 scale) (Vlit (ZToValue offset))))
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     ret (Vlit (ZToValue a))
@@ -314,8 +337,8 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Osub, r1::r2::nil => ret (bop Vsub r1 r2)
   | Op.Omul, r1::r2::nil => ret (bop Vmul r1 r2)
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
-  | Op.Omulhs, r1::r2::nil => ret (bop Vmul r1 r2)
-  | Op.Omulhu, r1::r2::nil => ret (bop Vmul r1 r2)
+  | Op.Omulhs, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhs")
+  | Op.Omulhu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhu")
   | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
   | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
   | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
@@ -331,12 +354,13 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshlimm n, r::nil => ret (boplit Vshl r n)
   | Op.Oshr, r1::r2::nil => ret (bop Vshr r1 r2)
   | Op.Oshrimm n, r::nil => ret (boplit Vshr r n)
-  | Op.Oshrximm n, r::nil => ret (Vbinop Vdiv (Vvar r)
-                                         (Vbinop Vshl (Vlit (ZToValue 1))
-                                                 (Vlit (intToValue n))))
+  | Op.Oshrximm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Oshrximm")
+  (*ret (Vbinop Vdiv (Vvar r)
+    (Vbinop Vshl (Vlit (ZToValue 1))
+    (Vlit (intToValue n))))*)
   | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
-  | Op.Ororimm n, r::nil => ret (Vbinop Vor (boplit Vshr r n) (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) n)))
+  | Op.Ororimm n, r::nil => ret (boplit Vror r n)
   | Op.Oshldimm n, r::nil => ret (Vbinop Vor (boplit Vshl r n) (boplit Vshr r (Integers.Int.sub (Integers.Int.repr 32) n)))
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>

@@ -361,6 +361,15 @@ Proof.
 Qed.
 Hint Resolve translate_comparison_freshreg_trans : htlspec.
 
+Lemma translate_comparisonu_freshreg_trans :
+  forall op args s r s' i,
+  translate_comparisonu op args s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
+Qed.
+Hint Resolve translate_comparisonu_freshreg_trans : htlspec.
+
 Lemma translate_comparison_imm_freshreg_trans :
   forall op args s r s' i n,
   translate_comparison_imm op args n s = OK r s' i ->
@@ -369,6 +378,15 @@ Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
 Qed.
 Hint Resolve translate_comparison_imm_freshreg_trans : htlspec.
+
+Lemma translate_comparison_immu_freshreg_trans :
+  forall op args s r s' i n,
+  translate_comparison_immu op args n s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof.
+  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
+Qed.
+Hint Resolve translate_comparison_immu_freshreg_trans : htlspec.
 
 Lemma translate_condition_freshreg_trans :
   forall op args s r s' i,
