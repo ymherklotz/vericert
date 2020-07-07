@@ -31,4 +31,19 @@ Module ZExtra.
       apply Zmult_gt_reg_r in g; lia.
   Qed.
 
+  Lemma Ple_not_eq :
+    forall x y,
+    (x < y)%positive -> x <> y.
+  Proof. lia. Qed.
+
+  Lemma Pge_not_eq :
+    forall x y,
+    (y < x)%positive -> x <> y.
+  Proof. lia. Qed.
+
+  Lemma Ple_Plt_Succ :
+    forall x y n,
+    (x <= y)%positive -> (x < y + n)%positive.
+  Proof. lia. Qed.
+
 End ZExtra.

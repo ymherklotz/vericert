@@ -19,7 +19,7 @@
 From compcert Require Import Maps.
 From compcert Require Errors Globalenvs Integers.
 From compcert Require Import AST RTL.
-From coqup Require Import Verilog HTL Coquplib AssocMap Value Statemonad.
+From coqup Require Import Verilog HTL Coquplib AssocMap ValueInt Statemonad.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
@@ -88,10 +88,10 @@ Import HTLMonadExtra.
 Export MonadNotation.
 
 Definition state_goto (st : reg) (n : node) : stmnt :=
-  Vnonblock (Vvar st) (Vlit (posToValue 32 n)).
+  Vnonblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
-  Vnonblock (Vvar st) (Vternary c (posToExpr 32 n1) (posToExpr 32 n2)).
+  Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
@@ -244,7 +244,7 @@ Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
   Vbinop op (Vvar r) (Vlit (intToValue l)).
 
 Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
-  Vbinop op (Vvar r) (Vlit (ZToValue 32%nat l)).
+  Vbinop op (Vvar r) (Vlit (ZToValue l)).
 
 Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
@@ -269,14 +269,37 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
   | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
   end.
 
+Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : mon expr :=
+  match c, args with
+  | Integers.Ceq, r1::r2::nil => ret (bop Veq r1 r2)
+  | Integers.Cne, r1::r2::nil => ret (bop Vne r1 r2)
+  | Integers.Clt, r1::r2::nil => ret (bop Vltu r1 r2)
+  | Integers.Cgt, r1::r2::nil => ret (bop Vgtu r1 r2)
+  | Integers.Cle, r1::r2::nil => ret (bop Vleu r1 r2)
+  | Integers.Cge, r1::r2::nil => ret (bop Vgeu r1 r2)
+  | _, _ => error (Errors.msg "Htlgen: comparison instruction not implemented: other")
+  end.
+
+Definition translate_comparison_immu (c : Integers.comparison) (args : list reg) (i: Integers.int)
+  : mon expr :=
+  match c, args with
+  | Integers.Ceq, r1::nil => ret (boplit Veq r1 i)
+  | Integers.Cne, r1::nil => ret (boplit Vne r1 i)
+  | Integers.Clt, r1::nil => ret (boplit Vltu r1 i)
+  | Integers.Cgt, r1::nil => ret (boplit Vgtu r1 i)
+  | Integers.Cle, r1::nil => ret (boplit Vleu r1 i)
+  | Integers.Cge, r1::nil => ret (boplit Vgeu r1 i)
+  | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
+  end.
+
 Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :=
   match c, args with
   | Op.Ccomp c, _ => translate_comparison c args
-  | Op.Ccompu c, _ => translate_comparison c args
+  | Op.Ccompu c, _ => translate_comparisonu c args
   | Op.Ccompimm c i, _ => translate_comparison_imm c args i
-  | Op.Ccompuimm c i, _ => translate_comparison_imm c args i
-  | Op.Cmaskzero n, r::nil => ret (Vbinop Veq (boplit Vand r n) (Vlit (ZToValue 32 0)))
-  | Op.Cmasknotzero n, r::nil => ret (Vbinop Vne (boplit Vand r n) (Vlit (ZToValue 32 0)))
+  | Op.Ccompuimm c i, _ => translate_comparison_immu c args i
+  | Op.Cmaskzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmaskzero")
+  | Op.Cmasknotzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmasknotzero")
   | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
@@ -292,26 +315,16 @@ Definition check_address_parameter_unsigned (p : Z) : bool :=
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (boplitz Vadd r1 off)
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address misaligned")
+    ret (boplitz Vadd r1 off)
   | Op.Ascaled scale offset, r1::nil =>
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue 32 offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address misaligned")
+    ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
   | Op.Aindexed2 offset, r1::r2::nil =>
-    if (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (Vvar r1) (boplitz Vadd r2 offset))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address misaligned")
+    ret (Vbinop Vadd (bop Vadd r1 r2) (Vlit (ZToValue offset)))
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address misaligned")
+    ret (Vbinop Vadd (Vvar r1) (Vbinop Vadd (boplitz Vmul r2 scale) (Vlit (ZToValue offset))))
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vlit (ZToValue 32 a))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address misaligned")
+    ret (Vlit (ZToValue a))
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
@@ -341,20 +354,19 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Oshlimm n, r::nil => ret (boplit Vshl r n)
   | Op.Oshr, r1::r2::nil => ret (bop Vshr r1 r2)
   | Op.Oshrimm n, r::nil => ret (boplit Vshr r n)
-  | Op.Oshrximm n, r::nil => ret (Vbinop Vdiv (Vvar r)
-                                         (Vbinop Vshl (Vlit (ZToValue 32 1))
-                                                 (Vlit (intToValue n))))
+  | Op.Oshrximm n, r::nil => error (Errors.msg "Htlgen: Instruction not implemented: Oshrximm")
+  (*ret (Vbinop Vdiv (Vvar r)
+    (Vbinop Vshl (Vlit (ZToValue 1))
+    (Vlit (intToValue n))))*)
   | Op.Oshru, r1::r2::nil => ret (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => ret (boplit Vshru r n)
-  | Op.Ororimm n, r::nil => ret (Vbinop Vor (boplit Vshr r n) (boplit Vshl r (Integers.Int.sub (Integers.Int.repr 32) n)))
+  | Op.Ororimm n, r::nil => ret (boplit Vror r n)
   | Op.Oshldimm n, r::nil => ret (Vbinop Vor (boplit Vshl r n) (boplit Vshr r (Integers.Int.sub (Integers.Int.repr 32) n)))
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>
     do tc <- translate_condition c rl;
     ret (Vternary tc (Vvar r1) (Vvar r2))
   | Op.Olea a, _ => translate_eff_addressing a args
-  | Op.Oleal a, _ => translate_eff_addressing a args (* FIXME: Need to be careful here; large arrays might fail? *)
-  | Op.Ocast32signed, r::nil => ret (Vvar r) (* FIXME: Don't need to sign extend for now since everything is 32 bit? *)
   | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
 
@@ -392,26 +404,38 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
     | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
-Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
-           (args : list reg) (stack : reg) : mon expr :=
-  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Mint32, Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 32 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
-  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vvari stack
-                    (Vbinop Vdivu
-                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-                            (ZToValue 32 4)))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
-  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+(* Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing) *)
+(*            (args : list reg) (stack : reg) : mon expr := *)
+(*   match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*) *)
+(*   | Mint32, Op.Aindexed off, r1::nil => *)
+(*     if (check_address_parameter_signed off) *)
+(*     then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4)))) *)
+(*     else error (Errors.msg "HTLgen: translate_arr_access address misaligned") *)
+(*   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *) *)
+(*     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset) *)
+(*     then ret (Vvari stack *)
+(*                     (Vbinop Vdivu *)
+(*                             (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale)) *)
+(*                             (Vlit (ZToValue 4)))) *)
+(*     else error (Errors.msg "HTLgen: translate_arr_access address misaligned") *)
+(*   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *) *)
+(*     let a := Integers.Ptrofs.unsigned a in *)
+(*     if (check_address_parameter_unsigned a) *)
+(*     then ret (Vvari stack (Vlit (ZToValue (a / 4)))) *)
+(*     else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset") *)
+(*   | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing") *)
+(*   end. *)
+
+Definition translate_arr_addressing (a: Op.addressing) (args: list reg) : mon expr :=
+  match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Op.Aindexed off, r1::nil =>
+    ret (boplitz Vadd r1 off)
+  | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    ret (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+  | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vvari stack (Vlit (ZToValue 32 (a / 4))))
-    else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset")
-  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
+    ret (Vlit (ZToValue a))
+  | _, _ => error (Errors.msg "Veriloggen: translate_arr_addressing unsuported addressing")
   end.
 
 Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
@@ -422,41 +446,70 @@ Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
 
 Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
   List.map (fun a => match a with
-                    (i, n) => (Vlit (natToValue 32 i), Vnonblock (Vvar st) (Vlit (posToValue 32 n)))
+                    (i, n) => (Vlit (natToValue i), Vnonblock (Vvar st) (Vlit (posToValue n)))
                   end)
            (enumerate 0 ns).
+
+Definition create_single_cycle_load (stack : reg) (addr : expr) (dst : reg) : stmnt :=
+  Vnonblock (Vvar dst) (Vload stack addr).
+
+Definition create_single_cycle_store (stack : reg) (addr : expr) (src : reg) : stmnt :=
+  let l0   := Vnonblock (Vvari stack addr) (Vvarb0 src) in
+  let l1   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 1)) (Vvarb1 src) in
+  let l2   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 2)) (Vvarb2 src) in
+  let l3   := Vnonblock (Vvari stack $ Vbinop Vadd addr (Vlit $ ZToValue 3)) (Vvarb3 src)
+  in Vseq l0 $ Vseq l1 $ Vseq l2 $ l3.
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
-    | Inop n' => add_instr n n' Vskip
+    | Inop n' =>
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        add_instr n n' Vskip
+      else error (Errors.msg "State is larger than 2^32.")
     | Iop op args dst n' =>
-      do instr <- translate_instr op args;
-      do _ <- declare_reg None dst 32;
-      add_instr n n' (nonblock dst instr)
-    | Iload mem addr args dst n' =>
-      do src <- translate_arr_access mem addr args stack;
-      do _ <- declare_reg None dst 32;
-      add_instr n n' (nonblock dst src)
-    | Istore mem addr args src n' =>
-      do dst <- translate_arr_access mem addr args stack;
-      add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        do instr <- translate_instr op args;
+        do _ <- declare_reg None dst 32;
+        add_instr n n' (nonblock dst instr)
+      else error (Errors.msg "State is larger than 2^32.")
+    | Iload chunk addr args dst n' =>
+      match chunk with
+      | Mint32 =>
+        if Z.leb (Z.pos n') Integers.Int.max_unsigned
+        then do addr' <- translate_arr_addressing addr args;
+             do _ <- declare_reg None dst 32;
+             add_instr n n' $ create_single_cycle_load stack addr' dst
+        else error (Errors.msg "State is larger than 2^32.")
+      | _ => error (Errors.msg "Iload invalid chunk size.")
+      end
+    | Istore chunk addr args src n' =>
+      match chunk with
+      | Mint32 =>
+        if Z.leb (Z.pos n') Integers.Int.max_unsigned
+        then do addr' <- translate_arr_addressing addr args;
+             add_instr n n' $ create_single_cycle_store stack addr' src
+        else error (Errors.msg "State is larger than 2^32.")
+      | _ => error (Errors.msg "Istore invalid chunk size.")
+      end
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
     | Icond cond args n1 n2 =>
-      do e <- translate_condition cond args;
-      add_branch_instr e n n1 n2
+      if Z.leb (Z.pos n1) Integers.Int.max_unsigned && Z.leb (Z.pos n2) Integers.Int.max_unsigned then
+        do e <- translate_condition cond args;
+        add_branch_instr e n n1 n2
+      else error (Errors.msg "State is larger than 2^32.")
     | Ijumptable r tbl =>
       do s <- get;
       add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
     | Ireturn r =>
       match r with
       | Some r' =>
-        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vvar r')))
+        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r')))
       | None =>
-        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%nat 1%Z))) (block rtrn (Vlit (ZToValue 1%nat 0%Z))))
+        add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z))))
       end
     end
   end.
@@ -512,32 +565,67 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
 
+Definition max_pc_map (m : Maps.PTree.t stmnt) :=
+  PTree.fold (fun m pc i => Pos.max m pc) m 1%positive.
+
+Lemma max_pc_map_sound:
+  forall m pc i, m!pc = Some i -> Ple pc (max_pc_map m).
+Proof.
+  intros until i. unfold max_pc_function.
+  apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
+  (* extensionality *)
+  intros. apply H0. rewrite H; auto.
+  (* base case *)
+  rewrite PTree.gempty. congruence.
+  (* inductive case *)
+  intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
+  inv H2. xomega.
+  apply Ple_trans with a. auto. xomega.
+Qed.
+
+Lemma max_pc_wf :
+  forall m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+            map_well_formed m.
+Proof.
+  unfold map_well_formed. intros.
+  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
+  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
+  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
+  simplify. transitivity (Z.pos (max_pc_map m)); eauto.
+Qed.
+
 Definition transf_module (f: function) : mon module :=
   if stack_correct f.(fn_stacksize) then
-  do fin <- create_reg (Some Voutput) 1;
-  do rtrn <- create_reg (Some Voutput) 32;
-  do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-  do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
-  do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
-  do start <- create_reg (Some Vinput) 1;
-  do rst <- create_reg (Some Vinput) 1;
-  do clk <- create_reg (Some Vinput) 1;
-  do current_state <- get;
-  ret (mkmodule
-         f.(RTL.fn_params)
-         current_state.(st_datapath)
-         current_state.(st_controllogic)
-         f.(fn_entrypoint)
-         current_state.(st_st)
-         stack
-         stack_len
-         fin
-         rtrn
-         start
-         rst
-         clk
-         current_state.(st_scldecls)
-         current_state.(st_arrdecls))
+    do fin <- create_reg (Some Voutput) 1;
+    do rtrn <- create_reg (Some Voutput) 32;
+    do (stack, stack_len) <- create_arr None 8 (Z.to_nat f.(fn_stacksize));
+    do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+    do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
+    do start <- create_reg (Some Vinput) 1;
+    do rst <- create_reg (Some Vinput) 1;
+    do clk <- create_reg (Some Vinput) 1;
+    do current_state <- get;
+    match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
+          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
+    | left LEDATA, left LECTRL =>
+        ret (mkmodule
+           f.(RTL.fn_params)
+           current_state.(st_datapath)
+           current_state.(st_controllogic)
+           f.(fn_entrypoint)
+           current_state.(st_st)
+           stack
+           stack_len
+           fin
+           rtrn
+           start
+           rst
+           clk
+           current_state.(st_scldecls)
+           current_state.(st_arrdecls)
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
+    | _, _ => error (Errors.msg "More than 2^32 states.")
+    end
   else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=

@@ -29,11 +29,9 @@ Require Import Lia.
 
 Import ListNotations.
 
-From coqup Require Import common.Coquplib common.Show verilog.Value AssocMap Array.
-From compcert Require Integers Events.
-From compcert Require Import Errors Smallstep Globalenvs.
-
-Import HexNotationValue.
+From coqup Require Import common.Coquplib common.Show verilog.ValueInt IntegerExtra AssocMap Array.
+From compcert Require Events.
+From compcert Require Import Integers Errors Smallstep Globalenvs.
 
 Local Open Scope assocmap.
 
@@ -80,7 +78,7 @@ Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
   | None => None
-  | Some arr => Some (Option.default (NToValue 32 0) (Option.join (array_get_error i arr)))
+  | Some arr => Some (Option.default (NToValue 0) (Option.join (array_get_error i arr)))
   end.
 
 Definition arr_assocmap_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
@@ -145,7 +143,8 @@ Inductive binop : Type :=
 | Vxor : binop  (** xor (binary [^|]) *)
 | Vshl : binop  (** shift left ([<<]) *)
 | Vshr : binop (** shift right ([>>>]) *)
-| Vshru : binop. (** shift right unsigned ([>>]) *)
+| Vshru : binop (** shift right unsigned ([>>]) *)
+| Vror : binop. (** shift right unsigned ([>>]) *)
 
 (** ** Unary Operators *)
 
@@ -156,16 +155,21 @@ Inductive unop : Type :=
 (** ** Expressions *)
 
 Inductive expr : Type :=
-| Vlit : value -> expr
-| Vvar : reg -> expr
-| Vvari : reg -> expr -> expr
+| Vlit : value -> expr                    (** literal *)
+| Vvar : reg -> expr                      (** reg *)
+| Vvarb0 : reg -> expr                    (** 1st byte projection of reg *)
+| Vvarb1 : reg -> expr
+| Vvarb2 : reg -> expr
+| Vvarb3 : reg -> expr
+| Vvari : reg -> expr -> expr              (** array *)
 | Vinputvar : reg -> expr
 | Vbinop : binop -> expr -> expr -> expr
 | Vunop : unop -> expr -> expr
-| Vternary : expr -> expr -> expr -> expr.
+| Vternary : expr -> expr -> expr -> expr
+| Vload : reg -> expr -> expr.    (** 4-byte concatenation load *)
 
-Definition posToExpr (sz : nat) (p : positive) : expr :=
-  Vlit (posToValue sz p).
+Definition posToExpr (p : positive) : expr :=
+  Vlit (posToValue p).
 
 (** ** Statements *)
 
@@ -245,12 +249,9 @@ Definition program := AST.program fundef unit.
 (** Convert a [positive] to an expression directly, setting it to the right
     size. *)
 Definition posToLit (p : positive) : expr :=
-  Vlit (posToValueAuto p).
+  Vlit (posToValue p).
 
-Coercion Vlit : value >-> expr.
-Coercion Vvar : reg >-> expr.
-
-Definition fext := assocmap.
+Definition fext := unit.
 Definition fextclk := nat -> fext.
 
 (** ** State
@@ -298,81 +299,99 @@ Inductive state : Type :=
            (m : module)
            (args : list value), state.
 
-Definition binop_run (op : binop) : forall v1 v2 : value, vsize v1 = vsize v2 -> value :=
+Definition binop_run (op : binop) (v1 v2 : value) : option value :=
   match op with
-  | Vadd => vplus
-  | Vsub => vminus
-  | Vmul => vmul
-  | Vdiv => vdivs
-  | Vdivu => vdiv
-  | Vmod => vmods
-  | Vmodu => vmod
-  | Vlt => vlts
-  | Vltu => vlt
-  | Vgt => vgts
-  | Vgtu => vgt
-  | Vle => vles
-  | Vleu => vle
-  | Vge => vges
-  | Vgeu => vge
-  | Veq => veq
-  | Vne => vne
-  | Vand => vand
-  | Vor => vor
-  | Vxor => vxor
-  | Vshl => vshl
-  | Vshr => vshr
-  | Vshru => vshr (* FIXME: should not be the same operation. *)
+  | Vadd => Some (Int.add v1 v2)
+  | Vsub => Some (Int.sub v1 v2)
+  | Vmul => Some (Int.mul v1 v2)
+  | Vdiv => if Int.eq v2 Int.zero
+               || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
+            then None
+            else Some (Int.divs v1 v2)
+  | Vdivu => if Int.eq v2 Int.zero then None else Some (Int.divu v1 v2)
+  | Vmod => if Int.eq v2 Int.zero
+               || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
+            then None
+            else Some (Int.mods v1 v2)
+  | Vmodu => if Int.eq v2 Int.zero then None else Some (Int.modu v1 v2)
+  | Vlt => Some (boolToValue (Int.lt v1 v2))
+  | Vltu => Some (boolToValue (Int.ltu v1 v2))
+  | Vgt => Some (boolToValue (Int.lt v2 v1))
+  | Vgtu => Some (boolToValue (Int.ltu v2 v1))
+  | Vle => Some (boolToValue (negb (Int.lt v2 v1)))
+  | Vleu => Some (boolToValue (negb (Int.ltu v2 v1)))
+  | Vge => Some (boolToValue (negb (Int.lt v1 v2)))
+  | Vgeu => Some (boolToValue (negb (Int.ltu v1 v2)))
+  | Veq => Some (boolToValue (Int.eq v1 v2))
+  | Vne => Some (boolToValue (negb (Int.eq v1 v2)))
+  | Vand => Some (Int.and v1 v2)
+  | Vor => Some (Int.or v1 v2)
+  | Vxor => Some (Int.xor v1 v2)
+  | Vshl => Some (Int.shl v1 v2)
+  | Vshr => Some (Int.shr v1 v2)
+  | Vshru => Some (Int.shru v1 v2)
+  | Vror => Some (Int.ror v1 v2)
   end.
 
-Definition unop_run (op : unop) : value -> value :=
+Definition unop_run (op : unop) (v1 : value) : value :=
   match op with
-  | Vneg => vnot
-  | Vnot => vbitneg
+  | Vneg => Int.neg v1
+  | Vnot => Int.not v1
   end.
 
 Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop :=
   | erun_Vlit :
-      forall fext reg stack v,
-      expr_runp fext reg stack (Vlit v) v
+      forall fext asr asa v,
+      expr_runp fext asr asa (Vlit v) v
   | erun_Vvar :
-      forall fext reg stack v r,
-      reg#r = v ->
-      expr_runp fext reg stack (Vvar r) v
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvar r) v
+  | erun_Vvarb0 :
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb0 r) (IntExtra.ibyte0 v)
+  | erun_Vvarb1 :
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb1 r) (IntExtra.ibyte1 v)
+  | erun_Vvarb2 :
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb2 r) (IntExtra.ibyte2 v)
+  | erun_Vvarb3 :
+      forall fext asr asa v r,
+      asr#r = v ->
+      expr_runp fext asr asa (Vvarb3 r) (IntExtra.ibyte3 v)
   | erun_Vvari :
-      forall fext reg stack v iexp i r,
-      expr_runp fext reg stack iexp i ->
-      arr_assocmap_lookup stack r (valueToNat i) = Some v ->
-      expr_runp fext reg stack (Vvari r iexp) v
-  | erun_Vinputvar :
-      forall fext reg stack r v,
-      fext!r = Some v ->
-      expr_runp fext reg stack (Vinputvar r) v
+      forall fext asr asa v iexp i r,
+      expr_runp fext asr asa iexp i ->
+      arr_assocmap_lookup asa r (valueToNat i) = Some v ->
+      expr_runp fext asr asa (Vvari r iexp) v
   | erun_Vbinop :
-      forall fext reg stack op l r lv rv oper EQ resv,
-      expr_runp fext reg stack l lv ->
-      expr_runp fext reg stack r rv ->
-      oper = binop_run op ->
-      resv = oper lv rv EQ ->
-      expr_runp fext reg stack (Vbinop op l r) resv
+      forall fext asr asa op l r lv rv resv,
+      expr_runp fext asr asa l lv ->
+      expr_runp fext asr asa r rv ->
+      Some resv = binop_run op lv rv ->
+      expr_runp fext asr asa (Vbinop op l r) resv
   | erun_Vunop :
-      forall fext reg stack u vu op oper resv,
-      expr_runp fext reg stack u vu ->
+      forall fext asr asa u vu op oper resv,
+      expr_runp fext asr asa u vu ->
       oper = unop_run op ->
       resv = oper vu ->
-      expr_runp fext reg stack (Vunop op u) resv
+      expr_runp fext asr asa (Vunop op u) resv
   | erun_Vternary_true :
-      forall fext reg stack c ts fs vc vt,
-      expr_runp fext reg stack c vc ->
-      expr_runp fext reg stack ts vt ->
+      forall fext asr asa c ts fs vc vt,
+      expr_runp fext asr asa c vc ->
+      expr_runp fext asr asa ts vt ->
       valueToBool vc = true ->
-      expr_runp fext reg stack (Vternary c ts fs) vt
+      expr_runp fext asr asa (Vternary c ts fs) vt
   | erun_Vternary_false :
-      forall fext reg stack c ts fs vc vf,
-      expr_runp fext reg stack c vc ->
-      expr_runp fext reg stack fs vf ->
+      forall fext asr asa c ts fs vc vf,
+      expr_runp fext asr asa c vc ->
+      expr_runp fext asr asa fs vf ->
       valueToBool vc = false ->
-      expr_runp fext reg stack (Vternary c ts fs) vf.
+      expr_runp fext asr asa (Vternary c ts fs) vf.
 Hint Constructors expr_runp : verilog.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
@@ -391,11 +410,11 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
-Definition access_fext (f : fext) (r : reg) : res value :=
+(*Definition access_fext (f : fext) (r : reg) : res value :=
   match AssocMap.get r f with
   | Some v => OK v
-  | _ => OK (ZToValue 1 0)
-  end.
+  | _ => OK (ZToValue 0)
+  end.*)
 
 (* TODO FIX Vvar case without default *)
 (*Fixpoint expr_run (assoc : assocmap) (e : expr)
@@ -432,8 +451,8 @@ Inductive location : Type :=
 | LocArray (_ : reg) (_ : nat).
 
 Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> Prop :=
-| Base : forall f asr asa r, location_is f asr asa (Vvar r) (LocReg r)
-| Indexed : forall f asr asa r iexp iv,
+| Reg : forall f asr asa r, location_is f asr asa (Vvar r) (LocReg r)
+| RegIndexed : forall f asr asa r iexp iv,
   expr_runp f asr asa iexp iv ->
   location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).
 
@@ -519,7 +538,7 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     forall f st1 st2 asr0 asa0 asr1 asa1 asr2 asa2,
     stmnt_runp f asr0 asa0 st1 asr1 asa1 ->
     stmnt_runp f asr1 asa1 st2 asr2 asa2 ->
-    stmnt_runp f asr0 asa1 (Vseq st1 st2) asr2 asa2
+    stmnt_runp f asr0 asa0 (Vseq st1 st2) asr2 asa2
 | stmnt_runp_Vcond_true:
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
@@ -530,7 +549,7 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
     valueToBool vc = false ->
-    stmnt_runp f asr0 asa0 stt asr1 asa1 ->
+    stmnt_runp f asr0 asa0 stf asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
 | stmnt_runp_Vcase_nomatch:
     forall e ve asr0 asa0 f asr1 asa1 me mve sc cs def,
@@ -599,7 +618,7 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
                      module_item -> reg_associations -> arr_associations -> Prop :=
 | mi_stepp_Valways :
     forall f sr0 sa0 st sr1 sa1 c,
-    stmnt_runp f sr0 sa0 st sr1 sa0 ->
+    stmnt_runp f sr0 sa0 st sr1 sa1 ->
     mi_stepp f sr0 sa0 (Valways c st) sr1 sa1
 | mi_stepp_Valways_ff :
     forall f sr0 sa0 st sr1 sa1 c,
@@ -610,8 +629,8 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
     stmnt_runp f sr0 sa0 st sr1 sa1 ->
     mi_stepp f sr0 sa0 (Valways_comb c st) sr1 sa1
 | mi_stepp_Vdecl :
-    forall f sr sa lhs rhs io,
-    mi_stepp f sr sa (Vdeclaration (Vdecl io lhs rhs)) sr sa.
+    forall f sr sa d,
+    mi_stepp f sr sa (Vdeclaration d) sr sa.
 Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
@@ -650,11 +669,11 @@ Fixpoint mi_run (f : fextclk) (assoc : assocmap) (m : list module_item) (n : nat
 assumed to be the starting state of the module, and may have to be changed if
 other arguments to the module are also to be supported. *)
 
-Definition initial_fextclk (m : module) : fextclk :=
+(*Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
-           | S O => (AssocMap.set (mod_reset m) (ZToValue 1 1) empty_assocmap)
-           | _ => (AssocMap.set (mod_reset m) (ZToValue 1 0) empty_assocmap)
-           end.
+           | S O => (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)
+           | _ => (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)
+           end.*)
 
 (*Definition module_run (n : nat) (m : module) : res assocmap :=
   mi_run (initial_fextclk m) empty_assocmap (mod_body m) n.*)
@@ -713,6 +732,8 @@ Definition empty_stack (m : module) : assocmap_arr :=
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
       forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
+      asr!(m.(mod_reset)) = Some (ZToValue 0) ->
+      asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
       mis_stepp f (mkassociations asr empty_assocmap)
@@ -727,22 +748,23 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall asr asa sf retval m st g,
-    asr!(m.(mod_finish)) = Some (1'h"1") ->
+    asr!(m.(mod_finish)) = Some (ZToValue 1) ->
     asr!(m.(mod_return)) = Some retval ->
     step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
 | step_call :
     forall g res m args,
     step g (Callstate res m args) Events.E0
          (State res m m.(mod_entrypoint)
-          (AssocMap.set m.(mod_st) (posToValue 32 m.(mod_entrypoint))
-           (init_params args m.(mod_args)))
+          (AssocMap.set (mod_reset m) (ZToValue 0)
+           (AssocMap.set (mod_finish m) (ZToValue 0)
+            (AssocMap.set m.(mod_st) (posToValue m.(mod_entrypoint))
+             (init_params args m.(mod_args)))))
           (empty_stack m))
 | step_return :
     forall g m asr i r sf pc mst asa,
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
-         (State sf m pc ((asr # mst <- (posToValue 32 pc)) # r <- i)
-                (empty_stack m)).
+         (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
 Hint Constructors step : verilog.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -761,3 +783,138 @@ Inductive final_state : state -> Integers.int -> Prop :=
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
+
+Lemma expr_runp_determinate :
+  forall f e asr asa v,
+  expr_runp f asr asa e v ->
+  forall v',
+  expr_runp f asr asa e v' ->
+  v' = v.
+Proof.
+  induction e; intros;
+
+  repeat (try match goal with
+              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb0 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb1 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb2 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvarb3 _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vload _ _) _ |- _ ] => invert H
+
+              | [ H1 : forall asr asa v, expr_runp _ asr asa ?e v -> _,
+                  H2 : expr_runp _ _ _ ?e _ |- _ ] =>
+                learn (H1 _ _ _ H2)
+              | [ H1 : forall v, expr_runp _ ?asr ?asa ?e v -> _,
+                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
+                learn (H1 _ H2)
+              end; crush).
+Qed.
+Hint Resolve expr_runp_determinate : verilog.
+
+Lemma location_is_determinate :
+  forall f asr asa e l,
+  location_is f asr asa e l ->
+  forall l',
+  location_is f asr asa e l' ->
+  l' = l.
+Proof.
+  induction 1; intros;
+
+  repeat (try match goal with
+              | [ H : location_is _ _ _ _ _ |- _ ] => invert H
+              | [ H1 : expr_runp _ ?asr ?asa ?e _,
+                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
+                learn (expr_runp_determinate H1 H2)
+              end; crush).
+Qed.
+
+Lemma stmnt_runp_determinate :
+  forall f s asr0 asa0 asr1 asa1,
+  stmnt_runp f asr0 asa0 s asr1 asa1 ->
+  forall asr1' asa1',
+  stmnt_runp f asr0 asa0 s asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+  induction 1; intros;
+
+  repeat (try match goal with
+             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (_ :: _) _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ []  _) _ _ |- _ ] => invert H
+
+             | [ H1 : expr_runp _ ?asr ?asa ?e _,
+                 H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
+               learn (expr_runp_determinate H1 H2)
+
+             | [ H1 : location_is _ ?asr ?asa ?e _,
+                 H2 : location_is _ ?asr ?asa ?e _ |- _ ] =>
+               learn (location_is_determinate H1 H2)
+
+             | [ H1 : forall asr1 asa1, stmnt_runp _ ?asr0 ?asa0 ?s asr1 asa1 -> _,
+                 H2 : stmnt_runp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+               learn (H1 _ _ H2)
+              end; crush).
+Qed.
+Hint Resolve stmnt_runp_determinate : verilog.
+
+Lemma mi_stepp_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mi_stepp f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mi_stepp f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  intros. destruct m; invert H; invert H0;
+
+  repeat (try match goal with
+              | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
+                  H2 : stmnt_runp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (stmnt_runp_determinate H1 H2)
+              end; crush).
+Qed.
+
+Lemma mis_stepp_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mis_stepp f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mis_stepp f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  induction 1; intros;
+
+  repeat (try match goal with
+              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] => invert H
+              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+
+              | [ H1 : mi_stepp _ ?asr0 ?asa0 ?s _ _,
+                  H2 : mi_stepp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (mi_stepp_determinate H1 H2)
+
+             | [ H1 : forall asr1 asa1, mis_stepp _ ?asr0 ?asa0 ?m asr1 asa1 -> _,
+                 H2 : mis_stepp _ ?asr0 ?asa0 ?m _ _ |- _ ] =>
+               learn (H1 _ _ H2)
+              end; crush).
+Qed.
+
+Lemma semantics_determinate :
+  forall (p: program), Smallstep.determinate (semantics p).
+Proof.
+  intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
+  - invert H; invert H0; constructor. (* Traces are always empty *)
+  - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
+    pose proof (mis_stepp_determinate H5 H15).
+    crush.
+  - constructor. invert H; crush.
+  - invert H; invert H0; unfold ge0, ge1 in *; crush.
+  - red; simplify; intro; invert H0; invert H; crush.
+  - invert H; invert H0; crush.
+Qed.
