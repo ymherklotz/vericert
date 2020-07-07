@@ -17,7 +17,7 @@
  *)
 
 From compcert Require RTL Registers AST.
-From compcert Require Import Integers Globalenvs Memory.
+From compcert Require Import Integers Globalenvs Memory Linking.
 From coqup Require Import Coquplib HTLgenspec HTLgen ValueInt AssocMap Array IntegerExtra ZExtra.
 From coqup Require HTL Verilog.
 
@@ -124,11 +124,30 @@ Definition match_prog (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp /\
   main_is_internal p = true.
 
-Definition match_prog_matches :
-  forall p tp,
-    match_prog p tp ->
-    Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
-  Proof. intros. unfold match_prog in H. tauto. Qed.
+Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
+  TransfLink (fun (p1: RTL.program) (p2: HTL.program) => match_prog p1 p2).
+Proof.
+  red. intros. exfalso. destruct (link_linkorder _ _ _ H) as [LO1 LO2].
+  apply link_prog_inv in H.
+
+  unfold match_prog in *.
+  unfold main_is_internal in *. simplify. repeat (unfold_match H4).
+  repeat (unfold_match H3). simplify.
+  subst. rewrite H0 in *. specialize (H (AST.prog_main p2)).
+  exploit H.
+  apply Genv.find_def_symbol. exists b. split.
+  assumption. apply Genv.find_funct_ptr_iff. eassumption.
+  apply Genv.find_def_symbol. exists b0. split.
+  assumption. apply Genv.find_funct_ptr_iff. eassumption.
+  intros. inv H3. inv H5. destruct H6. inv H5.
+Qed.
+
+Definition match_prog' (p: RTL.program) (tp: HTL.program) :=
+  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+
+Lemma match_prog_matches :
+  forall p tp, match_prog p tp -> match_prog' p tp.
+Proof. unfold match_prog. tauto. Qed.
 
 Lemma transf_program_match:
   forall p tp, HTLgen.transl_program p = Errors.OK tp -> match_prog p tp.
@@ -368,6 +387,56 @@ Section CORRECTNESS.
     rewrite H. auto.
   Qed.
 
+  Lemma op_stack_based :
+    forall F V sp v m args rs op ge pc' res0 pc f e fin rtrn st stk,
+      tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
+               (Verilog.Vnonblock (Verilog.Vvar res0) e)
+               (state_goto st pc') ->
+      reg_stack_based_pointers sp rs ->
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
+      @Op.eval_operation F V ge (Values.Vptr sp Ptrofs.zero) op
+                        (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some v ->
+      stack_based v sp.
+  Proof.
+    Ltac solve_no_ptr :=
+      match goal with
+      | H: reg_stack_based_pointers ?sp ?rs |- stack_based (Registers.Regmap.get ?r ?rs) _ =>
+        solve [apply H]
+      | H1: reg_stack_based_pointers ?sp ?rs, H2: Registers.Regmap.get _ _ = Values.Vptr ?b ?i
+        |- context[Values.Vptr ?b _] =>
+        let H := fresh "H" in
+        assert (H: stack_based (Values.Vptr b i) sp) by (rewrite <- H2; apply H1); simplify; solve [auto]
+      | |- context[Registers.Regmap.get ?lr ?lrs] =>
+        destruct (Registers.Regmap.get lr lrs) eqn:?; simplify; auto
+      | |- stack_based (?f _) _ => unfold f
+      | |- stack_based (?f _ _) _ => unfold f
+      | |- stack_based (?f _ _ _) _ => unfold f
+      | |- stack_based (?f _ _ _ _) _ => unfold f
+      | H: ?f _ _ = Some _ |- _ =>
+        unfold f in H; repeat (unfold_match H); inv H
+      | H: ?f _ _ _ _ _ _ = Some _ |- _ =>
+        unfold f in H; repeat (unfold_match H); inv H
+      | H: map (fun r : positive => Registers.Regmap.get r _) ?args = _ |- _ =>
+        destruct args; inv H
+      | |- context[if ?c then _ else _] => destruct c; try discriminate
+      | H: match _ with _ => _ end = Some _ |- _ => repeat (unfold_match H)
+      | |- context[match ?g with _ => _ end] => destruct g; try discriminate
+      | |- _ => simplify; solve [auto]
+      end.
+    intros F V sp v m args rs op g pc' res0 pc f e fin rtrn st stk INSTR RSBP SEL EVAL.
+    inv INSTR. unfold translate_instr in H5.
+    unfold_match H5; repeat (unfold_match H5); repeat (simplify; solve_no_ptr).
+  Qed.
+
+  Lemma int_inj :
+    forall x y,
+      Int.unsigned x = Int.unsigned y ->
+      x = y.
+  Proof.
+    intros. rewrite <- Int.repr_unsigned at 1. rewrite <- Int.repr_unsigned.
+    rewrite <- H. trivial.
+  Qed.
+
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
       match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
@@ -377,36 +446,85 @@ Section CORRECTNESS.
       translate_instr op args s = OK e s' i ->
       exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
   Proof.
+    Ltac eval_correct_tac :=
+      match goal with
+      | |- context[valueToPtr] => unfold valueToPtr
+      | |- context[valueToInt] => unfold valueToInt
+      | |- context[bop] => unfold bop
+      | |- context[boplit] => unfold boplit
+      | |- val_value_lessdef Values.Vundef _ => solve [constructor]
+      | H : val_value_lessdef _ _ |- val_value_lessdef (Values.Vint _) _ => constructor; inv H
+      | |- val_value_lessdef (Values.Vint _) _ => constructor; auto
+      | H : context[RTL.max_reg_function ?f]
+        |- context[_ (Registers.Regmap.get ?r ?rs) (Registers.Regmap.get ?r0 ?rs)] =>
+        let HPle1 := fresh "HPle" in
+        let HPle2 := fresh "HPle" in
+        assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        assert (HPle2 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H in HPle1; apply H in HPle2; eexists; split;
+        [econstructor; eauto; constructor; trivial | inv HPle1; inv HPle2; try (constructor; auto)]
+      | H : context[RTL.max_reg_function ?f]
+        |- context[_ (Registers.Regmap.get ?r ?rs) _] =>
+        let HPle1 := fresh "HPle" in
+        assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H in HPle1; eexists; split;
+        [econstructor; eauto; constructor; trivial | inv HPle1; try (constructor; auto)]
+      | H : _ :: _ = _ :: _ |- _ => inv H
+      | |- context[match ?d with _ => _ end] => destruct d eqn:?; try discriminate
+      | |- Verilog.expr_runp _ _ _ _ _ => econstructor
+      | |- val_value_lessdef (?f _ _) _ => unfold f
+      | |- val_value_lessdef (?f _) _ => unfold f
+      | H : ?f (Registers.Regmap.get _ _) _ = Some _ |- _ =>
+        unfold f in H; repeat (unfold_match H)
+      | H1 : Registers.Regmap.get ?r ?rs = Values.Vint _, H2 : val_value_lessdef (Registers.Regmap.get ?r ?rs) _
+        |- _ => rewrite H1 in H2; inv H2
+      | |- _ => eexists; split; try constructor; solve [eauto]
+      | H : context[RTL.max_reg_function ?f] |- context[_ (Verilog.Vvar ?r) (Verilog.Vvar ?r0)] =>
+        let HPle1 := fresh "H" in
+        let HPle2 := fresh "H" in
+        assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        assert (HPle2 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H in HPle1; apply H in HPle2; eexists; split; try constructor; eauto
+      | H : context[RTL.max_reg_function ?f] |- context[Verilog.Vvar ?r] =>
+        let HPle := fresh "H" in
+        assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
+        apply H in HPle; eexists; split; try constructor; eauto
+      | |- context[if ?c then _ else _] => destruct c eqn:?; try discriminate
+      end.
     intros s sp op rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st MSTATE INSTR EVAL TR_INSTR.
     inv MSTATE. inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
-    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); simplify.
-    - inv Heql.
-      assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
-      apply H in HPle. eexists. split; try constructor; eauto.
-    - eexists. split. constructor. constructor. auto.
-    - inv Heql.
-      assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
-      apply H in HPle.
-      eexists. split. econstructor; eauto. constructor. trivial.
-      unfold Verilog.unop_run. unfold Values.Val.neg. destruct (Registers.Regmap.get r rs) eqn:?; constructor.
-      inv HPle. auto.
-    - inv Heql.
-      assert (HPle : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
-      assert (HPle0 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
-      apply H in HPle. apply H in HPle0.
-      eexists. split. econstructor; eauto. constructor. trivial.
-      constructor. trivial. simplify. inv HPle. inv HPle0; constructor; auto.
-      + inv HPle0. constructor. unfold valueToPtr. Search Integers.Ptrofs.sub Integers.int.
-        pose proof Integers.Ptrofs.agree32_sub. unfold Integers.Ptrofs.agree32 in H3.
-        Print Integers.Ptrofs.agree32. unfold Ptrofs.of_int. simpl.
-        apply ptrofs_inj. assert (Archi.ptr64 = false) by auto. eapply H3 in H4.
-        rewrite Ptrofs.unsigned_repr. apply H4. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
-        apply Int.unsigned_range_2.
-        auto. rewrite Ptrofs.unsigned_repr. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
-        apply Int.unsigned_range_2. rewrite Ptrofs.unsigned_repr. auto.
-        replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
-        apply Int.unsigned_range_2.
-        Admitted.
+    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
+    repeat (simplify; eval_correct_tac; unfold valueToInt in *).
+    - pose proof Integers.Ptrofs.agree32_sub as H2; unfold Integers.Ptrofs.agree32 in H2.
+      unfold Ptrofs.of_int. simpl.
+      apply ptrofs_inj. assert (Archi.ptr64 = false) by auto. eapply H2 in H3.
+      rewrite Ptrofs.unsigned_repr. apply H3. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+      apply Int.unsigned_range_2.
+      auto. rewrite Ptrofs.unsigned_repr. replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+      apply Int.unsigned_range_2. rewrite Ptrofs.unsigned_repr. auto.
+      replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+      apply Int.unsigned_range_2.
+    - pose proof Integers.Ptrofs.agree32_sub as AGR; unfold Integers.Ptrofs.agree32 in AGR.
+      assert (ARCH: Archi.ptr64 = false) by auto. eapply AGR in ARCH.
+      apply int_inj. unfold Ptrofs.to_int. rewrite Int.unsigned_repr.
+      apply ARCH. Search Ptrofs.unsigned. pose proof Ptrofs.unsigned_range_2.
+      replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
+      pose proof Ptrofs.agree32_of_int. unfold Ptrofs.agree32 in H2.
+      eapply H2 in ARCH. apply ARCH.
+      pose proof Ptrofs.agree32_of_int. unfold Ptrofs.agree32 in H2.
+      eapply H2 in ARCH. apply ARCH.
+    - admit. (* mulhs *)
+    - admit. (* mulhu *)
+    - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
+    - rewrite Heqb in Heqb0. discriminate.
+    - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
+    - rewrite Heqb in Heqb0. discriminate.
+    - admit.
+    - admit. (* ror *)
+    - admit. (* addressing *)
+    - admit. (* eval_condition *)
+    - admit. (* select *)
+            Admitted.
 
   Lemma eval_cond_correct :
     forall cond (args : list Registers.reg) s1 c s' i rs args m b f asr asa,
@@ -532,7 +650,7 @@ Section CORRECTNESS.
           match_states (RTL.State s f sp pc' (Registers.Regmap.set res0 v rs) m) R2.
   Proof.
     intros s f sp pc rs m op args res0 pc' v H H0 R1 MSTATE.
-    inv_state.
+    inv_state. inv MARR.
     exploit eval_correct; eauto. intros. inversion H1. inversion H2.
     econstructor. split.
     apply Smallstep.plus_one.
@@ -543,74 +661,32 @@ Section CORRECTNESS.
     constructor; trivial.
     econstructor; simpl; eauto.
     simpl. econstructor. econstructor.
-    apply H3. simplify.
+    apply H5. simplify.
 
     all: big_tac.
 
-    assert (Ple res0 (RTL.max_reg_function f))
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
 
-    unfold Ple in H10. lia.
+    unfold Ple in HPle. lia.
     apply regs_lessdef_add_match. assumption.
     apply regs_lessdef_add_greater. unfold Plt; lia. assumption.
-    assert (Ple res0 (RTL.max_reg_function f))
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-    unfold Ple in H12; lia.
-    Admitted.
-(*    unfold_merge. simpl.
-    rewrite AssocMap.gso.
-    apply AssocMap.gss.
-    apply st_greater_than_res.
-
-    (*match_states*)
-      assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
-    rewrite <- H1.
-    constructor; auto.
-    unfold_merge.
-    apply regs_lessdef_add_match.
-    constructor.
-    apply regs_lessdef_add_greater.
-    apply greater_than_max_func.
-    assumption.
-
-    unfold state_st_wf. intros. inversion H2. subst.
-    unfold_merge.
-    rewrite AssocMap.gso.
-    apply AssocMap.gss.
-    apply st_greater_than_res.
-
-     + econstructor. split.
-     apply Smallstep.plus_one.
-     eapply HTL.step_module; eauto.
-     econstructor; simpl; trivial.
-     constructor; trivial.
-     econstructor; simpl; eauto.
-     eapply eval_correct; eauto.
-     constructor. rewrite valueToInt_intToValue. trivial.
-     unfold_merge. simpl.
-     rewrite AssocMap.gso.
-     apply AssocMap.gss.
-     apply st_greater_than_res.
-
-      match_states
-     assert (pc' = valueToPos (posToValue 32 pc')). auto using assumption_32bit.
-     rewrite <- H1.
-     constructor.
-     unfold_merge.
-     apply regs_lessdef_add_match.
-     constructor.
-     symmetry. apply valueToInt_intToValue.
-     apply regs_lessdef_add_greater.
-     apply greater_than_max_func.
-     assumption. assumption.
-
-     unfold state_st_wf. intros. inversion H2. subst.
-     unfold_merge.
-     rewrite AssocMap.gso.
-     apply AssocMap.gss.
-     apply st_greater_than_res.
-     assumption.
-  Admitted.*)
+    unfold Ple in HPle; lia.
+    eapply op_stack_based; eauto.
+    inv CONST. constructor; simplify. rewrite AssocMap.gso. rewrite AssocMap.gso.
+    assumption. lia.
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
+      by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+    unfold Ple in HPle. lia.
+    rewrite AssocMap.gso. rewrite AssocMap.gso.
+    assumption. lia.
+    assert (HPle: Ple res0 (RTL.max_reg_function f))
+      by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+    unfold Ple in HPle. lia.
+    Unshelve. trivial.
+  Qed.
   Hint Resolve transl_iop_correct : htlproof.
 
   Ltac tac :=

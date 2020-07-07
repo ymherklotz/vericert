@@ -158,6 +158,5 @@ Proof.
   destruct v; try discriminate; constructor.
   unfold valToValue in H. inversion H.
   unfold valueToInt. unfold intToValue in H1. auto.
-  inv H. symmetry.
-  unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
+  inv H. symmetry. unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
 Qed.

@@ -250,7 +250,7 @@ Definition program := AST.program fundef unit.
 Definition posToLit (p : positive) : expr :=
   Vlit (posToValue p).
 
-Definition fext := assocmap.
+Definition fext := unit.
 Definition fextclk := nat -> fext.
 
 (** ** State
@@ -366,10 +366,6 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       expr_runp fext asr asa iexp i ->
       arr_assocmap_lookup asa r (valueToNat i) = Some v ->
       expr_runp fext asr asa (Vvari r iexp) v
-  | erun_Vinputvar :
-      forall fext asr asa r v,
-      fext!r = Some v ->
-      expr_runp fext asr asa (Vinputvar r) v
   | erun_Vbinop :
       forall fext asr asa op l r lv rv resv,
       expr_runp fext asr asa l lv ->
@@ -412,11 +408,11 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
-Definition access_fext (f : fext) (r : reg) : res value :=
+(*Definition access_fext (f : fext) (r : reg) : res value :=
   match AssocMap.get r f with
   | Some v => OK v
   | _ => OK (ZToValue 0)
-  end.
+  end.*)
 
 (* TODO FIX Vvar case without default *)
 (*Fixpoint expr_run (assoc : assocmap) (e : expr)
@@ -671,11 +667,11 @@ Fixpoint mi_run (f : fextclk) (assoc : assocmap) (m : list module_item) (n : nat
 assumed to be the starting state of the module, and may have to be changed if
 other arguments to the module are also to be supported. *)
 
-Definition initial_fextclk (m : module) : fextclk :=
+(*Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
            | S O => (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)
            | _ => (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)
-           end.
+           end.*)
 
 (*Definition module_run (n : nat) (m : module) : res assocmap :=
   mi_run (initial_fextclk m) empty_assocmap (mod_body m) n.*)
@@ -912,11 +908,11 @@ Lemma semantics_determinate :
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
-  - invert H; invert H0; crush. assert (f = f0) by admit; subst.
+  - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
     pose proof (mis_stepp_determinate H5 H15).
     crush.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.
   - red; simplify; intro; invert H0; invert H; crush.
   - invert H; invert H0; crush.
-Admitted.
+Qed.
