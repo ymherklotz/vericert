@@ -275,8 +275,8 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
   | Op.Ccompu c, _ => translate_comparison c args
   | Op.Ccompimm c i, _ => translate_comparison_imm c args i
   | Op.Ccompuimm c i, _ => translate_comparison_imm c args i
-  | Op.Cmaskzero n, r::nil => ret (Vbinop Veq (boplit Vand r n) (Vlit (ZToValue 32 0)))
-  | Op.Cmasknotzero n, r::nil => ret (Vbinop Vne (boplit Vand r n) (Vlit (ZToValue 32 0)))
+  | Op.Cmaskzero n, r::nil => ret (Vbinop Veq (boplit Vand r n) (Vlit (ZToValue 0)))
+  | Op.Cmasknotzero n, r::nil => ret (Vbinop Vne (boplit Vand r n) (Vlit (ZToValue 0)))
   | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
