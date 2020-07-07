@@ -169,9 +169,12 @@ let testbench = "module testbench;
 
    always #5 clk = ~clk;
 
+   reg [31:0] count;
+   initial count = 0;
    always @(posedge clk) begin
+      count <= count + 1;
       if (finish == 1) begin
-         $display(\"finished: %d\", return_val);
+         $display(\"finished: %d cycles %d\", return_val, count);
          $finish;
       end
    end
