@@ -468,7 +468,7 @@ Qed.
 
 Lemma ZToValue_eq :
   forall w1,
-  (mkvalue 32 w1) = (ZToValue 32 (wordToZ w1)). Admitted.
+  (mkvalue 32 w1) = (ZToValue 32 (wordToZ w1)). Abort.
 
 Lemma wordsize_32 :
   Int.wordsize = 32%nat.

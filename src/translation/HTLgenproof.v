@@ -513,8 +513,8 @@ Section CORRECTNESS.
       eapply H2 in ARCH. apply ARCH.
       pose proof Ptrofs.agree32_of_int. unfold Ptrofs.agree32 in H2.
       eapply H2 in ARCH. apply ARCH.
-    - admit.
-    - admit.
+    - admit. (* mulhs *)
+    - admit. (* mulhu *)
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
