@@ -80,7 +80,7 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@ Tailcall.transf_program
   @@@ Inlining.transf_program
   @@ Renumber.transf_program
-  @@ Constprop.transf_program
+  (* @@ Constprop.transf_program *)
   @@ Renumber.transf_program
   @@@ CSE.transf_program
   @@@ Deadcode.transf_program
