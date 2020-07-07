@@ -23,12 +23,37 @@ From Coq Require Export
      List
      Bool.
 
+Require Import Lia.
+
 From coqup Require Import Show.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
 From compcert.lib Require Export Coqlib.
-From compcert Require Integers.
+From compcert Require Import Integers.
+
+Local Open Scope Z_scope.
+
+(* This tactic due to Clement Pit-Claudel with some minor additions by JDP to
+   allow the result to be named: https://pit-claudel.fr/clement/MSc/#org96a1b5f *)
+Inductive Learnt {A: Type} (a: A) :=
+  | AlreadyKnown : Learnt a.
+
+Ltac learn_tac fact name :=
+  lazymatch goal with
+  | [ H: Learnt fact |- _ ] =>
+    fail 0 "fact" fact "has already been learnt"
+  | _ => let type := type of fact in
+        lazymatch goal with
+        | [ H: @Learnt type _ |- _ ] =>
+          fail 0 "fact" fact "of type" type "was already learnt through" H
+        | _ => let learnt := fresh "Learn" in
+              pose proof (AlreadyKnown fact) as learnt; pose proof fact as name
+        end
+  end.
+
+Tactic Notation "learn" constr(fact) := let name := fresh "H" in learn_tac fact name.
+Tactic Notation "learn" constr(fact) "as" simple_intropattern(name) := learn_tac fact name.
 
 Ltac unfold_rec c := unfold c; fold c.
 
@@ -44,11 +69,22 @@ Ltac solve_by_invert := solve_by_inverts 1.
 
 Ltac invert x := inversion x; subst; clear x.
 
-Ltac clear_obvious :=
+Ltac destruct_match :=
+  match goal with | [ |- context[match ?x with | _ => _ end ] ] => destruct x end.
+
+Ltac nicify_hypotheses :=
   repeat match goal with
          | [ H : ex _ |- _ ] => invert H
-         | [ H : ?C _ = ?C _ |- _ ] => invert H
+         | [ H : Some _ = Some _ |- _ ] => invert H
+         | [ H : ?x = ?x |- _ ] => clear H
          | [ H : _ /\ _ |- _ ] => invert H
+         end.
+
+Ltac nicify_goals :=
+  repeat match goal with
+         | [ |- _ /\ _ ] => split
+         | [ |- Some _ = Some _ ] => f_equal
+         | [ |- S _ = S _ ] => f_equal
          end.
 
 Ltac kill_bools :=
@@ -117,15 +153,37 @@ Ltac unfold_constants :=
            end
          end.
 
-Ltac simplify := unfold_constants; simpl in *;
-                 repeat (clear_obvious; kill_bools);
-                 simpl in *; try discriminate.
+Ltac substpp :=
+  repeat match goal with
+         | [ H1 : ?x = Some _, H2 : ?x = Some _ |- _ ] =>
+           let EQ := fresh "EQ" in
+           learn H1 as EQ; rewrite H2 in EQ; invert EQ
+         | _ => idtac
+         end.
 
-Global Opaque Nat.div.
-Global Opaque Z.mul.
+Ltac simplify := intros; unfold_constants; simpl in *;
+                 repeat (nicify_hypotheses; nicify_goals; kill_bools; substpp);
+                 simpl in *.
 
 Infix "==nat" := eq_nat_dec (no associativity, at level 50).
 Infix "==Z" := Z.eq_dec (no associativity, at level 50).
+
+Ltac liapp :=
+  repeat match goal with
+         | [ |- (?x | ?y) ] =>
+           match (eval compute in (Z.rem y x ==Z 0)) with
+           | left _ =>
+             let q := (eval compute in (Z.div y x))
+             in exists q; reflexivity
+           | _ => idtac
+          end
+         | _ => idtac
+         end.
+
+Ltac crush := simplify; try discriminate; try congruence; try lia; liapp; try assumption.
+
+Global Opaque Nat.div.
+Global Opaque Z.mul.
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
@@ -177,3 +235,5 @@ Definition debug_show {A B : Type} `{Show A} (a : A) (b : B) : B :=
 
 Definition debug_show_msg {A B : Type} `{Show A} (s : string) (a : A) (b : B) : B :=
   let unused := debug_print (s ++ show a) in b.
+
+Notation "f $ x" := (f x) (at level 60, right associativity, only parsing).

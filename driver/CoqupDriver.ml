@@ -65,6 +65,7 @@ let compile_c_file sourcename ifile ofile =
   set_dest Coqup.PrintClight.destination option_dclight ".light.c";
   set_dest Coqup.PrintCminor.destination option_dcminor ".cm";
   set_dest Coqup.PrintRTL.destination option_drtl ".rtl";
+  set_dest Coqup.PrintHTL.destination option_dhtl ".htl";
   set_dest Coqup.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Coqup.PrintLTL.destination option_dltl ".ltl";
   set_dest Coqup.PrintMach.destination option_dmach ".mach";
@@ -253,6 +254,7 @@ Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -dclight       Save generated Clight in <file>.light.c
   -dcminor       Save generated Cminor in <file>.cm
   -drtl          Save RTL at various optimization points in <file>.rtl.<n>
+  -dhtl          Save HTL before Verilog generation <file>.htl
   -dltl          Save LTL after register allocation in <file>.ltl
   -dmach         Save generated Mach code in <file>.mach
   -dasm          Save generated assembly in <file>.s
@@ -377,6 +379,7 @@ let cmdline_actions =
   Exact "-dclight", Set option_dclight;
   Exact "-dcminor", Set option_dcminor;
   Exact "-drtl", Set option_drtl;
+  Exact "-dhtl", Set option_dhtl;
   Exact "-dltl", Set option_dltl;
   Exact "-dalloctrace", Set option_dalloctrace;
   Exact "-dmach", Set option_dmach;
@@ -388,6 +391,7 @@ let cmdline_actions =
     option_dclight := true;
     option_dcminor := true;
     option_drtl := true;
+    option_dhtl := true;
     option_dltl := true;
     option_dalloctrace := true;
     option_dmach := true;

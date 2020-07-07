@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Verilog Value Compiler.
+From coqup Require Verilog ValueInt Compiler.
 
 From Coq Require DecidableClass.
 
@@ -128,6 +128,7 @@ Extract Constant Compiler.print_Clight => "PrintClight.print_if".
 Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
+Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
@@ -166,7 +167,7 @@ Set Extraction AccessOpaque.
 
 Cd "src/extraction".
 Separate Extraction
-         Verilog.module Value.uvalueToZ coqup.Compiler.transf_hls
+         Verilog.module ValueInt.uvalueToZ coqup.Compiler.transf_hls
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

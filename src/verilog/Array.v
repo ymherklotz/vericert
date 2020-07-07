@@ -29,7 +29,7 @@ Lemma list_set_spec1 {A : Type} :
   forall l i (x : A),
     i < length l -> nth_error (list_set i x l) i = Some x.
 Proof.
-  induction l; intros; destruct i; simplify; try lia; try reflexivity; firstorder.
+  induction l; intros; destruct i; crush; firstorder.
 Qed.
 Hint Resolve list_set_spec1 : array.
 
@@ -37,7 +37,7 @@ Lemma list_set_spec2 {A : Type} :
   forall l i (x : A) d,
     i < length l -> nth i (list_set i x l) d = x.
 Proof.
-  induction l; intros; destruct i; simplify; try lia; try reflexivity; firstorder.
+  induction l; intros; destruct i; crush; firstorder.
 Qed.
 Hint Resolve list_set_spec2 : array.
 
@@ -46,7 +46,7 @@ Lemma list_set_spec3 {A : Type} :
     i1 <> i2 ->
     nth_error (list_set i1 x l) i2 = nth_error l i2.
 Proof.
-  induction l; intros; destruct i1; destruct i2; simplify; try lia; try reflexivity; firstorder.
+  induction l; intros; destruct i1; destruct i2; crush; firstorder.
 Qed.
 Hint Resolve list_set_spec3 : array.
 
@@ -56,7 +56,7 @@ Lemma array_set_wf {A : Type} :
 Proof.
   induction l; intros; destruct i; auto.
 
-  invert H; simplify; auto.
+  invert H; crush; auto.
 Qed.
 
 Definition array_set {A : Type} (i : nat) (x : A) (a : Array A) :=
@@ -72,7 +72,7 @@ Proof.
   intros.
 
   rewrite <- a.(arr_wf) in H.
-  unfold array_set. simplify.
+  unfold array_set. crush.
   eauto with array.
 Qed.
 Hint Resolve array_set_spec1 : array.
@@ -84,7 +84,7 @@ Proof.
   intros.
 
   rewrite <- a.(arr_wf) in H.
-  unfold array_set. simplify.
+  unfold array_set. crush.
   eauto with array.
 Qed.
 Hint Resolve array_set_spec2 : array.
@@ -93,7 +93,7 @@ Lemma array_set_len {A : Type} :
   forall a i (x : A),
     a.(arr_length) = (array_set i x a).(arr_length).
 Proof.
-  unfold array_set. simplify. reflexivity.
+  unfold array_set. crush.
 Qed.
 
 Definition array_get_error {A : Type} (i : nat) (a : Array A) : option A :=
@@ -104,7 +104,7 @@ Lemma array_get_error_equal {A : Type} :
     a.(arr_contents) = b.(arr_contents) ->
     array_get_error i a = array_get_error i b.
 Proof.
-  unfold array_get_error. congruence.
+  unfold array_get_error. crush.
 Qed.
 
 Lemma array_get_error_bound {A : Type} :
@@ -142,7 +142,7 @@ Proof.
 
   unfold array_get_error.
   unfold array_set.
-  simplify.
+  crush.
   eauto with array.
 Qed.
 
@@ -180,18 +180,17 @@ Fixpoint list_repeat' {A : Type} (acc : list A) (a : A) (n : nat) : list A :=
 Lemma list_repeat'_len {A : Type} : forall (a : A) n l,
     length (list_repeat' l a n) = (n + Datatypes.length l)%nat.
 Proof.
-  induction n; intros; simplify; try reflexivity.
+  induction n; intros; crush; try reflexivity.
 
   specialize (IHn (a :: l)).
   rewrite IHn.
-  simplify.
-  lia.
+  crush.
 Qed.
 
 Lemma list_repeat'_app {A : Type} : forall (a : A) n l,
     list_repeat' l a n = list_repeat' [] a n ++ l.
 Proof.
-  induction n; intros; simplify; try reflexivity.
+  induction n; intros; crush; try reflexivity.
 
   pose proof IHn.
   specialize (H (a :: l)).
@@ -207,7 +206,7 @@ Qed.
 Lemma list_repeat'_head_tail {A : Type} : forall n (a : A),
   a :: list_repeat' [] a n = list_repeat' [] a n ++ [a].
 Proof.
-  induction n; intros; simplify; try reflexivity.
+  induction n; intros; crush; try reflexivity.
   rewrite list_repeat'_app.
 
   replace (a :: list_repeat' [] a n ++ [a]) with (list_repeat' [] a n ++ [a] ++ [a]).
@@ -232,17 +231,17 @@ Proof.
   intros.
   unfold list_repeat.
   rewrite list_repeat'_len.
-  simplify. lia.
+  crush.
 Qed.
 
 Lemma dec_list_repeat_spec {A : Type} : forall n (a : A) a',
     (forall x x' : A, {x' = x} + {~ x' = x}) ->
     In a' (list_repeat a n) -> a' = a.
 Proof.
-  induction n; intros; simplify; try contradiction.
+  induction n; intros; crush.
 
   unfold list_repeat in *.
-  simplify.
+  crush.
 
   rewrite list_repeat'_app in H.
   pose proof (X a a').
@@ -278,13 +277,18 @@ Lemma list_repeat_lookup {A : Type} :
 Proof.
   induction n; intros.
 
-  destruct i; simplify; lia.
+  destruct i; crush.
 
   rewrite list_repeat_cons.
-  destruct i; simplify; firstorder.
+  destruct i; crush; firstorder.
 Qed.
 
 Definition arr_repeat {A : Type} (a : A) (n : nat) : Array A := make_array (list_repeat a n).
+
+Lemma arr_repeat_length {A : Type} : forall n (a : A), arr_length (arr_repeat a n) = n.
+Proof.
+  unfold list_repeat. crush. apply list_repeat_len.
+Qed.
 
 Fixpoint list_combine {A B C : Type} (f : A -> B -> C) (x : list A) (y : list B) : list C :=
   match x, y with
@@ -295,9 +299,9 @@ Fixpoint list_combine {A B C : Type} (f : A -> B -> C) (x : list A) (y : list B)
 Lemma list_combine_length {A B C : Type} (f : A -> B -> C) : forall (x : list A) (y : list B),
     length (list_combine f x y) = min (length x) (length y).
 Proof.
-  induction x; intros; simplify; try reflexivity.
+  induction x; intros; crush.
 
-  destruct y; simplify; auto.
+  destruct y; crush; auto.
 Qed.
 
 Definition combine {A B C : Type} (f : A -> B -> C) (x : Array A) (y : Array B) : Array C :=
@@ -310,15 +314,24 @@ Proof.
 
   unfold combine.
   unfold make_array.
-  simplify.
+  crush.
 
   rewrite <- (arr_wf x) in *.
   rewrite <- (arr_wf y) in *.
 
-  destruct (arr_contents x); simplify.
-  - reflexivity.
-  - destruct (arr_contents y); simplify.
-    f_equal.
-    rewrite list_combine_length.
-    destruct (Min.min_dec (length l) (length l0)); congruence.
+  destruct (arr_contents x); destruct (arr_contents y); crush.
+  rewrite list_combine_length.
+  destruct (Min.min_dec (length l) (length l0)); congruence.
 Qed.
+
+Ltac array :=
+  try match goal with
+      | [ |- context[arr_length (combine _ _ _)] ] =>
+        rewrite combine_length
+      | [ |- context[length (list_repeat _ _)] ] =>
+        rewrite list_repeat_len
+      | |- context[array_get_error _ (arr_repeat ?x _) = Some ?x] =>
+        unfold array_get_error, arr_repeat
+      | |- context[nth_error (list_repeat ?x _) _ = Some ?x] =>
+        apply list_repeat_lookup
+      end.

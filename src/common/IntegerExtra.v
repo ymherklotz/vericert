@@ -27,7 +27,7 @@ Module PtrofsExtra.
       rewrite Zmod_mod
     | [ _ : _ |- context[(_ mod Ptrofs.modulus) mod m ] ] =>
       rewrite <- Zmod_div_mod;
-      try (simplify; lia || assumption)
+      try (crush; lia || assumption)
 
     | [ _ : _ |- context[Ptrofs.modulus mod m] ] =>
       rewrite Zdivide_mod with (a := Ptrofs.modulus);
@@ -65,27 +65,26 @@ Module PtrofsExtra.
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
            | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
-           end; try (simplify; lia); ptrofs_mod_tac m.
+           end; try crush; ptrofs_mod_tac m.
   Qed.
 
   Lemma of_int_mod :
     forall x m,
-      Int.signed x mod m = 0 ->
-      Ptrofs.signed (Ptrofs.of_int x) mod m = 0.
+      Int.unsigned x mod m = 0 ->
+      Ptrofs.unsigned (Ptrofs.of_int x) mod m = 0.
   Proof.
     intros.
-    pose proof (Integers.Ptrofs.agree32_of_int eq_refl x) as A.
-    pose proof Ptrofs.agree32_signed.
-    apply H0 in A; try reflexivity.
-    rewrite A. assumption.
+    unfold Ptrofs.of_int.
+    rewrite Ptrofs.unsigned_repr; crush;
+      apply Int.unsigned_range_2.
   Qed.
 
   Lemma mul_mod :
     forall x y m,
       0 < m ->
       (m | Ptrofs.modulus) ->
-      Ptrofs.signed x mod m = 0 ->
-      Ptrofs.signed y mod m = 0 ->
+      Ptrofs.unsigned x mod m = 0 ->
+      Ptrofs.unsigned y mod m = 0 ->
       (Ptrofs.signed (Ptrofs.mul x y)) mod m = 0.
   Proof.
     intros. unfold Ptrofs.mul.
@@ -95,16 +94,15 @@ Module PtrofsExtra.
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
-           end; try (simplify; lia); ptrofs_mod_tac m.
+           end; try(crush; lia); ptrofs_mod_tac m.
   Qed.
 
   Lemma add_mod :
     forall x y m,
       0 < m ->
       (m | Ptrofs.modulus) ->
-      Ptrofs.signed x mod m = 0 ->
-      Ptrofs.signed y mod m = 0 ->
+      Ptrofs.unsigned x mod m = 0 ->
+      Ptrofs.unsigned y mod m = 0 ->
       (Ptrofs.unsigned (Ptrofs.add x y)) mod m = 0.
   Proof.
     intros. unfold Ptrofs.add.
@@ -114,8 +112,7 @@ Module PtrofsExtra.
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Ptrofs.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Ptrofs.unsigned _] ] => rewrite Ptrofs.unsigned_signed
-           end; try (simplify; lia); ptrofs_mod_tac m.
+           end; try (crush; lia); ptrofs_mod_tac m.
   Qed.
 
   Lemma mul_divu :
@@ -156,7 +153,7 @@ Module PtrofsExtra.
     eapply Z.le_trans.
     exact H0.
     rewrite Z.mul_comm.
-    apply Z.le_mul_diag_r; simplify; lia.
+    apply Z.le_mul_diag_r; crush.
   Qed.
 
   Lemma mul_unsigned :
@@ -184,8 +181,25 @@ Module PtrofsExtra.
   Qed.
 End PtrofsExtra.
 
-Module IntExtra.
+Ltac ptrofs :=
+  repeat match goal with
+         | [ |- context[Ptrofs.add (Ptrofs.zero) _] ] => setoid_rewrite Ptrofs.add_zero_l
+         | [ H : context[Ptrofs.add (Ptrofs.zero) _] |- _ ] => setoid_rewrite Ptrofs.add_zero_l in H
 
+         | [ |- context[Ptrofs.repr 0] ] => replace (Ptrofs.repr 0) with Ptrofs.zero by reflexivity
+         | [ H : context[Ptrofs.repr 0] |- _ ] =>
+           replace (Ptrofs.repr 0) with Ptrofs.zero in H by reflexivity
+
+         | [ H: context[Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned _))] |- _ ] =>
+           setoid_rewrite Ptrofs.unsigned_repr in H; [>| apply Ptrofs.unsigned_range_2]
+         | [ |- context[Ptrofs.unsigned (Ptrofs.repr (Ptrofs.unsigned _))] ] =>
+           rewrite Ptrofs.unsigned_repr; [>| apply Ptrofs.unsigned_range_2]
+
+         | [ |- context[0 <= Ptrofs.unsigned _] ] => apply Ptrofs.unsigned_range_2
+         end.
+
+Module IntExtra.
+  Import Int.
   Ltac int_mod_match m :=
     match goal with
     | [ H : ?x = 0 |- context[?x] ] => rewrite H
@@ -202,7 +216,7 @@ Module IntExtra.
       rewrite Zmod_mod
     | [ _ : _ |- context[(_ mod Int.modulus) mod m ] ] =>
       rewrite <- Zmod_div_mod;
-      try (simplify; lia || assumption)
+      try (crush; lia || assumption)
 
     | [ _ : _ |- context[Int.modulus mod m] ] =>
       rewrite Zdivide_mod with (a := Int.modulus);
@@ -226,41 +240,130 @@ Module IntExtra.
   Ltac int_mod_tac m :=
     repeat (int_mod_match m); lia.
 
-  Lemma mul_mod :
+  Lemma mul_mod1 :
     forall x y m,
       0 < m ->
       (m | Int.modulus) ->
-      Int.signed x mod m = 0 ->
-      Int.signed y mod m = 0 ->
-      (Int.signed (Int.mul x y)) mod m = 0.
+      Int.unsigned x mod m = 0 ->
+      (Int.unsigned (Int.mul x y)) mod m = 0.
   Proof.
     intros. unfold Int.mul.
-    rewrite Int.signed_repr_eq.
+    rewrite Int.unsigned_repr_eq.
 
     repeat match goal with
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
-           end; try (simplify; lia); int_mod_tac m.
+           end; try (crush; lia); int_mod_tac m.
+  Qed.
+
+  Lemma mul_mod2 :
+    forall x y m,
+      0 < m ->
+      (m | Int.modulus) ->
+      Int.unsigned y mod m = 0 ->
+      (Int.unsigned (Int.mul x y)) mod m = 0.
+  Proof.
+    intros. unfold Int.mul.
+    rewrite Int.unsigned_repr_eq.
+
+    repeat match goal with
+           | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
+           | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
+             rewrite <- Zmod_div_mod; try lia; try assumption
+           end; try (crush; lia); int_mod_tac m.
   Qed.
 
   Lemma add_mod :
     forall x y m,
       0 < m ->
       (m | Int.modulus) ->
-      Int.signed x mod m = 0 ->
-      Int.signed y mod m = 0 ->
-      (Int.signed (Int.add x y)) mod m = 0.
+      Int.unsigned x mod m = 0 ->
+      Int.unsigned y mod m = 0 ->
+      (Int.unsigned (Int.add x y)) mod m = 0.
   Proof.
     intros. unfold Int.add.
-    rewrite Int.signed_repr_eq.
+    rewrite Int.unsigned_repr_eq.
 
     repeat match goal with
            | [ _ : _ |- context[if ?x then _ else _] ] => destruct x
            | [ _ : _ |- context[_ mod Int.modulus mod m] ] =>
              rewrite <- Zmod_div_mod; try lia; try assumption
-           | [ _ : _ |- context[Int.unsigned _] ] => rewrite Int.unsigned_signed
-           end; try (simplify; lia); int_mod_tac m.
+           end; try (crush; lia); int_mod_tac m.
   Qed.
+
+  Definition ofbytes (a b c d : byte) : int :=
+    or (shl (repr (Byte.unsigned a)) (repr (3 * Byte.zwordsize)))
+       (or (shl (repr (Byte.unsigned b)) (repr (2 * Byte.zwordsize)))
+           (or (shl (repr (Byte.unsigned c)) (repr Byte.zwordsize))
+               (repr (Byte.unsigned d)))).
+
+  Definition byte0 (n: int) : byte := Byte.repr $ unsigned n.
+  Definition ibyte0 (n: int) : int := Int.repr $ Byte.unsigned $ byte0 n.
+
+  Definition byte1 (n: int) : byte := Byte.repr $ unsigned $ shru n $ repr Byte.zwordsize.
+  Definition ibyte1 (n: int) : int := Int.repr $ Byte.unsigned $ byte1 n.
+
+  Definition byte2 (n: int) : byte := Byte.repr $ unsigned $ shru n $ repr (2 * Byte.zwordsize).
+  Definition ibyte2 (n: int) : int := Int.repr $ Byte.unsigned $ byte2 n.
+
+  Definition byte3 (n: int) : byte := Byte.repr $ unsigned $ shru n $ repr (3 * Byte.zwordsize).
+  Definition ibyte3 (n: int) : int := Int.repr $ Byte.unsigned $ byte3 n.
+
+  Lemma bits_byte0:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte0 n) i = testbit n i.
+  Proof.
+    intros. unfold byte0. rewrite Byte.testbit_repr; auto.
+  Qed.
+
+  Lemma bits_byte1:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte1 n) i = testbit n (i + Byte.zwordsize).
+  Proof.
+    intros. unfold byte1. rewrite Byte.testbit_repr; auto.
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    fold (testbit (shru n (repr Byte.zwordsize)) i). rewrite bits_shru.
+    change (unsigned (repr Byte.zwordsize)) with Byte.zwordsize.
+    apply zlt_true. omega. omega.
+  Qed.
+
+  Lemma bits_byte2:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte2 n) i = testbit n (i + (2 * Byte.zwordsize)).
+  Proof.
+    intros. unfold byte2. rewrite Byte.testbit_repr; auto.
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    fold (testbit (shru n (repr (2 * Byte.zwordsize))) i). rewrite bits_shru.
+    change (unsigned (repr (2 * Byte.zwordsize))) with (2 * Byte.zwordsize).
+    apply zlt_true. omega. omega.
+  Qed.
+
+  Lemma bits_byte3:
+    forall n i, 0 <= i < Byte.zwordsize -> Byte.testbit (byte3 n) i = testbit n (i + (3 * Byte.zwordsize)).
+  Proof.
+    intros. unfold byte3. rewrite Byte.testbit_repr; auto.
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    fold (testbit (shru n (repr (3 * Byte.zwordsize))) i). rewrite bits_shru.
+    change (unsigned (repr (3 * Byte.zwordsize))) with (3 * Byte.zwordsize).
+    apply zlt_true. omega. omega.
+  Qed.
+
+  Lemma bits_ofwords:
+    forall b4 b3 b2 b1 i, 0 <= i < zwordsize ->
+                          testbit (ofbytes b4 b3 b2 b1) i =
+                          if zlt i Byte.zwordsize
+                          then Byte.testbit b1 i
+                          else (if zlt i (2 * Byte.zwordsize)
+                                then Byte.testbit b2 (i - Byte.zwordsize)
+                                else (if zlt i (3 * Byte.zwordsize)
+                                      then Byte.testbit b2 (i - 2 * Byte.zwordsize)
+                                      else Byte.testbit b2 (i - 3 * Byte.zwordsize))).
+  Proof.
+    intros. unfold ofbytes. repeat (rewrite bits_or; auto). repeat (rewrite bits_shl; auto).
+    change (unsigned (repr Byte.zwordsize)) with Byte.zwordsize.
+    change (unsigned (repr (2 * Byte.zwordsize))) with (2 * Byte.zwordsize).
+    change (unsigned (repr (3 * Byte.zwordsize))) with (3 * Byte.zwordsize).
+    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
+    destruct (zlt i Byte.zwordsize).
+    rewrite testbit_repr; auto.
+    Abort.
+
 End IntExtra.
