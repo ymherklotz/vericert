@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -29,7 +29,7 @@ Require Import Lia.
 
 Import ListNotations.
 
-From coqup Require Import common.Coquplib common.Show verilog.ValueInt AssocMap Array.
+From vericert Require Import common.Vericertlib common.Show verilog.ValueInt AssocMap Array.
 From compcert Require Events.
 From compcert Require Import Integers Errors Smallstep Globalenvs.
 

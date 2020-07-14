@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Import HTLgenproof.
+From vericert Require Import HTLgenproof.
 
 From compcert.common Require Import
     Errors
@@ -47,7 +47,7 @@ From compcert.cfrontend Require
 From compcert.driver Require
     Compiler.
 
-From coqup Require
+From vericert Require
      Verilog
      Veriloggen
      Veriloggenproof

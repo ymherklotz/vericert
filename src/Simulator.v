@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,8 +20,8 @@
 
 From compcert Require Import Errors.
 
-From coqup Require Compiler Verilog Value.
-From coqup Require Import Coquplib.
+From vericert Require Compiler Verilog Value.
+From vericert Require Import Vericertlib.
 
 Local Open Scope error_monad_scope.
 

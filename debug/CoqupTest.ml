@@ -1,4 +1,4 @@
-open Coqup
+open Vericert
 
 open Test
 open Camlcoq

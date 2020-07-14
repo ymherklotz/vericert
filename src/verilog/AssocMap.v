@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Import Coquplib ValueInt.
+From vericert Require Import Vericertlib ValueInt.
 From compcert Require Import Maps.
 
 Definition reg := positive.

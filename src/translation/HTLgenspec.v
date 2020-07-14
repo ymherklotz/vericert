@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 
 From compcert Require RTL Op Maps Errors.
 From compcert Require Import Maps Integers.
-From coqup Require Import Coquplib Verilog ValueInt HTL HTLgen AssocMap.
+From vericert Require Import Vericertlib Verilog ValueInt HTL HTLgen AssocMap.
 Require Import Lia.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.

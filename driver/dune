@@ -1,5 +1,5 @@
 (include_subdirs no)
 
 (executable
- (name CoqupDriver)
- (libraries coqup))
+ (name VericertDriver)
+ (libraries vericert))

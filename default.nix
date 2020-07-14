@@ -25,7 +25,7 @@ let
       } ) { };
 in
 stdenv.mkDerivation {
-  name = "coqup";
+  name = "vericert";
   src = ./.;
 
   buildInputs = [ ncoq ocamlPackages.menhir dune

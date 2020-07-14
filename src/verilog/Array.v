@@ -1,7 +1,7 @@
 Set Implicit Arguments.
 
 Require Import Lia.
-Require Import Coquplib.
+Require Import Vericertlib.
 From Coq Require Import Lists.List Datatypes.
 
 Import ListNotations.

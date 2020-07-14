@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From coqup Require Verilog Value Compiler.
+From vericert Require Verilog Value Compiler.
 
 From Coq Require DecidableClass.
 
@@ -134,7 +134,7 @@ Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
 Extract Constant Compiler.time  => "Timing.time_coq".
 
-Extract Constant Coquplib.debug_print => "print_newline".
+Extract Constant Vericertlib.debug_print => "print_newline".
 
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 
@@ -167,7 +167,7 @@ Set Extraction AccessOpaque.
 
 Cd "src/extraction".
 Separate Extraction
-         Verilog.module Value.uvalueToZ coqup.Compiler.transf_hls
+         Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

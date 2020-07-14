@@ -1,8 +1,8 @@
--R src/common coqup.common
--R src/extraction coqup.extraction
--R src/translation coqup.translation
--R src/verilog coqup.verilog
--R src coqup
+-R src/common vericert.common
+-R src/extraction vericert.extraction
+-R src/translation vericert.translation
+-R src/verilog vericert.verilog
+-R src vericert
 
 -R lib/CompCert/MenhirLib compcert.MenhirLib
 -R lib/CompCert/backend compcert.backend

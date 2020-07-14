@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 From compcert Require Import Maps.
 From compcert Require Errors.
 From compcert Require Import AST.
-From coqup Require Import Verilog HTL Coquplib AssocMap ValueInt.
+From vericert Require Import Verilog HTL Vericertlib AssocMap ValueInt.
 
 Definition transl_list_fun (a : node * Verilog.stmnt) :=
   let (n, stmnt) := a in

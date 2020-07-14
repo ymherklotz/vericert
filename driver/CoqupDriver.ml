@@ -9,7 +9,7 @@
 (*  under the terms of the INRIA Non-Commercial License Agreement.     *)
 (*                                                                     *)
 (* *********************************************************************)
-(* CoqUp: Verified high-level synthesis.
+(* Vericert: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -27,16 +27,16 @@
  *)
 
 open Printf
-open Coqup.Commandline
-open Coqup.Clflags
-open Coqup.CommonOptions
-open Coqup.Timing
-open Coqup.Driveraux
-open Coqup.Frontend
-open Coqup.Assembler
-open Coqup.Linker
-open Coqup.Diagnostics
-open Coqup.CoqupClflags
+open Vericert.Commandline
+open Vericert.Clflags
+open Vericert.CommonOptions
+open Vericert.Timing
+open Vericert.Driveraux
+open Vericert.Frontend
+open Vericert.Assembler
+open Vericert.Linker
+open Vericert.Diagnostics
+open Vericert.VericertClflags
 
 (* Name used for version string etc. *)
 let tool_name = "C verified high-level synthesis"
@@ -60,45 +60,45 @@ let compile_c_file sourcename ifile ofile =
   let set_dest dst opt ext =
     dst := if !opt then Some (output_filename sourcename ".c" ext)
       else None in
-  set_dest Coqup.Cprint.destination option_dparse ".parsed.c";
-  set_dest Coqup.PrintCsyntax.destination option_dcmedium ".compcert.c";
-  set_dest Coqup.PrintClight.destination option_dclight ".light.c";
-  set_dest Coqup.PrintCminor.destination option_dcminor ".cm";
-  set_dest Coqup.PrintRTL.destination option_drtl ".rtl";
-  set_dest Coqup.PrintHTL.destination option_dhtl ".htl";
-  set_dest Coqup.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
-  set_dest Coqup.PrintLTL.destination option_dltl ".ltl";
-  set_dest Coqup.PrintMach.destination option_dmach ".mach";
-  set_dest Coqup.AsmToJSON.destination option_sdump !sdump_suffix;
+  set_dest Vericert.Cprint.destination option_dparse ".parsed.c";
+  set_dest Vericert.PrintCsyntax.destination option_dcmedium ".compcert.c";
+  set_dest Vericert.PrintClight.destination option_dclight ".light.c";
+  set_dest Vericert.PrintCminor.destination option_dcminor ".cm";
+  set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
+  set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
+  set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
+  set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
+  set_dest Vericert.PrintMach.destination option_dmach ".mach";
+  set_dest Vericert.AsmToJSON.destination option_sdump !sdump_suffix;
   (* Parse the ast *)
   let csyntax = parse_c_file sourcename ifile in
   if not !option_hls then begin
     (* Convert to Asm *)
     let asm =
-      match Coqup.Compiler.apply_partial
-              (Coqup.Compiler.transf_c_program csyntax)
-              Coqup.Asmexpand.expand_program with
-      | Coqup.Errors.OK asm ->
+      match Vericert.Compiler.apply_partial
+              (Vericert.Compiler.transf_c_program csyntax)
+              Vericert.Asmexpand.expand_program with
+      | Vericert.Errors.OK asm ->
         asm
-      | Coqup.Errors.Error msg ->
+      | Vericert.Errors.Error msg ->
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     (* Dump Asm in binary and JSON format *)
-    Coqup.AsmToJSON.print_if asm sourcename;
+    Vericert.AsmToJSON.print_if asm sourcename;
     (* Print Asm in text form *)
     let oc = open_out ofile in
-    Coqup.PrintAsm.print_program oc asm;
+    Vericert.PrintAsm.print_program oc asm;
     close_out oc
   end else begin
     let verilog =
-      match Coqup.Compiler0.transf_hls csyntax with
-      | Coqup.Errors.OK v ->
+      match Vericert.Compiler0.transf_hls csyntax with
+      | Vericert.Errors.OK v ->
         v
-      | Coqup.Errors.Error msg ->
+      | Vericert.Errors.Error msg ->
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     let oc = open_out ofile in
-    Coqup.PrintVerilog.print_program !option_debug_hls oc verilog;
+    Vericert.PrintVerilog.print_program !option_debug_hls oc verilog;
     close_out oc
   end
 
@@ -106,9 +106,9 @@ let compile_c_file sourcename ifile ofile =
 
 let compile_i_file sourcename preproname =
   if !option_interp then begin
-    Coqup.Machine.config := Coqup.Machine.compcert_interpreter !Coqup.Machine.config;
+    Vericert.Machine.config := Vericert.Machine.compcert_interpreter !Vericert.Machine.config;
     let csyntax = parse_c_file sourcename preproname in
-    Coqup.Interp.execute csyntax;
+    Vericert.Interp.execute csyntax;
         ""
   end else if !option_hls then begin
     compile_c_file sourcename preproname
@@ -179,7 +179,7 @@ let process_h_file sourcename =
     fatal_error no_loc "input file %s ignored (not in -E mode)\n" sourcename
 
 let target_help =
-  if Coqup.Configuration.arch = "arm" && Coqup.Configuration.model <> "armv6" then
+  if Vericert.Configuration.arch = "arm" && Vericert.Configuration.model <> "armv6" then
 {|Target processor options:
   -mthumb        Use Thumb2 instruction encoding
   -marm          Use classic ARM instruction encoding
@@ -188,7 +188,7 @@ else
   ""
 
 let toolchain_help =
-  if not Coqup.Configuration.gnu_toolchain then begin
+  if not Vericert.Configuration.gnu_toolchain then begin
 {|Toolchain options:
   -t tof:env     Select target processor for the diab toolchain
 |} end else
@@ -216,7 +216,7 @@ Processing options:
 |} ^
   prepro_help ^
   language_support_help ^
- Coqup.DebugInit.debugging_help ^
+ Vericert.DebugInit.debugging_help ^
 {|Optimization options: (use -fno-<opt> to turn off -f<opt>)
   -O             Optimize the compiled code [on by default]
   -O0            Do not optimize the compiled code
@@ -263,7 +263,7 @@ Code generation options: (use -fno-<opt> to turn off -f<opt>)
 |} ^
   general_help ^
   warning_help ^
-  {|Coqup.Interpreter mode:
+  {|Vericert.Interpreter mode:
   -interp        Execute given .c files using the reference interpreter
   -quiet         Suppress diagnostic messages for the interpreter
   -trace         Have the interpreter produce a detailed trace of reductions
@@ -275,7 +275,7 @@ let print_usage_and_exit () =
   printf "%s" usage_string; exit 0
 
 let enforce_buildnr nr =
-  let build = int_of_string Coqup.Version.buildnr in
+  let build = int_of_string Vericert.Version.buildnr in
   if nr != build then
     fatal_error no_loc "Mismatching builds: This is CompCert build %d, but QSK requires build %d.\n\
 Please use matching builds of QSK and CompCert." build nr
@@ -283,7 +283,7 @@ Please use matching builds of QSK and CompCert." build nr
 let dump_mnemonics destfile =
   let oc = open_out_bin destfile in
   let pp = Format.formatter_of_out_channel oc in
-  Coqup.AsmToJSON.pp_mnemonics pp;
+  Vericert.AsmToJSON.pp_mnemonics pp;
   Format.pp_print_flush pp ();
   close_out oc;
   exit 0
@@ -320,7 +320,7 @@ let cmdline_actions =
 (* Getting version info *)
   @ version_options tool_name @
 (* Enforcing CompCert build numbers for QSKs and mnemonics dump *)
-  (if Coqup.Version.buildnr <> "" then
+  (if Vericert.Version.buildnr <> "" then
     [ Exact "-qsk-enforce-build", Integer enforce_buildnr;
       Exact "--qsk-enforce-build", Integer enforce_buildnr;
       Exact "-dump-mnemonics", String  dump_mnemonics;
@@ -338,7 +338,7 @@ let cmdline_actions =
   (* Language support options *)
     language_support_options
   (* Debugging options *)
-    @ Coqup.DebugInit.debugging_actions @
+    @ Vericert.DebugInit.debugging_actions @
 (* Code generation options -- more below *)
  [
   Exact "-O0", Unit (unset_all optimization_options);
@@ -354,15 +354,15 @@ let cmdline_actions =
   Exact "-falign-cond-branches", Integer(fun n -> check_align n; option_faligncondbranchs := n);] @
       f_opt "common" option_fcommon @
 (* Target processor options *)
-  (if Coqup.Configuration.arch = "arm" then
-    if Coqup.Configuration.model = "armv6" then
+  (if Vericert.Configuration.arch = "arm" then
+    if Vericert.Configuration.model = "armv6" then
       [ Exact "-marm", Ignore ] (* Thumb needs ARMv6T2 or ARMv7 *)
     else
       [ Exact "-mthumb", Set option_mthumb;
         Exact "-marm", Unset option_mthumb; ]
    else []) @
 (* Toolchain options *)
-    (if not Coqup.Configuration.gnu_toolchain then
+    (if not Vericert.Configuration.gnu_toolchain then
        [Exact "-t", String (fun arg -> push_linker_arg "-t"; push_linker_arg arg;
                              prepro_options := arg :: "-t" :: !prepro_options;
                              assembler_options := arg :: "-t" :: !assembler_options;)]
@@ -398,17 +398,17 @@ let cmdline_actions =
     option_dasm := true);
   Exact "-sdump", Set option_sdump;
   Exact "-sdump-suffix", String (fun s -> option_sdump := true; sdump_suffix:= s);
-  Exact "-sdump-folder", String (fun s -> Coqup.AsmToJSON.sdump_folder := s);] @
+  Exact "-sdump-folder", String (fun s -> Vericert.AsmToJSON.sdump_folder := s);] @
 (* General options *)
    general_options @
 (* Diagnostic options *)
   warning_options @
-(* Coqup.Interpreter mode *)
+(* Vericert.Interpreter mode *)
  [ Exact "-interp", Set option_interp;
-  Exact "-quiet", Unit (fun () -> Coqup.Interp.trace := 0);
-  Exact "-trace", Unit (fun () -> Coqup.Interp.trace := 2);
-  Exact "-random", Unit (fun () -> Coqup.Interp.mode := Coqup.Interp.Random);
-  Exact "-all", Unit (fun () -> Coqup.Interp.mode := Coqup.Interp.All)
+  Exact "-quiet", Unit (fun () -> Vericert.Interp.trace := 0);
+  Exact "-trace", Unit (fun () -> Vericert.Interp.trace := 2);
+  Exact "-random", Unit (fun () -> Vericert.Interp.mode := Vericert.Interp.Random);
+  Exact "-all", Unit (fun () -> Vericert.Interp.mode := Vericert.Interp.All)
  ]
 (* Optimization options *)
 (* -f options: come in -f and -fno- variants *)
@@ -456,9 +456,9 @@ let _ =
                 Gc.major_heap_increment = 4194304 (* 4M *)
            };
     Printexc.record_backtrace true;
-    Coqup.Frontend.init ();
+    Vericert.Frontend.init ();
     parse_cmdline cmdline_actions;
-    Coqup.DebugInit.init (); (* Initialize the debug functions *)
+    Vericert.DebugInit.init (); (* Initialize the debug functions *)
     if nolink () && !option_o <> None && !num_source_files >= 2 then
       fatal_error no_loc "ambiguous '-o' option (multiple source files)";
     if !num_input_files = 0 then

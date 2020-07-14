@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@ From Coq Require Export
 
 Require Import Lia.
 
-From coqup Require Import Show.
+From vericert Require Import Show.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)

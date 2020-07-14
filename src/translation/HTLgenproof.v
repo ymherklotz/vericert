@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,8 +18,8 @@
 
 From compcert Require RTL Registers AST.
 From compcert Require Import Integers Globalenvs Memory Linking.
-From coqup Require Import Coquplib HTLgenspec HTLgen ValueInt AssocMap Array IntegerExtra ZExtra.
-From coqup Require HTL Verilog.
+From vericert Require Import Vericertlib HTLgenspec HTLgen ValueInt AssocMap Array IntegerExtra ZExtra.
+From vericert Require HTL Verilog.
 
 Require Import Lia.
 
@@ -708,13 +708,12 @@ Section CORRECTNESS.
             Admitted.
 
   Lemma eval_cond_correct :
-    forall cond (args : list Registers.reg) s1 c s' i rs args m b f asr asa,
-      translate_condition cond args s1 = OK c s' i ->
-      Op.eval_condition
-        cond
-        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args)
-        m = Some b ->
-      Verilog.expr_runp f asr asa c (boolToValue b).
+    exists v' : value,
+      Verilog.expr_runp f' asr asa e v' /\
+      val_value_lessdef
+        (Values.Val.of_optbool
+           (Op.eval_condition cond
+                              (map (fun r : positive => Registers.Regmap.get r rs) args) m)) v'
   Admitted.
 
   (** The proof of semantic preservation for the translation of instructions

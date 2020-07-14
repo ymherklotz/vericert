@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,8 +17,8 @@
  *)
 
 From compcert Require Import Smallstep Linking Integers Globalenvs.
-From coqup Require HTL.
-From coqup Require Import Coquplib Veriloggen Verilog ValueInt AssocMap.
+From vericert Require HTL.
+From vericert Require Import Vericertlib Veriloggen Verilog ValueInt AssocMap.
 Require Import Lia.
 
 Local Open Scope assocmap.

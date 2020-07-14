@@ -41,7 +41,7 @@ src/extraction/STAMP
 
 *.exe
 *.ini
-bin/coqup
+bin/vericert
 
 # Ocaml
 _build

@@ -5,7 +5,7 @@ Require Import ZBinary.
 From bbv Require Import ZLib.
 From compcert Require Import Integers Coqlib.
 
-Require Import Coquplib.
+Require Import Vericertlib.
 
 Local Open Scope Z_scope.
 

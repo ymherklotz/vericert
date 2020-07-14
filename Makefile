@@ -9,9 +9,9 @@ endif
 COMPCERTRECDIRS := lib common x86_32 x86 backend cfrontend driver flocq exportclight \
   MenhirLib cparser
 
-COQINCLUDES := -R src/common coqup.common -R src/verilog coqup.verilog \
-               -R src/extraction coqup.extraction -R src/translation coqup.translation \
-               -R src coqup \
+COQINCLUDES := -R src/common vericert.common -R src/verilog vericert.verilog \
+               -R src/extraction vericert.extraction -R src/translation vericert.translation \
+               -R src vericert \
                $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
@@ -35,7 +35,7 @@ lib/COMPCERTSTAMP:
 install:
 	install -d $(PREFIX)/bin
 	install -C _build/default/driver/compcert.ini $(PREFIX)/bin/.
-	install -C _build/default/driver/CoqupDriver.exe $(PREFIX)/bin/coqup
+	install -C _build/default/driver/VericertDriver.exe $(PREFIX)/bin/vericert
 
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
@@ -47,9 +47,9 @@ test:
 	./test/test_all.sh ./test
 
 compile: src/extraction/STAMP
-	@echo "OCaml bin/coqup"
+	@echo "OCaml bin/vericert"
 	@mkdir -p bin
-	@dune build driver/CoqupDriver.exe
+	@dune build driver/VericertDriver.exe
 	@cp lib/CompCert/compcert.ini _build/default/driver/.
 
 src/extraction/STAMP:

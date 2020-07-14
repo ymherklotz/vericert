@@ -1,4 +1,4 @@
-From coqup Require Import Coquplib.
+From vericert Require Import Vericertlib.
 
 From compcert Require Export Maps.
 From compcert Require Import Errors.

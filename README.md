@@ -1,10 +1,10 @@
-# Coqup [![Build Status](https://travis-ci.com/ymherklotz/coqup.svg?token=qfBKKGwxeWkjDsy7e16x&branch=master)](https://travis-ci.com/ymherklotz/coqup)
+# Vericert [![Build Status](https://travis-ci.com/ymherklotz/vericert.svg?token=qfBKKGwxeWkjDsy7e16x&branch=master)](https://travis-ci.com/ymherklotz/vericert)
 
 A formally verified HLS tool in Coq, building on top of [CompCert](https://github.com/AbsInt/CompCert).
 
 ## Building
 
-To build coqup, the provided [Makefile](/Makefile) can be used. External dependencies are needed to build the project, which can be pulled in automatically with [nix](https://nixos.org/nix/) using the provided [default.nix](/default.nix) and [shell.nix](/shell.nix) files.
+To build vericert, the provided [Makefile](/Makefile) can be used. External dependencies are needed to build the project, which can be pulled in automatically with [nix](https://nixos.org/nix/) using the provided [default.nix](/default.nix) and [shell.nix](/shell.nix) files.
 
 The project is written in Coq, a theorem prover, which is extracted to OCaml so that it can then be compiled and executed. The dependencies of this project are the following:
 
@@ -23,7 +23,7 @@ These dependencies can be installed manually, or automatically through Nix.
 CompCert is added as a submodule in the `lib/CompCert` directory. It is needed to run the build process below, as it is the one dependency that is not downloaded by nix, and has to be downloaded together with the repository. To clone CompCert together with this project, you can run:
 
 ``` shell
-git clone --recursive https://github.com/ymherklotz/coqup
+git clone --recursive https://github.com/ymherklotz/vericert
 ```
 
 If the repository is already cloned, you can run the following command to make sure that CompCert is also downloaded:
@@ -58,14 +58,14 @@ and installed locally, or under the `PREFIX` location using:
 make install
 ```
 
-Which will install the binary in `./bin/coqup` by default. However, this can be changed by changing the `PREFIX` environment variable, in which case the binary will be installed in `$PREFIX/bin/coqup`.
+Which will install the binary in `./bin/vericert` by default. However, this can be changed by changing the `PREFIX` environment variable, in which case the binary will be installed in `$PREFIX/bin/vericert`.
 
 ## Running
 
-To test out `coqup` you can try the following examples which are in the test folder using the following:
+To test out `vericert` you can try the following examples which are in the test folder using the following:
 
 ``` shell
-./bin/coqup test/loop.c -o loop.v
-./bin/coqup test/conditional.c -o conditional.v
-./bin/coqup test/add.c -o add.v
+./bin/vericert test/loop.c -o loop.v
+./bin/vericert test/conditional.c -o conditional.v
+./bin/vericert test/add.c -o add.v
 ```

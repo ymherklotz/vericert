@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@ From bbv Require Import Word.
 From bbv Require HexNotation WordScope.
 From Coq Require Import ZArith.ZArith FSets.FMapPositive Lia.
 From compcert Require Import lib.Integers common.Values.
-From coqup Require Import Coquplib.
+From vericert Require Import Vericertlib.
 (* end hide *)
 
 (** * Value

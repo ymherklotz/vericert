@@ -1,5 +1,5 @@
 (include_subdirs no)
 
 (executable
- (name CoqupTest)
- (libraries coqup))
+ (name VericertTest)
+ (libraries vericert))

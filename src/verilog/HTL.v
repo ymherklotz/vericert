@@ -1,5 +1,5 @@
 (*
- * CoqUp: Verified high-level synthesis.
+ * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,8 +17,8 @@
  *)
 
 From Coq Require Import FSets.FMapPositive.
-From coqup Require Import Coquplib ValueInt AssocMap Array.
-From coqup Require Verilog.
+From vericert Require Import Vericertlib ValueInt AssocMap Array.
+From vericert Require Verilog.
 From compcert Require Events Globalenvs Smallstep Integers Values.
 From compcert Require Import Maps.
 
