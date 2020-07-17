@@ -1,4 +1,6 @@
-# VeriCert ![CI](https://github.com/ymherklotz/vericert/workflows/CI/badge.svg)
+# VeriCert
+
+![CI](https://github.com/ymherklotz/vericert/workflows/CI/badge.svg)
 
 A formally verified HLS tool in Coq, building on top of [CompCert](https://github.com/AbsInt/CompCert).
 
