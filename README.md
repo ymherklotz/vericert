@@ -1,4 +1,4 @@
-# Vericert [![Build Status](https://travis-ci.com/ymherklotz/vericert.svg?token=qfBKKGwxeWkjDsy7e16x&branch=master)](https://travis-ci.com/ymherklotz/vericert)
+# VeriCert ![CI](https://github.com/ymherklotz/vericert/workflows/CI/badge.svg)
 
 A formally verified HLS tool in Coq, building on top of [CompCert](https://github.com/AbsInt/CompCert).
 
