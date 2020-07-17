@@ -21,10 +21,11 @@ jobs:
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
+      with:
+        submodules: true
 
     - name: Install Nix
       uses: cachix/install-nix-action@v10
 
     - name: Build
       run: nix-shell --run "make -j8"
-  
