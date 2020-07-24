@@ -577,7 +577,7 @@ Section CORRECTNESS.
     - pose proof Integers.Ptrofs.agree32_sub as AGR; unfold Integers.Ptrofs.agree32 in AGR.
       assert (ARCH: Archi.ptr64 = false) by auto. eapply AGR in ARCH.
       apply int_inj. unfold Ptrofs.to_int. rewrite Int.unsigned_repr.
-      apply ARCH. Search Ptrofs.unsigned. pose proof Ptrofs.unsigned_range_2.
+      apply ARCH. pose proof Ptrofs.unsigned_range_2.
       replace Ptrofs.max_unsigned with Int.max_unsigned; auto.
       pose proof Ptrofs.agree32_of_int. unfold Ptrofs.agree32 in H2.
       eapply H2 in ARCH. apply ARCH.
@@ -708,12 +708,13 @@ Section CORRECTNESS.
             Admitted.
 
   Lemma eval_cond_correct :
+    forall e asa asr f' m args rs cond,
     exists v' : value,
       Verilog.expr_runp f' asr asa e v' /\
       val_value_lessdef
         (Values.Val.of_optbool
            (Op.eval_condition cond
-                              (map (fun r : positive => Registers.Regmap.get r rs) args) m)) v'
+                              (map (fun r : positive => Registers.Regmap.get r rs) args) m)) v'.
   Admitted.
 
   (** The proof of semantic preservation for the translation of instructions
