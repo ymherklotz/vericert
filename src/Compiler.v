@@ -88,8 +88,6 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@ print print_HTL
   @@ Veriloggen.transl_program.
 
-Check mkpass.
-
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   OK p
   @@@ SimplExpr.transl_program
