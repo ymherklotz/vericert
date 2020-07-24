@@ -4,6 +4,15 @@
 
 A formally verified high-level synthesis (HLS) tool written in Coq, building on top of [CompCert](https://github.com/AbsInt/CompCert).  This ensures the correctness of the C to Verilog translation according to our Verilog semantics and CompCert's C semantics, removing the need to check the resulting hardware for behavioural correctness.
 
+## Features
+
+The project is currently a work in progress, so proofs remain to be finished.  Currently, the following C features are supported, but are not all proven correct yet:
+
+- all int operations,
+- non-recursive function calls,
+- local arrays and pointers
+- control-flow structures such as if-statements, for-loops, etc...
+
 ## Building
 
 To build Vericert, the provided [Makefile](/Makefile) can be used. External dependencies are needed to build the project, which can be pulled in automatically with [nix](https://nixos.org/nix/) using the provided [default.nix](/default.nix) and [shell.nix](/shell.nix) files.
