@@ -162,6 +162,7 @@ Proof.
   inv H. symmetry. unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
 Qed.
 
-Ltac simplify_val := repeat (simplify; unfold uvalueToZ, valueToPtr, Ptrofs.of_int in *).
+Ltac simplify_val := repeat (simplify; unfold uvalueToZ, valueToPtr, Ptrofs.of_int, valueToInt, intToValue,
+                                       ptrToValue in *).
 
 Ltac crush_val := simplify_val; try discriminate; try congruence; try lia; liapp; try assumption.
