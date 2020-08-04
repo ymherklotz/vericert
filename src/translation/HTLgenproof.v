@@ -1596,7 +1596,8 @@ Section CORRECTNESS.
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
       erewrite Mem.load_store_other with (m1 := m).
       2: { exact H1. }
-      2: { right. right. simpl.
+      2: { rewrite HeqOFFSET in *. simplify_val.
+        right. right. simpl.
            rewrite ZERO.
            rewrite Integers.Ptrofs.add_zero_l.
            rewrite Integers.Ptrofs.unsigned_repr; crush; try lia.
@@ -2143,7 +2144,7 @@ Section CORRECTNESS.
       exact (Values.Vint (Int.repr 0)).
       exact tt.
       exact (Values.Vint (Int.repr 0)).
-  Admitted.
+  Qed.
   Hint Resolve transl_istore_correct : htlproof.
 
   Lemma transl_icond_correct:
