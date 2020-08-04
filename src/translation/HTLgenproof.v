@@ -1006,17 +1006,31 @@ Section CORRECTNESS.
       apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
-      match goal with
-      | [ |- context [valueToNat ?x] ] =>
-        assert (Z.to_nat
-                  (Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.divu
-                        OFFSET
-                        (Integers.Ptrofs.repr 4)))
-                =
-                valueToNat x)
-          as EXPR_OK by admit
-      end.
+      assert (EXPR_OK : Z.to_nat
+                          (Integers.Ptrofs.unsigned
+                             (Integers.Ptrofs.divu
+                                OFFSET
+                                (Integers.Ptrofs.repr 4)))
+                        =
+                        valueToNat (Int.divu (Int.add asr # r0 (ZToValue z)) (ZToValue 4))).
+      { simplify_val. unfold valueToNat. unfold Int.divu, Ptrofs.divu.
+        rewrite HeqOFFSET.
+        pose proof Integers.Ptrofs.agree32_add as AGR.
+        unfold Integers.Ptrofs.agree32 in AGR.
+        assert (Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr (Int.unsigned asr # r0))
+                                            (Ptrofs.repr (Int.unsigned (Int.repr z)))) =
+                Int.unsigned (Int.add asr # r0 (ZToValue z))).
+        apply AGR; auto.
+        apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2.
+        apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2.
+        rewrite H11. replace (Ptrofs.unsigned (Ptrofs.repr 4)) with 4.
+        replace (Int.unsigned (ZToValue 4)) with 4. Search Ptrofs.agree32.
+        pose proof Ptrofs.agree32_repr. unfold Ptrofs.agree32 in *.
+        rewrite H16. trivial. auto.
+        unfold ZToValue. symmetry. apply Int.unsigned_repr.
+        unfold_constants. lia.
+        unfold ZToValue. symmetry. apply Int.unsigned_repr.
+        unfold_constants. lia. }
       rewrite <- EXPR_OK.
 
       specialize (H9 (Integers.Ptrofs.unsigned
