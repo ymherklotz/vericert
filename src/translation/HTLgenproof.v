@@ -890,6 +890,76 @@ Section CORRECTNESS.
       destruct c, chunk, addr, args; crush; tac; crush
     end.
 
+  Lemma offset_expr_ok :
+    forall v z, (Z.to_nat
+                   (Integers.Ptrofs.unsigned
+                      (Integers.Ptrofs.divu
+                         (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ v))
+                                              (Integers.Ptrofs.of_int (Integers.Int.repr z)))
+                         (Integers.Ptrofs.repr 4)))
+                 = valueToNat (Int.divu (Int.add v (ZToValue z)) (ZToValue 4))).
+  Proof.
+    simplify_val. unfold valueToNat. unfold Int.divu, Ptrofs.divu.
+    pose proof Integers.Ptrofs.agree32_add as AGR.
+    unfold Integers.Ptrofs.agree32 in AGR.
+    assert (Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr (Int.unsigned v))
+                                        (Ptrofs.repr (Int.unsigned (Int.repr z)))) =
+            Int.unsigned (Int.add v (ZToValue z))).
+    apply AGR; auto.
+    apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2.
+    apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2.
+    rewrite H. replace (Ptrofs.unsigned (Ptrofs.repr 4)) with 4.
+    replace (Int.unsigned (ZToValue 4)) with 4.
+    pose proof Ptrofs.agree32_repr. unfold Ptrofs.agree32 in *.
+    rewrite H0. trivial. auto.
+    unfold ZToValue. symmetry. apply Int.unsigned_repr.
+    unfold_constants. lia.
+    unfold ZToValue. symmetry. apply Int.unsigned_repr.
+    unfold_constants. lia.
+  Qed.
+
+  Lemma offset_expr_ok_2 :
+    forall v0 v1 z0 z1,
+      (Z.to_nat
+         (Integers.Ptrofs.unsigned
+            (Integers.Ptrofs.divu
+               (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ v0))
+                                    (Integers.Ptrofs.of_int
+                                       (Integers.Int.add
+                                          (Integers.Int.mul (valueToInt v1) (Integers.Int.repr z1))
+                                          (Integers.Int.repr z0)))) (Ptrofs.repr 4))))
+      = valueToNat (Int.divu (Int.add (Int.add v0 (ZToValue z0))
+                                      (Int.mul v1 (ZToValue z1))) (ZToValue 4)).
+    intros. unfold ZToValue, valueToNat, valueToInt, Ptrofs.divu, Int.divu, Ptrofs.of_int.
+
+    assert (H : (Ptrofs.unsigned
+             (Ptrofs.add (Ptrofs.repr (uvalueToZ v0))
+                (Ptrofs.of_int (Int.add (Int.mul (valueToInt v1) (Int.repr z1)) (Int.repr z0)))) /
+           Ptrofs.unsigned (Ptrofs.repr 4))
+                = (Int.unsigned (Int.add (Int.add v0 (Int.repr z0)) (Int.mul v1 (Int.repr z1))) /
+           Int.unsigned (Int.repr 4))).
+    { unfold ZToValue, valueToNat, valueToInt, Ptrofs.divu, Int.divu, Ptrofs.of_int.
+      rewrite Ptrofs.unsigned_repr by (unfold_constants; lia).
+      rewrite Int.unsigned_repr by (unfold_constants; lia).
+
+      unfold Ptrofs.of_int. Search Int.add. rewrite Int.add_commut.
+      pose proof Integers.Ptrofs.agree32_add as AGR. unfold Ptrofs.agree32 in *.
+      erewrite AGR.
+      3: { unfold uvalueToZ. rewrite Ptrofs.unsigned_repr. trivial. apply Int.unsigned_range_2. }
+      3: { rewrite Ptrofs.unsigned_repr. trivial. apply Int.unsigned_range_2. }
+      rewrite Int.add_assoc. trivial. auto.
+    }
+
+    rewrite <- H. auto.
+
+  Qed.
+
+  Lemma offset_expr_ok_3 :
+    forall OFFSET,
+      Z.to_nat (Ptrofs.unsigned (Ptrofs.divu OFFSET (Ptrofs.repr 4)))
+      = valueToNat (ZToValue (Ptrofs.unsigned OFFSET / 4)).
+  Proof. auto. Qed.
+
   Lemma transl_iload_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
       (rs : Registers.Regmap.t Values.val) (m : mem) (chunk : AST.memory_chunk)
@@ -1006,32 +1076,7 @@ Section CORRECTNESS.
       apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
-      assert (EXPR_OK : Z.to_nat
-                          (Integers.Ptrofs.unsigned
-                             (Integers.Ptrofs.divu
-                                OFFSET
-                                (Integers.Ptrofs.repr 4)))
-                        =
-                        valueToNat (Int.divu (Int.add asr # r0 (ZToValue z)) (ZToValue 4))).
-      { simplify_val. unfold valueToNat. unfold Int.divu, Ptrofs.divu.
-        rewrite HeqOFFSET.
-        pose proof Integers.Ptrofs.agree32_add as AGR.
-        unfold Integers.Ptrofs.agree32 in AGR.
-        assert (Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr (Int.unsigned asr # r0))
-                                            (Ptrofs.repr (Int.unsigned (Int.repr z)))) =
-                Int.unsigned (Int.add asr # r0 (ZToValue z))).
-        apply AGR; auto.
-        apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2.
-        apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2.
-        rewrite H11. replace (Ptrofs.unsigned (Ptrofs.repr 4)) with 4.
-        replace (Int.unsigned (ZToValue 4)) with 4. Search Ptrofs.agree32.
-        pose proof Ptrofs.agree32_repr. unfold Ptrofs.agree32 in *.
-        rewrite H16. trivial. auto.
-        unfold ZToValue. symmetry. apply Int.unsigned_repr.
-        unfold_constants. lia.
-        unfold ZToValue. symmetry. apply Int.unsigned_repr.
-        unfold_constants. lia. }
-      rewrite <- EXPR_OK.
+      rewrite <- offset_expr_ok.
 
       specialize (H9 (Integers.Ptrofs.unsigned
                         (Integers.Ptrofs.divu
@@ -1161,18 +1206,7 @@ Section CORRECTNESS.
       apply regs_lessdef_add_match; big_tac.
 
       (** Equality proof *)
-      match goal with
-      | [ |- context [valueToNat ?x] ] =>
-        assert (Z.to_nat
-                  (Integers.Ptrofs.unsigned
-                     (Integers.Ptrofs.divu
-                        OFFSET
-                        (Integers.Ptrofs.repr 4)))
-                =
-                valueToNat x)
-          as EXPR_OK by admit
-      end.
-      rewrite <- EXPR_OK.
+      rewrite <- offset_expr_ok_2.
 
       specialize (H9 (Integers.Ptrofs.unsigned
                         (Integers.Ptrofs.divu
