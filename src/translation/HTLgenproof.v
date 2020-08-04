@@ -908,7 +908,7 @@ Section CORRECTNESS.
     inv_state. inv_arr_access.
 
     + (** Preamble *)
-      invert MARR. crush.
+      invert MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -926,11 +926,10 @@ Section CORRECTNESS.
       pose proof (H0 r0).
       assert (HPler0 : Ple r0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; crush; eauto).
-      apply H6 in HPler0.
+      apply H0 in HPler0.
       invert HPler0; try congruence.
-      rewrite EQr0 in H8.
-      invert H8.
-      clear H0. clear H6.
+      rewrite EQr0 in H11.
+      invert H11.
 
       unfold check_address_parameter_signed in *;
       unfold check_address_parameter_unsigned in *; crush.
@@ -939,14 +938,9 @@ Section CORRECTNESS.
                                     (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
 
       (** Modular preservation proof *)
-      (*assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
-      { rewrite HeqOFFSET.
-        apply PtrofsExtra.add_mod; crush.
-        rewrite Integers.Ptrofs.unsigned_repr_eq.
-        rewrite <- Zmod_div_mod; crush.
-        apply PtrofsExtra.of_int_mod.
-        rewrite Integers.Int.unsigned_repr_eq.
-        rewrite <- Zmod_div_mod; crush. }
+      assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
+      { apply Mem.load_valid_access in H1. unfold Mem.valid_access in *. simplify.
+        apply Zdivide_mod. assumption. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
@@ -954,7 +948,7 @@ Section CORRECTNESS.
         unfold stack_bounds in BOUNDS.
         exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET)); auto.
         split; try lia; apply Integers.Ptrofs.unsigned_range_2.
-        small_tac. }
+        small_tac. admit. }
 
       (** Normalisation proof *)
       assert (Integers.Ptrofs.repr
@@ -969,8 +963,8 @@ Section CORRECTNESS.
       assert (0 <=
               Integers.Ptrofs.unsigned (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4))
               < (RTL.fn_stacksize f / 4))
-        as NORMALISE_BOUND.
-      { split.
+        as NORMALISE_BOUND by admit.
+      (*{ split.
         apply Integers.Ptrofs.unsigned_range_2.
         assert (forall x y, Integers.Ptrofs.divu x y = Integers.Ptrofs.divu x y ) by reflexivity.
         unfold Integers.Ptrofs.divu at 2 in H0.
@@ -979,7 +973,7 @@ Section CORRECTNESS.
         apply Zmult_lt_reg_r with (p := 4); try lia.
         repeat rewrite ZLib.div_mul_undo; try lia.
         apply Z.div_pos; small_tac.
-        apply Z.div_le_upper_bound; small_tac. }
+        apply Z.div_le_upper_bound; small_tac. }*)
 
       inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
       clear NORMALISE_BOUND.
@@ -988,12 +982,11 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      apply assumption_32bit.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
-      econstructor. econstructor. econstructor. econstructor.
+      econstructor. econstructor.
 
       all: big_tac.
 
@@ -1026,11 +1019,11 @@ Section CORRECTNESS.
       end.
       rewrite <- EXPR_OK.
 
-      specialize (H7 (Integers.Ptrofs.unsigned
+      specialize (H9 (Integers.Ptrofs.unsigned
                         (Integers.Ptrofs.divu
                            OFFSET
                            (Integers.Ptrofs.repr 4)))).
-      exploit H7; big_tac.
+      exploit H9; big_tac.
 
       (** RSBP preservation *)
       unfold arr_stack_based_pointers in ASBP.
