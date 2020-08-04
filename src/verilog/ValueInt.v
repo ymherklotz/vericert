@@ -161,3 +161,7 @@ Proof.
   unfold valueToInt. unfold intToValue in H1. auto.
   inv H. symmetry. unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
 Qed.
+
+Ltac simplify_val := repeat (simplify; unfold uvalueToZ, valueToPtr, Ptrofs.of_int in *).
+
+Ltac crush_val := simplify_val; try discriminate; try congruence; try lia; liapp; try assumption.
