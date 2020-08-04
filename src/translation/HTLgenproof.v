@@ -1463,18 +1463,19 @@ Section CORRECTNESS.
            rewrite Integers.Ptrofs.add_zero_l.
            rewrite Integers.Ptrofs.unsigned_repr.
            simpl.
+           rewrite HeqOFFSET in *. simplify_val.
            destruct (Z_le_gt_dec (4 * ptr + 4) (Integers.Ptrofs.unsigned OFFSET)); eauto.
+           rewrite HeqOFFSET in *. simplify_val.
+           left; auto.
+           rewrite HeqOFFSET in *. simplify_val.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
            rewrite Z2Nat.id in H16; try lia.
            apply Zmult_lt_compat_r with (p := 4) in H16; try lia.
            rewrite ZLib.div_mul_undo in H16; try lia.
-           rewrite HeqOFFSET in MOD_PRESERVE. apply MOD_PRESERVE.
-           rewrite HeqOFFSET in n. apply n.
-           admit. admit. admit.
-           (*split; try lia.
-           apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.*)
+           split; try lia.
+           apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
 
       rewrite <- EXPR_OK.
