@@ -1,7 +1,7 @@
 # Vericert
 
 ![CI](https://github.com/ymherklotz/vericert/workflows/CI/badge.svg)
-![Admitted](https://ymherklotz.github.io/vericert/assets/admitted.svg)
+![Admitted](https://raw.githubusercontent.com/ymherklotz/vericert/gh-pages/assets/admitted.svg)
 
 A formally verified high-level synthesis (HLS) tool written in Coq, building on top of [CompCert](https://github.com/AbsInt/CompCert).  This ensures the correctness of the C to Verilog translation according to our Verilog semantics and CompCert's C semantics, removing the need to check the resulting hardware for behavioural correctness.
 
