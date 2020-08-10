@@ -24,8 +24,11 @@ jobs:
 
     # Runs a single command using the runners shell
     - name: Generate Admitted icon
-      run: python3 scripts/statistics.py src
+      run: python3 scripts/statistics.py src && mkdir -p docs/assets && mv admitted.svg docs/assets/.
 
-    - uses: actions/upload-artifact@v2
+    - name: Deploy gh-pages
+      uses: peaceiris/actions-gh-pages@v3
       with:
-        path: admitted.svg
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs
+        enable_jekyll: true
