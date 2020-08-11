@@ -31,7 +31,7 @@ def main(d):
     n_admitted, n_theorems, _ = collect(d)
     colour = pick_colour(n_admitted, n_theorems)
 
-    url = "https://img.shields.io/badge/Admitted%20Proofs-{}-{}?style=flat".format(
+    url = "https://img.shields.io/badge/admitted%20proofs-{}-{}?style=flat".format(
         str(n_admitted), colour)
 
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
