@@ -1,4 +1,5 @@
 ;; Publishing projects, this one is for the zettelkasten
+(require 'org)
 (setq org-publish-project-alist
       '(("orgfiles"
          :base-directory "./"
