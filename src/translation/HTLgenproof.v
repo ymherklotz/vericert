@@ -773,6 +773,7 @@ Section CORRECTNESS.
     | [ |- context[Registers.Regmap.get ?d (Registers.Regmap.set ?d _ _)] ] =>
       rewrite Registers.Regmap.gss
     | [ |- context[Registers.Regmap.get ?s (Registers.Regmap.set ?d _ _)] ] =>
+      let EQ := fresh "EQ" in
       destruct (Pos.eq_dec s d) as [EQ|EQ];
       [> rewrite EQ | rewrite Registers.Regmap.gso; auto]
 
@@ -1089,7 +1090,7 @@ Section CORRECTNESS.
       specialize (ASBP (Integers.Ptrofs.unsigned
                           (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
       exploit ASBP; big_tac.
-      rewrite NORMALISE in H11. rewrite HeqOFFSET in H11. rewrite H1 in H11. assumption.
+      rewrite NORMALISE in H14. rewrite HeqOFFSET in H14. rewrite H1 in H14. assumption.
       constructor; simplify. rewrite AssocMap.gso. rewrite AssocMap.gso.
       assumption. lia.
       assert (HPle: Ple dst (RTL.max_reg_function f))
@@ -1171,8 +1172,8 @@ Section CORRECTNESS.
       { split.
         apply Integers.Ptrofs.unsigned_range_2.
         assert (forall x y, Integers.Ptrofs.divu x y = Integers.Ptrofs.divu x y ) by reflexivity.
-        unfold Integers.Ptrofs.divu at 2 in H0.
-        rewrite H0. clear H0.
+        unfold Integers.Ptrofs.divu at 2 in H14.
+        rewrite H14. clear H14.
         rewrite Integers.Ptrofs.unsigned_repr; crush.
         apply Zmult_lt_reg_r with (p := 4); try lia.
         repeat rewrite ZLib.div_mul_undo; try lia.
@@ -1219,7 +1220,7 @@ Section CORRECTNESS.
       specialize (ASBP (Integers.Ptrofs.unsigned
                           (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
       exploit ASBP; big_tac.
-      rewrite NORMALISE in H0. rewrite HeqOFFSET in H0. rewrite H1 in H0. assumption.
+      rewrite NORMALISE in H14. rewrite HeqOFFSET in H14. rewrite H1 in H14. assumption.
 
       constructor; simplify. rewrite AssocMap.gso. rewrite AssocMap.gso.
       assumption. lia.
@@ -1248,11 +1249,13 @@ Section CORRECTNESS.
       remember i0 as OFFSET.
 
       (** Modular preservation proof *)
-      rename H0 into MOD_PRESERVE.
+      assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
+      { apply Mem.load_valid_access in H1. unfold Mem.valid_access in *. simplify.
+        apply Zdivide_mod. assumption. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
-      { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; crush; auto.
+      { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:?EQ; crush; auto.
         unfold stack_bounds in BOUNDS.
         exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET)); big_tac. }
 
@@ -1483,7 +1486,7 @@ Section CORRECTNESS.
       simplify.
       assert (HPle : Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
-      apply H0 in HPle.
+      apply H11 in HPle.
       destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert HPle; eauto.
 
       rewrite <- array_set_len.
@@ -1517,9 +1520,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H16; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H16; try lia.
-           rewrite ZLib.div_mul_undo in H16; try lia.
+           rewrite Z2Nat.id in H15; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H15; try lia.
+           rewrite ZLib.div_mul_undo in H15; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1543,8 +1546,7 @@ Section CORRECTNESS.
       lia.
       unfold_constants.
       intro.
-      Search (Z.to_nat _ = Z.to_nat _).
-      apply Z2Nat.inj_iff in H14; rewrite HeqOFFSET in n0; try lia.
+      apply Z2Nat.inj_iff in H13; rewrite HeqOFFSET in n0; try lia.
       apply Z.div_pos; try lia.
       apply Integers.Ptrofs.unsigned_range.
       apply Integers.Ptrofs.unsigned_range_2.
@@ -1565,7 +1567,7 @@ Section CORRECTNESS.
       crush.
       destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; try constructor.
       destruct (Archi.ptr64); try discriminate.
-      pose proof (RSBP src). rewrite EQ_SRC in H0.
+      pose proof (RSBP src). rewrite EQ_SRC in H11.
       assumption.
 
       simpl.
@@ -1583,9 +1585,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           invert H0.
-           apply Zmult_lt_compat_r with (p := 4) in H15; try lia.
-           rewrite ZLib.div_mul_undo in H15; try lia.
+           invert H11.
+           apply Zmult_lt_compat_r with (p := 4) in H14; try lia.
+           rewrite ZLib.div_mul_undo in H14; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1605,19 +1607,19 @@ Section CORRECTNESS.
       crush.
       exploit (BOUNDS ptr); try lia. intros. crush.
       exploit (BOUNDS ptr v); try lia. intros.
-      invert H0.
+      invert H11.
       match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
       assert (Mem.valid_access m AST.Mint32 sp'
                                (Integers.Ptrofs.unsigned
                                   (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                        (Integers.Ptrofs.repr ptr))) Writable).
-      { pose proof H1. eapply Mem.store_valid_access_2 in H0.
-        exact H0. eapply Mem.store_valid_access_3. eassumption. }
+      { pose proof H1. eapply Mem.store_valid_access_2 in H11.
+        exact H11. eapply Mem.store_valid_access_3. eassumption. }
       pose proof (Mem.valid_access_store m AST.Mint32 sp'
                                          (Integers.Ptrofs.unsigned
                                             (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                                  (Integers.Ptrofs.repr ptr))) v).
-      apply X in H0. invert H0. congruence.
+      apply X in H11. invert H11. congruence.
 
       constructor; simplify. unfold Verilog.merge_regs. unfold_merge.
       rewrite AssocMap.gso.
@@ -1764,19 +1766,19 @@ Section CORRECTNESS.
       simpl.
       assert (Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
-      apply H0 in H17.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H17; eauto.
+      apply H14 in H15.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H15; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
       rewrite list_repeat_len. auto.
 
       assert (4 * ptr / 4 = Integers.Ptrofs.unsigned OFFSET / 4) by (f_equal; assumption).
-      rewrite Z.mul_comm in H17.
-      rewrite Z_div_mult in H17; try lia.
-      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H17 by reflexivity.
-      rewrite <- PtrofsExtra.divu_unsigned in H17; unfold_constants; try lia.
-      rewrite H17. rewrite <- offset_expr_ok_2.
+      rewrite Z.mul_comm in H15.
+      rewrite Z_div_mult in H15; try lia.
+      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H15 by reflexivity.
+      rewrite <- PtrofsExtra.divu_unsigned in H15; unfold_constants; try lia.
+      rewrite H15. rewrite <- offset_expr_ok_2.
       rewrite HeqOFFSET in *.
       rewrite array_get_error_set_bound.
       reflexivity.
@@ -1797,9 +1799,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H19; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H19; try lia.
-           rewrite ZLib.div_mul_undo in H19; try lia.
+           rewrite Z2Nat.id in H17; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H17; try lia.
+           rewrite ZLib.div_mul_undo in H17; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1824,7 +1826,7 @@ Section CORRECTNESS.
       unfold_constants.
       intro.
       rewrite HeqOFFSET in *.
-      apply Z2Nat.inj_iff in H17; try lia.
+      apply Z2Nat.inj_iff in H15; try lia.
       apply Z.div_pos; try lia.
       apply Integers.Ptrofs.unsigned_range.
       apply Integers.Ptrofs.unsigned_range_2.
@@ -1845,7 +1847,7 @@ Section CORRECTNESS.
       crush.
       destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; try constructor.
       destruct (Archi.ptr64); try discriminate.
-      pose proof (RSBP src). rewrite EQ_SRC in H0.
+      pose proof (RSBP src). rewrite EQ_SRC in H14.
       assumption.
 
       simpl.
@@ -1863,9 +1865,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           invert H0.
-           apply Zmult_lt_compat_r with (p := 4) in H18; try lia.
-           rewrite ZLib.div_mul_undo in H18; try lia.
+           invert H14.
+           apply Zmult_lt_compat_r with (p := 4) in H16; try lia.
+           rewrite ZLib.div_mul_undo in H16; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1885,19 +1887,19 @@ Section CORRECTNESS.
       crush.
       exploit (BOUNDS ptr); try lia. intros. crush.
       exploit (BOUNDS ptr v); try lia. intros.
-      invert H0.
+      simplify.
       match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
       assert (Mem.valid_access m AST.Mint32 sp'
                                (Integers.Ptrofs.unsigned
                                   (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                        (Integers.Ptrofs.repr ptr))) Writable).
-      { pose proof H1. eapply Mem.store_valid_access_2 in H0.
-        exact H0. eapply Mem.store_valid_access_3. eassumption. }
+      { pose proof H1. eapply Mem.store_valid_access_2 in H14.
+        exact H14. eapply Mem.store_valid_access_3. eassumption. }
       pose proof (Mem.valid_access_store m AST.Mint32 sp'
                                          (Integers.Ptrofs.unsigned
                                             (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                                  (Integers.Ptrofs.repr ptr))) v).
-      apply X in H0. invert H0. congruence.
+      apply X in H14. invert H14. congruence.
 
       constructor; simplify. unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
@@ -1920,11 +1922,13 @@ Section CORRECTNESS.
       remember i0 as OFFSET.
 
       (** Modular preservation proof *)
-      rename H0 into MOD_PRESERVE.
+      assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
+      { apply Mem.store_valid_access_3 in H1. unfold Mem.valid_access in *. simplify.
+        apply Zdivide_mod. assumption. }
 
       (** Write bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as WRITE_BOUND_HIGH.
-      { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:EQ; crush; auto.
+      { destruct (Integers.Ptrofs.unsigned OFFSET <? f.(RTL.fn_stacksize)) eqn:?EQ; crush; auto.
         unfold stack_bounds in BOUNDS.
         exploit (BOUNDS (Integers.Ptrofs.unsigned OFFSET) (Registers.Regmap.get src rs)); auto.
         crush.
@@ -2007,19 +2011,19 @@ Section CORRECTNESS.
       simpl.
       assert (Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
-      apply H0 in H11.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H11; eauto.
+      apply H0 in H8.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H8; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
       rewrite list_repeat_len. auto.
 
       assert (4 * ptr / 4 = Integers.Ptrofs.unsigned OFFSET / 4) by (f_equal; assumption).
-      rewrite Z.mul_comm in H11.
-      rewrite Z_div_mult in H11; try lia.
-      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H11 by reflexivity.
-      rewrite <- PtrofsExtra.divu_unsigned in H11; unfold_constants; try lia.
-      rewrite H11. rewrite <- offset_expr_ok_3.
+      rewrite Z.mul_comm in H8.
+      rewrite Z_div_mult in H8; try lia.
+      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H8 by reflexivity.
+      rewrite <- PtrofsExtra.divu_unsigned in H8; unfold_constants; try lia.
+      rewrite H8. rewrite <- offset_expr_ok_3.
       rewrite array_get_error_set_bound.
       reflexivity.
       unfold arr_length, arr_repeat. simpl.
@@ -2036,9 +2040,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H14; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H14; try lia.
-           rewrite ZLib.div_mul_undo in H14; try lia.
+           rewrite Z2Nat.id in H13; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H13; try lia.
+           rewrite ZLib.div_mul_undo in H13; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -2062,7 +2066,7 @@ Section CORRECTNESS.
       lia.
       unfold_constants.
       intro.
-      apply Z2Nat.inj_iff in H11; try lia.
+      apply Z2Nat.inj_iff in H8; try lia.
       apply Z.div_pos; try lia.
       apply Integers.Ptrofs.unsigned_range.
 
@@ -2098,8 +2102,8 @@ Section CORRECTNESS.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
            invert H0.
-           apply Zmult_lt_compat_r with (p := 4) in H13; try lia.
-           rewrite ZLib.div_mul_undo in H13; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H11; try lia.
+           rewrite ZLib.div_mul_undo in H11; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -2119,7 +2123,7 @@ Section CORRECTNESS.
       exploit (BOUNDS ptr); try lia. intros. crush.
       exploit (BOUNDS ptr v); try lia. intros.
       invert H0.
-      match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
+      match goal with | |- ?x = _ => destruct x eqn:?EQ end; try reflexivity.
       assert (Mem.valid_access m AST.Mint32 sp'
                                (Integers.Ptrofs.unsigned
                                   (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
