@@ -300,37 +300,35 @@ Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :
   end.
 
 Definition check_address_parameter_signed (p : Z) : bool :=
-  Z.eqb (Z.modulo p 4) 0
-  && Z.leb Integers.Ptrofs.min_signed p
+  Z.leb Integers.Ptrofs.min_signed p
   && Z.leb p Integers.Ptrofs.max_signed.
 
 Definition check_address_parameter_unsigned (p : Z) : bool :=
-  Z.eqb (Z.modulo p 4) 0
-  && Z.leb p Integers.Ptrofs.max_unsigned.
+  Z.leb p Integers.Ptrofs.max_unsigned.
 
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Op.Aindexed off, r1::nil =>
     if (check_address_parameter_signed off)
     then ret (boplitz Vadd r1 off)
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address out of bounds")
   | Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address out of bounds")
   | Op.Aindexed2 offset, r1::r2::nil =>
     if (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (bop Vadd r1 r2) (Vlit (ZToValue offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address out of bounds")
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (Vvar r1) (Vbinop Vadd (boplitz Vmul r2 scale) (Vlit (ZToValue offset))))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address out of bounds")
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
     then ret (Vlit (ZToValue a))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address misaligned")
+    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address out of bounds")
   | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
   end.
 
@@ -418,19 +416,19 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
   | Mint32, Op.Aindexed off, r1::nil =>
     if (check_address_parameter_signed off)
     then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
+    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
   | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vvari stack
                     (Vbinop Vdivu
                             (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
                             (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address misaligned")
+    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
     then ret (Vvari stack (Vlit (ZToValue (a / 4))))
-    else error (Errors.msg "HTLgen: eff_addressing misaligned stack offset")
+    else error (Errors.msg "HTLgen: eff_addressing out of bounds stack offset")
   | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
   end.
 
