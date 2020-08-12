@@ -438,16 +438,7 @@ Section CORRECTNESS.
     rewrite <- H. trivial.
   Qed.
 
-  Lemma eval_correct :
-    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
-      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
-      Op.eval_operation ge sp op
-                        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
-      translate_instr op args s = OK e s' i ->
-      exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
-  Proof.
-    Ltac eval_correct_tac :=
+  Ltac eval_correct_tac :=
       match goal with
       | |- context[valueToPtr] => unfold valueToPtr
       | |- context[valueToInt] => unfold valueToInt
@@ -501,8 +492,9 @@ Section CORRECTNESS.
       | H : ?b = _ |- _ = boolToValue ?b => rewrite H
       end.
       Ltac inv_lessdef := lazymatch goal with
-      | H2 : context[RTL.max_reg_function ?f], H : Registers.Regmap.get ?r ?rs = _,
-                                                   H1 : Registers.Regmap.get ?r0 ?rs = _ |- _ =>
+      | H2 : context[RTL.max_reg_function ?f],
+        H : Registers.Regmap.get ?r ?rs = _,
+        H1 : Registers.Regmap.get ?r0 ?rs = _ |- _ =>
         let HPle1 := fresh "HPle" in
         assert (HPle1 : Ple r (RTL.max_reg_function f))
           by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
@@ -531,13 +523,31 @@ Section CORRECTNESS.
               H2 : Registers.Regmap.get ?r ?rs = Values.Vundef |- _ =>
           rewrite H2 in H; discriminate
         | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vtrue |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vfalse |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vint _ = Registers.Regmap.get ?r ?rs,
               H2 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _ |- _ =>
           rewrite H2 in H; discriminate
         | H : Values.Vundef = Registers.Regmap.get ?r ?rs,
               H2 : Registers.Regmap.get ?r ?rs = Values.Vptr _ _ |- _ =>
           rewrite H2 in H; discriminate
+        | H : Values.Vundef = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vtrue |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vundef = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vfalse |- _ =>
+          rewrite H2 in H; discriminate
         | H : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
               H2 : Registers.Regmap.get ?r ?rs = Values.Vundef |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vtrue |- _ =>
+          rewrite H2 in H; discriminate
+        | H : Values.Vptr _ _ = Registers.Regmap.get ?r ?rs,
+              H2 : Registers.Regmap.get ?r ?rs = Values.Vfalse |- _ =>
           rewrite H2 in H; discriminate
         | |- context[val_value_lessdef Values.Vundef _] =>
           econstructor; split; econstructor; econstructor; auto; solve [constructor]
@@ -561,8 +571,163 @@ Section CORRECTNESS.
                             unfold valueToPtr in *
                           ]
         end.
+
+  Lemma eval_cond_correct :
+    forall stk f sp pc rs m res ml st asr asa e b f' s s' args i cond,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+      (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
+      Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some b ->
+      translate_condition cond args s = OK e s' i ->
+      Verilog.expr_runp f' asr asa e (boolToValue b).
+  Proof.
+    intros stk f sp pc rs m res ml st asr asa e b f' s s' args i cond MSTATE MAX_FUN EVAL TR_INSTR.
+    pose proof MSTATE as MSTATE_2. inv MSTATE.
+    inv MASSOC. unfold translate_condition, translate_comparison,
+                translate_comparisonu, translate_comparison_imm,
+                translate_comparison_immu in TR_INSTR;
+                repeat unfold_match TR_INSTR; try inv TR_INSTR; simplify_val;
+                unfold Values.Val.cmp_bool, Values.Val.of_optbool, bop, Values.Val.cmpu_bool,
+                  Int.cmpu in *;
+                repeat unfold_match EVAL.
+    - repeat econstructor. repeat unfold_match Heqo. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo; simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; solve_cond.
+    - repeat econstructor. repeat unfold_match Heqo; simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; try solve_cond. simplify_val.
+      rewrite Heqv0 in H3. rewrite Heqv in H2. inv H2. inv H3.
+      unfold Ptrofs.ltu. unfold Int.ltu.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2. auto.
+    - repeat econstructor.  unfold Verilog.binop_run.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; simplify_val; solve_cond.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; try solve_cond. simplify_val.
+      rewrite Heqv0 in H3. rewrite Heqv in H2. inv H2. inv H3.
+      unfold Ptrofs.ltu. unfold Int.ltu.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2. auto.
+    - repeat econstructor.  unfold Verilog.binop_run.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; simplify_val; solve_cond.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; try solve_cond. simplify_val.
+      rewrite Heqv0 in H3. rewrite Heqv in H2. inv H2. inv H3.
+      unfold Ptrofs.ltu. unfold Int.ltu.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2. auto.
+    - repeat econstructor.  unfold Verilog.binop_run.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; simplify_val; solve_cond.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      pose proof (MAX_FUN p0) as MAX_FUN_P0. apply H in MAX_FUN_P0; auto.
+      inv MAX_FUN_P; inv MAX_FUN_P0; try solve_cond. simplify_val.
+      rewrite Heqv0 in H3. rewrite Heqv in H2. inv H2. inv H3.
+      unfold Ptrofs.ltu. unfold Int.ltu.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2.
+      rewrite Ptrofs.unsigned_repr by apply Int.unsigned_range_2. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+    - repeat econstructor. simplify_val.
+      pose proof (MAX_FUN p) as MAX_FUN_P. apply H in MAX_FUN_P; auto.
+      inv MAX_FUN_P; simplify_val; try solve_cond.
+      rewrite Heqv in H0. inv H0. auto.
+  Qed.
+
+  Lemma eval_cond_correct' :
+    forall e stk f sp pc rs m res ml st asr asa v f' s s' args i cond,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+      (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
+      Values.Val.of_optbool None = v ->
+      translate_condition cond args s = OK e s' i ->
+      exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
+    intros e stk f sp pc rs m res ml st asr asa v f' s s' args i cond MSTATE MAX_FUN EVAL TR_INSTR.
+    unfold translate_condition, translate_comparison, translate_comparisonu,
+    translate_comparison_imm, translate_comparison_immu, bop, boplit in *.
+    repeat unfold_match TR_INSTR; inv TR_INSTR; repeat econstructor.
+  Qed.
+
+  Lemma eval_correct :
+    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
+      Op.eval_operation ge sp op
+                        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
+      translate_instr op args s = OK e s' i ->
+      exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
+  Proof.
     intros s sp op rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st MSTATE INSTR EVAL TR_INSTR.
-    inv MSTATE. inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
+    pose proof MSTATE as MSTATE_2. inv MSTATE.
+    inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
     unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
     repeat (simplify; eval_correct_tac; unfold valueToInt in *).
     - pose proof Integers.Ptrofs.agree32_sub as H2; unfold Integers.Ptrofs.agree32 in H2.
@@ -672,50 +837,47 @@ Section CORRECTNESS.
         constructor. unfold valueToPtr, ZToValue. rewrite Ptrofs.add_zero_l. unfold Ptrofs.of_int.
         rewrite Int.unsigned_repr. symmetry. apply Ptrofs.repr_unsigned.
         unfold check_address_parameter_unsigned in *. apply Ptrofs.unsigned_range_2.
-    - unfold translate_condition in *; repeat unfold_match H1;
-      unfold translate_comparison in *; repeat unfold_match H1; inv H1;
-      unfold translate_comparisonu, translate_comparison_imm, translate_comparison_immu in *;
-      unfold Op.eval_condition, Values.Val.of_optbool, Values.Val.cmp_bool, Values.Val.cmpu_bool, bop in *;
-      simplify;
-      repeat (match goal with |- context[match ?d with _ => _ end] => destruct d eqn:? end;
-      match goal with H : context[match ?d with _ => _ end] |- _ => repeat unfold_match H end);
-      try (match goal with |- context[if ?d then _ else _] => destruct d eqn:? end);
-      simplify; repeat solve_cond;
-      try (match goal with H : ?f = _ |- context[boolToValue ?f] => rewrite H; solve [auto] end);
-      try (match goal with H : context[match ?d with _ => _ end] |- _ => repeat unfold_match H end);
-      simplify; repeat solve_cond.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-      + rewrite H3 in H0. inv H0. constructor. unfold valueToInt, intToValue in *. rewrite H1. auto.
-    - admit. (* select *)
-            Admitted.
-
-  Lemma eval_cond_correct :
-    forall e asa asr f' m args rs cond,
-    exists v' : value,
-      Verilog.expr_runp f' asr asa e v' /\
-      val_value_lessdef
-        (Values.Val.of_optbool
-           (Op.eval_condition cond
-                              (map (fun r : positive => Registers.Regmap.get r rs) args) m)) v'.
-  Admitted.
+    - destruct (Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m) eqn:EQ.
+      + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. auto.
+        intros. econstructor. econstructor. eassumption. unfold boolToValue, Values.Val.of_optbool.
+        destruct b; constructor; auto.
+      + eapply eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. auto.
+    - monadInv H1.
+      destruct (Op.eval_condition c (map (fun r1 : positive => Registers.Regmap.get r1 rs) l0) m) eqn:EQN;
+      simplify. destruct b eqn:B.
+      + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_true. eassumption. econstructor. auto.
+        auto. unfold Values.Val.normalize.
+        destruct (Registers.Regmap.get r rs) eqn:EQN2; constructor.
+        * assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. unfold valueToInt in H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H1. discriminate. rewrite EQN2 in H2. discriminate.
+        * assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H2. discriminate.
+      + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_false. eassumption. econstructor. auto.
+        auto. unfold Values.Val.normalize.
+        destruct (Registers.Regmap.get r0 rs) eqn:EQN2; constructor.
+        * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. unfold valueToInt in H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H1. discriminate. rewrite EQN2 in H2. discriminate.
+        * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H2. discriminate.
+      + exploit eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros. inv H0. inv H1. destruct (Int.eq_dec x0 Int.zero).
+        econstructor. econstructor. eapply Verilog.erun_Vternary_false.
+        eassumption. econstructor. auto. subst. auto. constructor.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_true.
+        eassumption. econstructor. auto. unfold valueToBool. pose proof n. apply Int.eq_false in n.
+        unfold uvalueToZ. unfold Int.eq in n. unfold zeq in *.
+        destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
+        rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
+        constructor.
+  Qed.
 
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:
@@ -2512,3 +2674,5 @@ Section CORRECTNESS.
   Qed.
 
 End CORRECTNESS.
+
+Check transl_step_correct.
