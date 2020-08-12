@@ -867,10 +867,17 @@ Section CORRECTNESS.
         * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
           apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto.
           rewrite EQN2 in H2. discriminate.
-      + exploit eval_cond_correct'. eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
-        simplify. right. right. apply H0.
-        auto. eapply EQ. intros. inv H0. inv H1.
-        econstructor. econstructor. eapply Verilog.erun_Vternary_true. apply H0. econstructor. auto.
+      + exploit eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros. inv H0. inv H1. destruct (Int.eq_dec x0 Int.zero).
+        econstructor. econstructor. eapply Verilog.erun_Vternary_false.
+        eassumption. econstructor. auto. subst. auto. constructor.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_true.
+        eassumption. econstructor. auto. unfold valueToBool. pose proof n. apply Int.eq_false in n.
+        unfold uvalueToZ. unfold Int.eq in n. unfold zeq in *.
+        destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
+        rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
+        constructor.
+  Qed.
 
 
 (*            Lemma eval_cond_correct :
