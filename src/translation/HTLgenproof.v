@@ -879,29 +879,6 @@ Section CORRECTNESS.
         constructor.
   Qed.
 
-
-(*            Lemma eval_cond_correct :
-    forall s,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
-      (RTL.fn_code f) ! st = Some (RTL.Iop (Op.Ocmp cond) args pc' res0) ->
-      (Values.Val.of_optbool
-         (Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m)) = v ->
-      translate_condition cond args s = OK e s' i ->
-    exists v' : value, Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
-
-              Lemma value_select_optbool :
-                Values.Val.normalize (Values.Val.of_optbool b)
-
-  Lemma eval_cond_correct :
-    forall e asa asr f' m args rs cond,
-    exists v' : value,
-      Verilog.expr_runp f' asr asa e v' /\
-      val_value_lessdef
-        (Values.Val.of_optbool
-           (Op.eval_condition cond
-                              (map (fun r : positive => Registers.Regmap.get r rs) args) m)) v'.
-  Admitted.
-*)
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:
 <<
