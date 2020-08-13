@@ -753,7 +753,6 @@ Section CORRECTNESS.
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
     (*- unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
-      Search Int.repr.
       repeat (rewrite Int.unsigned_repr). auto.*)
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
@@ -1105,7 +1104,7 @@ Section CORRECTNESS.
       rewrite Ptrofs.unsigned_repr by (unfold_constants; lia).
       rewrite Int.unsigned_repr by (unfold_constants; lia).
 
-      unfold Ptrofs.of_int. Search Int.add. rewrite Int.add_commut.
+      unfold Ptrofs.of_int. rewrite Int.add_commut.
       pose proof Integers.Ptrofs.agree32_add as AGR. unfold Ptrofs.agree32 in *.
       erewrite AGR.
       3: { unfold uvalueToZ. rewrite Ptrofs.unsigned_repr. trivial. apply Int.unsigned_range_2. }

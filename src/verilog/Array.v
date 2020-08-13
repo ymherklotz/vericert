@@ -156,7 +156,7 @@ Proof.
   intros.
 
   unfold array_get.
-  info_eauto with array.
+  eauto with array.
 Qed.
 
 Lemma array_get_get_error {A : Type} :

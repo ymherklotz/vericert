@@ -40,8 +40,6 @@ Record value : Type :=
     vword: word vsize
   }.
 
-Search N.of_nat.
-
 (** ** Value conversions
 
 Various conversions to different number types such as [N], [Z], [positive] and
@@ -490,7 +488,7 @@ Qed.
 Proof.
   intros. unfold Int.add, valueToInt, intToValue. repeat (rewrite Int.unsigned_repr).
   rewrite (@vadd_vplus v1 v2 EQ). trivial.
-  unfold uvalueToZ. Search word "bound". pose proof (@uwordToZ_bound (vsize v2) (vword v2)).
+  unfold uvalueToZ. pose proof (@uwordToZ_bound (vsize v2) (vword v2)).
   rewrite H in EQ. rewrite <- EQ in H0 at 3.*)
   (*rewrite zadd_vplus3. trivia*)
 

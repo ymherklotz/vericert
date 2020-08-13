@@ -77,7 +77,6 @@ Definition ptrToValue (i : ptrofs) : value := Ptrofs.to_int i.
 Definition valueToPtr (i : value) : Integers.ptrofs :=
   Ptrofs.of_int i.
 
-Search Ptrofs.of_int Ptrofs.to_int.
 Definition valToValue (v : Values.val) : option value :=
   match v with
   | Values.Vint i => Some (intToValue i)

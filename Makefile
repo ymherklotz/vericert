@@ -17,6 +17,8 @@ COQINCLUDES := -R src/common vericert.common -R src/verilog vericert.verilog \
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
 
+COQDOCFLAGS := --no-lib-name
+
 VS := src/Compiler.v src/Simulator.v $(foreach d, translation common verilog, src/$(d)/*.v)
 
 PREFIX ?= .
@@ -40,6 +42,9 @@ install:
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
 	@rm -f src/extraction/STAMP
+
+doc: Makefile.coq
+	$(MAKE) COQDOCFLAGS="$(COQDOCFLAGS)" -f Makefile.coq html
 
 extraction: src/extraction/STAMP
 
