@@ -2327,39 +2327,47 @@ Section CORRECTNESS.
   Proof.
     intros s f sp pc rs m cond args ifso ifnot b pc' H H0 H1 R1 MSTATE.
     inv_state.
-
-    eexists. split. apply Smallstep.plus_one.
-    eapply HTL.step_module; eauto.
-    inv CONST; assumption.
-    inv CONST; assumption.
-(*    eapply Verilog.stmnt_runp_Vnonblock_reg with
-        (rhsval := if b then posToValue 32 ifso else posToValue 32 ifnot).
-    constructor.
-
-    simpl.
     destruct b.
-    eapply Verilog.erun_Vternary_true.
-    eapply eval_cond_correct; eauto.
-    constructor.
-    apply boolToValue_ValueToBool.
-    eapply Verilog.erun_Vternary_false.
-    eapply eval_cond_correct; eauto.
-    constructor.
-    apply boolToValue_ValueToBool.
-    constructor.
+    - eexists. split. apply Smallstep.plus_one.
+      clear H33.
+      eapply HTL.step_module; eauto.
+      inv CONST; assumption.
+      inv CONST; assumption.
+      econstructor; simpl; trivial.
+      constructor; trivial.
+      eapply Verilog.erun_Vternary_true; simpl; eauto.
+      eapply eval_cond_correct; eauto. intros.
+      intros. eapply RTL.max_reg_function_use. apply H22. auto.
+      econstructor. auto.
+      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      apply AssocMap.gss.
 
-    big_tac.
+      inv MARR. inv CONST.
+      big_tac.
+      constructor; rewrite AssocMap.gso; simplify; try assumption; lia.
+    - eexists. split. apply Smallstep.plus_one.
+      clear H32.
+      eapply HTL.step_module; eauto.
+      inv CONST; assumption.
+      inv CONST; assumption.
+      econstructor; simpl; trivial.
+      constructor; trivial.
+      eapply Verilog.erun_Vternary_false; simpl; eauto.
+      eapply eval_cond_correct; eauto. intros.
+      intros. eapply RTL.max_reg_function_use. apply H22. auto.
+      econstructor. auto.
+      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      apply AssocMap.gss.
 
-    invert MARR.
-    destruct b; rewrite assumption_32bit; big_tac.
+      inv MARR. inv CONST.
+      big_tac.
+      constructor; rewrite AssocMap.gso; simplify; try assumption; lia.
 
-    Unshelve.
-    constructor.
-  Qed.*)
-  Admitted.
+      Unshelve. all: exact tt.
+  Qed.
   Hint Resolve transl_icond_correct : htlproof.
 
-  Lemma transl_ijumptable_correct:
+  (*Lemma transl_ijumptable_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
       (rs : Registers.Regmap.t Values.val) (m : mem) (arg : Registers.reg) (tbl : list RTL.node)
       (n : Integers.Int.int) (pc' : RTL.node),
@@ -2372,8 +2380,8 @@ Section CORRECTNESS.
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m) R2.
   Proof.
     intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE.
-  Admitted.
-  Hint Resolve transl_ijumptable_correct : htlproof.
+  
+  Hint Resolve transl_ijumptable_correct : htlproof.*)
 
   Lemma transl_ireturn_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
@@ -2674,5 +2682,3 @@ Section CORRECTNESS.
   Qed.
 
 End CORRECTNESS.
-
-Check transl_step_correct.

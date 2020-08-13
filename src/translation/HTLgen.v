@@ -478,8 +478,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
         add_branch_instr e n n1 n2
       else error (Errors.msg "State is larger than 2^32.")
     | Ijumptable r tbl =>
-      do s <- get;
-      add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
+      (*do s <- get;
+      add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))*)
+      error (Errors.msg "Ijumptable: Case statement not supported.")
     | Ireturn r =>
       match r with
       | Some r' =>

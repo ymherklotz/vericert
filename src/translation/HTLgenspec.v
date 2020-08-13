@@ -147,11 +147,11 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
       tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
-               (state_goto st n)
-| tr_instr_Ijumptable :
+               (state_goto st n).
+(*| tr_instr_Ijumptable :
     forall cexpr tbl r,
     cexpr = tbl_to_case_expr st tbl ->
-    tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).
+    tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
@@ -446,7 +446,7 @@ Proof.
   - monadInv H. apply add_instr_freshreg_trans in EQ0. apply translate_arr_access_freshreg_trans in EQ. congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.
-  - inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.
+  (*- inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.*)
 Qed.
 Hint Resolve transf_instr_freshreg_trans : htlspec.
 
@@ -551,12 +551,12 @@ Proof.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
 
-    + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
+    (*+ destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + inversion H2.
       * inversion H14. constructor. congruence.
       * apply in_map with (f := fst) in H14. contradiction.
-
+      *)
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + inversion H2.
