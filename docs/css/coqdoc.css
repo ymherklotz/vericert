@@ -1,0 +1,606 @@
+body { padding: 0px 0px;
+       margin: 0px 0px; 
+       background-color: white }
+
+#page { display: block;
+        padding: 0px;
+        margin: 0px;
+        padding-bottom: 10px; }
+
+#header { display: block;
+          position: relative;
+          padding: 0;
+          margin: 0;
+          vertical-align: middle;
+          border-bottom-style: solid;
+          border-width: thin }
+
+#header h1 { padding: 0; 
+             margin: 0;}
+
+
+/* Contents */
+
+#main{ display: block;
+       padding: 10px;
+       font-family: sans-serif;
+       font-size: 100%;
+       line-height: 100% }
+
+#main  h1 { line-height: 95% } /* allow for multi-line headers */
+
+#main  a.idref:visited {color : #416DFF; text-decoration : none; }
+#main  a.idref:link {color : #416DFF; text-decoration : none; }
+#main  a.idref:hover {text-decoration : none; }
+#main  a.idref:active {text-decoration : none; }
+
+#main  a.modref:visited {color : #416DFF; text-decoration : none; }
+#main  a.modref:link {color : #416DFF; text-decoration : none; }
+#main  a.modref:hover {text-decoration : none; }
+#main  a.modref:active {text-decoration : none; }
+
+#main .keyword { color : #cf1d1d }
+#main { color: black }
+
+.section { background-color: white;
+           padding-top: 13px; 
+           padding-bottom: 13px; 
+           padding-left: 3px; 
+           margin-top: 5px;
+           margin-bottom: 5px;
+           font-size : 175% }
+
+h2.section { background-color: white;
+             padding-left: 3px; 
+             padding-top: 12px; 
+             padding-bottom: 10px; 
+             font-size : 130% }
+
+h3.section { background-color: white;
+             padding-left: 3px; 
+             padding-top: 7px; 
+             padding-bottom: 7px; 
+             font-size : 115% }
+
+h4.section { 
+/*
+                   background-color: rgb(80%,80%,80%);
+                   max-width: 20em;
+                   padding-left: 5px; 
+                   padding-top: 5px; 
+                   padding-bottom: 5px; 
+*/
+                   background-color: white;
+                   padding-left: 0px; 
+                   padding-top: 0px; 
+                   padding-bottom: 0px; 
+                   font-size : 100%;
+                   font-weight : bold;
+                   text-decoration : underline;
+ }
+
+#main .doc { margin: 0px;
+             font-family: sans-serif;
+             font-size: 100%;
+	     line-height: 125%;
+             max-width: 40em;
+             color: black;
+	     padding: 10px;
+             background-color: #90bdff }
+
+.inlinecode { 
+    display: inline;
+/*    font-size: 125%; */
+    color: #666666;
+    font-family: monospace } 
+
+.doc .inlinecode { 
+    display: inline;
+    font-size: 120%; 
+    color: rgb(30%,30%,70%);
+    font-family: monospace } 
+
+.doc .inlinecode .id { 
+    color: rgb(30%,30%,70%); 
+} 
+
+.inlinecodenm { 
+    display: inline;
+    color: #444444;
+}
+
+.doc .code { 
+    display: inline;
+    font-size: 120%; 
+    color: rgb(30%,30%,70%); 
+    font-family: monospace } 
+
+.comment { 
+    display: inline;
+    font-family: monospace;
+    color: rgb(50%,50%,80%); 
+} 
+
+.code { 
+    display: block;
+/*  padding-left: 15px; */
+    font-size: 110%; 
+    font-family: monospace;
+ } 
+
+table.infrule {
+  border: 0px;
+  margin-left: 50px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+td.infrule {
+    font-family: monospace;
+    text-align: center;
+/*    color: rgb(35%,35%,70%);  */
+    padding: 0px;
+    line-height: 100%;
+}
+
+tr.infrulemiddle hr {
+    margin: 1px 0 1px 0;
+}
+
+.infrulenamecol {
+    color: rgb(60%,60%,60%); 
+    font-size: 80%;
+    padding-left: 1em;
+    padding-bottom: 0.1em
+}
+
+/* Pied de page */
+
+#footer { font-size: 65%;
+          font-family: sans-serif; }
+
+/* Identifiers: <span class="id" title="...">) */
+
+.id { display: inline; }
+
+.id[title="constructor"] {
+    color: rgb(60%,0%,0%);
+}
+
+.id[title="var"] {
+    color: rgb(40%,0%,40%);
+}
+
+.id[title="variable"] {
+    color: rgb(40%,0%,40%);
+}
+
+.id[title="definition"] {
+    color: rgb(0%,40%,0%);
+}
+
+.id[title="abbreviation"] {
+    color: rgb(0%,40%,0%);
+}
+
+.id[title="lemma"] {
+    color: rgb(0%,40%,0%);
+}
+
+.id[title="instance"] {
+    color: rgb(0%,40%,0%);
+}
+
+.id[title="projection"] {
+    color: rgb(0%,40%,0%);
+}
+
+.id[title="method"] {
+    color: rgb(0%,40%,0%);
+}
+
+.id[title="inductive"] {
+    color: rgb(0%,0%,80%);
+}
+
+.id[title="record"] {
+    color: rgb(0%,0%,80%);
+}
+
+.id[title="class"] {
+    color: rgb(0%,0%,80%);
+}
+
+.id[title="keyword"] {
+ color : #cf1d1d;
+/*     color: black; */
+}
+
+/* Deprecated rules using the 'type' attribute of <span> (not xhtml valid) */
+
+.id[type="constructor"] { 
+    color: rgb(60%,0%,0%);
+}
+
+.id[type="var"] { 
+    color: rgb(40%,0%,40%);
+}
+
+.id[type="variable"] { 
+    color: rgb(40%,0%,40%);
+}
+
+.id[type="definition"] { 
+    color: rgb(0%,40%,0%);
+}
+
+.id[type="abbreviation"] { 
+    color: rgb(0%,40%,0%);
+}
+
+.id[type="lemma"] { 
+    color: rgb(0%,40%,0%);
+}
+
+.id[type="instance"] { 
+    color: rgb(0%,40%,0%);
+}
+
+.id[type="projection"] { 
+    color: rgb(0%,40%,0%);
+}
+
+.id[type="method"] { 
+    color: rgb(0%,40%,0%);
+}
+
+.id[type="inductive"] { 
+    color: rgb(0%,0%,80%);
+}
+
+.id[type="record"] { 
+    color: rgb(0%,0%,80%);
+}
+
+.id[type="class"] { 
+    color: rgb(0%,0%,80%);
+}
+
+.id[type="keyword"] { 
+ color : #cf1d1d;
+/*     color: black; */
+}
+
+.inlinecode .id {
+    color: rgb(0%,0%,0%);
+}
+
+
+/* TOC */
+
+#toc h2 {
+    padding: 10px;
+    background-color: rgb(60%,60%,100%);
+}
+
+#toc li {
+    padding-bottom: 8px;
+}
+
+/* Index */
+
+#index {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+#index #frontispiece {
+    margin: 1em auto;
+    padding: 1em;
+    width: 60%;
+}
+
+.booktitle { font-size : 140%  }
+.authors { font-size : 90%;
+	         line-height: 115%;  }
+.moreauthors { font-size : 60%  }
+
+#index #entrance {
+    text-align: center;
+}
+
+#index #entrance .spacer {
+    margin: 0 30px 0 30px;
+}
+
+#index #footer {
+    position: absolute;
+    bottom: 0;
+}
+
+.paragraph {
+    height: 0.75em;
+}
+
+ul.doclist {
+    margin-top: 0em;
+    margin-bottom: 0em;
+}
+
+.section { background-color: white; }
+
+h2.section { background-color: white; }
+
+h3.section { background-color: white; }
+
+#main .doc {
+    background-color: white;
+}
+
+#toc h2 {
+    background-color: white;
+}
+
+body {
+    font-family: "Helvetica Neue", "Lucida Grande", "Lucida Sans Unicode", Helvetica, Arial, sans-serif !important;
+    font-size: 14px;
+    line-height: 21px;
+    color: #333;
+
+    max-width: 62em;
+    margin: auto;
+}
+
+.code {
+    font-size: 80%;
+    color: black;
+    border: 1px solid #DEDEDE;
+    font-family: Monaco, Consolas, "Lucida Console", monospace;
+    color: black;
+    background-color: #ffffff;
+    padding: 1.2em;
+    /* border: 1px solid #dddddd; */
+    overflow: auto;
+}
+
+table {
+    border: none;
+    margin: auto;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+td {
+    border: none;
+}
+
+th {
+    border: none;
+}
+
+a {
+    text-decoration: none;
+    color: #3399cc;
+}
+
+a:visited {
+    text-decoration: none;
+    color: #3399cc;
+}
+
+a:hover {
+    text-decoration: underline;
+    color: #3399cc;
+}
+
+body {
+    font-family: "Helvetica Neue", "Lucida Grande", "Lucida Sans Unicode", Helvetica, Arial, sans-serif !important;
+    font-size: 14px;
+    line-height: 21px;
+    color: #333;
+
+    max-width: 62em;
+    margin: auto;
+}
+body #content {
+    padding-top: 30px;
+}
+body .title {
+    margin-left: 0;
+}
+
+h1 {
+    font-size:2.1em;
+    padding:0 0 30px 0;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+h2 {
+    font-family:Arial,sans-serif;
+    font-size:1.45em;
+    line-height:16px;
+    padding:7px 0 0 0;
+    color: #666;
+}
+
+.outline-text-2 {
+    margin-left: 0.1em
+}
+
+.title {
+
+}
+
+h3 {
+    font-family:Arial,sans-serif;
+    font-size:1.3em;
+    color: #666;
+    margin-left: 0.6em;
+}
+
+.outline-text-3 {
+    margin-left: 0.9em;
+}
+
+h4 {
+    font-family:Arial,sans-serif;
+    font-size:1.2em;
+    margin-left: 1.2em;
+    color: #666;
+}
+
+.outline-text-4 {
+    margin-left: 1.45em;
+}
+
+a {
+    text-decoration: none;
+    color: #3399cc;
+}
+/* a:visited {text-decoration: none; color: #224444} */ /* Taken out because color too similar to text. */
+a:visited {
+    text-decoration: none;
+    color: #3399cc;
+}  /* this is now the color of the Unicorns horn */
+a:hover {
+    text-decoration: underline;
+    color: #3399cc;
+}
+
+ul, ol {
+    padding-left: 2em;
+}
+
+ul {
+    list-style-type: square;
+    list-style-image: inherit;
+    list-style-position: outside;
+}
+ol {
+    list-style-type: decimal;
+    list-style-position: outside;
+}
+ol ol {
+    list-style-type: lower-alpha;
+}
+
+.todo {
+    color: #CA0000;
+}
+
+.done {
+    color: #006666;
+}
+
+.timestamp-kwd {
+    color: #444;
+}
+
+.tag {
+
+}
+
+li {
+    margin: .4em;
+}
+
+table {
+    border: none;
+    margin: auto;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+td {
+    border: none;
+    border-left: 1px solid black;
+}
+
+th {
+    border: none;
+}
+
+table.full {
+}
+
+table.full td {
+    border: 1px solid black;
+    padding: 5px;
+}
+
+code {
+    font-size: 100%;
+    color: black;
+    border: 1px solid #DEDEDE;
+    padding: 0px 0.2em;
+}
+
+img {
+    border: none;
+}
+
+.share img {
+    opacity: .4;
+    -moz-opacity: .4;
+    filter: alpha(opacity=40);
+}
+
+.share img:hover {
+    opacity: 1;
+    -moz-opacity: 1;
+    filter: alpha(opacity=100);
+}
+
+/* pre {border: 1px solid #555; */
+/*      background: #EEE; */
+/*      font-size: 9pt; */
+/*      padding: 1em; */
+/*     } */
+
+/* pre { */
+/*     color: #e5e5e5; */
+/*     background-color: #000000; */
+/*     padding: 1.4em; */
+/*     border: 2px solid gray; */
+/* } */
+
+/* pre { */
+/*     background-color: #2b2b2b; */
+/*     border: 4px solid gray; */
+/*     color: #EEE; */
+/*     overflow: auto; */
+/*     padding: 1em; */
+/*  } */
+
+pre {
+    font-family: Monaco, Consolas, "Lucida Console", monospace;
+    color: black;
+    background-color: #ffffff;
+    padding: 1.2em;
+    /* border: 1px solid #dddddd; */
+    overflow: auto;
+
+/*
+        -webkit-box-shadow: 0px 0px 4px rgba(0,0,0,0.23);
+        -moz-box-shadow: 0px 0px 4px rgba(0,0,0,0.23);
+        box-shadow: 0px 0px 4px rgba(0,0,0,0.23);
+*/
+}
+
+div.summary {
+    padding: 15px;
+    border:1px solid #CCC;
+    border-radius:10px;
+    -moz-border-radius:10px;
+    -webkit-box-shadow: 0px 0px 4px rgba(0,0,0,0.23);
+    -moz-box-shadow: 0px 0px 4px rgba(0,0,0,0.23);
+    box-shadow: 0px 0px 4px rgba(0,0,0,0.23);
+}
+
+div.summary h2 {
+    padding: 0;
+    margin: 0;
+}
