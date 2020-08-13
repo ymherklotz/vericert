@@ -1,6 +1,8 @@
-import urllib.request
+import datetime
+import re
 import subprocess
 import sys
+import urllib.request
 
 
 def collect(d):
@@ -17,7 +19,17 @@ def collect(d):
             ["grep", "-r", "-E", "Qed|Defined", d]).splitlines())
     except: n_qed = 0
 
-    return (n_admitted, n_theorems, n_qed)
+    try: n_files = len(subprocess.check_output(["find", d, "-name", "*.v"]).splitlines())
+    except: n_files = 0
+
+    try:
+        ps = subprocess.Popen(["find", d, "-name", "*.v"], stdout=subprocess.PIPE)
+        output = subprocess.check_output(["xargs", "wc"], stdin=ps.stdout).decode("utf-8").splitlines()[-1]
+        ps.wait()
+        n_lines = int(re.match("\s*(\d+)", output).group().strip())
+    except: n_lines = 0
+
+    return (n_files, n_lines, n_admitted, n_theorems, n_qed)
 
 
 def pick_colour(n, m):
@@ -28,7 +40,7 @@ def pick_colour(n, m):
 
 
 def main(d):
-    n_admitted, n_theorems, _ = collect(d)
+    n_files, n_lines, n_admitted, n_theorems, n_qed = collect(d)
     colour = pick_colour(n_admitted, n_theorems)
 
     url = "https://img.shields.io/badge/admitted%20proofs-{}-{}?style=flat".format(
@@ -38,6 +50,11 @@ def main(d):
     with open("admitted.svg", "wb") as f:
         with urllib.request.urlopen(req) as r:
             f.write(r.read())
+
+    with open(str(datetime.datetime.now()).replace(" ", "_")+".csv", "w") as f:
+        f.write("n_files,n_lines,n_admitted,n_theorems,n_qed\n"
+                +str(n_files)+","+str(n_lines)+","
+                +str(n_admitted)+","+str(n_theorems)+","+str(n_qed)+"\n")
 
 
 if __name__ == "__main__":
