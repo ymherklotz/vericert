@@ -1,5 +1,19 @@
 name: CI
 
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "**.v"
+      - "**.ml"
+      - "**.mli"
+  pull_request:
+    branches: [ master ]
+    paths:
+      - "**.v"
+      - "**.ml"
+      - "**.mli"
+
 jobs:
   build:
     runs-on: ubuntu-latest

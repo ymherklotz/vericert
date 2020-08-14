@@ -12,7 +12,7 @@ The project is currently a work in progress, so proofs remain to be finished.  C
 - local arrays and pointers
 - control-flow structures such as if-statements, for-loops, etc...
 
-* TOC
+* Content
 
-[[/docs/toc.html][- Vericert Coq Documentation]]
+- [[./docs/toc.html][Vericert Coq Documentation]]
 - [[./building.org][Building Vericert]]
