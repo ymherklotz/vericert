@@ -20,7 +20,8 @@ From vericert Require
      Verilog
      Value
      Compiler
-     RTLBlockgen.
+     RTLBlockgen
+     RTLBlock.
 
 From Coq Require DecidableClass.
 
@@ -174,7 +175,7 @@ Set Extraction AccessOpaque.
 Cd "src/extraction".
 Separate Extraction
          Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
-         RTLBlockgen.transl_program
+         RTLBlockgen.transl_program RTLBlock.successors_instr
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

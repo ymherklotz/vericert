@@ -35,13 +35,13 @@ Inductive instruction : Type :=
 Definition bblock_body : Type := list instruction.
 
 Inductive control_flow_inst : Type :=
-| RBcall : signature -> ident -> list reg -> reg -> node -> control_flow_inst
-| RBtailcall : signature -> ident -> list reg -> control_flow_inst
+| RBcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst
+| RBtailcall : signature -> reg + ident -> list reg -> control_flow_inst
 | RBbuiltin : external_function -> list (builtin_arg reg) ->
               builtin_res reg -> node -> control_flow_inst
 | RBcond : condition -> list reg -> node -> node -> control_flow_inst
 | RBjumptable : reg -> list node -> control_flow_inst
-| RBredurn : option reg -> control_flow_inst.
+| RBreturn : option reg -> control_flow_inst.
 
 Record bblock : Type := mk_bblock {
     bb_body: bblock_body;
@@ -66,4 +66,14 @@ Definition funsig (fd: fundef) :=
   match fd with
   | Internal f => fn_sig f
   | External ef => ef_sig ef
+  end.
+
+Definition successors_instr (i : control_flow_inst) : list node :=
+  match i with
+  | RBcall sig ros args res s => s :: nil
+  | RBtailcall sig ros args => nil
+  | RBbuiltin ef args res s => s :: nil
+  | RBcond cond args ifso ifnot => ifso :: ifnot :: nil
+  | RBjumptable arg tbl => tbl
+  | RBreturn optarg => nil
   end.
