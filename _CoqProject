@@ -1,7 +1,6 @@
 -R src/common vericert.common
 -R src/extraction vericert.extraction
--R src/translation vericert.translation
--R src/verilog vericert.verilog
+-R src/hls vericert.hls
 -R src vericert
 
 -R lib/CompCert/MenhirLib compcert.MenhirLib

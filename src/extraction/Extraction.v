@@ -16,7 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From vericert Require Verilog Value Compiler.
+From vericert Require
+     Verilog
+     Value
+     Compiler
+     RTLBlockgen.
 
 From Coq Require DecidableClass.
 
@@ -162,12 +166,15 @@ Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
+Extract Constant RTLBlockgen.partition => "Partition.partition".
+
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
 
 Cd "src/extraction".
 Separate Extraction
          Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
+         RTLBlockgen.transl_program
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

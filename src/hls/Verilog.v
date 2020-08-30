@@ -29,7 +29,7 @@ Require Import Lia.
 
 Import ListNotations.
 
-From vericert Require Import common.Vericertlib common.Show verilog.ValueInt AssocMap Array.
+From vericert Require Import Vericertlib Show ValueInt AssocMap Array.
 From compcert Require Events.
 From compcert Require Import Integers Errors Smallstep Globalenvs.
 

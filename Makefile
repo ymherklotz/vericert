@@ -9,8 +9,9 @@ endif
 COMPCERTRECDIRS := lib common x86_32 x86 backend cfrontend driver flocq exportclight \
   MenhirLib cparser
 
-COQINCLUDES := -R src/common vericert.common -R src/verilog vericert.verilog \
-               -R src/extraction vericert.extraction -R src/translation vericert.translation \
+COQINCLUDES := -R src/common vericert.common \
+               -R src/extraction vericert.extraction \
+               -R src/hls vericert.hls \
                -R src vericert \
                $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
 
@@ -19,7 +20,7 @@ COQMAKE := $(COQBIN)coq_makefile
 
 COQDOCFLAGS := --no-lib-name -l
 
-VS := src/Compiler.v src/Simulator.v $(foreach d, translation common verilog, src/$(d)/*.v)
+VS := src/Compiler.v src/Simulator.v $(foreach d, common hls, src/$(d)/*.v)
 
 PREFIX ?= .
 
