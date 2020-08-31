@@ -61,15 +61,19 @@ let translate_cfi = function
 let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
   let succ = List.map (fun i -> (i, PTree.get i c)) (RTL.successors_instr i) in
   let trans_inst = (translate_inst i, translate_cfi i) in
+  printf "Current: %d\n" (P.to_int s);
   match trans_inst, succ with
   | (None, Some i'), _ ->
+    if List.exists (fun x -> x = s) (snd e) && not is_start then
+      Errors.OK { bb_body = []; bb_exit = Some (RBgoto s) }
+    else
     Errors.OK {bb_body = []; bb_exit = Some i'}
   | (Some i', None), (s', Some i_n)::[] ->
     if List.exists (fun x -> x = s) (fst e) then
       Errors.OK { bb_body = [i']; bb_exit = Some (RBgoto s') }
-    else if List.exists (fun x -> x = s) (snd e) && not is_start then begin
+    else if List.exists (fun x -> x = s) (snd e) && not is_start then
       Errors.OK { bb_body = []; bb_exit = Some (RBgoto s) }
-    end else begin
+    else begin
       match next_bblock_from_RTL false e c s' i_n with
       | Errors.OK bb ->
         Errors.OK (prepend_instr i' bb)
@@ -98,7 +102,7 @@ let rec translate_all edge c s c_bb =
     | Errors.OK {bb_exit = None; _} ->
       Errors.Error (Errors.msg (coqstring_of_camlstring "Error in translate all"))
     | Errors.OK {bb_body = bb; bb_exit = Some e} ->
-      let succ = successors_instr e in
+      let succ = List.filter (fun x -> P.lt x s) (successors_instr e) in
       match traverseacc (translate_all edge c) succ c_bb with
       | Errors.Error msg -> Errors.Error msg
       | Errors.OK c' ->
