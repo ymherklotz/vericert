@@ -41,7 +41,8 @@ Inductive control_flow_inst : Type :=
               builtin_res reg -> node -> control_flow_inst
 | RBcond : condition -> list reg -> node -> node -> control_flow_inst
 | RBjumptable : reg -> list node -> control_flow_inst
-| RBreturn : option reg -> control_flow_inst.
+| RBreturn : option reg -> control_flow_inst
+| RBgoto : node -> control_flow_inst.
 
 Record bblock : Type := mk_bblock {
     bb_body: bblock_body;
@@ -76,4 +77,5 @@ Definition successors_instr (i : control_flow_inst) : list node :=
   | RBcond cond args ifso ifnot => ifso :: ifnot :: nil
   | RBjumptable arg tbl => tbl
   | RBreturn optarg => nil
+  | RBgoto n => n :: nil
   end.

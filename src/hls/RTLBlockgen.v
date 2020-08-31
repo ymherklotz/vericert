@@ -24,16 +24,9 @@ From compcert Require Import
 From vericert Require Import
      RTLBlock.
 
-Parameter partition : RTL.code -> code.
+Parameter partition : RTL.function -> Errors.res function.
 
-Definition transl_function (f : RTL.function) : function :=
-  mkfunction f.(RTL.fn_sig)
-             f.(RTL.fn_params)
-             f.(RTL.fn_stacksize)
-             (partition f.(RTL.fn_code))
-             f.(RTL.fn_entrypoint).
+Definition transl_fundef := transf_partial_fundef partition.
 
-Definition transl_fundef := transf_fundef transl_function.
-
-Definition transl_program : RTL.program -> program :=
-  transform_program transl_fundef.
+Definition transl_program : RTL.program -> Errors.res program :=
+  transform_partial_program transl_fundef.

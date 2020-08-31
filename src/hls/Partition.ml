@@ -1,4 +1,4 @@
-(*
+ (*
  * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -29,12 +29,15 @@ open RTLBlock
 
 (* Assuming that the nodes of the CFG [code] are numbered in reverse postorder (cf. pass
    [Renumber]), an edge from [n] to [s] is a normal edge if [s < n] and a back-edge otherwise. *)
-let find_backedge i n =
+let find_edge i n =
   let succ = RTL.successors_instr i in
-  List.filter (fun s -> P.lt n s) succ
+  let filt = List.filter (fun s -> P.lt n s || P.lt s (P.pred n)) succ in
+  (begin match filt with [] -> [] | _ -> [n] end, filt)
 
-let find_backedges c =
-  PTree.fold (fun l n i -> List.append (find_backedge i n) l) c []
+let find_edges c =
+  PTree.fold (fun l n i ->
+      let f = find_edge i n in
+      (List.append (fst f) (fst l), List.append (snd f) (snd l))) c ([], [])
 
 let prepend_instr i = function
   | {bb_body = bb; bb_exit = e} -> {bb_body = (i :: bb); bb_exit = e}
@@ -55,47 +58,63 @@ let translate_cfi = function
   | RTL.Ireturn r -> Some (RBreturn r)
   | _ -> None
 
-let rec next_bblock_from_RTL (c : RTL.code) i =
-  let succ = List.map (fun i -> PTree.get i c) (RTL.successors_instr i) in
+let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
+  let succ = List.map (fun i -> (i, PTree.get i c)) (RTL.successors_instr i) in
   let trans_inst = (translate_inst i, translate_cfi i) in
   match trans_inst, succ with
-  | (Some i', _), Some i::[] -> begin
-      match next_bblock_from_RTL c i with
-      | Errors.OK bb -> Errors.OK (prepend_instr i' bb)
+  | (None, Some i'), _ ->
+    Errors.OK {bb_body = []; bb_exit = Some i'}
+  | (Some i', None), (s', Some i_n)::[] ->
+    if List.exists (fun x -> x = s) (fst e) then
+      Errors.OK { bb_body = [i']; bb_exit = Some (RBgoto s') }
+    else if List.exists (fun x -> x = s) (snd e) && not is_start then begin
+      Errors.OK { bb_body = []; bb_exit = Some (RBgoto s) }
+    end else begin
+      match next_bblock_from_RTL false e c s' i_n with
+      | Errors.OK bb ->
+        Errors.OK (prepend_instr i' bb)
       | Errors.Error msg -> Errors.Error msg
     end
-  | (_, Some i'), _ ->
-    Errors.OK {bb_body = []; bb_exit = Some i'}
-  | _, _ -> Errors.Error (Errors.msg (coqstring_of_camlstring "next_bblock_from_RTL went wrong."))
+  | _, _ ->
+    Errors.Error (Errors.msg (coqstring_of_camlstring "next_bblock_from_RTL went wrong."))
 
-let rec traverselist f l =
+let rec traverseacc f l c =
   match l with
-  | [] -> Errors.OK []
+  | [] -> Errors.OK c
   | x::xs ->
-    match f x with
+    match f x c with
     | Errors.Error msg -> Errors.Error msg
     | Errors.OK x' ->
-      match traverselist f xs with
+      match traverseacc f xs x' with
       | Errors.Error msg -> Errors.Error msg
-      | Errors.OK xs' ->
-        Errors.OK (x'::xs')
+      | Errors.OK xs' -> Errors.OK xs'
 
-let rec translate_all start c =
-  match PTree.get start c with
+let rec translate_all edge c s c_bb =
+  match PTree.get s c with
   | None -> Errors.Error (Errors.msg (coqstring_of_camlstring "Could not translate all."))
   | Some i ->
-    match next_bblock_from_RTL c i with
+    match next_bblock_from_RTL true edge c s i with
     | Errors.Error msg -> Errors.Error msg
+    | Errors.OK {bb_exit = None; _} ->
+      Errors.Error (Errors.msg (coqstring_of_camlstring "Error in translate all"))
     | Errors.OK {bb_body = bb; bb_exit = Some e} ->
       let succ = successors_instr e in
-      match traverselist (fun s -> translate_all s c) succ with
-      | Errors.OK l ->
+      match traverseacc (translate_all edge c) succ c_bb with
+      | Errors.Error msg -> Errors.Error msg
+      | Errors.OK c' ->
+        Errors.OK (PTree.set s {bb_body = bb; bb_exit = Some e} c')
 
 (* Partition a function and transform it into RTLBlock. *)
 let function_from_RTL f =
-  let ba = find_backedges f.RTL.fn_code in
-  { fn_sig = f.RTL.fn_entrypoint;
-    fn_stacksize = f.RTL.fn_stacksize;
-    fn_entrypoint = f.RTL.fn_entrypoint;
-    fn_code = f.RTL.fn_code
-  }
+  let e = find_edges f.RTL.fn_code in
+  match translate_all e f.RTL.fn_code f.RTL.fn_entrypoint PTree.empty with
+  | Errors.Error msg -> Errors.Error msg
+  | Errors.OK c ->
+    Errors.OK { fn_sig = f.RTL.fn_sig;
+                fn_stacksize = f.RTL.fn_stacksize;
+                fn_params = f.RTL.fn_params;
+                fn_entrypoint = f.RTL.fn_entrypoint;
+                fn_code = c
+              }
+
+let partition = function_from_RTL
