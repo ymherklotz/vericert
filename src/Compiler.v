@@ -51,7 +51,9 @@ From vericert Require
      Verilog
      Veriloggen
      Veriloggenproof
-     HTLgen.
+     HTLgen
+     RTLBlock
+     RTLBlockgen.
 
 From compcert Require Import Smallstep.
 
@@ -98,6 +100,17 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   @@@ RTLgen.transl_program
   @@ print (print_RTL 0)
   @@@ transf_backend.
+
+Definition transf_hls_temp (p : Csyntax.program) : res RTLBlock.program :=
+  OK p
+  @@@ SimplExpr.transl_program
+  @@@ SimplLocals.transf_program
+  @@@ Cshmgen.transl_program
+  @@@ Cminorgen.transl_program
+  @@@ Selection.sel_program
+  @@@ RTLgen.transl_program
+  @@ print (print_RTL 0)
+  @@@ RTLBlockgen.transl_program.
 
 Local Open Scope linking_scope.
 

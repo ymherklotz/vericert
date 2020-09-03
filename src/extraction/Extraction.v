@@ -175,6 +175,7 @@ Set Extraction AccessOpaque.
 Cd "src/extraction".
 Separate Extraction
          Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
+         vericert.Compiler.transf_hls_temp
          RTLBlockgen.transl_program RTLBlock.successors_instr
 
    Compiler.transf_c_program Compiler.transf_cminor_program
