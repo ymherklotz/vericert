@@ -61,13 +61,12 @@ let translate_cfi = function
 let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
   let succ = List.map (fun i -> (i, PTree.get i c)) (RTL.successors_instr i) in
   let trans_inst = (translate_inst i, translate_cfi i) in
-  printf "Current: %d\n" (P.to_int s);
   match trans_inst, succ with
   | (None, Some i'), _ ->
     if List.exists (fun x -> x = s) (snd e) && not is_start then
       Errors.OK { bb_body = []; bb_exit = Some (RBgoto s) }
     else
-    Errors.OK {bb_body = []; bb_exit = Some i'}
+      Errors.OK { bb_body = []; bb_exit = Some i' }
   | (Some i', None), (s', Some i_n)::[] ->
     if List.exists (fun x -> x = s) (fst e) then
       Errors.OK { bb_body = [i']; bb_exit = Some (RBgoto s') }
@@ -118,7 +117,7 @@ let function_from_RTL f =
                 fn_stacksize = f.RTL.fn_stacksize;
                 fn_params = f.RTL.fn_params;
                 fn_entrypoint = f.RTL.fn_entrypoint;
-                fn_code = c
+                fn_code = Schedule.schedule f.RTL.fn_entrypoint c
               }
 
 let partition = function_from_RTL
