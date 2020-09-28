@@ -1,19 +1,20 @@
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-	ARCH := x86_32-linux
+	ARCH := x86_64-linux
 endif
 ifeq ($(UNAME_S),Darwin)
-	ARCH := x86_32-macosx
+	ARCH := x86_64-macosx
 endif
 
-COMPCERTRECDIRS := lib common x86_32 x86 backend cfrontend driver flocq exportclight \
-  MenhirLib cparser
+COMPCERTRECDIRS := lib common x86_64 x86 backend cfrontend driver exportclight cparser
 
 COQINCLUDES := -R src/common vericert.common \
                -R src/extraction vericert.extraction \
                -R src/hls vericert.hls \
                -R src vericert \
-               $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d))
+               $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d)) \
+               -R lib/CompCert/flocq Flocq \
+               -R lib/CompCert/MenhirLib MenhirLib
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
