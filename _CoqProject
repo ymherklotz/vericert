@@ -10,7 +10,6 @@
 -R lib/CompCert/driver compcert.driver
 -R lib/CompCert/exportclight compcert.exportclight
 -R lib/CompCert/lib compcert.lib
--R lib/CompCert/x86 compcert.x86
--R lib/CompCert/x86_64 compcert.x86_64
+-R lib/CompCert/verilog compcert.verilog
 -R lib/CompCert/flocq Flocq
 -R lib/CompCert/MenhirLib MenhirLib

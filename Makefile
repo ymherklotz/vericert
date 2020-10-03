@@ -1,12 +1,12 @@
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
-	ARCH := x86_64-linux
+	ARCH := verilog-linux
 endif
 ifeq ($(UNAME_S),Darwin)
-	ARCH := x86_64-macosx
+	ARCH := verilog-macosx
 endif
 
-COMPCERTRECDIRS := lib common x86_64 x86 backend cfrontend driver exportclight cparser
+COMPCERTRECDIRS := lib common verilog backend cfrontend driver exportclight cparser
 
 COQINCLUDES := -R src/common vericert.common \
                -R src/extraction vericert.extraction \
