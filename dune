@@ -1,5 +1,6 @@
 (dirs :standard \ "./lib/CompCert/x86_32" "./lib/CompCert/powerpc" "./lib/CompCert/riscV"
-      "./lib/CompCert/arm" "./lib/CompCert/aarch64" "./lib/CompCert/extraction")
+      "./lib/CompCert/arm" "./lib/CompCert/aarch64" "./lib/CompCert/extraction"
+      "./lib/CompCert/x86" "./lib/CompCert/x86_64")
 
 (include_subdirs unqualified)
 

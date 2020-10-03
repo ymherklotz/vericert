@@ -13,5 +13,6 @@
 -R lib/CompCert/exportclight compcert.exportclight
 -R lib/CompCert/flocq compcert.flocq
 -R lib/CompCert/lib compcert.lib
--R lib/CompCert/x86 compcert.x86
--R lib/CompCert/x86_32 compcert.x86_32
+-R lib/CompCert/verilog compcert.verilog
+-R lib/CompCert/flocq Flocq
+-R lib/CompCert/MenhirLib MenhirLib
