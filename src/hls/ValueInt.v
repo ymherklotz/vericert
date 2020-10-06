@@ -34,7 +34,10 @@ on the size of the [value]. This is necessary so that we can easily store
 
 Using the default [word], this would not be possible, as the size is part of the type. *)
 
-Definition value : Type := int.
+Inductive value : Type :=
+| value_bool : bool -> value
+| value_int : int -> value
+| value_long : int64 -> value.
 
 (** ** Value conversions
 
@@ -42,44 +45,93 @@ Various conversions to different number types such as [N], [Z], [positive] and
 [int], where the last one is a theory of integers of powers of 2 in CompCert. *)
 
 Definition valueToNat (v : value) : nat :=
-  Z.to_nat (Int.unsigned v).
+  match v with
+  | value_bool b => Nat.b2n b
+  | value_int i => Z.to_nat (Int.unsigned i)
+  | value_long i => Z.to_nat (Int64.unsigned i)
+  end.
 
 Definition natToValue (n : nat) : value :=
-  Int.repr (Z.of_nat n).
+  value_int (Int.repr (Z.of_nat n)).
+
+Definition natToValue64 (n : nat) : value :=
+  value_long (Int64.repr (Z.of_nat n)).
 
 Definition valueToN (v : value) : N :=
-  Z.to_N (Int.unsigned v).
+  match v with
+  | value_bool b => N.b2n b
+  | value_int i => Z.to_N (Int.unsigned i)
+  | value_long i => Z.to_N (Int64.unsigned i)
+  end.
 
 Definition NToValue (n : N) : value :=
-  Int.repr (Z.of_N n).
+  value_int (Int.repr (Z.of_N n)).
+
+Definition NToValue64 (n : N) : value :=
+  value_long (Int64.repr (Z.of_N n)).
 
 Definition ZToValue (z : Z) : value :=
-  Int.repr z.
+  value_int (Int.repr z).
+Hint Unfold ZToValue : core.
+
+Definition ZToValue64 (z : Z) : value :=
+  value_long (Int64.repr z).
+Hint Unfold ZToValue64 : core.
 
 Definition valueToZ (v : value) : Z :=
-  Int.signed v.
+  match v with
+  | value_bool b => Z.b2z b
+  | value_int i => Int.signed i
+  | value_long i => Int64.signed i
+  end.
+Hint Unfold valueToZ : core.
 
 Definition uvalueToZ (v : value) : Z :=
-  Int.unsigned v.
+  match v with
+  | value_bool b => Z.b2z b
+  | value_int i => Int.unsigned i
+  | value_long i => Int64.unsigned i
+  end.
+Hint Unfold valueToZ : core.
 
 Definition posToValue (p : positive) : value :=
-  Int.repr (Z.pos p).
+  value_int (Int.repr (Z.pos p)).
+
+Definition posToValue64 (p : positive) : value :=
+  value_long (Int64.repr (Z.pos p)).
 
 Definition valueToPos (v : value) : positive :=
-  Z.to_pos (Int.unsigned v).
+  match v with
+  | value_bool b => 1%positive
+  | value_int i => Z.to_pos (Int.unsigned i)
+  | value_long i => Z.to_pos (Int64.unsigned i)
+  end.
 
-Definition intToValue (i : Integers.int) : value := i.
+Definition intToValue (i : Integers.int) : value := value_int i.
 
-Definition valueToInt (i : value) : Integers.int := i.
+Definition longToValue (i : Integers.int64) : value := value_long i.
 
-Definition ptrToValue (i : ptrofs) : value := Ptrofs.to_int i.
+Definition valueToInt (v : value) : Integers.int :=
+  match v with
+  | value_bool b => Int.repr (if b then 1 else 0)
+  | value_int i => i
+  | value_long i => Int.repr (Int64.unsigned i)
+  end.
 
-Definition valueToPtr (i : value) : Integers.ptrofs :=
-  Ptrofs.of_int i.
+Definition ptrToValue (i : ptrofs) : value :=
+  value_int (Ptrofs.to_int i).
+
+Definition valueToPtr (i : value) : ptrofs :=
+  match i with
+  | value_bool b => Ptrofs.repr (if b then 1 else 0)
+  | value_int i => Ptrofs.repr (Int.unsigned i)
+  | value_long i => Ptrofs.repr (Int64.unsigned i)
+  end.
 
 Definition valToValue (v : Values.val) : option value :=
   match v with
   | Values.Vint i => Some (intToValue i)
+  | Values.Vlong i => Some (longToValue i)
   | Values.Vptr b off => Some (ptrToValue off)
   | Values.Vundef => Some (ZToValue 0%Z)
   | _ => None
@@ -108,9 +160,11 @@ Proof. auto. Qed.
 
 Inductive val_value_lessdef: val -> value -> Prop :=
 | val_value_lessdef_int:
-    forall i v',
-    i = valueToInt v' ->
-    val_value_lessdef (Vint i) v'
+    forall i,
+    val_value_lessdef (Vint i) (value_int i)
+| val_value_lessdef_long:
+    forall i,
+    val_value_lessdef (Vlong i) (value_long i)
 | val_value_lessdef_ptr:
     forall b off v',
     off = valueToPtr v' ->
@@ -126,13 +180,15 @@ Lemma valueToZ_ZToValue :
   forall z,
   (Int.min_signed <= z <= Int.max_signed)%Z ->
   valueToZ (ZToValue z) = z.
-Proof. auto using Int.signed_repr. Qed.
+Proof.
+  simpl; auto using Int.signed_repr.
+Qed.
 
 Lemma uvalueToZ_ZToValue :
   forall z,
   (0 <= z <= Int.max_unsigned)%Z ->
   uvalueToZ (ZToValue z) = z.
-Proof. auto using Int.unsigned_repr. Qed.
+Proof. simpl; auto using Int.unsigned_repr. Qed.
 
 Lemma valueToPos_posToValue :
   forall v,
@@ -155,9 +211,9 @@ Lemma valToValue_lessdef :
     val_value_lessdef v v'.
 Proof.
   intros.
-  destruct v; try discriminate; constructor.
-  unfold valToValue in H. inversion H.
-  unfold valueToInt. unfold intToValue in H1. auto.
+  destruct v; destruct v'; try discriminate; try constructor.
+  unfold valToValue in H. inversion H. constructor.
+  unfold valToValue, longToValue in *. inv H. constructor.
   inv H. symmetry. unfold valueToPtr, ptrToValue. apply Ptrofs.of_int_to_int. trivial.
 Qed.
 
