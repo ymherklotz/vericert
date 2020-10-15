@@ -38,6 +38,7 @@ lib/COMPCERTSTAMP:
 
 install:
 	install -d $(PREFIX)/bin
+	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
 	install -C _build/default/driver/compcert.ini $(PREFIX)/bin/.
 	install -C _build/default/driver/VericertDriver.exe $(PREFIX)/bin/vericert
 
