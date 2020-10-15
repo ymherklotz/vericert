@@ -18,8 +18,8 @@
 
 From compcert Require Import Maps.
 From compcert Require Errors Globalenvs Integers.
-From compcert Require Import AST RTLBlock.
-From vericert Require Import Verilog HTL Vericertlib AssocMap ValueInt Statemonad.
+From compcert Require Import AST.
+From vericert Require Import RTLBlock Verilog HTL Vericertlib AssocMap ValueInt Statemonad.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
