@@ -109,6 +109,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res RTLBlock.program :=
   @@@ Cminorgen.transl_program
   @@@ Selection.sel_program
   @@@ RTLgen.transl_program
+  @@ Renumber.transf_program
   @@ print (print_RTL 0)
   @@@ RTLBlockgen.transl_program.
 
