@@ -91,14 +91,14 @@ let compile_c_file sourcename ifile ofile =
     close_out oc
   end else begin
     let verilog =
-      match Vericert.Compiler0.transf_hls csyntax with
+      match Vericert.Compiler0.transf_hls_temp csyntax with
       | Vericert.Errors.OK v ->
         v
       | Vericert.Errors.Error msg ->
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     let oc = open_out ofile in
-    Vericert.PrintVerilog.print_program !option_debug_hls oc verilog;
+    Vericert.PrintRTLBlock.print_program oc verilog;
     close_out oc
   end
 
