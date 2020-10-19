@@ -287,11 +287,7 @@ let find_max = function
       in
       find_max' (snd l) ls
 
-type registers = {
-  reg_finish : reg;
-  reg_return : reg;
-  reg_stk : reg;
-}
+type registers = { reg_finish : reg; reg_return : reg; reg_stk : reg }
 
 let ( >>= ) = bind
 
@@ -304,7 +300,8 @@ let translate_control_flow r curr_st instr =
             {
               state with
               st_controllogic =
-                PTree.set curr_st (state_goto state.st_st n) state.st_controllogic;
+                PTree.set curr_st (state_goto state.st_st n)
+                  state.st_controllogic;
             } )
   | RBcond (c, rs, n1, n2) ->
       translate_condition c rs >>= fun ce state ->
@@ -348,71 +345,140 @@ let translate_control_flow r curr_st instr =
                   state with
                   st_datapath = PTree.set curr_st fin state.st_datapath;
                 } ) )
-  | _ -> error (Errors.msg (coqstring_of_camlstring "Control flow instructions not implemented."))
+  | _ ->
+      error
+        (Errors.msg
+           (coqstring_of_camlstring
+              "Control flow instructions not implemented."))
 
 let translate_instr r curr_st instr =
   let prev_instr state =
-    match PTree.get curr_st state.st_datapath with
-    | None -> Vskip
-    | Some v -> v
+    match PTree.get curr_st state.st_datapath with None -> Vskip | Some v -> v
   in
   match instr with
   | RBnop ->
-    fun state ->
-      OK ((), { state with st_datapath = PTree.set curr_st (prev_instr state) state.st_datapath })
+      fun state ->
+        OK
+          ( (),
+            {
+              state with
+              st_datapath =
+                PTree.set curr_st (prev_instr state) state.st_datapath;
+            } )
   | RBop (op, rs, dst) ->
-    translate_instr op rs >>=
-    (fun instr ->
-       declare_reg None dst (Nat.of_int 32) >>=
-       (fun _ state ->
-          let stmnt = Vseq (prev_instr state, nonblock dst instr) in
-          OK ((), { state with st_datapath = PTree.set curr_st stmnt state.st_datapath })))
+      translate_instr op rs >>= fun instr ->
+      declare_reg None dst (Nat.of_int 32) >>= fun _ state ->
+      let stmnt = Vseq (prev_instr state, nonblock dst instr) in
+      OK
+        ( (),
+          { state with st_datapath = PTree.set curr_st stmnt state.st_datapath }
+        )
   | RBload (mem, addr, rs, dst) ->
-    translate_arr_access mem addr rs r.reg_stk >>=
-    (fun src ->
-       declare_reg None dst (Nat.of_int 32) >>=
-       (fun _ state ->
-          let stmnt = Vseq (prev_instr state, nonblock dst src) in
-          OK ((), { state with st_datapath = PTree.set curr_st stmnt state.st_datapath })))
+      translate_arr_access mem addr rs r.reg_stk >>= fun src ->
+      declare_reg None dst (Nat.of_int 32) >>= fun _ state ->
+      let stmnt = Vseq (prev_instr state, nonblock dst src) in
+      OK
+        ( (),
+          { state with st_datapath = PTree.set curr_st stmnt state.st_datapath }
+        )
   | RBstore (mem, addr, rs, src) ->
-    translate_arr_access mem addr rs r.reg_stk >>=
-    (fun dst state ->
-       OK ((), { state with st_datapath = PTree.set curr_st (Vnonblock (dst, (Vvar src))) state.st_datapath }))
+      translate_arr_access mem addr rs r.reg_stk >>= fun dst state ->
+      OK
+        ( (),
+          {
+            state with
+            st_datapath =
+              PTree.set curr_st (Vnonblock (dst, Vvar src)) state.st_datapath;
+          } )
 
 let combine_bb_schedule schedule s =
-  let (i, st) = s in
+  let i, st = s in
   IMap.update st (update_schedule i) schedule
 
-let add_schedules bb_body min_sched curr i state schedule =
-  let (data, control) = state in
+let add_schedules r bb_body min_sched curr ischedule =
+  let i, schedule = ischedule in
   let curr_state = curr - i + min_sched in
-  List.fold_left (fun state' i -> )
+  let instrs = List.map (List.nth bb_body) schedule in
+  collectlist (translate_instr r (P.of_int curr_state)) instrs >>= fun _ ->
+  translate_control_flow r (P.of_int curr_state)
+    (RBgoto (curr_state - 1 |> P.of_int))
 
 (** Should generate the [HTL] code based on the input [RTLBlock] description. *)
-let transf_htl r c schedule =
-  let f state i bb =
+let transf_htl r c (schedule : (int * int) list IMap.t) =
+  let f bbs =
+    let i, bb = bbs in
     match bb with
-    | {bb_body = []; bb_exit = Some c} ->
-      translate_control_flow r i state c
-    | {bb_body = bb_body'; bb_exit = Some c} -> begin
-        match IMap.find (P.to_int i) schedule with
-        | None -> assert false
-        | Some i_sched ->
-          (* This means that we have a schedule for the current basic block, and the schedule is a
-             mapping from instruction to state. If it is empty, that means we only have a control flow
-             instruction which we have to schedule. *)
-          let min_state = find_min i_sched in
-          let i_sched_tree = List.fold_left combine_bb_schedule IMap.empty i_sched in
-          IMap.fold ()
-      end
+    | { bb_body = []; bb_exit = Some c } -> translate_control_flow r i c
+    | { bb_body = bb_body'; bb_exit = Some ctrl_flow } ->
+        let i_sched = IMap.find (P.to_int i) schedule in
+        let min_state = find_min i_sched in
+        let max_state = find_max i_sched in
+        let i_sched_tree =
+          List.fold_left combine_bb_schedule IMap.empty i_sched
+        in
+        collectlist
+          (add_schedules r bb_body' min_state (P.to_int i))
+          (IMap.to_seq i_sched_tree |> List.of_seq)
+        >>= fun _ ->
+        translate_control_flow r (P.of_int (P.to_int i - max_state)) ctrl_flow
+    | _ ->
+        coqstring_of_camlstring "Illegal state reached in scheduler"
+        |> Errors.msg |> error
   in
-  PTree.fold
+  collectlist f c
 
-let schedule entry (c : code) =
+let schedule entry r (c : code) =
   let c' = PTree.map1 gather_bb_constraints c in
   let _, (vars, constraints, types) =
     gather_cfg_constraints ([], ([], "", "")) c' entry
   in
   let schedule = solve_constraints vars constraints types in
   IMap.iter (fun d -> printf "%d: %a\n" d (print_list print_tuple)) schedule;
-  c
+  transf_htl r (PTree.elements c) schedule
+
+let transl_module' (f : RTLBlock.coq_function) : HTL.coq_module mon =
+  create_reg (Some Voutput) (Nat.of_int 1) >>= fun fin ->
+  create_reg (Some Voutput) (Nat.of_int 32) >>= fun rtrn ->
+  create_arr None (Nat.of_int 32) (Nat.of_int (Z.to_int f.fn_stacksize / 4))
+  >>= fun stack_var ->
+  let stack, stack_len = stack_var in
+  schedule f.fn_entrypoint
+    { reg_finish = fin; reg_return = rtrn; reg_stk = stack }
+    f.fn_code
+  >>= fun _ ->
+  collectlist (fun r -> declare_reg (Some Vinput) r (Nat.of_int 32)) f.fn_params
+  >>= fun _ ->
+  create_reg (Some Vinput) (Nat.of_int 1) >>= fun start ->
+  create_reg (Some Vinput) (Nat.of_int 1) >>= fun rst ->
+  create_reg (Some Vinput) (Nat.of_int 1) >>= fun clk current_state ->
+  let m =
+    {
+      HTL.mod_params = f.fn_params;
+      HTL.mod_datapath = current_state.st_datapath;
+      HTL.mod_controllogic = current_state.st_controllogic;
+      HTL.mod_entrypoint = f.fn_entrypoint;
+      HTL.mod_st = current_state.st_st;
+      HTL.mod_stk = stack;
+      HTL.mod_stk_len = stack_len;
+      HTL.mod_finish = fin;
+      HTL.mod_return = rtrn;
+      HTL.mod_start = start;
+      HTL.mod_reset = rst;
+      HTL.mod_clk = clk;
+      HTL.mod_scldecls = current_state.st_scldecls;
+      HTL.mod_arrdecls = current_state.st_arrdecls;
+    }
+  in
+  OK (m, current_state)
+
+let max_state f =
+  let st = P.of_int 10000 in
+  { (init_state st) with
+    st_st = st;
+    st_freshreg = P.succ st;
+    st_freshstate = P.of_int 10000;
+    st_scldecls = AssocMap.AssocMap.set st (None, Nat.of_int 32) ((init_state st).st_scldecls);
+  }
+
+let transl_module (f : RTLBlock.coq_function) : HTL.coq_module Errors.res =
+  run_mon (max_state f) (transl_module' f)
