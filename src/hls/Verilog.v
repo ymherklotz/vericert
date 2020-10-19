@@ -29,9 +29,9 @@ Require Import Lia.
 
 Import ListNotations.
 
-From vericert Require Import Vericertlib Show ValueInt AssocMap Array.
+From vericert Require Import Vericertlib Show AssocMap Array.
 From compcert Require Events.
-From compcert Require Import Integers Errors Smallstep Globalenvs.
+From compcert Require Import Integers Errors Smallstep Globalenvs Values.
 
 Local Open Scope assocmap.
 
@@ -47,18 +47,18 @@ Record associations (A : Type) : Type :=
     assoc_nonblocking : AssocMap.t A
   }.
 
-Definition arr := (Array (option value)).
+Definition arr := (Array (option val)).
 
-Definition reg_associations := associations value.
+Definition reg_associations := associations val.
 Definition arr_associations := associations arr.
 
-Definition assocmap_reg := AssocMap.t value.
+Definition assocmap_reg := AssocMap.t val.
 Definition assocmap_arr := AssocMap.t arr.
 
 Definition merge_regs (new : assocmap_reg) (old : assocmap_reg) : assocmap_reg :=
-  AssocMapExt.merge value new old.
+  AssocMapExt.merge val new old.
 
-Definition merge_cell (new : option value) (old : option value) : option value :=
+Definition merge_cell (new : option val) (old : option val) : option val :=
   match new, old with
   | Some _, _ => new
   | _, _ => old
@@ -75,28 +75,28 @@ Definition merge_arr (new : option arr) (old : option arr) : option arr :=
 Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :=
   AssocMap.combine merge_arr new old.
 
-Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
+Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option val :=
   match a ! r with
   | None => None
-  | Some arr => Some (Option.default (NToValue 0) (Option.join (array_get_error i arr)))
+  | Some arr => Some (Option.default Vzero (Option.join (array_get_error i arr)))
   end.
 
-Definition arr_assocmap_set (r : reg) (i : nat) (v : value) (a : assocmap_arr) : assocmap_arr :=
+Definition arr_assocmap_set (r : reg) (i : nat) (v : val) (a : assocmap_arr) : assocmap_arr :=
   match a ! r with
   | None => a
   | Some arr => a # r <- (array_set i (Some v) arr)
   end.
 
-Definition block_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
+Definition block_arr (r : reg) (i : nat) (asa : arr_associations) (v : val) : arr_associations :=
   mkassociations (arr_assocmap_set r i v asa.(assoc_blocking)) asa.(assoc_nonblocking).
 
-Definition nonblock_arr (r : reg) (i : nat) (asa : arr_associations) (v : value) : arr_associations :=
+Definition nonblock_arr (r : reg) (i : nat) (asa : arr_associations) (v : val) : arr_associations :=
   mkassociations asa.(assoc_blocking) (arr_assocmap_set r i v asa.(assoc_nonblocking)).
 
-Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
+Definition block_reg (r : reg) (asr : reg_associations) (v : val) :=
   mkassociations (AssocMap.set r v asr.(assoc_blocking)) asr.(assoc_nonblocking).
 
-Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
+Definition nonblock_reg (r : reg) (asr : reg_associations) (v : val) :=
   mkassociations asr.(assoc_blocking) (AssocMap.set r v asr.(assoc_nonblocking)).
 
 Inductive scl_decl : Type := VScalar (sz : nat).
@@ -107,9 +107,9 @@ Inductive arr_decl : Type := VArray (sz : nat) (ln : nat).
 The Verilog AST is defined here, which is the target language of the
 compilation.
 
-** Value
+** Val
 
-The Verilog [value] is a bitvector containg a size and the actual bitvector. In
+The Verilog [val] is a bitvector containg a size and the actual bitvector. In
 this case, the [Word.word] type is used as many theorems about that bitvector
 have already been proven. *)
 
@@ -155,7 +155,7 @@ Inductive unop : Type :=
 (** ** Expressions *)
 
 Inductive expr : Type :=
-| Vlit : value -> expr
+| Vlit : val -> expr
 | Vvar : reg -> expr
 | Vvari : reg -> expr -> expr
 | Vinputvar : reg -> expr
@@ -164,7 +164,7 @@ Inductive expr : Type :=
 | Vternary : expr -> expr -> expr -> expr.
 
 Definition posToExpr (p : positive) : expr :=
-  Vlit (posToValue p).
+  Vlit (Vint (Int.repr (Z.pos p))).
 
 (** ** Statements *)
 
@@ -219,7 +219,7 @@ Inductive module_item : Type :=
 - [mod_clk] The clock that controls the computation in the module.
 - [mod_args] The arguments to the module.
 - [mod_finish] Bit that is set if the result is ready.
-- [mod_return] The return value that was computed.
+- [mod_return] The return val that was computed.
 - [mod_body] The body of the module, including the state machine.
 *)
 
@@ -241,11 +241,6 @@ Definition fundef := AST.fundef module.
 
 Definition program := AST.program fundef unit.
 
-(** Convert a [positive] to an expression directly, setting it to the right
-    size. *)
-Definition posToLit (p : positive) : expr :=
-  Vlit (posToValue p).
-
 Definition fext := unit.
 Definition fextclk := nat -> fext.
 
@@ -263,8 +258,8 @@ retrieved and set appropriately.
   in previous clock cycles.
 - Nonblocking association list containing all the nonblocking assignments made
   in the current module.
-- The environment containing values for the input.
-- The program counter which determines the value for the state in this version of
+- The environment containing vals for the input.
+- The program counter which determines the val for the state in this version of
   Verilog, as the Verilog was generated by the RTL, which means that we have to
   make an assumption about how it looks.  In this case, that it contains state
   which determines which part of the Verilog is executed.  This is then the part
@@ -288,37 +283,33 @@ Inductive state : Type :=
            (arr_assoc : assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
-           (v : value), state
+           (v : val), state
 | Callstate :
     forall (stack : list stackframe)
            (m : module)
-           (args : list value), state.
+           (args : list val), state.
 
-Definition binop_run (op : binop) (v1 v2 : value) : option value :=
+Definition boolToVal (b : bool) := if b then Vtrue else Vfalse.
+
+Definition binop_run (op : binop) (v1 v2 : val) : option val :=
   match op with
-  | Vadd => Some (Int.add v1 v2)
-  | Vsub => Some (Int.sub v1 v2)
-  | Vmul => Some (Int.mul v1 v2)
-  | Vdiv => if Int.eq v2 Int.zero
-               || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
-            then None
-            else Some (Int.divs v1 v2)
-  | Vdivu => if Int.eq v2 Int.zero then None else Some (Int.divu v1 v2)
-  | Vmod => if Int.eq v2 Int.zero
-               || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
-            then None
-            else Some (Int.mods v1 v2)
-  | Vmodu => if Int.eq v2 Int.zero then None else Some (Int.modu v1 v2)
-  | Vlt => Some (boolToValue (Int.lt v1 v2))
-  | Vltu => Some (boolToValue (Int.ltu v1 v2))
-  | Vgt => Some (boolToValue (Int.lt v2 v1))
-  | Vgtu => Some (boolToValue (Int.ltu v2 v1))
-  | Vle => Some (boolToValue (negb (Int.lt v2 v1)))
-  | Vleu => Some (boolToValue (negb (Int.ltu v2 v1)))
-  | Vge => Some (boolToValue (negb (Int.lt v1 v2)))
-  | Vgeu => Some (boolToValue (negb (Int.ltu v1 v2)))
-  | Veq => Some (boolToValue (Int.eq v1 v2))
-  | Vne => Some (boolToValue (negb (Int.eq v1 v2)))
+  | Vadd => Some (Val.add v1 v2)
+  | Vsub => Some (Val.sub v1 v2)
+  | Vmul => Some (Val.mul v1 v2)
+  | Vdiv => Val.divs v1 v2
+  | Vdivu => Val.divu v1 v2
+  | Vmod => Val.mods v1 v2
+  | Vmodu => Val.modu v1 v2
+  | Vlt => Some (Val.cmp Clt v1 v2)
+  | Vltu => Some (Val.cmpu Clt v1 v2)
+  | Vgt => Some (Val.cmp Clt v1 v2)
+  | Vgtu => Some (boolToVal (Int.ltu v2 v1))
+  | Vle => Some (boolToVal (negb (Int.lt v2 v1)))
+  | Vleu => Some (boolToVal (negb (Int.ltu v2 v1)))
+  | Vge => Some (boolToVal (negb (Int.lt v1 v2)))
+  | Vgeu => Some (boolToVal (negb (Int.ltu v1 v2)))
+  | Veq => Some (boolToVal (Int.eq v1 v2))
+  | Vne => Some (boolToVal (negb (Int.eq v1 v2)))
   | Vand => Some (Int.and v1 v2)
   | Vor => Some (Int.or v1 v2)
   | Vxor => Some (Int.xor v1 v2)
@@ -327,13 +318,13 @@ Definition binop_run (op : binop) (v1 v2 : value) : option value :=
   | Vshru => Some (Int.shru v1 v2)
   end.
 
-Definition unop_run (op : unop) (v1 : value) : value :=
+Definition unop_run (op : unop) (v1 : val) : val :=
   match op with
   | Vneg => Int.neg v1
   | Vnot => Int.not v1
   end.
 
-Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop :=
+Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> val -> Prop :=
   | erun_Vlit :
       forall fext reg stack v,
       expr_runp fext reg stack (Vlit v) v
@@ -344,7 +335,7 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
   | erun_Vvari :
       forall fext reg stack v iexp i r,
       expr_runp fext reg stack iexp i ->
-      arr_assocmap_lookup stack r (valueToNat i) = Some v ->
+      arr_assocmap_lookup stack r (valToNat i) = Some v ->
       expr_runp fext reg stack (Vvari r iexp) v
   | erun_Vbinop :
       forall fext reg stack op l r lv rv resv,
@@ -362,13 +353,13 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       forall fext reg stack c ts fs vc vt,
       expr_runp fext reg stack c vc ->
       expr_runp fext reg stack ts vt ->
-      valueToBool vc = true ->
+      valToBool vc = true ->
       expr_runp fext reg stack (Vternary c ts fs) vt
   | erun_Vternary_false :
       forall fext reg stack c ts fs vc vf,
       expr_runp fext reg stack c vc ->
       expr_runp fext reg stack fs vf ->
-      valueToBool vc = false ->
+      valToBool vc = false ->
       expr_runp fext reg stack (Vternary c ts fs) vf.
 Hint Constructors expr_runp : verilog.
 
@@ -388,19 +379,19 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
-(*Definition access_fext (f : fext) (r : reg) : res value :=
+(*Definition access_fext (f : fext) (r : reg) : res val :=
   match AssocMap.get r f with
   | Some v => OK v
-  | _ => OK (ZToValue 0)
+  | _ => OK (ZToVal 0)
   end.*)
 
 (* TODO FIX Vvar case without default *)
 (*Fixpoint expr_run (assoc : assocmap) (e : expr)
-         {struct e} : res value :=
+         {struct e} : res val :=
   match e with
   | Vlit v => OK v
   | Vvar r => match s with
-              | State _ assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
+              | State _ assoc _ _ _ => handle_def (ZToVal 32 0) assoc!r
               | _ => Error (msg "Verilog: Wrong state")
               end
   | Vvari _ _ => Error (msg "Verilog: variable indexing not modelled")
@@ -419,7 +410,7 @@ Local Open Scope error_monad_scope.
     OK (oper ev)
   | Vternary c te fe =>
     do cv <- expr_run s c;
-    if valueToBool cv then expr_run s te else expr_run s fe
+    if valToBool cv then expr_run s te else expr_run s fe
   end.*)
 
 (** Return the location of the lhs of an assignment. *)
@@ -432,7 +423,7 @@ Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> 
 | Base : forall f asr asa r, location_is f asr asa (Vvar r) (LocReg r)
 | Indexed : forall f asr asa r iexp iv,
   expr_runp f asr asa iexp iv ->
-  location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).
+  location_is f asr asa (Vvari r iexp) (LocArray r (valToNat iv)).
 
 (* Definition assign_name (f : fext) (asr: assocmap) (asa : assocmap_l)  (e : expr) : res reg := *)
 (*   match e with *)
@@ -449,14 +440,14 @@ Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> 
   | _ => 1
   end.
 
-Fixpoint find_case_stmnt (s : state) (v : value) (cl : list (expr * stmnt))
+Fixpoint find_case_stmnt (s : state) (v : val) (cl : list (expr * stmnt))
          {struct cl} : option (res stmnt) :=
   match cl with
   | (e, st)::xs =>
     match expr_run s e with
     | OK v' =>
       match eq_to_opt v v' (veq v v') with
-      | Some eq => if valueToBool eq then Some (OK st) else find_case_stmnt s v xs
+      | Some eq => if valToBool eq then Some (OK st) else find_case_stmnt s v xs
       | None => Some (Error (msg "Verilog: equality check sizes not equal"))
       end
     | Error msg => Some (Error msg)
@@ -474,7 +465,7 @@ Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
       stmnt_run' n' s' s2
     | Vcond c st sf =>
       do cv <- expr_run s c;
-      if valueToBool cv
+      if valToBool cv
       then stmnt_run' n' s st
       else stmnt_run' n' s sf
     | Vcase e cl defst =>
@@ -520,13 +511,13 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
 | stmnt_runp_Vcond_true:
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
-    valueToBool vc = true ->
+    valToBool vc = true ->
     stmnt_runp f asr0 asa0 stt asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
 | stmnt_runp_Vcond_false:
     forall asr0 asa0 asr1 asa1 f c vc stt stf,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc ->
-    valueToBool vc = false ->
+    valToBool vc = false ->
     stmnt_runp f asr0 asa0 stf asr1 asa1 ->
     stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
 | stmnt_runp_Vcase_nomatch:
@@ -649,8 +640,8 @@ other arguments to the module are also to be supported. *)
 
 (*Definition initial_fextclk (m : module) : fextclk :=
   fun x => match x with
-           | S O => (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)
-           | _ => (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)
+           | S O => (AssocMap.set (mod_reset m) (ZToVal 1) empty_assocmap)
+           | _ => (AssocMap.set (mod_reset m) (ZToVal 0) empty_assocmap)
            end.*)
 
 (*Definition module_run (n : nat) (m : module) : res assocmap :=
@@ -658,10 +649,10 @@ other arguments to the module are also to be supported. *)
 
 Local Close Scope error_monad_scope.
 
-(*Theorem value_eq_size_if_eq:
+(*Theorem val_eq_size_if_eq:
   forall lv rv EQ,
-  vsize lv = vsize rv -> value_eq_size lv rv = left EQ.
-Proof. intros. unfold value_eq_size.
+  vsize lv = vsize rv -> val_eq_size lv rv = left EQ.
+Proof. intros. unfold val_eq_size.
 
 Theorem expr_run_same:
   forall assoc e v, expr_run assoc e = OK v <-> expr_runp assoc e v.
@@ -671,12 +662,12 @@ Proof.
     + intros. inversion H. constructor.
     + intros. inversion H. constructor. assumption.
     + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (expr_run assoc e2) eqn:?.
-      unfold eq_to_opt in H1. destruct (value_eq_size v0 v1) eqn:?. inversion H1.
+      unfold eq_to_opt in H1. destruct (val_eq_size v0 v1) eqn:?. inversion H1.
       constructor. apply IHe1. assumption. apply IHe2. assumption. reflexivity. discriminate. discriminate.
       discriminate.
     + intros. inversion H. destruct (expr_run assoc e) eqn:?. unfold option_map in H1.
       inversion H1. constructor. apply IHe. assumption. reflexivity. discriminate.
-    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (valueToBool v0) eqn:?.
+    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (valToBool v0) eqn:?.
       eapply erun_Vternary_true. apply IHe1. eassumption. apply IHe2. eassumption. assumption.
       eapply erun_Vternary_false. apply IHe1. eassumption. apply IHe3. eassumption. assumption.
       discriminate.
@@ -685,7 +676,7 @@ Proof.
     + intros. inversion H. subst. simpl. assumption.
     + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4.
       apply IHe2 in H6. rewrite H6. unfold eq_to_opt. assert (vsize lv = vsize rv).
-      apply EQ. apply (value_eq_size_if_eq lv rv EQ) in H0. rewrite H0. reflexivity.
+      apply EQ. apply (val_eq_size_if_eq lv rv EQ) in H0. rewrite H0. reflexivity.
     + intros. inversion H. subst. simpl. destruct (expr_run assoc e) eqn:?. simpl.
       apply IHe in H3. rewrite Heqo in H3.
       inversion H3. subst. reflexivity. apply IHe in H3. rewrite Heqo in H3. discriminate.
@@ -697,7 +688,7 @@ Qed.
 
  *)
 
-Fixpoint init_params (vl : list value) (rl : list reg) {struct rl} :=
+Fixpoint init_params (vl : list val) (rl : list reg) {struct rl} :=
   match rl, vl with
   | r :: rl', v :: vl' => AssocMap.set r v (init_params vl' rl')
   | _, _ => empty_assocmap
@@ -710,10 +701,10 @@ Definition empty_stack (m : module) : assocmap_arr :=
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
       forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
-      asr!(m.(mod_reset)) = Some (ZToValue 0) ->
-      asr!(m.(mod_finish)) = Some (ZToValue 0) ->
+      asr!(m.(mod_reset)) = Some (ZToVal 0) ->
+      asr!(m.(mod_finish)) = Some (ZToVal 0) ->
       asr!(m.(mod_st)) = Some ist ->
-      valueToPos ist = st ->
+      valToPos ist = st ->
       mis_stepp f (mkassociations asr empty_assocmap)
                   (mkassociations asa (empty_stack m))
                   m.(mod_body)
@@ -722,27 +713,27 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr' = merge_regs nasr1 basr1 ->
       asa' = merge_arrs nasa1 basa1 ->
       asr'!(m.(mod_st)) = Some stval ->
-      valueToPos stval = pstval ->
+      valToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall asr asa sf retval m st g,
-    asr!(m.(mod_finish)) = Some (ZToValue 1) ->
+    asr!(m.(mod_finish)) = Some (ZToVal 1) ->
     asr!(m.(mod_return)) = Some retval ->
     step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
 | step_call :
     forall g res m args,
     step g (Callstate res m args) Events.E0
          (State res m m.(mod_entrypoint)
-          (AssocMap.set (mod_reset m) (ZToValue 0)
-           (AssocMap.set (mod_finish m) (ZToValue 0)
-            (AssocMap.set m.(mod_st) (posToValue m.(mod_entrypoint))
+          (AssocMap.set (mod_reset m) (ZToVal 0)
+           (AssocMap.set (mod_finish m) (ZToVal 0)
+            (AssocMap.set m.(mod_st) (posToVal m.(mod_entrypoint))
              (init_params args m.(mod_args)))))
           (empty_stack m))
 | step_return :
     forall g m asr i r sf pc mst asa,
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
-         (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
+         (State sf m pc ((asr # mst <- (posToVal pc)) # r <- i) asa).
 Hint Constructors step : verilog.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -755,7 +746,7 @@ Inductive initial_state (p: program): state -> Prop :=
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval retvali,
-    retvali = valueToInt retval ->
+    retvali = valToInt retval ->
     final_state (Returnstate nil retval) retvali.
 
 Definition semantics (m : program) :=
