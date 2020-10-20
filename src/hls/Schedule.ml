@@ -420,7 +420,7 @@ let transf_htl r c (schedule : (int * int) list IMap.t) =
           (add_schedules r bb_body' min_state (P.to_int i))
           (IMap.to_seq i_sched_tree |> List.of_seq)
         >>= fun _ ->
-        translate_control_flow r (P.of_int (P.to_int i - max_state)) ctrl_flow
+        translate_control_flow r (P.of_int (P.to_int i - max_state - 1)) ctrl_flow
     | _ ->
         coqstring_of_camlstring "Illegal state reached in scheduler"
         |> Errors.msg |> error
