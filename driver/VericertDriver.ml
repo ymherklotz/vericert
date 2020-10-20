@@ -98,7 +98,7 @@ let compile_c_file sourcename ifile ofile =
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     let oc = open_out ofile in
-    Vericert.PrintRTLBlock.print_program oc verilog;
+    Vericert.PrintVerilog.print_program !option_debug_hls oc verilog;
     close_out oc
   end
 

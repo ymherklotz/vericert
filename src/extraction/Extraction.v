@@ -21,7 +21,8 @@ From vericert Require
      Value
      Compiler
      RTLBlockgen
-     RTLBlock.
+     RTLBlock
+     HTLSchedulegen.
 
 From Coq Require DecidableClass.
 
@@ -168,6 +169,7 @@ Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
 Extract Constant RTLBlockgen.partition => "Partition.partition".
+Extract Constant HTLSchedulegen.transl_module => "Schedule.transl_module".
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.

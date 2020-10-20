@@ -117,7 +117,7 @@ let function_from_RTL f =
                 fn_stacksize = f.RTL.fn_stacksize;
                 fn_params = f.RTL.fn_params;
                 fn_entrypoint = f.RTL.fn_entrypoint;
-                fn_code = Schedule.schedule f.RTL.fn_entrypoint c
+                fn_code = c
               }
 
 let partition = function_from_RTL
