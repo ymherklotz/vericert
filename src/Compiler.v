@@ -60,6 +60,7 @@ From compcert Require Import Smallstep.
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: HTL.program -> unit.
+Parameter print_RTLBlock: RTLBlock.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -110,9 +111,12 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ Cminorgen.transl_program
   @@@ Selection.sel_program
   @@@ RTLgen.transl_program
-  @@ Renumber.transf_program
+  @@@ Inlining.transf_program
   @@ print (print_RTL 0)
+  @@ Renumber.transf_program
+  @@ print (print_RTL 1)
   @@@ RTLBlockgen.transl_program
+  @@ print print_RTLBlock
   @@@ HTLSchedulegen.transl_program
   @@ print print_HTL
   @@ Veriloggen.transl_program.
