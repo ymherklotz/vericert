@@ -27,10 +27,14 @@ echo "--------------------------------------------------"
 for cfile in $test_dir/*.c; do
     echo "Testing $cfile"
     outbase=$mytmpdir/$(basename $cfile)
-    gcc -o $outbase.gcc $cfile
+    gcc -o $outbase.gcc $cfile >/dev/null 2>&1
     $outbase.gcc
     expected=$?
-    ./bin/vericert -drtl -o $outbase.v $cfile
+    ./bin/vericert -drtl -o $outbase.v $cfile >/dev/null 2>&1
+    if [[ ! -f $outbase.v ]]; then
+        echo "ERROR"
+        continue
+    fi
     iverilog -o $outbase.iverilog $outbase.v
     actual=$($outbase.iverilog | sed -E -e 's/[^0-9]+([0-9]+)/\1/')
     if [[ $expected = $actual ]]; then
