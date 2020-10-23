@@ -72,7 +72,11 @@ let register a = sprintf "reg_%d" (P.to_int a)
 
 (*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
 
-let literal l = sprintf "32'd%ld" (camlint_of_coqint l)
+let literal l =
+  let l' = camlint_of_coqint l in
+  if l' < Int32.zero
+  then sprintf "(- 32'd%ld)" (Int32.neg l')
+  else sprintf "32'd%ld" l'
 
 let rec pprint_expr = function
   | Vlit l -> literal l
