@@ -34,14 +34,19 @@ on the size of the [value]. This is necessary so that we can easily store
 
 Using the default [word], this would not be possible, as the size is part of the type. *)
 
-Definition value : Type := val.
+(* Definition value : Type := val.
 
 (** ** Value conversions
 
 Various conversions to different number types such as [N], [Z], [positive] and
 [int], where the last one is a theory of integers of powers of 2 in CompCert. *)
 
-Definition valueToNat (v : value) : nat := .
+Definition valueToNat (v : value) : nat :=
+  match v with
+  | value_bool b => Nat.b2n b
+  | value_int i => Z.to_nat (Int.unsigned i)
+  | value_int64 i => Z.to_nat (Int64.unsigned i)
+  end.
 
 Definition natToValue (n : nat) : value :=
   value_int (Int.repr (Z.of_nat n)).
@@ -201,3 +206,4 @@ Ltac simplify_val := repeat (simplify; unfold uvalueToZ, valueToPtr, Ptrofs.of_i
                                        ptrToValue in *)
 
 (*Ltac crush_val := simplify_val; try discriminate; try congruence; try lia; liapp; try assumption.*)
+*)
