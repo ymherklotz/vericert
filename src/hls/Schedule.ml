@@ -223,32 +223,32 @@ let assigned_vars vars = function
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data
    dependencies between nodes. *)
-let gather_bb_constraints bb =
+let gather_bb_constraints debug bb =
   let _, _, dfg =
     List.fold_left accumulate_RAW_deps
       (0, PTree.empty, { nodes = bb.bb_body; edges = [] })
       bb.bb_body
   in
-  printf "DFG : %a\n" print_dfg dfg;
+  if debug then printf "DFG : %a\n" print_dfg dfg else ();
   let _, dfg' = List.fold_left accumulate_WAW_deps (0, dfg) bb.bb_body in
-  printf "DFG': %a\n" print_dfg dfg';
+  if debug then printf "DFG': %a\n" print_dfg dfg' else ();
   let _, dfg'' = List.fold_left accumulate_WAR_deps (0, dfg') bb.bb_body in
-  printf "DFG'': %a\n" print_dfg dfg'';
+  if debug then printf "DFG'': %a\n" print_dfg dfg'' else ();
   let _, dfg''' =
     List.fold_left accumulate_RAW_mem_deps (0, dfg'') bb.bb_body
   in
-  printf "DFG''': %a\n" print_dfg dfg''';
+  if debug then printf "DFG''': %a\n" print_dfg dfg''' else ();
   let _, dfg'''' =
     List.fold_left accumulate_WAR_mem_deps (0, dfg''') bb.bb_body
   in
-  printf "DFG'''': %a\n" print_dfg dfg'''';
+  if debug then printf "DFG'''': %a\n" print_dfg dfg'''' else ();
   let _, dfg''''' =
     List.fold_left accumulate_WAW_mem_deps (0, dfg'''') bb.bb_body
   in
-  printf "DFG''''': %a\n" print_dfg dfg''''';
+  if debug then printf "DFG''''': %a\n" print_dfg dfg''''' else ();
   match bb.bb_exit with
   | None -> assert false
-  | Some e -> (List.length bb.bb_body, dfg''''', successors_instr e)
+  | Some e -> (List.length bb.bb_body, dfg, successors_instr e)
 
 let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
 
@@ -437,6 +437,13 @@ let translate_control_flow r curr_st instr =
                       state.st_controllogic;
                   st_freshstate = P.succ state.st_freshstate;
                 } ) )
+  | RBjumptable (r, tbl) ->
+      fun state ->
+      OK ( (),
+        {
+          state with
+          st_controllogic = PTree.set curr_st (Vcase (Vvar r, HTLgen.tbl_to_case_expr state.st_st tbl, Some Vskip)) state.st_controllogic
+        })
   | _ ->
       error
         (Errors.msg
@@ -506,12 +513,13 @@ let transf_htl r c (schedule : (int * int) list IMap.t) =
     | { bb_body = bb_body'; bb_exit = Some ctrl_flow } ->
         let i_sched =
           try IMap.find (P.to_int i) schedule
-          with Not_found ->
+          with Not_found -> (
             printf "Could not find %d\n" (P.to_int i);
             IMap.iter
               (fun d -> printf "%d: %a\n" d (print_list print_tuple))
               schedule;
             assert false
+          )
         in
         let min_state = find_min i_sched in
         let max_state = find_max i_sched in
@@ -529,12 +537,17 @@ let transf_htl r c (schedule : (int * int) list IMap.t) =
   in
   collectlist f c
 
+let second = function (_, a, _) -> a
+
 let schedule entry r (c : code) =
-  let c' = PTree.map1 gather_bb_constraints c in
+  let debug = true in
+  let c' = PTree.map1 (gather_bb_constraints false) c in
+  let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in
   let _, (vars, constraints, types) =
     gather_cfg_constraints ([], ([], "", "")) c' entry
   in
   let schedule' = solve_constraints vars constraints types in
+  IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';
   (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
   transf_htl r (PTree.elements c) schedule'
 

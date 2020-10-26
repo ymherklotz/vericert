@@ -22,7 +22,8 @@ From vericert Require
      Compiler
      RTLBlockgen
      RTLBlock
-     HTLSchedulegen.
+     HTLSchedulegen
+     HTLgen.
 
 From Coq Require DecidableClass.
 
@@ -180,6 +181,7 @@ Separate Extraction
          Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
          vericert.Compiler.transf_hls_temp
          RTLBlockgen.transl_program RTLBlock.successors_instr
+         HTLgen.tbl_to_case_expr
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
