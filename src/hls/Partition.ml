@@ -32,7 +32,7 @@ open RTLBlock
 let find_edge i n =
   let succ = RTL.successors_instr i in
   let filt = List.filter (fun s -> P.lt n s || P.lt s (P.pred n)) succ in
-  (begin match filt with [] -> [] | _ -> [n] end, filt)
+  ((match filt with [] -> [] | _ -> [n]), filt)
 
 let find_edges c =
   PTree.fold (fun l n i ->
@@ -92,27 +92,29 @@ let rec traverseacc f l c =
       | Errors.Error msg -> Errors.Error msg
       | Errors.OK xs' -> Errors.OK xs'
 
-let rec translate_all edge c s c_bb =
-  match PTree.get s c with
-  | None -> Errors.Error (Errors.msg (coqstring_of_camlstring "Could not translate all."))
-  | Some i ->
-    match next_bblock_from_RTL true edge c s i with
-    | Errors.Error msg -> Errors.Error msg
-    | Errors.OK {bb_exit = None; _} ->
-      Errors.Error (Errors.msg (coqstring_of_camlstring "Error in translate all"))
-    | Errors.OK {bb_body = bb; bb_exit = Some e} ->
-      let succ = List.filter (fun x -> P.lt x s) (successors_instr e) in
-      match traverseacc (translate_all edge c) succ c_bb with
-      | Errors.Error msg -> Errors.Error msg
-      | Errors.OK c' ->
-        Errors.OK (PTree.set s {bb_body = bb; bb_exit = Some e} c')
+let rec translate_all edge c s res =
+  let c_bb, translated = res in
+  if List.exists (fun x -> P.eq x s) translated then Errors.OK (c_bb, translated) else
+    (match PTree.get s c with
+     | None -> Errors.Error (Errors.msg (coqstring_of_camlstring "Could not translate all."))
+     | Some i ->
+       match next_bblock_from_RTL true edge c s i with
+       | Errors.Error msg -> Errors.Error msg
+       | Errors.OK {bb_exit = None; _} ->
+         Errors.Error (Errors.msg (coqstring_of_camlstring "Error in translate all"))
+       | Errors.OK {bb_body = bb; bb_exit = Some e} ->
+         let succ = List.filter (fun x -> P.lt x s) (successors_instr e) in
+         (match traverseacc (translate_all edge c) succ (c_bb, s :: translated) with
+          | Errors.Error msg -> Errors.Error msg
+          | Errors.OK (c', t') ->
+            Errors.OK (PTree.set s {bb_body = bb; bb_exit = Some e} c', t')))
 
 (* Partition a function and transform it into RTLBlock. *)
 let function_from_RTL f =
   let e = find_edges f.RTL.fn_code in
-  match translate_all e f.RTL.fn_code f.RTL.fn_entrypoint PTree.empty with
+  match translate_all e f.RTL.fn_code f.RTL.fn_entrypoint (PTree.empty, []) with
   | Errors.Error msg -> Errors.Error msg
-  | Errors.OK c ->
+  | Errors.OK (c, _) ->
     Errors.OK { fn_sig = f.RTL.fn_sig;
                 fn_stacksize = f.RTL.fn_stacksize;
                 fn_params = f.RTL.fn_params;
