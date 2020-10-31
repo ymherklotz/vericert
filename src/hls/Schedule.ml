@@ -248,7 +248,7 @@ let gather_bb_constraints debug bb =
   if debug then printf "DFG''''': %a\n" print_dfg dfg''''' else ();
   match bb.bb_exit with
   | None -> assert false
-  | Some e -> (List.length bb.bb_body, dfg, successors_instr e)
+  | Some e -> (List.length bb.bb_body, dfg''''', successors_instr e)
 
 let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
 
@@ -264,7 +264,9 @@ let gen_var_name_e = gen_var_name "e"
 
 let print_lt0 = sprintf "%s - %s <= 0;\n"
 
-let print_bb_order i c = print_lt0 (gen_bb_name_ssnk i) (gen_bb_name_ssrc c)
+let print_bb_order i c = if P.to_int c < P.to_int i then
+    print_lt0 (gen_bb_name_ssnk i) (gen_bb_name_ssrc c) else
+    ""
 
 let print_src_order i c =
   print_lt0 (gen_bb_name_ssrc i) (gen_var_name_b c i)
@@ -500,6 +502,7 @@ let add_schedules r bb_body min_sched curr ischedule =
   let i, schedule = ischedule in
   let curr_state = curr - i + min_sched in
   let instrs = List.map (List.nth bb_body) schedule in
+  if curr_state = 20 then printf "HII: curr_state: %d : curr: %d\n" curr_state curr;
   collectlist (translate_instr r (P.of_int curr_state)) instrs >>= fun _ ->
   translate_control_flow r (P.of_int curr_state)
     (RBgoto (curr_state - 1 |> P.of_int))
@@ -530,7 +533,13 @@ let transf_htl r c (schedule : (int * int) list IMap.t) =
           (add_schedules r bb_body' min_state (P.to_int i))
           (IMap.to_seq i_sched_tree |> List.of_seq)
         >>= fun _ ->
-        translate_control_flow r (P.of_int (P.to_int i - max_state)) ctrl_flow
+        printf "--------------- curr: %d, max: %d, min: %d, next: %d\n" (P.to_int i) max_state min_state (P.to_int i - max_state + min_state - 1);
+        printf "HIIIII: %d orig: %d\n" (P.to_int i - max_state + min_state - 1) (P.to_int i);
+        (match ctrl_flow with
+         | RBgoto _ ->
+           translate_control_flow r (P.of_int (P.to_int i - max_state + min_state)) ctrl_flow
+         | _ ->
+           translate_control_flow r (P.of_int (P.to_int i - max_state + min_state - 1)) ctrl_flow)
     | _ ->
         coqstring_of_camlstring "Illegal state reached in scheduler"
         |> Errors.msg |> error
