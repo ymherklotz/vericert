@@ -92,7 +92,8 @@ let compile_c_file sourcename ifile ofile =
     close_out oc
   end else begin
     let verilog =
-      match Vericert.Compiler0.transf_hls_temp csyntax with
+      let translation = if !option_hls_schedule then Vericert.Compiler0.transf_hls_temp else Vericert.Compiler0.transf_hls in
+      match translation csyntax with
       | Vericert.Errors.OK v ->
         v
       | Vericert.Errors.Error msg ->
@@ -243,6 +244,9 @@ Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -falign-branch-targets <n>  Set alignment (in bytes) of branch targets
   -falign-cond-branches <n>  Set alignment (in bytes) of conditional branches
   -fcommon       Put uninitialized globals in the common section [on].
+
+HLS Optimisations:
+  -fschedule     Schedule the resulting hardware [off].
 |} ^
  target_help ^
  toolchain_help ^
@@ -353,7 +357,7 @@ let cmdline_actions =
   Exact "-ffloat-const-prop", Integer(fun n -> option_ffloatconstprop := n);
   Exact "-falign-functions", Integer(fun n -> check_align n; option_falignfunctions := Some n);
   Exact "-falign-branch-targets", Integer(fun n -> check_align n; option_falignbranchtargets := n);
-  Exact "-falign-cond-branches", Integer(fun n -> check_align n; option_faligncondbranchs := n);] @
+  Exact "-falign-cond-branches", Integer(fun n -> check_align n; option_faligncondbranchs := n); ] @
       f_opt "common" option_fcommon @
 (* Target processor options *)
   (if Vericert.Configuration.arch = "arm" then
@@ -426,6 +430,7 @@ let cmdline_actions =
 (* Code generation options *)
   @ f_opt "fpu" option_ffpu
   @ f_opt "sse" option_ffpu (* backward compatibility *)
+  @ f_opt "schedule" option_hls_schedule
   @ [
 (* Catch options that are not handled *)
   Prefix "-", Self (fun s ->
