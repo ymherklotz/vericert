@@ -180,6 +180,7 @@ Cd "src/extraction".
 Separate Extraction
          Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
          vericert.Compiler.transf_hls_temp
+         vericert.Compiler.transf_hls_opt
          RTLBlockgen.transl_program RTLBlock.successors_instr
          HTLgen.tbl_to_case_expr
 

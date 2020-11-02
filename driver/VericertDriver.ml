@@ -92,7 +92,10 @@ let compile_c_file sourcename ifile ofile =
     close_out oc
   end else begin
     let verilog =
-      let translation = if !option_hls_schedule then Vericert.Compiler0.transf_hls_temp else Vericert.Compiler0.transf_hls in
+      let translation = if !option_hls_schedule
+                        then Vericert.Compiler0.transf_hls_temp
+                        else Vericert.Compiler0.transf_hls_opt
+      in
       match translation csyntax with
       | Vericert.Errors.OK v ->
         v

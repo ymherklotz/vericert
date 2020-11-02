@@ -84,13 +84,45 @@ Proof.
   intros. destruct x; simpl. rewrite print_identity. auto. auto.
 Qed.
 
+Definition total_if {A: Type}
+          (flag: unit -> bool) (f: A -> A) (prog: A) : A :=
+  if flag tt then f prog else prog.
+
+Definition partial_if {A: Type}
+          (flag: unit -> bool) (f: A -> res A) (prog: A) : res A :=
+  if flag tt then f prog else OK prog.
+
+Definition time {A B: Type} (name: string) (f: A -> B) : A -> B := f.
+
+Definition transf_backend_opt (r : RTL.program) : res Verilog.program :=
+  OK r
+  @@@ Inlining.transf_program
+   @@ print (print_RTL 1)
+   @@ Renumber.transf_program
+   @@ print (print_RTL 2)
+   @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
+   @@ print (print_RTL 3)
+   @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
+   @@ print (print_RTL 4)
+  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
+   @@ print (print_RTL 5)
+  @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
+   @@ print (print_RTL 6)
+  @@@ time "Unused globals" Unusedglob.transform_program
+   @@ print (print_RTL 7)
+  @@@ HTLgen.transl_program
+   @@ print print_HTL
+   @@ Veriloggen.transl_program.
+
 Definition transf_backend (r : RTL.program) : res Verilog.program :=
   OK r
   @@@ Inlining.transf_program
-  @@ print (print_RTL 1)
+   @@ print (print_RTL 1)
+   @@ Renumber.transf_program
+   @@ print (print_RTL 2)
   @@@ HTLgen.transl_program
-  @@ print print_HTL
-  @@ Veriloggen.transl_program.
+   @@ print print_HTL
+   @@ Veriloggen.transl_program.
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   OK p
@@ -100,8 +132,19 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   @@@ Cminorgen.transl_program
   @@@ Selection.sel_program
   @@@ RTLgen.transl_program
-  @@ print (print_RTL 0)
+   @@ print (print_RTL 0)
   @@@ transf_backend.
+
+Definition transf_hls_opt (p : Csyntax.program) : res Verilog.program :=
+  OK p
+  @@@ SimplExpr.transl_program
+  @@@ SimplLocals.transf_program
+  @@@ Cshmgen.transl_program
+  @@@ Cminorgen.transl_program
+  @@@ Selection.sel_program
+  @@@ RTLgen.transl_program
+   @@ print (print_RTL 0)
+  @@@ transf_backend_opt.
 
 Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   OK p
@@ -112,14 +155,24 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ Selection.sel_program
   @@@ RTLgen.transl_program
   @@@ Inlining.transf_program
-  @@ print (print_RTL 0)
-  @@ Renumber.transf_program
-  @@ print (print_RTL 1)
+   @@ print (print_RTL 1)
+   @@ Renumber.transf_program
+   @@ print (print_RTL 2)
+   @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
+   @@ print (print_RTL 3)
+   @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
+   @@ print (print_RTL 4)
+  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
+   @@ print (print_RTL 5)
+  @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
+   @@ print (print_RTL 6)
+  @@@ time "Unused globals" Unusedglob.transform_program
+   @@ print (print_RTL 7)
   @@@ RTLBlockgen.transl_program
-  @@ print print_RTLBlock
+   @@ print print_RTLBlock
   @@@ HTLSchedulegen.transl_program
-  @@ print print_HTL
-  @@ Veriloggen.transl_program.
+   @@ print print_HTL
+   @@ Veriloggen.transl_program.
 
 Local Open Scope linking_scope.
 
@@ -131,6 +184,7 @@ Definition CompCert's_passes :=
   ::: mkpass Selectionproof.match_prog
   ::: mkpass RTLgenproof.match_prog
   ::: mkpass Inliningproof.match_prog
+  ::: mkpass Renumberproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
@@ -154,8 +208,9 @@ Proof.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
   unfold transf_backend in T. simpl in T. rewrite ! compose_print_identity in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
-  destruct (HTLgen.transl_program p7) as [p8|e] eqn:P8; simpl in T; try discriminate.
-  set (p9 := Veriloggen.transl_program p8) in *.
+  set (p8 := Renumber.transf_program p7) in *.
+  destruct (HTLgen.transl_program p8) as [p9|e] eqn:P9; simpl in T; try discriminate.
+  set (p10 := Veriloggen.transl_program p9) in *.
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -164,8 +219,9 @@ Proof.
   exists p5; split. apply Selectionproof.transf_program_match; auto.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply Inliningproof.transf_program_match; auto.
-  exists p8; split. apply HTLgenproof.transf_program_match; auto.
-  exists p9; split. apply Veriloggenproof.transf_program_match; auto.
+  exists p8; split. apply Renumberproof.transf_program_match; auto.
+  exists p9; split. apply HTLgenproof.transf_program_match; auto.
+  exists p10; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
 
@@ -193,7 +249,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p9)).
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p10)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -209,6 +265,8 @@ Ltac DestructM :=
     eapply RTLgenproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply Inliningproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply Renumberproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct. eassumption.
   eapply Veriloggenproof.transf_program_correct; eassumption.
