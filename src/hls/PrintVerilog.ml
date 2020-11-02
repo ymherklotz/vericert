@@ -65,7 +65,7 @@ let pprint_binop l r =
   | Vshru -> unsigned ">>"
 
 let unop = function
-  | Vneg -> " ~ "
+  | Vneg -> " - "
   | Vnot -> " ! "
 
 let register a = sprintf "reg_%d" (P.to_int a)
@@ -177,7 +177,7 @@ let testbench = "module testbench;
 
    always @(posedge clk) begin
       if (finish == 1) begin
-         $display(\"finished: %d\", return_val);
+         $display(\"finished: %0d\", return_val);
          $finish;
       end
    end
