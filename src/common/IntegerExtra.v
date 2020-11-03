@@ -389,6 +389,21 @@ Module IntExtra.
     assumption.
   Qed.
 
+  Lemma neg_signed' :
+    forall x,
+      signed (neg x) = - signed x.
+  Proof.
+    intros.
+    Transparent repr.
+    Transparent signed.
+    unfold repr.
+    unfold signed.
+    simpl.
+    rewrite Z_mod_modulus_eq.
+    simpl.
+    repeat match goal with | |- context[if ?x then _ else _] => destruct x end.
+    Admitted.
+
   Lemma neg_divs_distr_l :
     forall x y,
       neg (divs x y) = divs (neg x) y.
@@ -402,79 +417,118 @@ Module IntExtra.
     2: {
       rewrite Zquot.Zquot_opp_l. auto.
     }
-    Search signed eqm.
-    rewrite signed_eq_unsigned; auto.
+    unfold x'.
+    rewrite <- neg_signed'.
     auto with ints.
-  Admitted.
-
-  Lemma neg_inj :
-    forall x y,
-      x = y -> neg x = neg y.
-  Proof. intros. rewrite H. trivial. Qed.
-
-  Compute (max_signed).
-  Lemma neg_signed' :
-    forall x,
-      signed (neg x) = - signed x.
-  Proof.
-    intros.
-    unfold neg.
-    destruct (Z_le_gt_dec (unsigned x) max_signed).
-    - admit.
-    -
-    rewrite signed_repr. rewrite signed_eq_unsigned.
-
   Qed.
-
-
-
 
   Lemma neg_signed :
     forall x : int,
       signed x < 0 ->
       signed (neg x) >= 0.
   Proof.
-    unfold signed.
     intros.
-    destruct (Z_ge_lt_dec (unsigned x) half_modulus).
-    - rewrite zlt_false in H; try assumption.
-      destruct (Z_ge_lt_dec (unsigned (neg x)) half_modulus).
-      + rewrite zlt_false; try assumption.
-        rewrite neg_not in *.
-        rewrite add_unsigned. rewrite unsigned_repr.
-        Search unsigned not.
-        rewrite unsigned_not.
-        unfold_constants.
-        admit. admit.
-      + rewrite zlt_true; try assumption.
-        pose (unsigned_range (neg x)).
-        apply Z.le_ge. apply a.
-    - rewrite zlt_true in H; try assumption.
-      pose (unsigned_range x). lia.
-  Admitted.
+    rewrite neg_signed'.
+    lia.
+  Qed.
 
-  Lemma shrx_shrx2_equiv : forall x y, shrx x y = shrx2 x y.
+  Lemma shl_signed_positive :
+    forall y,
+      unsigned y <= 30 ->
+      signed (shl one y) >= 0.
+  Proof.
+    intros.
+    unfold signed, shl.
+    destruct (zlt (unsigned (repr (Z.shiftl (unsigned one) (unsigned y)))) half_modulus).
+    - rewrite unsigned_repr.
+      + rewrite Z.shiftl_1_l.
+        apply Z.le_ge. apply Z.pow_nonneg. lia.
+      + rewrite Z.shiftl_1_l. split.
+        apply Z.pow_nonneg. lia.
+        simplify.
+        replace (4294967295) with (2 ^ 32 - 1); try lia.
+        transitivity (2 ^ 31); try lia.
+        apply Z.pow_le_mono_r; lia.
+    - simplify. rewrite Z.shiftl_1_l in g.
+      unfold half_modulus, modulus, wordsize,
+      Wordsize_32.wordsize in *. unfold two_power_nat in *. simplify.
+      unfold Z_mod_modulus in *.
+      destruct (2 ^ unsigned y) eqn:?.
+      apply Z.ge_le in g. exfalso.
+      replace (4294967296 / 2) with (2147483648) in g; auto.
+      rewrite Z.shiftl_1_l. rewrite Heqz.
+      unfold wordsize in *. unfold Wordsize_32.wordsize in *.
+      rewrite Zbits.P_mod_two_p_eq in *.
+      replace (4294967296 / 2) with (2147483648) in g; auto.
+      rewrite <- Heqz in g.
+      rewrite Z.mod_small in g.
+      replace (2147483648) with (2 ^ 31) in g.
+      pose proof (Z.pow_le_mono_r 2 (unsigned y) 30).
+      apply Z.ge_le in g.
+      assert (0 < 2) by lia. apply H0 in H1. lia. assumption. lia.
+      split. lia. rewrite two_power_nat_equiv.
+      apply Z.pow_lt_mono_r; lia.
+
+      pose proof (Zlt_neg_0 p).
+      pose proof (pow2_nonneg (unsigned y)). rewrite <- Heqz in H0.
+      lia.
+  Qed.
+
+  Lemma is_power2_shl :
+    forall y,
+      unsigned y <= 30 ->
+      is_power2 (shl one y) = Some y.
+  Proof.
+    intros.
+    unfold is_power2, shl.
+    destruct (Zbits.Z_is_power2 (unsigned (repr (Z.shiftl (unsigned one) (unsigned y))))) eqn:?.
+    - simplify.
+      rewrite Z_mod_modulus_eq in Heqo.
+      rewrite Z.mod_small in Heqo. rewrite Z.shiftl_1_l in Heqo.
+      rewrite <- two_p_correct in Heqo.
+      rewrite Zbits.Z_is_power2_complete in Heqo. inv Heqo.
+      rewrite repr_unsigned. auto.
+      pose proof (unsigned_range_2 y). lia.
+      rewrite Z.shiftl_1_l. unfold modulus, wordsize, Wordsize_32.wordsize.
+      rewrite two_power_nat_equiv.
+      split. apply pow2_nonneg.
+      apply Z.pow_lt_mono_r; lia.
+    - simplify.
+      rewrite Z_mod_modulus_eq in Heqo.
+      rewrite Z.mod_small in Heqo. rewrite Z.shiftl_1_l in Heqo.
+      rewrite <- two_p_correct in Heqo.
+      rewrite Zbits.Z_is_power2_complete in Heqo. discriminate.
+      pose proof (unsigned_range_2 y). lia.
+      rewrite Z.shiftl_1_l. unfold modulus, wordsize, Wordsize_32.wordsize.
+      rewrite two_power_nat_equiv.
+      split. apply pow2_nonneg.
+      apply Z.pow_lt_mono_r; lia.
+  Qed.
+
+  Theorem shrx_shrx2_equiv :
+    forall x y,
+      unsigned y <= 30 ->
+      shrx x y = shrx2 x y.
   Proof.
     intros.
     unfold shrx, shrx2, lt.
     destruct (Z_ge_lt_dec (signed x) 0).
     - rewrite zlt_false; try assumption.
-      pose (divu_pow2 x (shl one y) y).
-      rewrite <- e.
-      apply div_divs_equiv.
-      assumption.
-      admit (*shl >= 0*).
-      admit (* is_power2 shl *).
+      pose proof (divu_pow2 x (shl one y) y).
+      rewrite <- H0.
+      apply div_divs_equiv. assumption.
+      apply shl_signed_positive; assumption.
+      apply is_power2_shl; assumption.
     - rewrite zlt_true; try assumption.
       rewrite <- neg_involutive at 1.
       rewrite neg_divs_distr_l.
-      apply neg_inj.
-      pose (divu_pow2 (neg x) (shl one y) y).
-      rewrite <- e.
+      f_equal.
+      pose proof (divu_pow2 (neg x) (shl one y) y).
+      rewrite <- H0.
       apply div_divs_equiv.
       apply neg_signed; assumption.
-      admit (*shl >= 0*).
-      admit (* is_power2 shl *).
-  Admitted.
+      apply shl_signed_positive; assumption.
+      apply is_power2_shl; assumption.
+  Qed.
 
 End IntExtra.
