@@ -362,4 +362,119 @@ Module IntExtra.
     rewrite testbit_repr; auto.
     Abort.
 
+  Definition shrx2 (x y : int) : int :=
+    if zlt (signed x) 0
+    then neg (shru (neg x) y)
+    else shru x y.
+
+  Lemma div_divs_equiv :
+    forall x y,
+      signed x >= 0 ->
+      signed y >= 0 ->
+      divs x y = divu x y.
+  Proof.
+    unfold divs, divu.
+    intros.
+    rewrite signed_eq_unsigned. rewrite signed_eq_unsigned.
+    rewrite Zquot.Zquot_Zdiv_pos. reflexivity.
+    rewrite <- signed_eq_unsigned.
+    apply Z.ge_le; assumption.
+    rewrite <- signed_positive; assumption.
+    rewrite <- signed_eq_unsigned.
+    apply Z.ge_le.
+    assumption.
+    rewrite <- signed_positive. assumption.
+    rewrite <- signed_positive. assumption.
+    rewrite <- signed_positive.
+    assumption.
+  Qed.
+
+  Lemma neg_divs_distr_l :
+    forall x y,
+      neg (divs x y) = divs (neg x) y.
+  Proof.
+    intros. unfold divs, neg.
+    set (x' := signed x). set (y' := signed y).
+    apply eqm_samerepr.
+    apply eqm_trans with (- (Z.quot x' y')).
+    auto with ints.
+    replace (- (Z.quot x' y')) with (Z.quot (- x') y').
+    2: {
+      rewrite Zquot.Zquot_opp_l. auto.
+    }
+    Search signed eqm.
+    rewrite signed_eq_unsigned; auto.
+    auto with ints.
+  Admitted.
+
+  Lemma neg_inj :
+    forall x y,
+      x = y -> neg x = neg y.
+  Proof. intros. rewrite H. trivial. Qed.
+
+  Compute (max_signed).
+  Lemma neg_signed' :
+    forall x,
+      signed (neg x) = - signed x.
+  Proof.
+    intros.
+    unfold neg.
+    destruct (Z_le_gt_dec (unsigned x) max_signed).
+    - admit.
+    -
+    rewrite signed_repr. rewrite signed_eq_unsigned.
+
+  Qed.
+
+
+
+
+  Lemma neg_signed :
+    forall x : int,
+      signed x < 0 ->
+      signed (neg x) >= 0.
+  Proof.
+    unfold signed.
+    intros.
+    destruct (Z_ge_lt_dec (unsigned x) half_modulus).
+    - rewrite zlt_false in H; try assumption.
+      destruct (Z_ge_lt_dec (unsigned (neg x)) half_modulus).
+      + rewrite zlt_false; try assumption.
+        rewrite neg_not in *.
+        rewrite add_unsigned. rewrite unsigned_repr.
+        Search unsigned not.
+        rewrite unsigned_not.
+        unfold_constants.
+        admit. admit.
+      + rewrite zlt_true; try assumption.
+        pose (unsigned_range (neg x)).
+        apply Z.le_ge. apply a.
+    - rewrite zlt_true in H; try assumption.
+      pose (unsigned_range x). lia.
+  Admitted.
+
+  Lemma shrx_shrx2_equiv : forall x y, shrx x y = shrx2 x y.
+  Proof.
+    intros.
+    unfold shrx, shrx2, lt.
+    destruct (Z_ge_lt_dec (signed x) 0).
+    - rewrite zlt_false; try assumption.
+      pose (divu_pow2 x (shl one y) y).
+      rewrite <- e.
+      apply div_divs_equiv.
+      assumption.
+      admit (*shl >= 0*).
+      admit (* is_power2 shl *).
+    - rewrite zlt_true; try assumption.
+      rewrite <- neg_involutive at 1.
+      rewrite neg_divs_distr_l.
+      apply neg_inj.
+      pose (divu_pow2 (neg x) (shl one y) y).
+      rewrite <- e.
+      apply div_divs_equiv.
+      apply neg_signed; assumption.
+      admit (*shl >= 0*).
+      admit (* is_power2 shl *).
+  Admitted.
+
 End IntExtra.
