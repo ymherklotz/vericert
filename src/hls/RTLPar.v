@@ -76,7 +76,7 @@ Definition successors_instr (i : control_flow_inst) : list node :=
   | RPgoto n => n :: nil
   end.
 
-Inductive state : Type :=
+(*Inductive state : Type :=
   | State:
       forall (stack: list stackframe) (**r call stack *)
              (f: function)            (**r current function *)
@@ -96,3 +96,4 @@ Inductive state : Type :=
              (v: val)                 (**r return value for the call *)
              (m: mem),                (**r memory state *)
       state.
+*)

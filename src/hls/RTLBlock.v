@@ -76,7 +76,7 @@ Definition successors_instr (i : control_flow_inst) : list node :=
   | RBgoto n => n :: nil
   end.
 
-Definition genv := Genv.t fundef unit.
+(* Definition genv := Genv.t fundef unit.
 Definition regset := Regmap.t val.
 
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
@@ -165,3 +165,6 @@ Inductive step : state -> trace -> state -> Prop :=
       step (State s f sp pc rs m (mk_bblock nil (RBcond cond args ifso ifnot)) C)
         E0 (State s f sp pc' rs m (mk_bblock nil (RBcond cond args ifso ifnot)) N)
 .
+
+End RELSEM.
+*)
