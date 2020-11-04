@@ -391,9 +391,10 @@ Module IntExtra.
 
   Lemma neg_signed' :
     forall x,
+      unsigned x <> 2147483648 ->
       signed (neg x) = - signed x.
   Proof.
-    intros.
+    intros x Hhalf.
     Transparent repr.
     Transparent signed.
     unfold repr.
@@ -444,14 +445,24 @@ Module IntExtra.
       + lia.
       + rewrite Z.mod_opp_l_nz in g.
         rewrite Z.mod_small in g.
-        assert (- unsigned x >= - 2147483648) by lia.
+        assert (unsigned x < 2147483648) by lia.
+        lia.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+        lia.
+        rewrite Z.mod_small.
+        assumption.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+  Qed.
 
 
   Lemma neg_divs_distr_l :
     forall x y,
+      unsigned x <> 2147483648 ->
       neg (divs x y) = divs (neg x) y.
   Proof.
-    intros. unfold divs, neg.
+    intros x y Hhalf. unfold divs, neg.
     set (x' := signed x). set (y' := signed y).
     apply eqm_samerepr.
     apply eqm_trans with (- (Z.quot x' y')).
@@ -463,16 +474,19 @@ Module IntExtra.
     unfold x'.
     rewrite <- neg_signed'.
     auto with ints.
+    assumption.
   Qed.
 
   Lemma neg_signed :
     forall x : int,
+      unsigned x <> 2147483648 ->
       signed x < 0 ->
       signed (neg x) >= 0.
   Proof.
     intros.
     rewrite neg_signed'.
     lia.
+    assumption.
   Qed.
 
   Lemma shl_signed_positive :
@@ -550,10 +564,11 @@ Module IntExtra.
 
   Theorem shrx_shrx2_equiv :
     forall x y,
+      unsigned x <> 2147483648 ->
       unsigned y <= 30 ->
       shrx x y = shrx2 x y.
   Proof.
-    intros.
+    intros x y Hhalf H.
     unfold shrx, shrx2, lt.
     destruct (Z_ge_lt_dec (signed x) 0).
     - rewrite zlt_false; try assumption.
@@ -572,6 +587,7 @@ Module IntExtra.
       apply neg_signed; assumption.
       apply shl_signed_positive; assumption.
       apply is_power2_shl; assumption.
+      assumption.
   Qed.
 
 End IntExtra.
