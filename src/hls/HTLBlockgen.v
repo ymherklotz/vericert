@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require Import Maps.
+(*From compcert Require Import Maps.
 From compcert Require Errors Globalenvs Integers.
 From compcert Require Import AST.
 From vericert Require Import RTLBlock Verilog HTL Vericertlib AssocMap ValueInt Statemonad.
@@ -652,3 +652,4 @@ Definition transl_program (p : RTLBlock.program) : Errors.res HTL.program :=
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").
+*)
