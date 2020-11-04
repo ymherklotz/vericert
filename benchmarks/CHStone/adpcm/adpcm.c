@@ -461,7 +461,7 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
   int dec_sh;
 
   int dec_ph1, dec_ph2;
-  int i, j;
+  unsigned int i, j;
 
   /* reset, initialize required memory */
 
@@ -770,13 +770,13 @@ adpcm_main (const int test_data[SIZE], int compressed[SIZE], int result[SIZE])
     {
       int opA1, opB1;
       int opA2, opB2;
-      if(i==0){
+      if((int)i==0){
         opA1 = xd;
         opB1 = (*h_ptr++);
         opA2 = xs;
         opB2 = (*h_ptr++);
       }
-      else if(i==11){
+      else if((int)i==11){
         opA1 = (*ac_ptr++);
         opB1 = (*h_ptr++);
         opA2 = (*ad_ptr++);
