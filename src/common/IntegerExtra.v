@@ -400,9 +400,52 @@ Module IntExtra.
     unfold signed.
     simpl.
     rewrite Z_mod_modulus_eq.
+    replace modulus with 4294967296; auto.
+    replace half_modulus with 2147483648; auto.
     simpl.
     repeat match goal with | |- context[if ?x then _ else _] => destruct x end.
-    Admitted.
+    - destruct (Z.eq_dec (unsigned x) 0).
+      + rewrite e. auto.
+      + pose proof (Z.mod_opp_l_nz (unsigned x) 4294967296).
+        assert (4294967296 <> 0). lia.
+        apply H in H0.
+        rewrite H0 in l.
+        pose proof (Z.mod_small (unsigned x) 4294967296).
+        assert (0 <= unsigned x < 4294967296).
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+        apply H1 in H2. rewrite H2 in l. lia.
+        rewrite Z.mod_small. assumption.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+    - destruct (Z.eq_dec (unsigned x) 0).
+      + lia.
+      + rewrite Z.mod_opp_l_nz.
+        rewrite Z.opp_sub_distr.
+        rewrite Z.mod_small. lia.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+        lia.
+        rewrite Z.mod_small. assumption.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+    - destruct (Z.eq_dec (unsigned x) 0).
+      + rewrite e in *. rewrite Z.opp_0 in *. rewrite Zmod_0_l in g. lia.
+      + rewrite Z.mod_opp_l_nz.
+        rewrite Z.mod_small. lia.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+        lia.
+        rewrite Z.mod_small.
+        assumption.
+        pose proof (unsigned_range_2 x).
+        replace max_unsigned with 4294967295 in *; auto. lia.
+    - destruct (Z.eq_dec (unsigned x) 0).
+      + lia.
+      + rewrite Z.mod_opp_l_nz in g.
+        rewrite Z.mod_small in g.
+        assert (- unsigned x >= - 2147483648) by lia.
+
 
   Lemma neg_divs_distr_l :
     forall x y,
