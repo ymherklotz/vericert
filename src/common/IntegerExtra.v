@@ -362,11 +362,6 @@ Module IntExtra.
     rewrite testbit_repr; auto.
     Abort.
 
-  Definition shrx2 (x y : int) : int :=
-    if zlt (signed x) 0
-    then neg (shru (neg x) y)
-    else shru x y.
-
   Lemma div_divs_equiv :
     forall x y,
       signed x >= 0 ->
@@ -375,87 +370,68 @@ Module IntExtra.
   Proof.
     unfold divs, divu.
     intros.
-    rewrite signed_eq_unsigned. rewrite signed_eq_unsigned.
-    rewrite Zquot.Zquot_Zdiv_pos. reflexivity.
-    rewrite <- signed_eq_unsigned.
-    apply Z.ge_le; assumption.
-    rewrite <- signed_positive; assumption.
-    rewrite <- signed_eq_unsigned.
-    apply Z.ge_le.
-    assumption.
-    rewrite <- signed_positive. assumption.
-    rewrite <- signed_positive. assumption.
-    rewrite <- signed_positive.
-    assumption.
+    rewrite !signed_eq_unsigned;
+    try rewrite Zquot.Zquot_Zdiv_pos; try reflexivity;
+    lazymatch goal with
+    | |- unsigned _ <= max_signed =>
+      solve [rewrite <- signed_positive; assumption]
+    | |- 0 <= unsigned _ => solve [apply unsigned_range_2]
+    end.
   Qed.
 
   Lemma neg_signed' :
-    forall x,
+    forall x : int,
       unsigned x <> 2147483648 ->
       signed (neg x) = - signed x.
   Proof.
     intros x Hhalf.
     Transparent repr.
-    Transparent signed.
-    unfold repr.
     unfold signed.
     simpl.
     rewrite Z_mod_modulus_eq.
     replace modulus with 4294967296; auto.
     replace half_modulus with 2147483648; auto.
-    simpl.
     repeat match goal with | |- context[if ?x then _ else _] => destruct x end.
     - destruct (Z.eq_dec (unsigned x) 0).
       + rewrite e. auto.
       + pose proof (Z.mod_opp_l_nz (unsigned x) 4294967296).
-        assert (4294967296 <> 0). lia.
+        assert (4294967296 <> 0) by lia.
         apply H in H0.
         rewrite H0 in l.
         pose proof (Z.mod_small (unsigned x) 4294967296).
         assert (0 <= unsigned x < 4294967296).
-        pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
+        pose proof (unsigned_range_2 x). lia.
         apply H1 in H2. rewrite H2 in l. lia.
         rewrite Z.mod_small. assumption.
-        pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
+        pose proof (unsigned_range_2 x). lia.
     - destruct (Z.eq_dec (unsigned x) 0).
       + lia.
-      + rewrite Z.mod_opp_l_nz.
+      + rewrite Z.mod_opp_l_nz; try lia.
         rewrite Z.opp_sub_distr.
         rewrite Z.mod_small. lia.
         pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
-        lia.
+        simplify; lia.
         rewrite Z.mod_small. assumption.
         pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
+        simplify; lia.
     - destruct (Z.eq_dec (unsigned x) 0).
       + rewrite e in *. rewrite Z.opp_0 in *. rewrite Zmod_0_l in g. lia.
-      + rewrite Z.mod_opp_l_nz.
+      + rewrite Z.mod_opp_l_nz; try lia.
         rewrite Z.mod_small. lia.
-        pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
-        lia.
-        rewrite Z.mod_small.
-        assumption.
-        pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
+        pose proof (unsigned_range_2 x). lia.
+        rewrite Z.mod_small. assumption.
+        pose proof (unsigned_range_2 x). lia.
     - destruct (Z.eq_dec (unsigned x) 0).
       + lia.
-      + rewrite Z.mod_opp_l_nz in g.
+      + rewrite Z.mod_opp_l_nz in g; try lia.
         rewrite Z.mod_small in g.
-        assert (unsigned x < 2147483648) by lia.
-        lia.
+        assert (unsigned x < 2147483648) by lia. lia.
         pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
-        lia.
-        rewrite Z.mod_small.
-        assumption.
+        replace max_unsigned with 4294967295 in * by auto. lia.
+        rewrite Z.mod_small. assumption.
         pose proof (unsigned_range_2 x).
-        replace max_unsigned with 4294967295 in *; auto. lia.
+        replace max_unsigned with 4294967295 in * by auto. lia.
   Qed.
-
 
   Lemma neg_divs_distr_l :
     forall x y,
@@ -467,10 +443,8 @@ Module IntExtra.
     apply eqm_samerepr.
     apply eqm_trans with (- (Z.quot x' y')).
     auto with ints.
-    replace (- (Z.quot x' y')) with (Z.quot (- x') y').
-    2: {
-      rewrite Zquot.Zquot_opp_l. auto.
-    }
+    replace (- (Z.quot x' y')) with (Z.quot (- x') y')
+      by (rewrite Zquot.Zquot_opp_l; auto).
     unfold x'.
     rewrite <- neg_signed'.
     auto with ints.
@@ -484,8 +458,7 @@ Module IntExtra.
       signed (neg x) >= 0.
   Proof.
     intros.
-    rewrite neg_signed'.
-    lia.
+    rewrite neg_signed'. lia.
     assumption.
   Qed.
 
@@ -562,32 +535,118 @@ Module IntExtra.
       apply Z.pow_lt_mono_r; lia.
   Qed.
 
-  Theorem shrx_shrx2_equiv :
+  Definition shrx_alt (x y : int) : int :=
+    if zlt (signed x) 0
+    then neg (shru (neg x) y)
+    else shru x y.
+
+  Lemma shrx_shrx_alt_equiv_ne :
     forall x y,
       unsigned x <> 2147483648 ->
       unsigned y <= 30 ->
-      shrx x y = shrx2 x y.
+      shrx x y = shrx_alt x y.
   Proof.
     intros x y Hhalf H.
-    unfold shrx, shrx2, lt.
-    destruct (Z_ge_lt_dec (signed x) 0).
-    - rewrite zlt_false; try assumption.
-      pose proof (divu_pow2 x (shl one y) y).
-      rewrite <- H0.
-      apply div_divs_equiv. assumption.
-      apply shl_signed_positive; assumption.
-      apply is_power2_shl; assumption.
-    - rewrite zlt_true; try assumption.
-      rewrite <- neg_involutive at 1.
-      rewrite neg_divs_distr_l.
-      f_equal.
-      pose proof (divu_pow2 (neg x) (shl one y) y).
-      rewrite <- H0.
-      apply div_divs_equiv.
-      apply neg_signed; assumption.
-      apply shl_signed_positive; assumption.
-      apply is_power2_shl; assumption.
-      assumption.
+    unfold shrx, shrx_alt, lt.
+    destruct (Z_ge_lt_dec (signed x) 0);
+      [rewrite zlt_false | rewrite zlt_true];
+
+      repeat lazymatch goal with
+             | |- is_power2 _ = Some _ => apply is_power2_shl
+             | |- signed (shl one _) >= 0 => apply shl_signed_positive
+             | |- signed (neg _) >= 0 => apply neg_signed
+             | |- divs _ _ = divu _ _ => apply div_divs_equiv
+             | |- divs ?x (shl one ?y) = neg (shru (neg ?x) ?y) =>
+               rewrite <- neg_involutive at 1; rewrite neg_divs_distr_l;
+                 try assumption; f_equal
+             | |- divs ?x (shl one ?y) = shru ?x ?y =>
+               let H := fresh "H" in
+               pose proof (divu_pow2 x (shl one y) y) as H;
+                 rewrite <- H
+             end; try assumption.
+  Qed.
+
+  Lemma shrx_shrx_alt_equiv_eq :
+    forall x y,
+      unsigned x = 2147483648 ->
+      unsigned y <= 30 ->
+      shrx x y = shrx_alt x y.
+  Proof.
+    intros.
+    repeat unfold shrx, shrx_alt, signed, divs, neg.
+    replace half_modulus with 2147483648 by auto.
+    replace modulus with 4294967296 by auto.
+    simplify.
+    rewrite !Z_mod_modulus_eq.
+    rewrite !H.
+    simplify.
+    assert (Hshl: Z.shiftl 1 (unsigned y) mod 4294967296 = Z.shiftl 1 (unsigned y)).
+    { apply Z.mod_small.
+      rewrite Z.shiftl_1_l.
+      split.
+      apply pow2_nonneg.
+      replace 4294967296 with (2^32) by auto.
+      apply Z.le_lt_trans with (m := 2 ^ 31); try lia.
+      apply Z.pow_le_mono_r; lia.
+    }
+    rewrite !Hshl.
+    f_equal.
+    assert ((Z.shiftl 1 (unsigned y)) < 2147483648).
+    rewrite Z.shiftl_1_l.
+    replace 2147483648 with (2^31) by auto.
+    apply Z.le_lt_trans with (m := 2 ^ 30); try lia.
+    apply Z.pow_le_mono_r; lia.
+    destruct (zlt (Z.shiftl 1 (unsigned y)) 2147483648); try lia.
+    replace (-2147483648 mod 4294967296) with 2147483648 by auto.
+    assert (Hmodeq : Z.shiftr 2147483648 (unsigned y) mod 4294967296
+                     = Z.shiftr 2147483648 (unsigned y)).
+    { apply Z.mod_small. split.
+      apply Z.shiftr_nonneg. lia.
+      rewrite Z.shiftr_div_pow2.
+      replace 4294967296 with (Z.succ 4294967295); auto.
+      apply Zle_lt_succ.
+      replace 4294967295 with (4294967295 * (2 ^ unsigned y) / (2 ^ unsigned y)).
+      2: {
+          apply Z.div_mul.
+          pose proof (Z.pow_pos_nonneg 2 (unsigned y)).
+          apply not_eq_sym.
+          apply Z.le_neq. apply H2; try lia.
+          apply unsigned_range_2.
+      }
+
+      apply Z.div_le_mono.
+      apply Z.pow_pos_nonneg. lia.
+      apply unsigned_range_2.
+      transitivity 4294967295; try lia.
+      apply Z.le_mul_diag_r; try lia.
+      replace 1 with (Z.succ 0) by auto.
+      apply Z.le_succ_l.
+      apply Z.pow_pos_nonneg; try lia.
+      apply unsigned_range_2. apply unsigned_range_2.
+    }
+    rewrite !Hmodeq.
+    replace (-2147483648) with (Z.opp 2147483648) by auto.
+    rewrite Zquot.Zquot_opp_l.
+    f_equal.
+    rewrite Zquot.Zquot_Zdiv_pos.
+    rewrite Z.shiftr_div_pow2.
+    rewrite Z.shiftl_1_l. auto.
+    apply unsigned_range_2.
+    lia.
+    rewrite Z.shiftl_1_l.
+    apply Z.lt_le_incl.
+    apply Z.pow_pos_nonneg; try lia.
+    apply unsigned_range_2.
+  Qed.
+
+  Lemma shrx_shrx_alt_equiv :
+    forall x y,
+      unsigned y <= 30 ->
+      shrx x y = shrx_alt x y.
+  Proof.
+    intros.
+    destruct (Z.eq_dec (unsigned x) 2147483648);
+    [ apply shrx_shrx_alt_equiv_eq | apply shrx_shrx_alt_equiv_ne]; auto.
   Qed.
 
 End IntExtra.
