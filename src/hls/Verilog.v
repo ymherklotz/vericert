@@ -149,7 +149,7 @@ Inductive binop : Type :=
 (** ** Unary Operators *)
 
 Inductive unop : Type :=
-| Vneg  (** negation ([~]) *)
+| Vneg  (** negation ([-]) *)
 | Vnot. (** not operation [!] *)
 
 (** ** Expressions *)

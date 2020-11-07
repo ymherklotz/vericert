@@ -639,7 +639,7 @@ Module IntExtra.
     apply unsigned_range_2.
   Qed.
 
-  Lemma shrx_shrx_alt_equiv :
+  Theorem shrx_shrx_alt_equiv :
     forall x y,
       unsigned y <= 30 ->
       shrx x y = shrx_alt x y.
