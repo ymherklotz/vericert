@@ -67,9 +67,9 @@ Definition funsig (fd: fundef) :=
 
 Definition successors_instr (i : control_flow_inst) : list node :=
   match i with
-  (*| RPcall sig ros args res s => s :: nil*)
-  (*| RPtailcall sig ros args => nil*)
-  (*| RPbuiltin ef args res s => s :: nil*)
+  | RPcall sig ros args res s => s :: nil
+  | RPtailcall sig ros args => nil
+  | RPbuiltin ef args res s => s :: nil
   | RPcond cond args ifso ifnot => ifso :: ifnot :: nil
   | RPjumptable arg tbl => tbl
   | RPreturn optarg => nil

@@ -470,7 +470,11 @@ Section CORRECTNESS.
       | |- context[match ?d with _ => _ end] => destruct d eqn:?; try discriminate
       | H : match ?d with _ => _ end = _ |- _ => repeat unfold_match H
       | H : match ?d with _ => _ end _ = _ |- _ => repeat unfold_match H
-      | |- Verilog.expr_runp _ _ _ _ _ => econstructor
+      | |- Verilog.expr_runp _ _ _ ?f _ =>
+        match f with
+        | Verilog.Vternary _ _ _ => idtac
+        | _ => econstructor
+        end
       | |- val_value_lessdef (?f _ _) _ => unfold f
       | |- val_value_lessdef (?f _) _ => unfold f
       | H : ?f (Registers.Regmap.get _ _) _ = Some _ |- _ =>
@@ -716,6 +720,23 @@ Section CORRECTNESS.
     repeat unfold_match TR_INSTR; inv TR_INSTR; repeat econstructor.
   Qed.
 
+  Lemma eval_correct_Oshrximm :
+    forall s sp rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st n,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Iop (Op.Oshrximm n) args res0 pc') ->
+      Op.eval_operation ge sp (Op.Oshrximm n)
+                        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
+      translate_instr (Op.Oshrximm n) args s = OK e s' i ->
+      exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
+  Proof.
+    intros s sp rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st n MSTATE INSTR EVAL TR_INSTR.
+    pose proof MSTATE as MSTATE_2. inv MSTATE.
+    inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
+    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
+    repeat (simplify; eval_correct_tac; unfold valueToInt in *).
+            destruct (Z_lt_ge_dec (Int.signed i0) 0).
+            econstructor.
+
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
       match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
@@ -754,6 +775,8 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     (*- unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
       repeat (rewrite Int.unsigned_repr). auto.*)
+    - admit.
+    - admit.
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
         destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
