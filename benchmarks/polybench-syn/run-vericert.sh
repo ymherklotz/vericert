@@ -18,22 +18,22 @@ while read benchmark ; do
    #Undefined checks
    if test -z $veriresult 
    then
-   echo "FAIL"
-   exit 0
+   echo "FAIL: Verilog returned nothing"
+   #exit 0
    fi
    
    # Don't care checks
    if [ $veriresult == "x" ] 
    then
-   echo "FAIL"
-   exit 0
+   echo "FAIL: Verilog returned don't cares"
+   #exit 0
    fi
   
   # unequal result check
    if [ $cresult -ne $veriresult ] 
    then 
-   echo "FAIL"
-   exit 0 
+   echo "FAIL: Verilog and C output do not match!"
+   #exit 0 
    else 
    echo "PASS"
    fi
