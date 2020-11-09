@@ -14,6 +14,22 @@ while read benchmark ; do
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
    cycles=$(tail -4 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f3)
    echo "Veri output: "$veriresult
+  
+   #Undefined checks
+   if test -z $veriresult 
+   then
+   echo "FAIL"
+   exit 0
+   fi
+   
+   # Don't care checks
+   if [ $veriresult == "x" ] 
+   then
+   echo "FAIL"
+   exit 0
+   fi
+  
+  # unequal result check
    if [ $cresult -ne $veriresult ] 
    then 
    echo "FAIL"
@@ -21,5 +37,6 @@ while read benchmark ; do
    else 
    echo "PASS"
    fi
+
    echo $cycles > $benchmark.cycle
 done < benchmark-list-master
