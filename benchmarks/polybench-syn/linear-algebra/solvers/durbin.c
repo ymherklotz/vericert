@@ -9,9 +9,6 @@
  */
 /* durbin.c: this file is part of PolyBench/C */
 
-#ifndef SYNTHESIS
-#include <stdio.h>
-#endif
 
 unsigned int divider(unsigned int x, unsigned int y)
 {
@@ -82,9 +79,6 @@ int print_array(int n,
         res  += y[i];
     }
 
-#ifndef SYNTHESIS
-    printf("finished = %u\n", res);
-#endif
     return res;
 }
 
@@ -110,8 +104,8 @@ void kernel_durbin(int n,
         for (i=0; i<k; plus(i)) {
             sum += r[k-i-ONE]*y[i];
         }
-        //alpha = - sdivider(r[k] + sum, beta);
-        alpha = - (r[k] + sum) / beta;
+        alpha = - sdivider(r[k] + sum, beta);
+        //alpha = - (r[k] + sum) / beta;
 
         for (i=0; i<k; plus(i)) {
             z[i] = y[i] + alpha*y[k-i-ONE];
