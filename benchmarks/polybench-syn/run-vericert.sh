@@ -8,7 +8,7 @@ while read benchmark ; do
    ./$benchmark.o
    cresult=$(echo $?)
    echo "C output: "$cresult
-   ../../bin/vericert --debug-hls $benchmark.c -o $benchmark.v
+   ../../bin/vericert -O0 -finline --debug-hls $benchmark.c -o $benchmark.v
    iverilog -o $benchmark.iver -- $benchmark.v
    ./$benchmark.iver > $benchmark.tmp
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
