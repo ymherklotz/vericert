@@ -31,10 +31,10 @@ Inductive instruction : Type :=
 Definition bblock_body : Type := list instruction.
 
 Inductive control_flow_inst : Type :=
-(*| RBcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst
+| RBcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst
 | RBtailcall : signature -> reg + ident -> list reg -> control_flow_inst
 | RBbuiltin : external_function -> list (builtin_arg reg) ->
-              builtin_res reg -> node -> control_flow_inst*)
+              builtin_res reg -> node -> control_flow_inst
 | RBcond : condition -> list reg -> node -> node -> control_flow_inst
 | RBjumptable : reg -> list node -> control_flow_inst
 | RBreturn : option reg -> control_flow_inst
@@ -42,7 +42,7 @@ Inductive control_flow_inst : Type :=
 
 Record bblock : Type := mk_bblock {
     bb_body: bblock_body;
-    bb_exit: control_flow_inst
+    bb_exit: option control_flow_inst
   }.
 
 Definition code : Type := PTree.t bblock.

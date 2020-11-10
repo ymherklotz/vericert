@@ -732,10 +732,11 @@ Section CORRECTNESS.
     intros s sp rs m v e asr asa f f' stk s' i pc pc' res0 args res ml st n MSTATE INSTR EVAL TR_INSTR.
     pose proof MSTATE as MSTATE_2. inv MSTATE.
     inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
-    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
-    repeat (simplify; eval_correct_tac; unfold valueToInt in *).
+    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL.
+    (*repeat (simplify; eval_correct_tac; unfold valueToInt in * ).
             destruct (Z_lt_ge_dec (Int.signed i0) 0).
-            econstructor.
+            econstructor.*)
+  Abort.
 
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
@@ -775,7 +776,6 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     (*- unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
       repeat (rewrite Int.unsigned_repr). auto.*)
-    - admit.
     - admit.
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
@@ -899,7 +899,7 @@ Section CORRECTNESS.
         destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
         rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
         constructor.
-  Qed.
+  Admitted.
 
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:

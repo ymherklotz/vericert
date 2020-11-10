@@ -31,10 +31,10 @@ Inductive instruction : Type :=
 Definition bblock_body : Type := list (list instruction).
 
 Inductive control_flow_inst : Type :=
-(*| RPcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst*)
-(*| RPtailcall : signature -> reg + ident -> list reg -> control_flow_inst*)
-(*| RPbuiltin : external_function -> list (builtin_arg reg) ->
-              builtin_res reg -> node -> control_flow_inst*)
+| RPcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst
+| RPtailcall : signature -> reg + ident -> list reg -> control_flow_inst
+| RPbuiltin : external_function -> list (builtin_arg reg) ->
+              builtin_res reg -> node -> control_flow_inst
 | RPcond : condition -> list reg -> node -> node -> control_flow_inst
 | RPjumptable : reg -> list node -> control_flow_inst
 | RPreturn : option reg -> control_flow_inst
