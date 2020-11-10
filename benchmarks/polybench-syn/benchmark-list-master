@@ -2,7 +2,6 @@ stencils/heat-3d
 stencils/fdtd-2d
 stencils/jacobi-1d
 stencils/seidel-2d
-stencils/adi
 stencils/jacobi-2d
 medley/nussinov
 medley/floyd-warshall
@@ -19,7 +18,6 @@ linear-algebra/blas/gesummv
 linear-algebra/blas/gemm
 linear-algebra/blas/trmm
 linear-algebra/blas/syr2k
-linear-algebra/blas/trmm.preproc
 linear-algebra/solvers/cholesky
 linear-algebra/solvers/trisolv
 linear-algebra/solvers/lu
