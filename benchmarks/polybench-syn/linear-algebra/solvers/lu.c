@@ -14,6 +14,8 @@
 //#include <string.h>
 //#include <math.h>
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 
 static
@@ -26,7 +28,7 @@ void init_array (int n,
   for (i = 0; i < n; plus(i))
     {
       for (j = 0; j <= i; plus(j))
- A[i][j] = (int)(-j % n) / n + ONE;
+ A[i][j] = (-j % n )/ n + ONE;
       for (j = plus(i); j < n; plus(j)) {
  A[i][j] = 0;
       }
@@ -82,13 +84,12 @@ void kernel_lu(int n,
   int i, j, k;
   int ONE = 1;
 
-#pragma scop
  for (i = 0; i < n; plus(i)) {
     for (j = 0; j <i; plus(j)) {
        for (k = 0; k < j; plus(k)) {
           A[i][j] -= A[i][k] * A[k][j];
        }
-        A[i][j] /= A[j][j];
+        A[i][j] = sdivider(A[i][j], A[j][j]);
     }
    for (j = i; j < n; plus(j)) {
        for (k = 0; k < i; plus(k)) {
@@ -96,7 +97,6 @@ void kernel_lu(int n,
        }
     }
   }
-#pragma endscop
 }
 
 static
@@ -128,19 +128,9 @@ int main()
 
 
 
-  //print_array(n, A);
-  // polybench_timer_start();;
-
-
   kernel_lu (n, A);
 
 
-  // polybench_timer_stop();;
-  // polybench_timer_print();;
-
-
-
-  //if (argc > 42 && ! strcmp(argv[0], "")) 
   return check_array(n, A);
   return 0;
 
