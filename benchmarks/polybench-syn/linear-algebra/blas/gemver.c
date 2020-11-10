@@ -9,6 +9,8 @@
  */
 /* gemver.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int n,
@@ -35,15 +37,15 @@ void init_array (int n,
   for (i = 0; i < n; plus(i))
     {
       u1[i] = i;
-      u2[i] = ((i+ONE)/fn)/2;
-      v1[i] = ((i+ONE)/fn)/4;
-      v2[i] = ((i+ONE)/fn)/6;
-      y[i] = ((i+ONE)/fn)/8;
-      z[i] = ((i+ONE)/fn)/9;
+      u2[i] = sdivider(((i+ONE)/fn),2);
+      v1[i] = sdivider(((i+ONE)/fn),4);
+      v2[i] = sdivider(((i+ONE)/fn),6);
+      y[i] =  sdivider(((i+ONE)/fn),8);
+      z[i] =  sdivider(((i+ONE)/fn),9);
       x[i] = 0;
       w[i] = 0;
       for (j = 0; j < n; plus(j))
-        A[i][j] = (int) (i*j % n) / n;
+        A[i][j] = (int) sdivider(smodulo(i*j, n), n);
     }
 }
 
