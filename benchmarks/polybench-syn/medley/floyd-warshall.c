@@ -9,6 +9,7 @@
  */
 /* floyd-warshall.c: this file is part of PolyBench/C */
 
+#include "../include/misc.h"
 
 #define plus(i) i = i + ONE
 static
@@ -16,6 +17,7 @@ void init_array (int n,
    int path[ 60 + 0][60 + 0])
 {
   int i, j;
+  int ZERO = 0;
   int ONE = 1;
   int N7 = 7;
   int N11 = 11;
@@ -24,7 +26,8 @@ void init_array (int n,
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j)) {
       path[i][j] = i*j%N7+ONE;
-      if ((i+j)%N13 == 0 || (i+j)%N7==0 || (i+j)%N11 == 0)
+      //if (((i+j)%N13 == ZERO || (i+j)%N7== ZERO || (i+j)%N11 == ZERO ) != 0 )
+      if(((smodulo((i+j),13) == (int)0 || smodulo((i+j),7) == (int)0)!=0 || smodulo((i+j),11) == (int)0 ) != 0)
          path[i][j] = 999;
     }
 }
