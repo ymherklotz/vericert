@@ -9,6 +9,8 @@
  */
 /* fdtd-2d.c: this file is part of PolyBench/C */
 
+#include <stdio.h>
+
 #define plus(i) i = i + ONE
 static
 void init_array (int tmax,
@@ -62,6 +64,10 @@ int print_array(int nx,
     for (j = 0; j < ny; plus(j)) {
       res ^= hz[i][j];
     }
+
+#ifndef SYNTHESIS
+  printf("finished: %u\n", res);
+#endif
     
   return res;
 }
@@ -87,15 +93,15 @@ void kernel_fdtd_2d(int tmax,
  ey[0][j] = _fict_[t];
       for (i = 1; i < nx; plus(i))
  for (j = 0; j < ny; plus(j))
-   ey[i][j] = ey[i][j] - ((hz[i][j]-(hz[i-ONE][j])>>1));
+   ey[i][j] = ey[i][j] - ((hz[i][j]-((hz[i-ONE][j])>>1)));
       for (i = 0; i < nx; plus(i))
  for (j = 1; j < ny; plus(j))
-   ex[i][j] = ex[i][j] - ((hz[i][j]-(hz[i][j-ONE])>>1));
+   ex[i][j] = ex[i][j] - ((hz[i][j]-((hz[i][j-ONE])>>1)));
       for (i = 0; i < nx - ONE; plus(i))
  for (j = 0; j < ny - ONE; plus(j)){
    int tmp = (ex[i][j+ONE] - ex[i][j] +
            ey[i+ONE][j] - ey[i][j]);
-   hz[i][j] = hz[i][j] - tmp >> 1 - tmp >> 2;
+   hz[i][j] = hz[i][j] - (tmp >> 1) - (tmp >> 2);
            }
     }
 
