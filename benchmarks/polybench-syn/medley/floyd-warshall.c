@@ -17,16 +17,12 @@ void init_array (int n,
    int path[ 60 + 0][60 + 0])
 {
   int i, j;
-  int ZERO = 0;
   int ONE = 1;
-  int N7 = 7;
-  int N11 = 11;
-  int N13 = 13;
 
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j)) {
-      path[i][j] = i*j%N7+ONE;
-      //if (((i+j)%N13 == ZERO || (i+j)%N7== ZERO || (i+j)%N11 == ZERO ) != 0 )
+      path[i][j] = i*smodulo(j,7)+ONE;
+      //if (((i+j)%13 == ZERO || (i+j)%7== ZERO || (i+j)%11 == ZERO ) != 0 )
       if(((smodulo((i+j),13) == (int)0 || smodulo((i+j),7) == (int)0)!=0 || smodulo((i+j),11) == (int)0 ) != 0)
          path[i][j] = 999;
     }
@@ -61,7 +57,6 @@ void kernel_floyd_warshall(int n,
   int i, j, k;
   int ONE = 1;
 
-#pragma scop
  for (k = 0; k < n; plus(k))
     {
       for(i = 0; i < n; plus(i))
@@ -69,7 +64,6 @@ void kernel_floyd_warshall(int n,
    path[i][j] = path[i][j] < path[i][k] + path[k][j] ?
      path[i][j] : path[i][k] + path[k][j];
     }
-#pragma endscop
 
 }
 

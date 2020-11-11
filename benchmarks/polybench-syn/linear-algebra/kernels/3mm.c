@@ -9,6 +9,9 @@
  */
 /* 3mm.c: this file is part of PolyBench/C */
 
+
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array(int ni, int nj, int nk, int nl, int nm,
@@ -21,23 +24,20 @@ void init_array(int ni, int nj, int nk, int nl, int nm,
   int ONE = 1;
   int TWO = 2;
   int THREE = 3;
-  int FIVE = 5;
 
   for (i = 0; i < ni; plus(i))
     for (j = 0; j < nk; plus(j))
-      A[i][j] = (int) ((i*j+ONE) % ni) / (5*ni);
+      A[i][j] = (int) divider(smodulo((i*j+ONE), ni), (5*ni));
   for (i = 0; i < nk; plus(i))
     for (j = 0; j < nj; plus(j))
-      B[i][j] = (int) ((i*(j+ONE)+TWO) % nj) / (5*nj);
+      B[i][j] = (int) divider(smodulo((i*(j+ONE)+TWO),nj), (5*nj));
   for (i = 0; i < nj; plus(i))
     for (j = 0; j < nm; plus(j))
-      C[i][j] = (int) (i*(j+THREE) % nl) / (5*nl);
+      C[i][j] = (int) divider(smodulo(i*(j+THREE), nl), (5*nl));
   for (i = 0; i < nm; plus(i))
     for (j = 0; j < nl; plus(j))
-      D[i][j] = (int) ((i*(j+TWO)+TWO) % nk) / (5*nk);
+      D[i][j] = (int) divider(smodulo((i*(j+TWO)+TWO), nk), (5*nk));
 }
-
-
 
 
 static
@@ -71,8 +71,6 @@ void kernel_3mm(int ni, int nj, int nk, int nl, int nm,
   int ONE = 1;
   int i, j, k;
 
-#pragma scop
-
  for (i = 0; i < ni; plus(i))
     for (j = 0; j < nj; plus(j))
       {
@@ -96,10 +94,8 @@ void kernel_3mm(int ni, int nj, int nk, int nl, int nm,
  for (k = 0; k < nj; plus(k))
    G[i][j] += E[i][k] * F[k][j];
       }
-#pragma endscop
 
 }
-
 
 int main()
 {

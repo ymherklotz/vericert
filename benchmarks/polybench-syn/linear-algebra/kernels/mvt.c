@@ -9,6 +9,8 @@
  */
 /* mvt.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 
 static
@@ -24,23 +26,23 @@ void init_array(int n,
   int THREE = 3;
 
   for (i = 0; i < n; plus(i))
-    {
-      x1[i] = (int) (i % n) / n;
-      x2[i] = (int) ((i + ONE) % n) / n;
-      y_1[i] = (int) ((i + THREE) % n) / n;
-      y_2[i] = (int) ((i + 4) % n) / n;
-      for (j = 0; j < n; plus(j))
- A[i][j] = (int) (i*j % n) / n;
-    }
+  {
+    x1[i] = (int) divider(smodulo(i, n), n);
+    x2[i] = (int) divider(smodulo(i + ONE, n), n);
+    y_1[i] = (int) divider(smodulo(i + THREE, n), n);
+    y_2[i] = (int) divider(smodulo(i + 4, n), n);
+    for (j = 0; j < n; plus(j))
+      A[i][j] = (int) divider(smodulo(i*j,n), n);
+  }
 }
 
 
 
 
-static
+  static
 int print_array(int n,
-   int x1[ 40 + 0],
-   int x2[ 40 + 0])
+    int x1[ 40 + 0],
+    int x2[ 40 + 0])
 
 {
   int i;
@@ -71,14 +73,12 @@ void kernel_mvt(int n,
   int i, j;
   int ONE = 1;
 
-#pragma scop
  for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j))
       x1[i] = x1[i] + A[i][j] * y_1[j];
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j))
       x2[i] = x2[i] + A[j][i] * y_2[j];
-#pragma endscop
 
 }
 

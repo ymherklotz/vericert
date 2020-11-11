@@ -9,6 +9,8 @@
  */
 /* seidel-2d.c: this file is part of PolyBench/C */
 
+#include "../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int n,
@@ -20,7 +22,7 @@ void init_array (int n,
 
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j))
-      A[i][j] = ((int) i*(j+TWO) + TWO) / n;
+      A[i][j] = divider(((int) i*(j+TWO) + TWO), n);
 }
 
 
@@ -55,14 +57,12 @@ void kernel_seidel_2d(int tsteps,
   int TWO = 2;
   int NINE = 9;
 
-#pragma scop
  for (t = 0; t <= tsteps - ONE; plus(t))
     for (i = ONE; i<= n - TWO; plus(i))
       for (j = ONE; j <= n - TWO; plus(j))
- A[i][j] = (A[i-ONE][j-ONE] + A[i-ONE][j] + A[i-ONE][j+ONE]
+ A[i][j] = divider((A[i-ONE][j-ONE] + A[i-ONE][j] + A[i-ONE][j+ONE]
      + A[i][j-ONE] + A[i][j] + A[i][j+ONE]
-     + A[i+ONE][j-ONE] + A[i+ONE][j] + A[i+ONE][j+ONE])/NINE;
-#pragma endscop
+     + A[i+ONE][j-ONE] + A[i+ONE][j] + A[i+ONE][j+ONE]), NINE);
 
 }
 

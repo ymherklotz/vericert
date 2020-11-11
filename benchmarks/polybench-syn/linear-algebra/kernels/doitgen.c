@@ -9,6 +9,8 @@
  */
 /* doitgen.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array(int nr, int nq, int np,
@@ -21,10 +23,10 @@ void init_array(int nr, int nq, int np,
   for (i = 0; i < nr; plus(i))
     for (j = 0; j < nq; plus(j))
       for (k = 0; k < np; plus(k))
- A[i][j][k] = (int) ((i*j + k)%np) / np;
+ A[i][j][k] = (int) divider(smodulo((i*j + k), np), np);
   for (i = 0; i < np; plus(i))
     for (j = 0; j < np; plus(j))
-      C4[i][j] = (int) (i*j % np) / np;
+      C4[i][j] = (int) divider(smodulo(i*j, np), np);
 }
 
 
@@ -55,7 +57,6 @@ void kernel_doitgen(int nr, int nq, int np,
   int r, q, p, s;
   int ONE = 1;
 
-#pragma scop
  for (r = 0; r < nr; plus(r))
     for (q = 0; q < nq; plus(q)) {
       for (p = 0; p < np; plus(p)) {
@@ -66,7 +67,6 @@ void kernel_doitgen(int nr, int nq, int np,
       for (p = 0; p < np; plus(p))
  A[r][q][p] = sum[p];
     }
-#pragma endscop
 
 }
 

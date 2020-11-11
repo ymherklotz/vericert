@@ -9,14 +9,16 @@
  */
 /* gemm.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
-static
+  static
 void init_array(int ni, int nj, int nk,
-  int *alpha,
-  int *beta,
-  int C[ 20 + 0][25 + 0],
-  int A[ 20 + 0][30 + 0],
-  int B[ 30 + 0][25 + 0])
+    int *alpha,
+    int *beta,
+    int C[ 20 + 0][25 + 0],
+    int A[ 20 + 0][30 + 0],
+    int B[ 30 + 0][25 + 0])
 {
   int i, j;
   int ONE = 1;
@@ -25,21 +27,21 @@ void init_array(int ni, int nj, int nk,
   *beta = 2;
   for (i = 0; i < ni; plus(i))
     for (j = 0; j < nj; plus(j))
-      C[i][j] = (int) ((i*j+ONE) % ni) / ni;
+      C[i][j] = (int) divider(smodulo(i*j+ONE, ni), ni);
   for (i = 0; i < ni; plus(i))
     for (j = 0; j < nk; plus(j))
-      A[i][j] = (int) (i*(j+ONE) % nk) / nk;
+      A[i][j] = (int) divider(smodulo(i*(j+ONE), nk), nk);
   for (i = 0; i < nk; plus(i))
     for (j = 0; j < nj; plus(j))
-      B[i][j] = (int) (i*(j+ONE+ONE) % nj) / nj;
+      B[i][j] = (int) divider(smodulo(i*(j+ONE+ONE), nj), nj);
 }
 
 
 
 
-static
+  static
 int print_array(int ni, int nj,
-   int C[ 20 + 0][25 + 0])
+    int C[ 20 + 0][25 + 0])
 {
   int i, j;
   int ONE = 1;
@@ -48,30 +50,28 @@ int print_array(int ni, int nj,
     for (j = 0; j < nj; plus(j)) {
       res ^= C[i][j];
     }
-    return res;
+  return res;
 }
 
-static
+  static
 void kernel_gemm(int ni, int nj, int nk,
-   int alpha,
-   int beta,
-   int C[ 20 + 0][25 + 0],
-   int A[ 20 + 0][30 + 0],
-   int B[ 30 + 0][25 + 0])
+    int alpha,
+    int beta,
+    int C[ 20 + 0][25 + 0],
+    int A[ 20 + 0][30 + 0],
+    int B[ 30 + 0][25 + 0])
 {
   int i, j, k;
   int ONE = 1;
 
-#pragma scop
- for (i = 0; i < ni; plus(i)) {
+  for (i = 0; i < ni; plus(i)) {
     for (j = 0; j < nj; plus(j))
- C[i][j] *= beta;
+      C[i][j] *= beta;
     for (k = 0; k < nk; plus(k)) {
-       for (j = 0; j < nj; plus(j))
-   C[i][j] += alpha * A[i][k] * B[k][j];
+      for (j = 0; j < nj; plus(j))
+        C[i][j] += alpha * A[i][k] * B[k][j];
     }
   }
-#pragma endscop
 
 }
 
@@ -92,20 +92,20 @@ int main()
 
 
   init_array (ni, nj, nk, &alpha, &beta,
-       C,
-       A,
-       B);
+      C,
+      A,
+      B);
 
 
   kernel_gemm (ni, nj, nk,
-        alpha, beta,
-        C,
-        A,
-        B);
+      alpha, beta,
+      C,
+      A,
+      B);
 
 
   return 
-  print_array(ni, nj, C);
+    print_array(ni, nj, C);
 
 
 }

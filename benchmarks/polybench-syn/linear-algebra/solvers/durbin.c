@@ -56,7 +56,7 @@ void init_array (int n,
                  int r[ 40 + 0])
 {
     int ONE = 1;
-    int i, j;
+    int i;
 
     for (i = 0; i < n; plus(i))
     {

@@ -4,7 +4,7 @@ top=$(pwd)
  #set up
 while read benchmark ; do
    echo "Running "$benchmark
-   gcc $benchmark.c -o $benchmark.o
+   clang -Wall -Werror -fsanitize=undefined $benchmark.c -o $benchmark.o
    ./$benchmark.o
    cresult=$(echo $?)
    echo "C output: "$cresult
@@ -37,6 +37,6 @@ while read benchmark ; do
    else 
    echo "PASS"
    fi
-
-   echo $cycles > $benchmark.cycle
+   name=$(echo $benchmark | awk -v FS="/" '{print $NF}')
+   echo $name","$cycles >> exec.csv 
 done < benchmark-list-master

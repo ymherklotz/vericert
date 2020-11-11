@@ -9,6 +9,8 @@
  */
 /* trisolv.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array(int n,
@@ -24,7 +26,7 @@ void init_array(int n,
       x[i] = - 999;
       b[i] = i ;
       for (j = 0; j <= i; plus(j))
- L[i][j] = (int) (i+n-j+ONE)*(ONE+ONE)/n;
+        L[i][j] = (int) divider((i+n-j+ONE)*(ONE+ONE), n);
     }
 }
 
@@ -57,15 +59,15 @@ void kernel_trisolv(int n,
   int i, j;
   int ONE = 1;
 
-#pragma scop
- for (i = 0; i < n; plus(i))
-    {
-      x[i] = b[i];
-      for (j = 0; j <i; plus(j))
-        x[i] -= L[i][j] * x[j];
-      x[i] = x[i] / L[i][i];
-    }
-#pragma endscop
+  for (i = 0; i < n; plus(i))
+  {
+    x[i] = b[i];
+    for (j = 0; j <i; plus(j))
+      x[i] -= L[i][j] * x[j];
+
+    x[i] = divider(x[i],L[i][i]);
+
+  }
 
 }
 

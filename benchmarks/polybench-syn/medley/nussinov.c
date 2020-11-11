@@ -11,6 +11,8 @@
 
 typedef int base; 
 
+#include "../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int n,
@@ -23,7 +25,7 @@ void init_array (int n,
 
 
   for (i=0; i <n; plus(i)) {
-     seq[i] = (base)((i+ONE)%FOUR);
+     seq[i] = (base)(modulo((i+ONE),FOUR));
   }
 
   for (i=0; i <n; plus(i))
@@ -60,7 +62,6 @@ void kernel_nussinov(int n, base seq[ 60 + 0],
   int ONE = 1;
   int THREE = 3;
 
-#pragma scop
  for (i = n-ONE; i >= ZERO; i=i-ONE) {
   for (j=i+ONE; j<n; plus(j)) {
 
@@ -82,7 +83,6 @@ void kernel_nussinov(int n, base seq[ 60 + 0],
    }
   }
  }
-#pragma endscop
 
 }
 

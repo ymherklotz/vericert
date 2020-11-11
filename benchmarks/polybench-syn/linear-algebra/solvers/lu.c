@@ -28,7 +28,7 @@ void init_array (int n,
   for (i = 0; i < n; plus(i))
     {
       for (j = 0; j <= i; plus(j))
- A[i][j] = (-j % n )/ n + ONE;
+ A[i][j] = sdivider(smodulo(-j, n), n) + ONE;
       for (j = plus(i); j < n; plus(j)) {
  A[i][j] = 0;
       }

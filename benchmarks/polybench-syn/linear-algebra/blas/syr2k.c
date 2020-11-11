@@ -9,6 +9,7 @@
  */
 /* syr2k.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
 
 #define plus(i) i = i + ONE
 static
@@ -26,12 +27,12 @@ void init_array(int n, int m,
   *beta = 2;
   for (i = 0; i < n; plus(i))
     for (j = 0; j < m; plus(j)) {
-      A[i][j] = (int) ((i*j+ONE)%n) / n;
-      B[i][j] = (int) ((i*j+ONE+ONE)%m) / m;
+      A[i][j] = (int) divider(smodulo(i*j+ONE, n), n);
+      B[i][j] = (int) divider(smodulo(i*j+ONE+ONE, m), m);
     }
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j)) {
-      C[i][j] = (int) ((i*j+4-ONE)%n) / m;
+      C[i][j] = (int) divider(smodulo(i*j+4-ONE, n), m);
     }
 }
 
@@ -65,7 +66,6 @@ void kernel_syr2k(int n, int m,
   int i, j, k;
   int ONE = 1;
 
-#pragma scop
  for (i = 0; i < n; plus(i)) {
     for (j = 0; j <= i; plus(j))
       C[i][j] *= beta;
@@ -75,7 +75,6 @@ void kernel_syr2k(int n, int m,
    C[i][j] += A[j][k]*alpha*B[i][k] + B[j][k]*alpha*A[i][k];
  }
   }
-#pragma endscop
 
 }
 

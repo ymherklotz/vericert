@@ -9,6 +9,8 @@
  */
 /* symm.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array(int m, int n,
@@ -26,12 +28,12 @@ void init_array(int m, int n,
   *beta = 2;
   for (i = 0; i < m; plus(i))
     for (j = 0; j < n; plus(j)) {
-      C[i][j] = (int) ((i+j) % HUND) / m;
-      B[i][j] = (int) ((n+i-j) % HUND) / m;
+      C[i][j] = (int) divider(smodulo(i+j, HUND), m);
+      B[i][j] = (int) divider(smodulo(n+i-j, HUND), m);
     }
   for (i = 0; i < m; plus(i)) {
     for (j = 0; j <=i; plus(j))
-      A[i][j] = (int) ((i+j) % HUND) / m;
+      A[i][j] = (int) divider(smodulo(i+j, HUND), m);
     for (j = i+ONE; j < m; plus(j))
       A[i][j] = -999;
   }
@@ -64,7 +66,6 @@ void kernel_symm(int m, int n,
   int ONE = 1;
   int i, j, k;
   int temp2;
-#pragma scop
  for (i = 0; i < m; plus(i))
       for (j = 0; j < n; plus(j) )
       {
@@ -75,7 +76,6 @@ void kernel_symm(int m, int n,
         }
         C[i][j] = beta * C[i][j] + alpha*B[i][j] * A[i][i] + alpha * temp2;
      }
-#pragma endscop
 
 }
 

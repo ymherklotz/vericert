@@ -37,15 +37,15 @@ void init_array (int n,
   for (i = 0; i < n; plus(i))
     {
       u1[i] = i;
-      u2[i] = sdivider(((i+ONE)/fn),2);
-      v1[i] = sdivider(((i+ONE)/fn),4);
-      v2[i] = sdivider(((i+ONE)/fn),6);
-      y[i] =  sdivider(((i+ONE)/fn),8);
-      z[i] =  sdivider(((i+ONE)/fn),9);
+      u2[i] = divider((i+ONE),fn*2);
+      v1[i] = divider((i+ONE),fn*4);
+      v2[i] = divider((i+ONE),fn*6);
+      y[i] =  divider((i+ONE),fn*8);
+      z[i] =  divider((i+ONE),fn*9);
       x[i] = 0;
       w[i] = 0;
       for (j = 0; j < n; plus(j))
-        A[i][j] = (int) sdivider(smodulo(i*j, n), n);
+        A[i][j] = (int) divider(smodulo(i*j, n), n);
     }
 }
 
@@ -86,8 +86,6 @@ void kernel_gemver(int n,
   int i, j;
   int ONE = 1;
 
-#pragma scop
-
  for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j))
       A[i][j] = A[i][j] + u1[i] * v1[j] + u2[i] * v2[j];
@@ -103,7 +101,6 @@ void kernel_gemver(int n,
     for (j = 0; j < n; plus(j))
       w[i] = w[i] + alpha * A[i][j] * x[j];
 
-#pragma endscop
 }
 
 

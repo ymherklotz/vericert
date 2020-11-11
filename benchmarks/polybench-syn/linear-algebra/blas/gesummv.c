@@ -9,16 +9,17 @@
  */
 /* gesummv.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
 
 #define plus(i) i = i + ONE
 
-static
+  static
 void init_array(int n,
-  int *alpha,
-  int *beta,
-  int A[ 30 + 0][30 + 0],
-  int B[ 30 + 0][30 + 0],
-  int x[ 30 + 0])
+    int *alpha,
+    int *beta,
+    int A[ 30 + 0][30 + 0],
+    int B[ 30 + 0][30 + 0],
+    int x[ 30 + 0])
 {
   int i, j;
   int ONE = 1;
@@ -26,21 +27,19 @@ void init_array(int n,
   *alpha = 3;
   *beta = 2;
   for (i = 0; i < n; plus(i))
-    {
-      x[i] = (int)( i % n) / n;
-      for (j = 0; j < n; plus(j)) {
- A[i][j] = (int) ((i*j+ONE) % n) / n;
- B[i][j] = (int) ((i*j+ONE+ONE) % n) / n;
-      }
+  {
+    x[i] = (int) divider(smodulo(i, n), n);
+    for (j = 0; j < n; plus(j)) {
+      A[i][j] = (int) divider(smodulo(i*j+ONE, n), n);
+      B[i][j] = (int) divider(smodulo(i*j+ONE+ONE, n), n);
     }
+  }
 }
 
 
-
-
-static
+  static
 int print_array(int n,
-   int y[ 30 + 0])
+    int y[ 30 + 0])
 
 {
   int i;
@@ -53,33 +52,30 @@ int print_array(int n,
   return res;
 }
 
-static
+  static
 void kernel_gesummv(int n,
-      int alpha,
-      int beta,
-      int A[ 30 + 0][30 + 0],
-      int B[ 30 + 0][30 + 0],
-      int tmp[ 30 + 0],
-      int x[ 30 + 0],
-      int y[ 30 + 0])
+    int alpha,
+    int beta,
+    int A[ 30 + 0][30 + 0],
+    int B[ 30 + 0][30 + 0],
+    int tmp[ 30 + 0],
+    int x[ 30 + 0],
+    int y[ 30 + 0])
 {
   int i, j;
   int ONE = 1;
 
-#pragma scop
- for (i = 0; i < n; plus(i))
+  for (i = 0; i < n; plus(i))
+  {
+    tmp[i] = 0;
+    y[i] = 0;
+    for (j = 0; j < n; plus(j))
     {
-      tmp[i] = 0;
-      y[i] = 0;
-      for (j = 0; j < n; plus(j))
- {
-   tmp[i] = A[i][j] * x[j] + tmp[i];
-   y[i] = B[i][j] * x[j] + y[i];
- }
-      y[i] = alpha * tmp[i] + beta * y[i];
+      tmp[i] = A[i][j] * x[j] + tmp[i];
+      y[i] = B[i][j] * x[j] + y[i];
     }
-#pragma endscop
-
+    y[i] = alpha * tmp[i] + beta * y[i];
+  }
 }
 
 
@@ -98,16 +94,16 @@ int main()
   int y[30 + 0]; 
 
   init_array (n, &alpha, &beta,
-       A,
-       B,
-       x);
+      A,
+      B,
+      x);
 
   kernel_gesummv (n, alpha, beta,
-    A,
-    B,
-    tmp,
-    x,
-    y);
+      A,
+      B,
+      tmp,
+      x,
+      y);
 
 
   return print_array(n, y);
