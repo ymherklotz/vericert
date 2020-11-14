@@ -7,12 +7,18 @@ on:
       - "**.v"
       - "**.ml"
       - "**.mli"
+      - "**.yml"
+      - "*.nix"
+      - Makefile
   pull_request:
     branches: [ master ]
     paths:
       - "**.v"
       - "**.ml"
       - "**.mli"
+      - "**.yml"
+      - "*.nix"
+      - Makefile
   workflow_dispatch: {}
 
 jobs:
