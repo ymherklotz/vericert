@@ -854,15 +854,16 @@ Section CORRECTNESS.
         rewrite Heqv0 in H0. auto. inv H0. auto.
         rewrite Heqv0 in H2. discriminate.
         unfold valueToInt in *. auto.
-        inv_lessdef. unfold valueToInt in *. rewrite H3 in H1.
-        inv H1.
+        inv_lessdef. unfold valueToInt in *.
+        rewrite Heqv0 in H0.
+        inv H0.
         unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify.
         rewrite Int.unsigned_repr in Heqb0. lia.
         simplify; lia.
         unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
         auto.
-        rewrite H3 in H1; discriminate.
-        rewrite H3 in H2; discriminate.
+        rewrite Heqv0 in H0; discriminate.
+        rewrite Heqv0 in H2; discriminate.
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
         destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
