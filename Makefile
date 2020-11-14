@@ -33,7 +33,7 @@ all: lib/COMPCERTSTAMP
 
 lib/COMPCERTSTAMP:
 	(cd lib/CompCert && ./configure --ignore-coq-version $(ARCH))
-	$(MAKE) extraction -C lib/CompCert
+	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
 
 install:
