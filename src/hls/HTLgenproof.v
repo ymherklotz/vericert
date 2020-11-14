@@ -725,7 +725,8 @@ Section CORRECTNESS.
       match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop (Op.Oshrximm n) args res0 pc') ->
       Op.eval_operation ge sp (Op.Oshrximm n)
-                        (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
+                        (List.map (fun r : BinNums.positive =>
+                                     Registers.Regmap.get r rs) args) m = Some v ->
       translate_instr (Op.Oshrximm n) args s = OK e s' i ->
       exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
   Proof.
@@ -736,7 +737,53 @@ Section CORRECTNESS.
     (*repeat (simplify; eval_correct_tac; unfold valueToInt in * ).
             destruct (Z_lt_ge_dec (Int.signed i0) 0).
             econstructor.*)
-  Abort.
+    unfold Values.Val.shrx in *.
+    destruct v0; try discriminate.
+    destruct (Int.ltu n (Int.repr 31)) eqn:?; try discriminate.
+    inversion H1. clear H1.
+    assert (Int.unsigned n <= 30).
+    { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate.
+      rewrite Int.unsigned_repr in l by (simplify; lia).
+      replace 31 with (Z.succ 30) in l by auto.
+      apply Zlt_succ_le in l.
+      auto.
+    }
+    rewrite IntExtra.shrx_shrx_alt_equiv in H2 by auto.
+    unfold IntExtra.shrx_alt in *.
+    destruct (zlt (Int.signed i0) 0).
+    - repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
+      repeat (simplify; eval_correct_tac).
+      inv_lessdef. unfold valueToInt in *. rewrite H3 in H1.
+      inv H1.
+      unfold Int.lt in *. rewrite zlt_true in Heqb0. simplify.
+      rewrite Int.unsigned_repr in Heqb0. discriminate.
+      simplify; lia.
+      unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
+      auto.
+      rewrite H3 in H1; discriminate.
+      rewrite H3 in H2; discriminate.
+      rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_true; try lia.
+      simplify. inv_lessdef. unfold valueToInt in *.
+      rewrite H3 in H1. auto. inv H1. auto.
+      rewrite H3 in H1. discriminate.
+      rewrite H3 in H2. discriminate.
+    - econstructor; econstructor; [eapply Verilog.erun_Vternary_false|idtac]; repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
+      repeat (simplify; eval_correct_tac).
+      inv_lessdef. unfold valueToInt in *. rewrite H3 in H1.
+      inv H1.
+      unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify.
+      rewrite Int.unsigned_repr in Heqb0. lia.
+      simplify; lia.
+      unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
+      auto.
+      rewrite H3 in H1; discriminate.
+      rewrite H3 in H2; discriminate.
+      rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_false; try lia.
+      simplify. inv_lessdef. unfold valueToInt in *.
+      rewrite H3 in H1. auto. inv H1. auto.
+      rewrite H3 in H1. discriminate.
+      rewrite H3 in H2. discriminate.
+  Qed.
 
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st,
@@ -776,7 +823,46 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     (*- unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
       repeat (rewrite Int.unsigned_repr). auto.*)
-    - admit.
+    - assert (Int.unsigned n <= 30).
+      { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate.
+        rewrite Int.unsigned_repr in l by (simplify; lia).
+        replace 31 with (Z.succ 30) in l by auto.
+        apply Zlt_succ_le in l.
+        auto.
+      }
+      destruct (zlt (Int.signed i0) 0).
+      + repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
+        repeat (simplify; eval_correct_tac).
+        rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_true; try lia.
+        simplify. inv_lessdef. unfold valueToInt in *.
+        rewrite Heqv0 in H0. auto. inv H0. auto.
+        rewrite Heqv0 in H2. discriminate.
+        unfold valueToInt in l. auto.
+        inv_lessdef. unfold valueToInt in *. rewrite Heqv0 in H0.
+        inv H0.
+        unfold Int.lt in *. rewrite zlt_true in Heqb0. simplify.
+        rewrite Int.unsigned_repr in Heqb0. discriminate.
+        simplify; lia.
+        unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
+        auto.
+        rewrite Heqv0 in H0; discriminate.
+        rewrite Heqv0 in H2; discriminate.
+      + eapply Verilog.erun_Vternary_false; repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
+        repeat (simplify; eval_correct_tac).
+        rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_false; try lia.
+        simplify. inv_lessdef. unfold valueToInt in *.
+        rewrite Heqv0 in H0. auto. inv H0. auto.
+        rewrite Heqv0 in H2. discriminate.
+        unfold valueToInt in *. auto.
+        inv_lessdef. unfold valueToInt in *. rewrite H3 in H1.
+        inv H1.
+        unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify.
+        rewrite Int.unsigned_repr in Heqb0. lia.
+        simplify; lia.
+        unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
+        auto.
+        rewrite H3 in H1; discriminate.
+        rewrite H3 in H2; discriminate.
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
         destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
@@ -899,7 +985,7 @@ Section CORRECTNESS.
         destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
         rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
         constructor.
-  Admitted.
+  Qed.
 
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:
