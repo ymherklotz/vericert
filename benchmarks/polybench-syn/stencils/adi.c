@@ -9,6 +9,7 @@
  */
 /* adi.c: this file is part of PolyBench/C */
 
+#include "../include/misc.h"
 
 #define plus(i) i = i + ONE
 static
@@ -64,10 +65,10 @@ void kernel_adi(int tsteps, int n,
   mul1 = B1 * DT / (DX * DX);
   mul2 = B2 * DT / (DY * DY);
 
-  a = -mul1 / 2;
+  a = -(sdivider(mul1,2));
   b = 1+mul1;
   c = a;
-  d = -mul2 / 2;
+  d = -(sdivider(mul2,2));
   e = 1+mul2;
   f = d;
   int ZERO = 0;
@@ -107,7 +108,7 @@ void kernel_adi(int tsteps, int n,
 }
 
 
-int main(int argc, char** argv)
+int main()
 {
 
   int n = 20;

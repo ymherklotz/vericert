@@ -9,6 +9,8 @@
  */
 /* atax.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int m, int n,
@@ -21,13 +23,11 @@ void init_array (int m, int n,
   fn = (int)n;
 
   for (i = 0; i < n; plus(i))
-      x[i] = ONE + (i / fn);
+      x[i] = ONE + divider(i, fn);
   for (i = 0; i < m; plus(i))
     for (j = 0; j < n; plus(j))
-      A[i][j] = (int) ((i+j) % n) / (5*m);
+      A[i][j] = (int) divider(smodulo(i+j, n),(5*m));
 }
-
-
 
 
 static
@@ -46,8 +46,6 @@ int print_array(int n,
 }
 
 
-
-
 static
 void kernel_atax(int m, int n,
    int A[ 38 + 0][42 + 0],
@@ -58,7 +56,6 @@ void kernel_atax(int m, int n,
   int i, j;
   int ONE = 1;
 
-#pragma scop
  for (i = 0; i < n; plus(i))
     y[i] = 0;
   for (i = 0; i < m; plus(i))
@@ -69,7 +66,6 @@ void kernel_atax(int m, int n,
       for (j = 0; j < n; plus(j))
  y[j] = y[j] + A[i][j] * tmp[i];
     }
-#pragma endscop
 
 }
 

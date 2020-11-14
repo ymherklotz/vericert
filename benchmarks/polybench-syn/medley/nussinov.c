@@ -11,6 +11,8 @@
 
 typedef int base; 
 
+#include "../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int n,
@@ -19,10 +21,11 @@ void init_array (int n,
 {
   int i, j;
   int ONE = 1;
+  int FOUR = 4;
 
 
   for (i=0; i <n; plus(i)) {
-     seq[i] = (base)((i+ONE)%4);
+     seq[i] = (base)(modulo((i+ONE),FOUR));
   }
 
   for (i=0; i <n; plus(i))
@@ -55,22 +58,22 @@ void kernel_nussinov(int n, base seq[ 60 + 0],
       int table[ 60 + 0][60 + 0])
 {
   int i, j, k;
+  int ZERO = 0;
   int ONE = 1;
   int THREE = 3;
 
-#pragma scop
- for (i = n-ONE; i >= 0; i=i-ONE) {
+ for (i = n-ONE; i >= ZERO; i=i-ONE) {
   for (j=i+ONE; j<n; plus(j)) {
 
-   if (j-ONE>=0)
+   if (j-ONE>=ZERO)
       table[i][j] = ((table[i][j] >= table[i][j-ONE]) ? table[i][j] : table[i][j-ONE]);
    if (i+ONE<n)
       table[i][j] = ((table[i][j] >= table[i+ONE][j]) ? table[i][j] : table[i+ONE][j]);
 
-   if (j-ONE>=0 && i+ONE<n) {
+   if ((j-ONE>=ZERO && i+ONE<n) !=  (int)0) {
 
      if (i<j-ONE)
-        table[i][j] = ((table[i][j] >= table[i+ONE][j-ONE]+(((seq[i])+(seq[j])) == THREE ? ONE : 0)) ? table[i][j] : table[i+ONE][j-ONE]+(((seq[i])+(seq[j])) == THREE ? ONE : 0));
+        table[i][j] = ((table[i][j] >= table[i+ONE][j-ONE]+(((seq[i])+(seq[j])) == THREE ? ONE : ZERO)) ? table[i][j] : table[i+ONE][j-ONE]+(((seq[i])+(seq[j])) == THREE ? ONE : ZERO));
      else
         table[i][j] = ((table[i][j] >= table[i+ONE][j-ONE]) ? table[i][j] : table[i+ONE][j-ONE]);
    }
@@ -80,7 +83,6 @@ void kernel_nussinov(int n, base seq[ 60 + 0],
    }
   }
  }
-#pragma endscop
 
 }
 

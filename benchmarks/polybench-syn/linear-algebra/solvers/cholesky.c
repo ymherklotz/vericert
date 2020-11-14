@@ -9,7 +9,7 @@
  */
 /* cholesky.c: this file is part of PolyBench/C */
 
-#include <stdio.h>
+#include "../../include/misc.h"
 
 #  define SQRT_FUN(x) sqrtf(x)
 
@@ -24,7 +24,7 @@ void init_array(int n,
   for (i = 0; i < n; plus(i))
     {
       for (j = 0; j <= i; plus(j))
- A[i][j] = (int)(-j % n) / n + ONE;
+ A[i][j] = (int)sdivider(smodulo(-j, n), n) + ONE;
       for (j = i + ONE; j < n; plus(j)) {
  A[i][j] = 0;
       }
@@ -76,34 +76,30 @@ void kernel_cholesky(int n,
   int i, j, k;
   int ONE = 1;
 
-#pragma scop
- for (i = 0; i < n; plus(i)) {
+  for (i = 0; i < n; plus(i)) {
 
-     for (j = 0; j < i; plus(j)) {
-        for (k = 0; k < j; plus(k)) {
-           A[i][j] -= A[i][k] * A[j][k];
-        }
-        A[i][j] /= A[j][j];
-     }
+    for (j = 0; j < i; plus(j)) {
+      for (k = 0; k < j; plus(k)) {
+        A[i][j] -= A[i][k] * A[j][k];
+      }
+      A[i][j] = sdivider(A[i][j] ,A[j][j]);
+    }
 
-     for (k = 0; k < i; plus(k)) {
-        A[i][i] -= A[i][k] * A[i][k];
-     }
-     int sq = 0; int val = 0; int cmp = A[i][i];
-     printf("cmp %d\n",cmp);
-     while(sq <= cmp) {
-       val = val + ONE;
-       sq = val * val;
-     }
-     printf("val %d\n",val);
-     A[i][i] = val;
-     }
-#pragma endscop
+    for (k = 0; k < i; plus(k)) {
+      A[i][i] -= A[i][k] * A[i][k];
+    }
+    int sq = 0; int val = 0; int cmp = A[i][i];
+    while(sq <= cmp) {
+      val = val + ONE;
+      sq = val * val;
+    }
+    A[i][i] = val;
+  }
 
 }
 
 
-int main(int argc, char** argv)
+int main()
 {
 
   int n = 40;
@@ -112,7 +108,7 @@ int main(int argc, char** argv)
   int A[40][40]; 
 
 
-  //init_array (n, A);
+  init_array (n, A);
 
 
   kernel_cholesky (n, A);

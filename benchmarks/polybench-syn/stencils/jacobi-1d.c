@@ -9,6 +9,7 @@
  */
 /* jacobi-1d.c: this file is part of PolyBench/C */
 
+#include "../include/misc.h"
 
 #define plus(i) i = i + ONE
 static
@@ -23,8 +24,8 @@ void init_array (int n,
 
   for (i = 0; i < n; plus(i))
       {
- A[i] = ((int) i+TWO) / n;
- B[i] = ((int) i+THREE) / n;
+        A[i] = divider(((int) i+TWO), n);
+        B[i] = divider(((int) i+THREE), n);
       }
 }
 
@@ -59,7 +60,6 @@ void kernel_jacobi_1d(int tsteps,
   int t, i;
   int ONE = 1;
 
-#pragma scop
   for (t = 0; t < tsteps; plus(t))
   {
     for (i = 1; i < n - ONE; plus(i)){
@@ -71,7 +71,6 @@ void kernel_jacobi_1d(int tsteps,
       A[i] = A[i] >> 2;
     }
   }
-#pragma endscop
 
 }
 

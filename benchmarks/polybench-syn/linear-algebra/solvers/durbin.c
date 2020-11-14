@@ -52,6 +52,45 @@ int sdivider(int N, int D) {
     }
 }
 
+unsigned int divider(unsigned int x, unsigned int y)
+{
+    unsigned int r0, q0, y0, y1;
+
+    r0 = x;
+    q0 = 0;
+    y0 = y;
+    y1 = y;
+    do
+    {
+        y1 = 2 * y1;
+    } while (y1 <= x);
+    do
+    {
+        y1 = y1 / 2;
+        q0 = 2 * q0;
+        if (r0 >= y1)
+        {
+            r0 = r0 - y1;
+            q0 = q0 + 1;
+        }
+    } while ((int)y1 != (int)y0);
+    return q0;
+}
+
+int sdivider(int N, int D) {
+    if (D < 0) {
+        if (N < 0)
+            return divider(-N, -D);
+        else
+            return -divider(N, -D);
+    } else {
+        if (N < 0)
+            return -divider(-N, D);
+        else
+            return divider(N, D);
+    }
+}
+
 #define plus(i) i = i + ONE
 /* Include polybench common header. */
 static
@@ -59,7 +98,7 @@ void init_array (int n,
                  int r[ 40 + 0])
 {
     int ONE = 1;
-    int i, j;
+    int i;
 
     for (i = 0; i < n; plus(i))
     {
@@ -85,6 +124,7 @@ int print_array(int n,
 #ifndef SYNTHESIS
     printf("finished = %u\n", res);
 #endif
+
     return res;
 }
 
@@ -110,8 +150,7 @@ void kernel_durbin(int n,
         for (i=0; i<k; plus(i)) {
             sum += r[k-i-ONE]*y[i];
         }
-        //alpha = - sdivider(r[k] + sum, beta);
-        alpha = - (r[k] + sum) / beta;
+        alpha = - sdivider(r[k] + sum, beta);
 
         for (i=0; i<k; plus(i)) {
             z[i] = y[i] + alpha*y[k-i-ONE];

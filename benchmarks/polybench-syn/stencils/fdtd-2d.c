@@ -9,7 +9,9 @@
  */
 /* fdtd-2d.c: this file is part of PolyBench/C */
 
+#ifndef SYNTHESIS
 #include <stdio.h>
+#endif
 
 #define plus(i) i = i + ONE
 static
@@ -85,8 +87,6 @@ void kernel_fdtd_2d(int tmax,
   int t, i, j;
   int ONE = 1;
 
-#pragma scop
-
  for(t = 0; t < tmax; t=t+ONE)
     {
       for (j = 0; j < ny; plus(j))
@@ -105,7 +105,6 @@ void kernel_fdtd_2d(int tmax,
            }
     }
 
-#pragma endscop
 }
 
 

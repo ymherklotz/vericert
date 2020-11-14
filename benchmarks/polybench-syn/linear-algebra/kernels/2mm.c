@@ -10,6 +10,8 @@
 /* 2mm.c: this file is part of PolyBench/C */
 
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array(int ni, int nj, int nk, int nl,
@@ -27,16 +29,16 @@ void init_array(int ni, int nj, int nk, int nl,
   *beta = 2;
   for (i = 0; i < ni; plus(i))
     for (j = 0; j < nk; plus(j))
-      A[i][j] = (int) ((i*j+ONE) % ni) / ni;
+      A[i][j] = (int) divider(smodulo(i*j+ONE, ni), ni);
   for (i = 0; i < nk; plus(i))
     for (j = 0; j < nj; plus(j))
-      B[i][j] = (int) (i*(j+ONE) % nj) / nj;
+      B[i][j] = (int) divider(smodulo(i*(j+ONE), nj), nj);
   for (i = 0; i < nj; plus(i))
     for (j = 0; j < nl; plus(j))
-      C[i][j] = (int) ((i*(j+ONE+ONE+ONE)+ONE) % nl) / nl;
+      C[i][j] = (int) divider(smodulo(i*(j+ONE+ONE+ONE)+ONE, nl), nl);
   for (i = 0; i < ni; plus(i))
     for (j = 0; j < nl; plus(j))
-      D[i][j] = (int) (i*(j+ONE+ONE) % nk) / nk;
+      D[i][j] = (int) divider(smodulo(i*(j+ONE+ONE), nk), nk);
 }
 
 static
@@ -69,8 +71,6 @@ void kernel_2mm(int ni, int nj, int nk, int nl,
   int ONE = 1;
   int i, j, k;
 
-#pragma scop
-
  for (i = 0; i < ni; plus(i))
     for (j = 0; j < nj; plus(j))
       {
@@ -85,7 +85,6 @@ void kernel_2mm(int ni, int nj, int nk, int nl,
  for (k = 0; k < nj; plus(k))
    D[i][j] += tmp[i][k] * C[k][j];
       }
-#pragma endscop
 
 }
 

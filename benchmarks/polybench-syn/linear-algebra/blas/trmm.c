@@ -9,13 +9,14 @@
  */
 /* trmm.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
 
 #define plus(i) i = i + ONE
-static
+  static
 void init_array(int m, int n,
-  int *alpha,
-  int A[ 20 + 0][20 + 0],
-  int B[ 20 + 0][30 + 0])
+    int *alpha,
+    int A[ 20 + 0][20 + 0],
+    int B[ 20 + 0][30 + 0])
 {
   int i, j;
   int ONE = 1;
@@ -23,22 +24,22 @@ void init_array(int m, int n,
   *alpha = 3;
   for (i = 0; i < m; plus(i)) {
     for (j = 0; j < i; plus(j)) {
-      A[i][j] = (int)((i+j) % m)/m;
+      A[i][j] = (int) divider(smodulo(i+j, m), m);
     }
     A[i][i] = 1;
     for (j = 0; j < n; plus(j)) {
-      B[i][j] = (int)((n+(i-j)) % n)/n;
+      B[i][j] = (int)divider(smodulo(n+i-j, n), n);
     }
- }
+  }
 
 }
 
 
 
 
-static
+  static
 int print_array(int m, int n,
-   int B[ 20 + 0][30 + 0])
+    int B[ 20 + 0][30 + 0])
 {
   int i, j;
   int ONE = 1;
@@ -48,28 +49,26 @@ int print_array(int m, int n,
     for (j = 0; j < n; plus(j)) {
       res ^= B[i][j];
     }
-    return res;
+  return res;
 }
 
 
 
 
-static
+  static
 void kernel_trmm(int m, int n,
-   int alpha,
-   int A[ 20 + 0][20 + 0],
-   int B[ 20 + 0][30 + 0])
+    int alpha,
+    int A[ 20 + 0][20 + 0],
+    int B[ 20 + 0][30 + 0])
 {
   int i, j, k;
   int ONE = 1;
-#pragma scop
- for (i = 0; i < m; plus(i))
-     for (j = 0; j < n; plus(j)) {
-        for (k = i+ONE; k < m; plus(k))
-           B[i][j] += A[k][i] * B[k][j];
-        B[i][j] = alpha * B[i][j];
-     }
-#pragma endscop
+  for (i = 0; i < m; plus(i))
+    for (j = 0; j < n; plus(j)) {
+      for (k = i+ONE; k < m; plus(k))
+        B[i][j] += A[k][i] * B[k][j];
+      B[i][j] = alpha * B[i][j];
+    }
 
 }
 

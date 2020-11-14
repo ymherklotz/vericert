@@ -9,37 +9,37 @@
  */
 /* ludcmp.c: this file is part of PolyBench/C */
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 
-static
+  static
 void init_array (int n,
-   int A[ 40 + 0][40 + 0],
-   int b[ 40 + 0],
-   int x[ 40 + 0],
-   int y[ 40 + 0])
+    int A[ 40 + 0][40 + 0],
+    int b[ 40 + 0],
+    int x[ 40 + 0],
+    int y[ 40 + 0])
 {
   int i, j;
   int ONE = 1;
-  int TWO = 2;
-  int FOUR = 4;
   int fn = (int)n;
 
   for (i = 0; i < n; plus(i))
-    {
-      x[i] = 0;
-      y[i] = 0;
-      b[i] = (i+ONE)/fn/(TWO) + (FOUR);
-    }
+  {
+    x[i] = 0;
+    y[i] = 0;
+    b[i] = divider(i+1, fn*2) + 4;
+  }
 
   for (i = 0; i < n; plus(i))
-    {
-      for (j = 0; j <= i; plus(j))
- A[i][j] = (int)(-j % n) / n + ONE;
-      for (j = i+ONE; j < n; plus(j)) {
- A[i][j] = 0;
-      }
-      A[i][i] = 1;
+  {
+    for (j = 0; j <= i; plus(j))
+      A[i][j] = (int)sdivider(smodulo(-j, n), n) + 1;
+    for (j = i+ONE; j < n; plus(j)) {
+      A[i][j] = 0;
     }
+    A[i][i] = 1;
+  }
 
 
 
@@ -51,19 +51,19 @@ void init_array (int n,
   for (t = 0; t < n; plus(t))
     for (r = 0; r < n; plus(r))
       for (s = 0; s < n; plus(s))
- B[r][s] += A[r][t] * A[s][t];
-    for (r = 0; r < n; plus(r))
-      for (s = 0; s < n; plus(s))
- A[r][s] = B[r][s];
+        B[r][s] += A[r][t] * A[s][t];
+  for (r = 0; r < n; plus(r))
+    for (s = 0; s < n; plus(s))
+      A[r][s] = B[r][s];
 
 }
 
 
 
 
-static
+  static
 int check_array(int n,
-   int x[ 40 + 0])
+    int x[ 40 + 0])
 
 {
   int i;
@@ -71,7 +71,7 @@ int check_array(int n,
   int res = 0;
 
   for (i = 0; i < n; plus(i)) {
-  res += x[i];
+    res += x[i];
   }
   return res;
 }
@@ -79,50 +79,48 @@ int check_array(int n,
 
 
 
-static
+  static
 void kernel_ludcmp(int n,
-     int A[ 40 + 0][40 + 0],
-     int b[ 40 + 0],
-     int x[ 40 + 0],
-     int y[ 40 + 0])
+    int A[ 40 + 0][40 + 0],
+    int b[ 40 + 0],
+    int x[ 40 + 0],
+    int y[ 40 + 0])
 {
   int i, j, k;
   int ONE = 1;
 
   int w;
 
-#pragma scop
- for (i = 0; i < n; plus(i)) {
+  for (i = 0; i < n; plus(i)) {
     for (j = 0; j <i; plus(j)) {
-       w = A[i][j];
-       for (k = 0; k < j; plus(k)) {
-          w -= A[i][k] * A[k][j];
-       }
-        A[i][j] = w / A[j][j];
+      w = A[i][j];
+      for (k = 0; k < j; plus(k)) {
+        w -= A[i][k] * A[k][j];
+      }
+      A[i][j] = sdivider(w, A[j][j]);
     }
-   for (j = i; j < n; plus(j)) {
-       w = A[i][j];
-       for (k = 0; k < i; plus(k)) {
-          w -= A[i][k] * A[k][j];
-       }
-       A[i][j] = w;
+    for (j = i; j < n; plus(j)) {
+      w = A[i][j];
+      for (k = 0; k < i; plus(k)) {
+        w -= A[i][k] * A[k][j];
+      }
+      A[i][j] = w;
     }
   }
 
   for (i = 0; i < n; plus(i)) {
-     w = b[i];
-     for (j = 0; j < i; plus(j))
-        w -= A[i][j] * y[j];
-     y[i] = w;
+    w = b[i];
+    for (j = 0; j < i; plus(j))
+      w -= A[i][j] * y[j];
+    y[i] = w;
   }
 
-   for (i = n-ONE; i >=0; i=i-ONE) {
-     w = y[i];
-     for (j = i+ONE; j < n; plus(j))
-        w -= A[i][j] * x[j];
-     x[i] = w / A[i][i];
+  for (i = n-ONE; i >=0; i=i-ONE) {
+    w = y[i];
+    for (j = i+ONE; j < n; plus(j))
+      w -= A[i][j] * x[j];
+    x[i] = sdivider(w, A[i][i]);
   }
-#pragma endscop
 
 }
 
@@ -131,7 +129,6 @@ int main()
 {
 
   int n = 40;
-  int ONE = 1;
 
 
   int A[40 + 0][40 + 0]; 
@@ -142,20 +139,17 @@ int main()
 
 
   init_array (n,
-       A,
-       b,
-       x,
-       y);
-
-
-                             ;
+      A,
+      b,
+      x,
+      y);
 
 
   kernel_ludcmp (n,
-   A,
-   b,
-   x,
-   y);
+      A,
+      b,
+      x,
+      y);
 
   return check_array(n, x);
 

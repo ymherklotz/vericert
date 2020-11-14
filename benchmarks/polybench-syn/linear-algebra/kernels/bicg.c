@@ -10,6 +10,8 @@
 /* bicg.c: this file is part of PolyBench/C */
 
 
+#include "../../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int m, int n,
@@ -21,11 +23,11 @@ void init_array (int m, int n,
   int ONE = 1;
 
   for (i = 0; i < m; plus(i))
-    p[i] = (int)(i % m) / m;
+    p[i] = divider(smodulo(i, m), m);
   for (i = 0; i < n; plus(i)) {
-    r[i] = (int)(i % n) / n;
+    r[i] = divider(smodulo(i, n), n);
     for (j = 0; j < m; plus(j))
-      A[i][j] = (int) (i*(j+ONE) % n)/n;
+      A[i][j] = divider(smodulo(i*(j+ONE), n), n);
   }
 }
 
@@ -65,7 +67,6 @@ void kernel_bicg(int m, int n,
   int i, j;
   int ONE = 1;
 
-#pragma scop
  for (i = 0; i < m; plus(i))
     s[i] = 0;
   for (i = 0; i < n; plus(i))
@@ -77,7 +78,6 @@ void kernel_bicg(int m, int n,
    q[i] = q[i] + A[i][j] * p[j];
  }
     }
-#pragma endscop
 
 }
 
