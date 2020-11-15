@@ -29,7 +29,7 @@ void init_array (int n,
     {
       for (j = 0; j <= i; plus(j))
  A[i][j] = sdivider(smodulo(-j, n), n) + ONE;
-      for (j = plus(i); j < n; plus(j)) {
+      for (j = i+1; j < n; plus(j)) {
  A[i][j] = 0;
       }
       A[i][i] = 1;
