@@ -9,6 +9,9 @@
  */
 /* durbin.c: this file is part of PolyBench/C */
 
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
 
 unsigned int divider(unsigned int x, unsigned int y)
 {
@@ -76,8 +79,12 @@ int print_array(int n,
     int res = 0;
 
     for (i = 0; i < n; plus(i)) {
-        res  += y[i];
+        res  ^= y[i];
     }
+
+#ifndef SYNTHESIS
+    printf("finished: %u\n", res);
+#endif
 
     return res;
 }
