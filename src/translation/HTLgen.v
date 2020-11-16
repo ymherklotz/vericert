@@ -33,6 +33,7 @@ Record state: Type := mkstate {
   st_freshstate: node;
   st_scldecls: AssocMap.t (option io * scl_decl);
   st_arrdecls: AssocMap.t (option io * arr_decl);
+  (* TODO Add module declarations *)
   st_datapath: datapath;
   st_controllogic: controllogic;
 }.
@@ -469,7 +470,13 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
         do dst <- translate_arr_access mem addr args stack;
         add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
       else error (Errors.msg "State is larger than 2^32.")
-    | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
+    | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
+    | Icall sig (inr fn) args dst n' =>
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+      (* TODO Find calling convention for VeriCert-generated modules *)
+      (* TODO Generate an ident for instantiated modules (fresh name supply?) *)
+        add_instr n n' (Vinstantiate fn 1%positive (dst :: args))
+      else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
     | Icond cond args n1 n2 =>

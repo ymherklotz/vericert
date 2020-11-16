@@ -36,6 +36,11 @@ let fold_map f s = List.map f s |> concat
 
 let pstr pp = fprintf pp "%s"
 
+let rec intersperse c = function
+  | [] -> []
+  | [x] -> [x]
+  | x :: xs -> x :: c :: intersperse c xs
+
 let pprint_binop l r =
   let unsigned op = sprintf "{%s %s %s}" l op r in
   let signed op = sprintf "{$signed(%s) %s $signed(%s)}" l op r in
@@ -69,6 +74,8 @@ let unop = function
   | Vnot -> " ! "
 
 let register a = sprintf "reg_%d" (P.to_int a)
+let mod_name a = sprintf "module_%d" (P.to_int a)
+let instance a = sprintf "instance_%d" (P.to_int a)
 
 (*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
 
@@ -101,6 +108,9 @@ let rec pprint_stmnt i =
                             ]
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
+  | Vinstantiate (m, name, args) -> concat [ indent i; ident m; " "; ident name;
+                                             "("; concat (intersperse ", " (List.map register args)); ")"; ";\n"
+                                           ]
 
 let rec pprint_edge = function
   | Vposedge r -> concat ["posedge "; register r]
@@ -144,11 +154,6 @@ let pprint_module_item i = function
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
   | Valways_comb (e, s) ->
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
-
-let rec intersperse c = function
-  | [] -> []
-  | [x] -> [x]
-  | x :: xs -> x :: c :: intersperse c xs
 
 let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
 

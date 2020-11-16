@@ -39,6 +39,7 @@ Set Implicit Arguments.
 
 Definition reg : Type := positive.
 Definition node : Type := positive.
+Definition ident : Type := positive.
 Definition szreg : Type := reg * nat.
 
 Record associations (A : Type) : Type :=
@@ -174,7 +175,8 @@ Inductive stmnt : Type :=
 | Vcond : expr -> stmnt -> stmnt -> stmnt
 | Vcase : expr -> list (expr * stmnt) -> option stmnt -> stmnt
 | Vblock : expr -> expr -> stmnt
-| Vnonblock : expr -> expr -> stmnt.
+| Vnonblock : expr -> expr -> stmnt
+| Vinstantiate : ident -> ident -> list reg -> stmnt.
 
 (** ** Edges
 
