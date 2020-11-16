@@ -74,7 +74,7 @@ let unop = function
   | Vnot -> " ! "
 
 let register a = sprintf "reg_%d" (P.to_int a)
-let mod_name a = sprintf "module_%d" (P.to_int a)
+let vmodule a = sprintf "module_%d" (P.to_int a)
 let instance a = sprintf "instance_%d" (P.to_int a)
 
 (*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
@@ -108,7 +108,7 @@ let rec pprint_stmnt i =
                             ]
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
-  | Vinstantiate (m, name, args) -> concat [ indent i; ident m; " "; ident name;
+  | Vinstantiate (m, name, args) -> concat [ indent i; vmodule m; " "; instance name;
                                              "("; concat (intersperse ", " (List.map register args)); ")"; ";\n"
                                            ]
 
@@ -204,17 +204,15 @@ let print_initial i n stk = concat [
   ]
 
 let pprint_module debug i n m =
-  if (extern_atom n) = "main" then
-    let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
-    let outputs = [m.mod_finish; m.mod_return] in
-    concat [ indent i; "module "; (extern_atom n);
-             "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-             fold_map (pprint_module_item (i+1)) m.mod_body;
-             if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
-             if debug then debug_always i m.mod_clk m.mod_st else "";
-             indent i; "endmodule\n\n"
-           ]
-  else ""
+  let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
+  let outputs = [m.mod_finish; m.mod_return] in
+  concat [ indent i; "module "; (extern_atom n);
+            "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
+            fold_map (pprint_module_item (i+1)) m.mod_body;
+            if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
+            if debug then debug_always i m.mod_clk m.mod_st else "";
+            indent i; "endmodule\n\n"
+          ]
 
 let print_result pp lst =
   let rec print_result_in pp = function
