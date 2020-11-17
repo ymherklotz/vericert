@@ -13,6 +13,13 @@
 #include <stdio.h>
 #endif
 
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
+
+
+#include "../include/misc.h"
+
 #define plus(i) i = i + ONE
 static
 void init_array (int tmax,
@@ -25,18 +32,16 @@ void init_array (int tmax,
 {
   int i, j;
   int ONE = 1;
-  int TWO = 1;
-  int THREE = 1;
 
   for (i = 0; i < tmax; plus(i))
     _fict_[i] = (int) i;
   for (i = 0; i < nx; plus(i))
     for (j = 0; j < ny; plus(j))
-      {
- ex[i][j] = ((int) i*(j+ONE)) / nx;
- ey[i][j] = ((int) i*(j+TWO)) / ny;
- hz[i][j] = ((int) i*(j+THREE)) / nx;
-      }
+    {
+      ex[i][j] = sdivider(i*(j+1) , nx);
+      ey[i][j] = sdivider(i*(j+2) , ny);
+      hz[i][j] = sdivider(i*(j+3) , nx);
+    }
       
 }
 
@@ -70,7 +75,7 @@ int print_array(int nx,
 #ifndef SYNTHESIS
   printf("finished: %u\n", res);
 #endif
-    
+
   return res;
 }
 

@@ -49,6 +49,9 @@ int print_array(int n,
   for (i = 0; i < n; plus(i)) {
     res ^= y[i];
   }
+#ifndef SYNTHESIS
+    printf("finished: %u\n", res);
+#endif
   return res;
 }
 

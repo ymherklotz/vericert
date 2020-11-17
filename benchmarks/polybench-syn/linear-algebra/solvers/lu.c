@@ -17,7 +17,11 @@
 
 #include "../../include/misc.h"
 
-#define plus(n) ((n = n + 1))
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
+
+#define plus(i) i = i + ONE
 
 static
 void init_array (int n,
@@ -25,11 +29,14 @@ void init_array (int n,
 {
   int i, j;
 
-  for (i = 0; i < n; i++)  {
-    for (j = 0; j <= i; j++)
-      A[i][j] = (-j % n) / n + 1;
-    for (j = i+1; j < n; j++) {
-      A[i][j] = 0;
+  for (i = 0; i < n; plus(i))
+    {
+      for (j = 0; j <= i; plus(j))
+ A[i][j] = sdivider(smodulo(-j, n), n) + ONE;
+      for (j = i+1; j < n; plus(j)) {
+ A[i][j] = 0;
+      }
+      A[i][i] = 1;
     }
     A[i][i] = 1;
   }
@@ -51,27 +58,6 @@ void init_array (int n,
   //free((void*)B);;
 
 }
-
-
-
-/*static
-  void print_array(int n,
-  int A[ 40 + 0][40 + 0])
-
-  {
-  int i, j;
-
-  fprintf(stderr, "==BEGIN DUMP_ARRAYS==\n");
-  fprintf(stderr, "begin dump: %s", "A");
-  for (i = 0; i < n; i++)
-  for (j = 0; j < n; j++) {
-  if ((i * n + j) % 20 == 0) fprintf (stderr, "\n");
-  fprintf (stderr, "%d ", A[i][j]);
-  }
-  fprintf(stderr, "\nend   dump: %s\n", "A");
-  fprintf(stderr, "==END   DUMP_ARRAYS==\n");
-  }
-*/
 
 
 static
@@ -107,6 +93,9 @@ int check_array(int n,
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j)) 
       if(A[i][j] !=0) res = 1;
+    #ifndef SYNTHESIS
+    printf("finished: %u\n", res);
+    #endif 
 
   return res;
 }
@@ -122,8 +111,6 @@ int main()
 
 
   init_array (n, A);
-
-
 
   kernel_lu (n, A);
 

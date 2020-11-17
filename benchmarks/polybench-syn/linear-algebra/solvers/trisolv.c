@@ -11,6 +11,11 @@
 
 #include "../../include/misc.h"
 
+
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
+
 #define plus(i) i = i + ONE
 static
 void init_array(int n,
@@ -23,7 +28,7 @@ void init_array(int n,
 
   for (i = 0; i < n; plus(i))
     {
-      x[i] = - 999;
+      x[i] = -999;
       b[i] = i ;
       for (j = 0; j <= i; plus(j))
         L[i][j] = (int) divider((i+n-j+ONE)*(ONE+ONE), n);
@@ -42,8 +47,12 @@ int check_array(int n,
   int res = 0;
   int ONE = 1;
   for (i = 0; i < n; plus(i)) {
-    res += x[i];
+    res ^= x[i];
   }
+
+#ifndef SYNTHESIS
+    printf("finished: %u\n", res);
+#endif
   return res;
 }
 
