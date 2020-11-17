@@ -11,6 +11,9 @@
 
 #include "../../include/misc.h"
 
+#ifndef SYNTHESIS
+  #include <stdio.h>
+#endif
 #define plus(i) i = i + ONE
 static
 void init_array (int n,
@@ -63,6 +66,9 @@ int print_array(int n,
   for (i = 0; i < n; plus(i)) {
     res ^= w[i];
   }
+#ifndef SYNTHESIS
+  printf("finished %u\n", res);
+#endif
   return res;
 }
 

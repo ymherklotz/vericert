@@ -10,6 +10,11 @@
 /* fdtd-2d.c: this file is part of PolyBench/C */
 
 
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
+
+
 #include "../include/misc.h"
 
 #define plus(i) i = i + ONE
@@ -63,6 +68,10 @@ int print_array(int nx,
     for (j = 0; j < ny; plus(j)) {
       res ^= hz[i][j];
     }
+
+#ifndef SYNTHESIS
+  printf("finished %u\n", res);
+#endif
 
   return res;
 }

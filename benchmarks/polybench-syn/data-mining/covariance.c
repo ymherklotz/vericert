@@ -10,6 +10,10 @@
 /* covariance.c: this file is part of PolyBench/C */
 
 #include "../include/misc.h"
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
+
 
 #define plus(i) i = i + ONE
 static
@@ -42,6 +46,9 @@ int print_array(int m,
     for (j = 0; j < m; plus(j)) {
       res ^= cov[i][j];
     }
+#ifndef SYNTHESIS
+    printf("finished: %u\n", res);
+#endif
     return res;
 }
 

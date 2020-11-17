@@ -11,6 +11,10 @@
 
 #include "../../include/misc.h"
 
+#ifndef SYNTHESIS
+#include <stdio.h>
+#endif 
+
 #  define SQRT_FUN(x) sqrtf(x)
 
 #define plus(i) i = i + ONE
@@ -63,6 +67,10 @@ int check_array(int n,
     for (j = 0; j <= i; plus(j)) {
     if(A[i][j]!=0) res = 1;
   }
+    #ifndef SYNTHESIS
+    printf("finished: %u\n", res);
+    #endif 
+
   return res;
 }
 

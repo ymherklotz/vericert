@@ -11,6 +11,10 @@
 
 #include "../../include/misc.h"
 
+#ifndef SYNTHESIS
+ #include <stdio.h> 
+#endif
+
 #define plus(i) i = i + ONE
 
 static
@@ -56,6 +60,9 @@ int print_array(int n,
   for (i = 0; i < n; plus(i)) {
     res ^= x2[i];
   }
+#ifndef SYNTHESIS
+  printf("finished %u\n", res);
+#endif
   return res;
 }
 
