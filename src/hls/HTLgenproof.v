@@ -1080,12 +1080,13 @@ Section CORRECTNESS.
     crush.
     econstructor.
     econstructor.
-    econstructor.
 
-    all: invert MARR; big_tac.
+    all: try constructor; invert MARR; big_tac.
 
-    inv CONST; constructor; simplify; rewrite AssocMap.gso; auto; lia.
-
+    inv CONST. simplify. assumption.
+    inv CONST. simplify. assumption.
+    inv CONST. constructor. simplify; rewrite AssocMap.gso; auto; lia.
+    simplify; rewrite AssocMap.gso; auto; lia.
     Unshelve. exact tt.
   Qed.
   Hint Resolve transl_inop_correct : htlproof.
@@ -1113,7 +1114,10 @@ Section CORRECTNESS.
     econstructor; simpl; trivial.
     constructor; trivial.
     econstructor; simpl; eauto.
-    simpl. econstructor. econstructor.
+    simpl.
+    inv CONST. assumption.
+    inv CONST. assumption.
+    econstructor. econstructor.
     apply H5. simplify.
 
     all: big_tac.
@@ -2448,7 +2452,10 @@ Section CORRECTNESS.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. apply H22. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl.
+      inv CONST. assumption.
+      inv CONST. assumption.
+      econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -2465,7 +2472,10 @@ Section CORRECTNESS.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. apply H22. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl.
+      inv CONST. assumption.
+      inv CONST. assumption.
+      econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -2514,6 +2524,8 @@ Section CORRECTNESS.
       inv CONST; assumption.
       inv CONST; assumption.
       constructor.
+      inv CONST. assumption.
+      inv CONST. assumption.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
       constructor.
@@ -2545,6 +2557,8 @@ Section CORRECTNESS.
       inv CONST; assumption.
       inv CONST; assumption.
       constructor.
+      inv CONST. assumption.
+      inv CONST. assumption.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
       constructor. constructor. constructor.

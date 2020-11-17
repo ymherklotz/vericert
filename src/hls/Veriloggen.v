@@ -44,7 +44,9 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
       Valways (Vposedge m.(mod_clk)) (Vcond (Vbinop Veq (Vvar m.(mod_reset)) (Vlit (ZToValue 1)))
                                                (Vnonblock (Vvar m.(mod_st)) (Vlit (posToValue m.(mod_entrypoint))))
                                                (Vcase (Vvar m.(mod_st)) case_el_ctrl (Some Vskip)))
-      :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
+      :: Valways (Vposedge m.(mod_clk)) (Vcond (Vbinop Veq (Vvar m.(mod_reset)) (Vlit (ZToValue 0)))
+                                               (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
+                                               Vskip)
       :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
   Verilog.mkmodule m.(mod_start)

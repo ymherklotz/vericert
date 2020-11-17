@@ -286,6 +286,11 @@ Inductive state : Type :=
            (st : node)
            (reg_assoc : assocmap_reg)
            (arr_assoc : assocmap_arr), state
+| Resetstate :
+    forall (stack : list stackframe)
+           (m : module)
+           (reg_assoc : assocmap_reg)
+           (arr_assoc : assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
            (v : value), state
@@ -724,6 +729,20 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
+| step_reset :
+      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf g,
+      asr!(m.(mod_reset)) = Some (ZToValue 1) ->
+      asr!(m.(mod_finish)) = Some (ZToValue 0) ->
+      mis_stepp f (mkassociations asr empty_assocmap)
+                  (mkassociations asa (empty_stack m))
+                  m.(mod_body)
+                  (mkassociations basr1 nasr1)
+                  (mkassociations basa1 nasa1) ->
+      asr' = merge_regs nasr1 basr1 ->
+      asa' = merge_arrs nasa1 basa1 ->
+      asr'!(m.(mod_st)) = Some stval ->
+      valueToPos stval = pstval ->
+      step g (Resetstate sf m asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall asr asa sf retval m st g,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->
@@ -732,11 +751,10 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_call :
     forall g res m args,
     step g (Callstate res m args) Events.E0
-         (State res m m.(mod_entrypoint)
-          (AssocMap.set (mod_reset m) (ZToValue 0)
+         (Resetstate res m
+          (AssocMap.set (mod_reset m) (ZToValue 1)
            (AssocMap.set (mod_finish m) (ZToValue 0)
-            (AssocMap.set m.(mod_st) (posToValue m.(mod_entrypoint))
-             (init_params args m.(mod_args)))))
+            (init_params args m.(mod_args))))
           (empty_stack m))
 | step_return :
     forall g m asr i r sf pc mst asa,
@@ -883,9 +901,9 @@ Lemma semantics_determinate :
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
-  - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
-    pose proof (mis_stepp_determinate H5 H15).
-    crush.
+  - invert H; invert H0; crush; assert (f = f0) by (destruct f; destruct f0; auto); subst.
+    pose proof (mis_stepp_determinate H5 H15). crush.
+    pose proof (mis_stepp_determinate H3 H10). crush.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.
   - red; simplify; intro; invert H0; invert H; crush.

@@ -300,7 +300,12 @@ Section CORRECTNESS.
       }
       apply Maps.PTree.elements_correct. eassumption. eassumption.
 
-      econstructor. econstructor.
+      econstructor. econstructor. econstructor.
+      econstructor. econstructor. simplify.
+      unfold find_assocmap, AssocMapExt.get_default.
+      rewrite H5. trivial.
+      constructor. simplify. unfold valueToBool, boolToValue, Int.eq, uvalueToZ, natToValue.
+      rewrite zeq_true. rewrite Int.unsigned_repr. auto. lia.
 
       eapply transl_list_correct.
       intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP]. auto.
@@ -319,9 +324,30 @@ Section CORRECTNESS.
 
     - econstructor; split. apply Smallstep.plus_one. apply step_finish. assumption. eassumption.
       constructor; assumption.
-    - econstructor; split. apply Smallstep.plus_one. constructor.
+    - econstructor; split. eapply Smallstep.plus_two. constructor.
+      econstructor.
+      apply AssocMap.gss.
+      rewrite AssocMap.gso.
+      apply AssocMap.gss. admit.
+      econstructor.
+      constructor. eapply stmnt_runp_Vcond_true. econstructor. econstructor. simplify.
+      unfold find_assocmap, AssocMapExt.get_default. rewrite AssocMap.gss. auto.
+      econstructor. simplify. unfold valueToBool, boolToValue, Int.eq, uvalueToZ, natToValue.
+      rewrite zeq_true. rewrite Int.unsigned_repr. auto. simpl. unfold_constants. lia.
+      econstructor. econstructor. econstructor.
+      econstructor. econstructor.
+      eapply stmnt_runp_Vcond_false. econstructor. econstructor. simplify.
+      unfold find_assocmap, AssocMapExt.get_default. rewrite AssocMap.gss. auto.
+      econstructor. simplify. unfold valueToBool, boolToValue, Int.eq, uvalueToZ, natToValue.
+      rewrite zeq_false. rewrite Int.unsigned_repr. auto. simpl. unfold_constants. lia.
+      unfold ZToValue. rewrite !Int.unsigned_repr; unfold_constants; try lia.
+      econstructor.
+      apply mis_stepp_decl. trivial. trivial. simplify.
+      unfold merge_regs. unfold_merge. apply AssocMap.gss. auto. auto.
+      rewrite valueToPos_posToValue.
+      simplify. unfold merge_regs. unfold_merge.
 
-      constructor. constructor.
+
     - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
 
       apply match_state. assumption.

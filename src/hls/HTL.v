@@ -120,6 +120,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         ctrl
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1) ->
+      basr1!(mod_reset m) = Some (ZToValue 0) ->
+      basr1!(mod_finish m) = Some (ZToValue 0) ->
       basr1!(m.(mod_st)) = Some (posToValue st) ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations basr1 nasr1)
