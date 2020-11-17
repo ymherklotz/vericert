@@ -10,6 +10,9 @@
 /* gesummv.c: this file is part of PolyBench/C */
 
 #include "../../include/misc.h"
+#ifndef SYNTHESIS
+    #include <stdio.h>
+#endif
 
 #define plus(i) i = i + ONE
 
