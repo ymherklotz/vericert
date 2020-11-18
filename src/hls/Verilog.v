@@ -730,7 +730,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_reset :
-      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf g,
+      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf g mrst,
       asr!(m.(mod_reset)) = Some (ZToValue 1) ->
       asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       mis_stepp f (mkassociations asr empty_assocmap)
@@ -742,7 +742,9 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asa' = merge_arrs nasa1 basa1 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
-      step g (Resetstate sf m asr asa) Events.E0 (State sf m pstval asr' asa')
+      mrst = (m.(mod_reset)) ->
+      step g (Resetstate sf m asr asa) Events.E0
+           (State sf m pstval (asr' # mrst <- (ZToValue 0)) asa')
 | step_finish :
     forall asr asa sf retval m st g,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->

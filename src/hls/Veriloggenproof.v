@@ -43,10 +43,11 @@ Inductive match_stacks : list HTL.stackframe -> list stackframe -> Prop :=
 
 Inductive match_states : HTL.state -> state -> Prop :=
 | match_state :
-    forall m st reg_assoc arr_assoc hstk vstk,
+    forall m st reg_assoc_htl reg_assoc_v arr_assoc hstk vstk,
       match_stacks hstk vstk ->
-      match_states (HTL.State hstk m st reg_assoc arr_assoc)
-                   (State vstk (transl_module m) st reg_assoc arr_assoc)
+      (forall i, reg_assoc_htl ! i = reg_assoc_v ! i) ->
+      match_states (HTL.State hstk m st reg_assoc_htl arr_assoc)
+                   (State vstk (transl_module m) st reg_assoc_v arr_assoc)
 | match_returnstate :
     forall v hstk vstk,
       match_stacks hstk vstk ->
@@ -343,9 +344,9 @@ Section CORRECTNESS.
       unfold ZToValue. rewrite !Int.unsigned_repr; unfold_constants; try lia.
       econstructor.
       apply mis_stepp_decl. trivial. trivial. simplify.
-      unfold merge_regs. unfold_merge. apply AssocMap.gss. auto. auto.
+      unfold merge_regs. unfold_merge. apply AssocMap.gss. auto. auto. auto.
       rewrite valueToPos_posToValue.
-      simplify. unfold merge_regs. unfold_merge.
+      simplify. unfold merge_regs. unfold_merge. Search Maps.PTree.set.
 
 
     - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
