@@ -13,11 +13,6 @@
 #include <stdio.h>
 #endif
 
-#ifndef SYNTHESIS
-#include <stdio.h>
-#endif 
-
-
 #include "../include/misc.h"
 
 #define plus(i) i = i + ONE
