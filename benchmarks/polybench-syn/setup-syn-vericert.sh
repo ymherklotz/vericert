@@ -3,7 +3,7 @@
 top=$(pwd)
  #set up
  basedir=poly-syn
- sshhost=nr113@ee-beholder0.ee.ic.ac.uk
+ sshhost=$1
  ssh $sshhost "cd ~; rm -r $basedir"
  ssh $sshhost "cd ~; mkdir $basedir"
  scp quartus_synth.tcl $sshhost:$basedir 
