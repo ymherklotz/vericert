@@ -31,13 +31,13 @@ open VericertClflags
 
 let pstr pp = fprintf pp "%s"
 
-let reg pp r =
-  fprintf pp "x%d" (P.to_int r)
+let rec intersperse c = function
+  | [] -> []
+  | [x] -> [x]
+  | x :: xs -> x :: c :: intersperse c xs
 
-let rec regs pp = function
-  | [] -> ()
-  | [r] -> reg pp r
-  | r1::rl -> fprintf pp "%a, %a" reg r1 regs rl
+let register a = sprintf "reg_%d" (P.to_int a)
+let registers a = String.concat "" (intersperse ", " (List.map register a))
 
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
@@ -53,7 +53,7 @@ let ptree_to_list ptree =
       (PTree.elements ptree))
 
 let print_module pp id f =
-  fprintf pp "%s(%a) {\n" (extern_atom id) regs f.mod_params;
+  fprintf pp "%s(%s) {\n" (extern_atom id) (registers f.mod_params);
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
   let insts = ptree_to_list f.mod_insts in
