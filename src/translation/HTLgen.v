@@ -583,6 +583,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do finished <- create_wire 1;
         do res <- create_wire 32;
+        (* TODO implement control and datapaths for instantiated module *)
         add_instance fn args finished res
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
