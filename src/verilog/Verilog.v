@@ -175,8 +175,10 @@ Inductive stmnt : Type :=
 | Vcond : expr -> stmnt -> stmnt -> stmnt
 | Vcase : expr -> list (expr * stmnt) -> option stmnt -> stmnt
 | Vblock : expr -> expr -> stmnt
-| Vnonblock : expr -> expr -> stmnt
-| Vinstantiate : ident -> ident -> list reg -> stmnt.
+| Vnonblock : expr -> expr -> stmnt.
+
+Inductive instantiation : Type :=
+  Vinstantiation : ident -> ident -> list reg -> instantiation.
 
 (** ** Edges
 

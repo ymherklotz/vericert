@@ -108,9 +108,6 @@ let rec pprint_stmnt i =
                             ]
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
-  | Vinstantiate (m, name, args) -> concat [ indent i; vmodule m; " "; instance name;
-                                             "("; concat (intersperse ", " (List.map register args)); ")"; ";\n"
-                                           ]
 
 let rec pprint_edge = function
   | Vposedge r -> concat ["posedge "; register r]

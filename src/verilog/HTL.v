@@ -55,6 +55,7 @@ Record module: Type :=
     mod_start : reg;
     mod_reset : reg;
     mod_clk : reg;
+    mod_insts : AssocMap.t Verilog.instantiation;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
