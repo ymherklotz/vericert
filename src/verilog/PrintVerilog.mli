@@ -18,6 +18,8 @@
 
 val pprint_stmnt : int -> Verilog.stmnt -> string
 
+val pprint_instantiation : Verilog.instantiation -> string
+
 val print_value : out_channel -> ValueInt.value -> unit
 
 val print_program : bool -> out_channel -> Verilog.program -> unit

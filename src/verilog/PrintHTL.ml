@@ -42,21 +42,27 @@ let rec regs pp = function
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
 
+let print_instance pp (pc, i) =
+  fprintf pp "%5d:\t%s" pc (pprint_instantiation i)
+
+let ptree_to_list ptree =
+  List.sort
+    (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
+    (List.rev_map
+      (fun (pc, i) -> (P.to_int pc, i))
+      (PTree.elements ptree))
+
 let print_module pp id f =
   fprintf pp "%s(%a) {\n" (extern_atom id) regs f.mod_params;
-  let datapath =
-    List.sort
-      (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
-      (List.rev_map
-        (fun (pc, i) -> (P.to_int pc, i))
-        (PTree.elements f.mod_datapath)) in
-  let controllogic =
-    List.sort
-      (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
-      (List.rev_map
-        (fun (pc, i) -> (P.to_int pc, i))
-        (PTree.elements f.mod_controllogic)) in
-  fprintf pp "  datapath {\n";
+  let datapath = ptree_to_list f.mod_datapath in
+  let controllogic = ptree_to_list f.mod_controllogic in
+  let insts = ptree_to_list f.mod_insts in
+  if List.length insts > 0 then (
+    fprintf pp "  instances {\n";
+    List.iter (print_instance pp) insts;
+    fprintf pp "  }\n\n";
+  ) else fprintf pp "  ";
+  fprintf pp "datapath {\n";
   List.iter (print_instruction pp) datapath;
   fprintf pp "  }\n\n  controllogic {\n";
   List.iter (print_instruction pp) controllogic;

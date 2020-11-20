@@ -74,7 +74,7 @@ let unop = function
   | Vnot -> " ! "
 
 let register a = sprintf "reg_%d" (P.to_int a)
-let vmodule a = sprintf "module_%d" (P.to_int a)
+let vmodule a = sprintf "%s" (extern_atom a)
 let instance a = sprintf "instance_%d" (P.to_int a)
 
 (*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
@@ -108,6 +108,13 @@ let rec pprint_stmnt i =
                             ]
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
+
+let pprint_instantiation = function
+  | Vinstantiation (m, name, args) -> concat [
+      vmodule m; " ";
+      instance name; "("; concat (intersperse ", " (List.map register args)); ")";
+      ";\n"
+    ]
 
 let rec pprint_edge = function
   | Vposedge r -> concat ["posedge "; register r]
