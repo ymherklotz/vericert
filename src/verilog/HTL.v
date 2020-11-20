@@ -32,6 +32,7 @@ Local Open Scope assocmap.
 
 Definition reg := positive.
 Definition node := positive.
+Definition ident := positive.
 
 Definition datapath := PTree.t Verilog.stmnt.
 Definition controllogic := PTree.t Verilog.stmnt.
@@ -40,6 +41,12 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
   forall p0 : positive,
     In p0 (map fst (Maps.PTree.elements m)) ->
     Z.pos p0 <= Integers.Int.max_unsigned.
+
+Inductive instantiation : Type :=
+  (** [HTLinstantiation mod_name inst_name args dest fin]. This does not map directly
+      to a verilog instantiation. It omits all control signals (clk, rst, etc.)
+      except the finished signal *)
+  HTLinstantiation : ident -> ident -> list reg -> reg -> reg -> instantiation.
 
 Record module: Type :=
   mkmodule {
@@ -55,7 +62,7 @@ Record module: Type :=
     mod_start : reg;
     mod_reset : reg;
     mod_clk : reg;
-    mod_insts : AssocMap.t Verilog.instantiation;
+    mod_insts : AssocMap.t instantiation;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);

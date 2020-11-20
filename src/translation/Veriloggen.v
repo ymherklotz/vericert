@@ -16,6 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+Require Import List.
+Import ListNotations.
+
 From compcert Require Import Maps.
 From compcert Require Errors.
 From compcert Require Import AST.
@@ -37,7 +40,11 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
-Definition inst_to_Vdecl := map (fun (a: positive * instantiation) => match a with (_, decl) => Vinstancedecl decl end).
+Definition inst_to_Vdecl_fun (m: HTL.module) (a: positive * HTL.instantiation) :=
+  match a with (_, HTLinstantiation mod_name inst_name args fin dst) =>
+               (Vinstancedecl mod_name inst_name ([mod_start m; mod_reset m; mod_clk m] ++ args ++ [dst;fin])) end.
+
+Definition inst_to_Vdecl (m: HTL.module) := map (inst_to_Vdecl_fun m).
 
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := transl_list (PTree.elements m.(mod_controllogic)) in
@@ -49,7 +56,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
       :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
       :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))
-                                               ++ inst_to_Vdecl (AssocMap.elements m.(mod_insts))) in
+                                               ++ inst_to_Vdecl m (AssocMap.elements m.(mod_insts))) in
   Verilog.mkmodule m.(mod_start)
                    m.(mod_reset)
                    m.(mod_clk)

@@ -109,13 +109,6 @@ let rec pprint_stmnt i =
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
 
-let pprint_instantiation = function
-  | Vinstantiation (m, name, args) -> concat [
-      vmodule m; " ";
-      instance name; "("; concat (intersperse ", " (List.map register args)); ")";
-      ";\n"
-    ]
-
 let rec pprint_edge = function
   | Vposedge r -> concat ["posedge "; register r]
   | Vnegedge r -> concat ["negedge "; register r]
@@ -148,7 +141,11 @@ let print_io = function
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
   | Vdeclarr (io, r, sz, ln) -> concat [indent i; declarearr (print_io io) (r, sz, ln)]
-  | Vinstancedecl inst -> concat [indent i; pprint_instantiation inst]
+  | Vinstancedecl (m, name, args) -> concat [
+      indent i; vmodule m; " ";
+      instance name; "("; concat (intersperse ", " (List.map register args)); ")";
+      ";\n"
+    ]
 
 (* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function

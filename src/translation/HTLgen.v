@@ -277,7 +277,7 @@ Admitted.
 Definition add_instance (mod_name: ident) (args: list reg) (rst: reg) (finished: reg) (dst: reg) : mon unit :=
   fun s =>
         let instname := assocmap_nextavailable s.(st_insts) in
-        let inst := Vinstantiation mod_name instname ([rst] ++ args ++ [finished; dst]) in
+        let inst := HTL.HTLinstantiation mod_name instname args dst finished in
         OK tt (mkstate
               s.(st_st)
               s.(st_freshreg)

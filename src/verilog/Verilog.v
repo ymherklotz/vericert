@@ -177,9 +177,6 @@ Inductive stmnt : Type :=
 | Vblock : expr -> expr -> stmnt
 | Vnonblock : expr -> expr -> stmnt.
 
-Inductive instantiation : Type :=
-  Vinstantiation : ident -> ident -> list reg -> instantiation.
-
 (** ** Edges
 
 These define when an always block should be triggered, for example if the always
@@ -209,7 +206,7 @@ Inductive io : Type :=
 Inductive declaration : Type :=
 | Vdecl : option io -> reg -> nat -> declaration
 | Vdeclarr : option io -> reg -> nat -> nat -> declaration
-| Vinstancedecl : instantiation -> declaration.
+| Vinstancedecl : ident -> ident -> list reg -> declaration.
 
 Inductive module_item : Type :=
 | Vdeclaration : declaration -> module_item

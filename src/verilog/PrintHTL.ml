@@ -31,6 +31,7 @@ open VericertClflags
 
 let pstr pp = fprintf pp "%s"
 
+(* TODO import from PrintVerilog.v *)
 let rec intersperse c = function
   | [] -> []
   | [x] -> [x]
@@ -38,12 +39,14 @@ let rec intersperse c = function
 
 let register a = sprintf "reg_%d" (P.to_int a)
 let registers a = String.concat "" (intersperse ", " (List.map register a))
+let vmodule a = sprintf "%s" (extern_atom a)
+let instance a = sprintf "instance_%d" (P.to_int a)
 
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
 
-let print_instance pp (pc, i) =
-  fprintf pp "%5d:\t%s" pc (pprint_instantiation i)
+let print_instantiation pp (pc, HTLinstantiation (mod_name, inst_name, args, dst, fin)) =
+  fprintf pp "%5d:\t %s %s(%s) -> %s\n" pc (vmodule mod_name) (instance inst_name) (registers args) (register dst)
 
 let ptree_to_list ptree =
   List.sort
@@ -59,7 +62,7 @@ let print_module pp id f =
   let insts = ptree_to_list f.mod_insts in
   if List.length insts > 0 then (
     fprintf pp "  instances {\n";
-    List.iter (print_instance pp) insts;
+    List.iter (print_instantiation pp) insts;
     fprintf pp "  }\n\n";
   ) else fprintf pp "  ";
   fprintf pp "datapath {\n";
