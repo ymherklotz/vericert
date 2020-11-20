@@ -37,6 +37,8 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
+Definition inst_to_Vdecl := map (fun (a: positive * instantiation) => match a with (_, decl) => Vinstancedecl decl end).
+
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := transl_list (PTree.elements m.(mod_controllogic)) in
   let case_el_data := transl_list (PTree.elements m.(mod_datapath)) in
@@ -46,7 +48,8 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                                                (Vcase (Vvar m.(mod_st)) case_el_ctrl (Some Vskip)))
       :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
       :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
-                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
+                                               ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))
+                                               ++ inst_to_Vdecl (AssocMap.elements m.(mod_insts))) in
   Verilog.mkmodule m.(mod_start)
                    m.(mod_reset)
                    m.(mod_clk)

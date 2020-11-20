@@ -208,7 +208,8 @@ Inductive io : Type :=
 
 Inductive declaration : Type :=
 | Vdecl : option io -> reg -> nat -> declaration
-| Vdeclarr : option io -> reg -> nat -> nat -> declaration.
+| Vdeclarr : option io -> reg -> nat -> nat -> declaration
+| Vinstancedecl : instantiation -> declaration.
 
 Inductive module_item : Type :=
 | Vdeclaration : declaration -> module_item

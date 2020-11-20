@@ -148,6 +148,7 @@ let print_io = function
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
   | Vdeclarr (io, r, sz, ln) -> concat [indent i; declarearr (print_io io) (r, sz, ln)]
+  | Vinstancedecl inst -> concat [indent i; pprint_instantiation inst]
 
 (* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function
