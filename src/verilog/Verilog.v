@@ -100,7 +100,15 @@ Definition block_reg (r : reg) (asr : reg_associations) (v : value) :=
 Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
   mkassociations asr.(assoc_blocking) (AssocMap.set r v asr.(assoc_nonblocking)).
 
-Inductive scl_decl : Type := VScalar (sz : nat).
+Inductive io : Type :=
+| Vinput : io
+| Voutput : io
+| Vinout : io.
+
+Inductive scl_decl : Type :=
+| VScalar (io: option Verilog.io) (sz : nat)
+| VWire (sz : nat).
+
 Inductive arr_decl : Type := VArray (sz : nat) (ln : nat).
 
 (** * Verilog AST
@@ -194,18 +202,12 @@ Inductive edge : Type :=
 
 (** ** Module Items
 
-Module items can either be declarations ([Vdecl]) or always blocks ([Valways]).
-The declarations are always register declarations as combinational logic can be
-done using combinational always block instead of continuous assignments. *)
-
-Inductive io : Type :=
-| Vinput : io
-| Voutput : io
-| Vinout : io.
+Module items can either be declarations ([Vdecl]) or always blocks ([Valways]). *)
 
 Inductive declaration : Type :=
 | Vdecl : option io -> reg -> nat -> declaration
 | Vdeclarr : option io -> reg -> nat -> nat -> declaration
+| Vdeclwire : reg -> nat -> declaration
 | Vinstancedecl : ident -> ident -> list reg -> declaration.
 
 Inductive module_item : Type :=

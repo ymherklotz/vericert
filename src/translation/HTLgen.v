@@ -34,7 +34,7 @@ Record state: Type := mkstate {
   st_st : reg;
   st_freshreg: reg;
   st_freshstate: node;
-  st_scldecls: AssocMap.t (option io * scl_decl);
+  st_scldecls: AssocMap.t scl_decl;
   st_arrdecls: AssocMap.t (option io * arr_decl);
   st_insts: AssocMap.t instantiation;
   st_datapath: datapath;
@@ -45,7 +45,7 @@ Definition init_state (st : reg) : state :=
   mkstate st
           1%positive
           1%positive
-          (AssocMap.empty (option io * scl_decl))
+          (AssocMap.empty scl_decl)
           (AssocMap.empty (option io * arr_decl))
           (AssocMap.empty instantiation)
           (AssocMap.empty stmnt)
@@ -140,7 +140,7 @@ Lemma declare_reg_state_incr :
        s.(st_st)
        s.(st_freshreg)
        s.(st_freshstate)
-       (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
+       (AssocMap.set r (VScalar i sz) s.(st_scldecls))
        s.(st_arrdecls)
        s.(st_insts)
        s.(st_datapath)
@@ -152,7 +152,7 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_st)
                 s.(st_freshreg)
                 s.(st_freshstate)
-                (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
+                (AssocMap.set r (VScalar i sz) s.(st_scldecls))
                 s.(st_arrdecls)
                 s.(st_insts)
                 s.(st_datapath)
@@ -274,7 +274,7 @@ Lemma add_instance_state_incr :
 Proof.
 Admitted.
 
-Definition add_instance (mod_name: ident) (args: list reg) (rst: reg) (finished: reg) (dst: reg) : mon unit :=
+Definition add_instance (mod_name: ident) (args: list reg) (finished: reg) (dst: reg) : mon unit :=
   fun s =>
         let instname := assocmap_nextavailable s.(st_insts) in
         let inst := HTL.HTLinstantiation mod_name instname args dst finished in
@@ -507,7 +507,7 @@ Lemma create_reg_state_incr:
          s.(st_st)
          (Pos.succ (st_freshreg s))
          (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+         (AssocMap.set s.(st_freshreg) (VScalar i sz) s.(st_scldecls))
          s.(st_arrdecls)
          s.(st_insts)
          (st_datapath s)
@@ -520,12 +520,38 @@ Definition create_reg (i : option io) (sz : nat) : mon reg :=
                    s.(st_st)
                    (Pos.succ r)
                    (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+                   (AssocMap.set s.(st_freshreg) (VScalar i sz) s.(st_scldecls))
                    (st_arrdecls s)
                    (st_insts s)
                    (st_datapath s)
                    (st_controllogic s))
               (create_reg_state_incr s sz i).
+
+Lemma create_wire_state_incr:
+  forall s sz,
+    st_incr s (mkstate
+         s.(st_st)
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         (AssocMap.set s.(st_freshreg) (VWire sz) s.(st_scldecls))
+         s.(st_arrdecls)
+         s.(st_insts)
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_wire (sz : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (VWire sz) s.(st_scldecls))
+                   (st_arrdecls s)
+                   (st_insts s)
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_wire_state_incr s sz).
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
@@ -555,9 +581,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
-        do rst <- create_reg None 1;
-        do finished <- create_reg None 1;
-        add_instance fn args rst finished dst
+        do finished <- create_wire 1;
+        do res <- create_wire 32;
+        add_instance fn args finished res
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -678,7 +704,7 @@ Definition max_state (f: function) : state :=
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
-          (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
+          (AssocMap.set st (VScalar None 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_insts (init_state st))
           (st_datapath (init_state st))

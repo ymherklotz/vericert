@@ -141,6 +141,7 @@ let print_io = function
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
   | Vdeclarr (io, r, sz, ln) -> concat [indent i; declarearr (print_io io) (r, sz, ln)]
+  | Vdeclwire (r, sz) -> concat [indent i; declare "wire" (r, sz)]
   | Vinstancedecl (m, name, args) -> concat [
       indent i; vmodule m; " ";
       instance name; "("; concat (intersperse ", " (List.map register args)); ")";

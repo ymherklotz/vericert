@@ -30,8 +30,11 @@ Definition transl_list_fun (a : node * Verilog.stmnt) :=
 
 Definition transl_list st := map transl_list_fun st.
 
-Definition scl_to_Vdecl_fun (a : reg * (option io * scl_decl)) :=
-  match a with (r, (io, VScalar sz)) => (Vdecl io r sz) end.
+Definition scl_to_Vdecl_fun (a : reg * scl_decl) :=
+  match a with
+  | (r, (VScalar io sz)) => (Vdecl io r sz)
+  | (r, VWire sz) => (Vdeclwire r sz)
+  end.
 
 Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
 
