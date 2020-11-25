@@ -30,7 +30,8 @@
 
 (setq vericert/site-attachments
   (regexp-opt '("jpg" "jpeg" "gif" "png" "svg"
-                "ico" "cur" "css" "js" "woff" "html" "pdf")))
+                "ico" "cur" "css" "js" "woff" "woff2" "ttf"
+                "html" "pdf")))
 
 (setq user-full-name nil)
 
