@@ -1,7 +1,19 @@
-#+SETUPFILE: publish.setup
-#+TITLE: Vericert Documentation
+#+setupfile: publish.setup
+#+title: Vericert Documentation
+#+author: Yann Herklotz
 
-* Building
+* Overview
+
+Vericert translates C code into a hardware description language called Verilog, which can then be synthesised into hardware, to be placed onto a field-programmable gate array (FPGA) or application-specific integrated circuit (ASIC).
+
+#+attr_html: :width 600
+#+caption: Current design of Vericert, where HTL is an intermediate language representing a finite state machine with data-path (FSMD) and Verilog is the target language.
+#+name: fig:design
+[[./images/design.jpg]]
+
+The design shown in Figure [[fig:design]] shows how Vericert leverages an existing verified C compiler called [[https://compcert.org/compcert-C.html][CompCert]] to perform this translation.
+
+* Building Vericert
 
 To build Vericert, the provided Makefile can be used. External dependencies are needed to build the project, which can be pulled in automatically with [[https://nixos.org/nix/][nix]] using the provided ~default.nix~ and ~shell.nix~ files.
 
@@ -59,7 +71,7 @@ make install
 
 Which will install the binary in ~./bin/vericert~ by default. However, this can be changed by changing the ~PREFIX~ environment variable, in which case the binary will be installed in ~$PREFIX/bin/vericert~.
 
-** Running
+** Testing
 
 To test out ~vericert~ you can try the following examples which are in the test folder using the following:
 
@@ -68,3 +80,13 @@ To test out ~vericert~ you can try the following examples which are in the test 
 ./bin/vericert test/conditional.c -o conditional.v
 ./bin/vericert test/add.c -o add.v
 #+end_src
+
+Or by running the test suite using the following command:
+
+#+begin_src shell
+make test
+#+end_src
+
+* Using Vericert
+
+Vericert can be used to translate a subset of C into Verilog.
