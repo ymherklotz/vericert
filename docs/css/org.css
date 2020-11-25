@@ -198,7 +198,7 @@ img {
 h1,h2,h3,h4,h5,h6 {
     color: #A5573E;
     line-height: 1em;
-    font-family: "Iosevka", sans-serif;
+    font-family: "Iosevka Web", sans-serif;
 }
 
 h1,h2,h3 {
@@ -317,7 +317,7 @@ kbd {
     border-radius: 3px;
     background-clip: padding-box;
     font-size: 80%;
-    font-family: "Iosevka", monospace;
+    font-family: "Iosevka Web", monospace;
     line-height: 1;
 }
 
@@ -328,13 +328,13 @@ kbd {
     border-radius: 3px;
     background-clip: padding-box;
     font-size: 80%;
-    font-family: "Iosevka", monospace;
+    font-family: "Iosevka Web", monospace;
     line-height: 1;
 }
 
 .priority {
     color: orange;
-    font-family: "Iosevka", monospace;
+    font-family: "Iosevka Web", monospace;
 }
 
 /* Because tag span is set to float.  This is more like a hacking.  Maybe we
@@ -344,7 +344,7 @@ kbd {
 }
 
 .tag {
-    font-family: "Iosevka", monospace;
+    font-family: "Iosevka Web", monospace;
     font-size: 0.7em;
     font-weight: normal;
 }
@@ -414,7 +414,7 @@ p.verse {
 .org-src-container {
     border: 1px solid #ccc;
     box-shadow: 3px 3px 3px #eee;
-    font-family: "Iosevka", monospace;
+    font-family: "Iosevka Web", monospace;
     font-size: 80%;
     margin: 1em auto;
     padding: 0.1em 0.5em;
