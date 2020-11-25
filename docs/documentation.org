@@ -1,5 +1,7 @@
-#+SETUPFILE: setup.org
-#+TITLE: Building
+#+SETUPFILE: publish.setup
+#+TITLE: Vericert Documentation
+
+* Building
 
 To build Vericert, the provided Makefile can be used. External dependencies are needed to build the project, which can be pulled in automatically with [[https://nixos.org/nix/][nix]] using the provided ~default.nix~ and ~shell.nix~ files.
 
@@ -15,7 +17,7 @@ The project is written in Coq, a theorem prover, which is extracted to OCaml so 
 
 These dependencies can be installed manually, or automatically through Nix.
 
-* Downloading CompCert
+** Downloading CompCert
 
 CompCert is added as a submodule in the ~lib/CompCert~ directory. It is needed to run the build process below, as it is the one dependency that is not downloaded by nix, and has to be downloaded together with the repository. To clone CompCert together with this project, you can run:
 
@@ -29,7 +31,7 @@ If the repository is already cloned, you can run the following command to make s
 git submodule update --init
 #+end_src
 
-* Setting up Nix
+** Setting up Nix
 
 Nix is a package manager that can create an isolated environment so that the builds are reproducible. Once nix is installed, it can be used in the following way.
 
@@ -41,7 +43,7 @@ nix-shell
 
 which will open a shell that has all the dependencies loaded.
 
-* Makefile build
+** Makefile build
 
 If the dependencies were installed manually, or if one is in the ~nix-shell~, the project can be built by running:
 
@@ -57,7 +59,7 @@ make install
 
 Which will install the binary in ~./bin/vericert~ by default. However, this can be changed by changing the ~PREFIX~ environment variable, in which case the binary will be installed in ~$PREFIX/bin/vericert~.
 
-* Running
+** Running
 
 To test out ~vericert~ you can try the following examples which are in the test folder using the following:
 

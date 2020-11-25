@@ -1,7 +1,0 @@
-#+HTML_HEAD: <link rel="stylesheet" href="css/org.css" type="text/css" media="screen" />
-
-#+MACRO: begin-summary #+HTML: <div class="summary"><h2>Summary</h2>
-#+MACRO: end-summary #+HTML: </div>
-
-#+MACRO: begin-hidden #+HTML: <div class="hidden"><strong>$1 <small>click to toggle</small></strong><div class="hidden-content">
-#+MACRO: end-hidden #+HTML: </div></div>

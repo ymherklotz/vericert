@@ -1,0 +1,2 @@
+#+MACRO: begin-summary #+HTML: <div class="summary"><h2>Summary</h2>
+#+MACRO: end-summary #+HTML: </div>

@@ -1,5 +1,5 @@
-#+SETUPFILE: setup.org
-#+TITLE: VeriCert
+#+SETUPFILE: publish.setup
+#+TITLE: Vericert
 
 A formally verified high-level synthesis (HLS) tool written in Coq, building on top of [[https://github.com/AbsInt/CompCert][CompCert]].  This ensures the correctness of the C to Verilog translation according to our Verilog semantics and CompCert's C semantics, removing the need to check the resulting hardware for behavioural correctness.
 
@@ -14,5 +14,5 @@ The project is currently a work in progress, so proofs remain to be finished.  C
 
 * Content
 
-- [[./docs/toc.html][Vericert Coq Documentation]]
-- [[./building.org][Building Vericert]]
+- [[./proof/toc.html][Vericert Proof]]
+- [[./documentation.org][Vericert Documentation]]
