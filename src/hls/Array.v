@@ -29,7 +29,7 @@ Lemma list_set_spec1 {A : Type} :
   forall l i (x : A),
     i < length l -> nth_error (list_set i x l) i = Some x.
 Proof.
-  induction l; intros; destruct i; crush; firstorder.
+  induction l; intros; destruct i; crush; firstorder. intuition.
 Qed.
 Hint Resolve list_set_spec1 : array.
 
@@ -37,7 +37,7 @@ Lemma list_set_spec2 {A : Type} :
   forall l i (x : A) d,
     i < length l -> nth i (list_set i x l) d = x.
 Proof.
-  induction l; intros; destruct i; crush; firstorder.
+  induction l; intros; destruct i; crush; firstorder. intuition.
 Qed.
 Hint Resolve list_set_spec2 : array.
 
@@ -280,7 +280,7 @@ Proof.
   destruct i; crush.
 
   rewrite list_repeat_cons.
-  destruct i; crush; firstorder.
+  destruct i; crush; firstorder. intuition.
 Qed.
 
 Definition arr_repeat {A : Type} (a : A) (n : nat) : Array A := make_array (list_repeat a n).

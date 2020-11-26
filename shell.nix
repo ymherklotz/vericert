@@ -1,7 +1,7 @@
 with import <nixpkgs> {};
 
 mkShell {
-  buildInputs = (import ./.).buildInputs ++ [ ocamlPackages.ocp-indent verilog yosys
+  buildInputs = (import ./.).buildInputs ++ [ ocamlPackages.ocp-indent
                                               ocamlPackages.merlin ocamlPackages.utop
                                             ];
 }

@@ -17,8 +17,6 @@
  *)
 
 (* begin hide *)
-From bbv Require Import Word.
-From bbv Require HexNotation WordScope.
 From Coq Require Import ZArith.ZArith FSets.FMapPositive Lia.
 From compcert Require Export lib.Integers common.Values.
 From vericert Require Import Vericertlib.

@@ -18,7 +18,6 @@
 
 From vericert Require
      Verilog
-     Value
      Compiler
      RTLBlockgen
      RTLBlock
@@ -178,7 +177,7 @@ Set Extraction AccessOpaque.
 
 Cd "src/extraction".
 Separate Extraction
-         Verilog.module Value.uvalueToZ vericert.Compiler.transf_hls
+         Verilog.module vericert.Compiler.transf_hls
          vericert.Compiler.transf_hls_temp
          vericert.Compiler.transf_hls_opt
          RTLBlockgen.transl_program RTLBlock.successors_instr

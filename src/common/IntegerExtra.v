@@ -2,7 +2,6 @@ Require Import BinInt.
 Require Import Lia.
 Require Import ZBinary.
 
-From bbv Require Import ZLib.
 From compcert Require Import Integers Coqlib.
 
 Require Import Vericertlib.
@@ -500,7 +499,7 @@ Module IntExtra.
       apply Z.pow_lt_mono_r; lia.
 
       pose proof (Zlt_neg_0 p).
-      pose proof (pow2_nonneg (unsigned y)). rewrite <- Heqz in H0.
+      pose proof (Z.pow_nonneg 2 (unsigned y)). rewrite <- Heqz in H0.
       lia.
   Qed.
 
@@ -521,7 +520,7 @@ Module IntExtra.
       pose proof (unsigned_range_2 y). lia.
       rewrite Z.shiftl_1_l. unfold modulus, wordsize, Wordsize_32.wordsize.
       rewrite two_power_nat_equiv.
-      split. apply pow2_nonneg.
+      split. apply Z.pow_nonneg. lia.
       apply Z.pow_lt_mono_r; lia.
     - simplify.
       rewrite Z_mod_modulus_eq in Heqo.
@@ -531,7 +530,7 @@ Module IntExtra.
       pose proof (unsigned_range_2 y). lia.
       rewrite Z.shiftl_1_l. unfold modulus, wordsize, Wordsize_32.wordsize.
       rewrite two_power_nat_equiv.
-      split. apply pow2_nonneg.
+      split. apply Z.pow_nonneg. lia.
       apply Z.pow_lt_mono_r; lia.
   Qed.
 
@@ -584,7 +583,7 @@ Module IntExtra.
     { apply Z.mod_small.
       rewrite Z.shiftl_1_l.
       split.
-      apply pow2_nonneg.
+      apply Z.pow_nonneg. lia.
       replace 4294967296 with (2^32) by auto.
       apply Z.le_lt_trans with (m := 2 ^ 31); try lia.
       apply Z.pow_le_mono_r; lia.

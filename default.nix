@@ -1,8 +1,8 @@
 with import <nixpkgs> {};
 
 let
-  ncoq = coq_8_11;
-  ncoqPackages = coqPackages_8_11;
+  ncoq = coq_8_12;
+  ncoqPackages = coqPackages_8_12;
   bbv = ncoqPackages.callPackage
     ( { coq, stdenv, fetchFromGitHub }:
       stdenv.mkDerivation {
@@ -28,9 +28,9 @@ stdenv.mkDerivation {
   name = "vericert";
   src = ./.;
 
-  buildInputs = [ ncoq ocamlPackages.menhir dune
-                  ocaml ocamlPackages.findlib bbv
-                  gcc ocamlPackages.utop
+  buildInputs = [ ncoq dune
+                  ocaml ocamlPackages.findlib ocamlPackages.menhir ocamlPackages.utop
+                  gcc bbv
                 ];
 
   enableParallelBuilding = true;

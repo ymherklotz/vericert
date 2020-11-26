@@ -1,4 +1,4 @@
-(*
+(*(*
  * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -549,3 +549,4 @@ Proof.
     apply Nat2Z.inj_lt in H2.
     assumption.
 Qed.
+*)

@@ -17,8 +17,6 @@
  *)
 
 (* begin hide *)
-From bbv Require Import Word.
-From bbv Require HexNotation WordScope.
 From Coq Require Import ZArith.ZArith FSets.FMapPositive Lia.
 From compcert Require Import lib.Integers common.Values.
 From vericert Require Import Vericertlib.
@@ -97,14 +95,6 @@ Definition boolToValue (b : bool) : value :=
   natToValue (if b then 1 else 0).
 
 (** ** Arithmetic operations *)
-
-Definition unify_word (sz1 sz2 : nat) (w1 : word sz2): sz1 = sz2 -> word sz1.
-intros; subst; assumption. Defined.
-
-Lemma unify_word_unfold :
-  forall sz w,
-  unify_word sz sz w eq_refl = w.
-Proof. auto. Qed.
 
 Inductive val_value_lessdef: val -> value -> Prop :=
 | val_value_lessdef_int:
