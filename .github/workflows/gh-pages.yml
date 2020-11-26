@@ -19,11 +19,6 @@ jobs:
     - name: Generate documentation
       run: cd docs && emacs --batch --no-init --load publish.el --funcall org-publish-all
 
-    - name: Generation Coq documentation
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: scripts/download_artifact.sh
-
     - name: Generate Admitted icon
       run: python3 scripts/statistics.py src && mkdir -p docs/html/assets && mv admitted.svg docs/html/assets/.
 

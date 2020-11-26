@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" class="alectryon-standalone" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.16: http://docutils.sourceforge.net/" />
+<title>Veriloggen.v</title>
+<link rel="stylesheet" href="alectryon.css" type="text/css" />
+<link rel="stylesheet" href="docutils_basic.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.min.css" type="text/css" />
+<script type="text/javascript" src="alectryon.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/IBM-type/0.5.4/css/ibm-type.min.css" integrity="sha512-sky5cf9Ts6FY1kstGOBHSybfKqdHR41M0Ldb0BjNiv3ifltoQIsg0zIaQ+wwdwgQ0w9vKFW7Js50lxH9vqNSSw==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/firacode/5.2.0/fira_code.min.css" integrity="sha512-MbysAYimH1hH2xYzkkMHB6MqxBqfP0megxsCLknbYqHVwXTCg9IqHbk+ZP/vnhO8UEW6PaXAkKe2vQ+SWACxxA==" crossorigin="anonymous" />
+</head>
+<body>
+<div class="alectryon-root alectryon-floating"><div class="document">
+
+
+<pre class="alectryon-io"><!-- Generator: Alectryon v1.0 --><span class="coq-wsp"><span class="highlight"><span class="c">(*</span>
+<span class="c"> * Vericert: Verified high-level synthesis.</span>
+<span class="c"> * Copyright (C) 2020 Yann Herklotz &lt;yann@yannherklotz.com&gt;</span>
+<span class="c"> *</span>
+<span class="c"> * This program is free software: you can redistribute it and/or modify</span>
+<span class="c"> * it under the terms of the GNU General Public License as published by</span>
+<span class="c"> * the Free Software Foundation, either version 3 of the License, or</span>
+<span class="c"> * (at your option) any later version.</span>
+<span class="c"> *</span>
+<span class="c"> * This program is distributed in the hope that it will be useful,</span>
+<span class="c"> * but WITHOUT ANY WARRANTY; without even the implied warranty of</span>
+<span class="c"> * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the</span>
+<span class="c"> * GNU General Public License for more details.</span>
+<span class="c"> *</span>
+<span class="c"> * You should have received a copy of the GNU General Public License</span>
+<span class="c"> * along with this program.  If not, see &lt;https://www.gnu.org/licenses/&gt;.</span>
+<span class="c"> *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> compcert <span class="kn">Require Import</span> Maps.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> compcert <span class="kn">Require</span> Errors.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> compcert <span class="kn">Require Import</span> AST.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> vericert <span class="kn">Require Import</span> Verilog HTL Vericertlib AssocMap ValueInt.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">transl_list_fun</span> (<span class="nv">a</span> : node * Verilog.stmnt) :=
+  <span class="kr">let</span> (<span class="nv">n</span>, stmnt) := a <span class="kr">in</span>
+  (Vlit (posToValue n), stmnt).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">transl_list</span> <span class="nv">st</span> := map transl_list_fun st.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">scl_to_Vdecl_fun</span> (<span class="nv">a</span> : reg * (option io * scl_decl)) :=
+  <span class="kr">match</span> a <span class="kr">with</span> (r, (io, VScalar sz)) =&gt; (Vdecl io r sz) <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">scl_to_Vdecl</span> <span class="nv">scldecl</span> := map scl_to_Vdecl_fun scldecl.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">arr_to_Vdeclarr_fun</span> (<span class="nv">a</span> : reg * (option io * arr_decl)) :=
+  <span class="kr">match</span> a <span class="kr">with</span> (r, (io, VArray sz l)) =&gt; (Vdeclarr io r sz l) <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">arr_to_Vdeclarr</span> <span class="nv">arrdecl</span> := map arr_to_Vdeclarr_fun arrdecl.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">transl_module</span> (<span class="nv">m</span> : HTL.module) : Verilog.module :=
+  <span class="kr">let</span> <span class="nv">case_el_ctrl</span> := transl_list (PTree.elements m.(mod_controllogic)) <span class="kr">in</span>
+  <span class="kr">let</span> <span class="nv">case_el_data</span> := transl_list (PTree.elements m.(mod_datapath)) <span class="kr">in</span>
+  <span class="kr">let</span> <span class="nv">body</span> :=
+      Valways (Vposedge m.(mod_clk)) (Vcond (Vbinop Veq (Vvar m.(mod_reset)) (Vlit (ZToValue <span class="mi">1</span>)))
+                                               (Vnonblock (Vvar m.(mod_st)) (Vlit (posToValue m.(mod_entrypoint))))
+                                               (Vcase (Vvar m.(mod_st)) case_el_ctrl (Some Vskip)))
+      :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
+      :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) <span class="kr">in</span>
+  Verilog.mkmodule m.(mod_start)
+                   m.(mod_reset)
+                   m.(mod_clk)
+                   m.(mod_finish)
+                   m.(mod_return)
+                   m.(mod_st)
+                   m.(mod_stk)
+                   m.(mod_stk_len)
+                   m.(mod_params)
+                   body
+                   m.(mod_entrypoint).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">transl_fundef</span> := transf_fundef transl_module.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">transl_program</span> (<span class="nv">p</span>: HTL.program) : Verilog.program :=
+  transform_program transl_fundef p.</span></span></span></pre>
+</div>
+</div></body>
+</html>

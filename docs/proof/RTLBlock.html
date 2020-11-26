@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" class="alectryon-standalone" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.16: http://docutils.sourceforge.net/" />
+<title>RTLBlock.v</title>
+<link rel="stylesheet" href="alectryon.css" type="text/css" />
+<link rel="stylesheet" href="docutils_basic.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.min.css" type="text/css" />
+<script type="text/javascript" src="alectryon.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/IBM-type/0.5.4/css/ibm-type.min.css" integrity="sha512-sky5cf9Ts6FY1kstGOBHSybfKqdHR41M0Ldb0BjNiv3ifltoQIsg0zIaQ+wwdwgQ0w9vKFW7Js50lxH9vqNSSw==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/firacode/5.2.0/fira_code.min.css" integrity="sha512-MbysAYimH1hH2xYzkkMHB6MqxBqfP0megxsCLknbYqHVwXTCg9IqHbk+ZP/vnhO8UEW6PaXAkKe2vQ+SWACxxA==" crossorigin="anonymous" />
+</head>
+<body>
+<div class="alectryon-root alectryon-floating"><div class="document">
+
+
+<pre class="alectryon-io"><!-- Generator: Alectryon v1.0 --><span class="coq-wsp"><span class="highlight"><span class="c">(*</span>
+<span class="c"> * Vericert: Verified high-level synthesis.</span>
+<span class="c"> * Copyright (C) 2020 Yann Herklotz &lt;yann@yannherklotz.com&gt;</span>
+<span class="c"> *</span>
+<span class="c"> * This program is free software: you can redistribute it and/or modify</span>
+<span class="c"> * it under the terms of the GNU General Public License as published by</span>
+<span class="c"> * the Free Software Foundation, either version 3 of the License, or</span>
+<span class="c"> * (at your option) any later version.</span>
+<span class="c"> *</span>
+<span class="c"> * This program is distributed in the hope that it will be useful,</span>
+<span class="c"> * but WITHOUT ANY WARRANTY; without even the implied warranty of</span>
+<span class="c"> * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the</span>
+<span class="c"> * GNU General Public License for more details.</span>
+<span class="c"> *</span>
+<span class="c"> * You should have received a copy of the GNU General Public License</span>
+<span class="c"> * along with this program.  If not, see &lt;https://www.gnu.org/licenses/&gt;.</span>
+<span class="c"> *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Require Import</span> Coqlib Maps.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Require Import</span> AST Integers Values Events Memory Globalenvs Smallstep.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Require Import</span> Op Registers.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">node</span> := positive.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">instruction</span> : <span class="kt">Type</span> :=
+| RBnop : instruction
+| RBop : operation -&gt; list reg -&gt; reg -&gt; instruction
+| RBload : memory_chunk -&gt; addressing -&gt; list reg -&gt; reg -&gt; instruction
+| RBstore : memory_chunk -&gt; addressing -&gt; list reg -&gt; reg -&gt; instruction.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">bblock_body</span> : <span class="kt">Type</span> := list instruction.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">control_flow_inst</span> : <span class="kt">Type</span> :=
+| RBcall : signature -&gt; reg + <span class="kn">ident</span> -&gt; list reg -&gt; reg -&gt; node -&gt; control_flow_inst
+| RBtailcall : signature -&gt; reg + <span class="kn">ident</span> -&gt; list reg -&gt; control_flow_inst
+| RBbuiltin : external_function -&gt; list (builtin_arg reg) -&gt;
+              builtin_res reg -&gt; node -&gt; control_flow_inst
+| RBcond : condition -&gt; list reg -&gt; node -&gt; node -&gt; control_flow_inst
+| RBjumptable : reg -&gt; list node -&gt; control_flow_inst
+| RBreturn : option reg -&gt; control_flow_inst
+| RBgoto : node -&gt; control_flow_inst.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Record</span> <span class="nf">bblock</span> : <span class="kt">Type</span> := mk_bblock {
+    bb_body: bblock_body;
+    bb_exit: option control_flow_inst
+  }.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">code</span> : <span class="kt">Type</span> := PTree.t bblock.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Record</span> <span class="nf">function</span>: <span class="kt">Type</span> := mkfunction {
+  fn_sig: signature;
+  fn_params: list reg;
+  fn_stacksize: Z;
+  fn_code: code;
+  fn_entrypoint: node
+}.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">fundef</span> := AST.fundef function.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">program</span> := AST.program fundef unit.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">funsig</span> (<span class="nv">fd</span>: fundef) :=
+  <span class="kr">match</span> fd <span class="kr">with</span>
+  | Internal f =&gt; fn_sig f
+  | External ef =&gt; ef_sig ef
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">successors_instr</span> (<span class="nv">i</span> : control_flow_inst) : list node :=
+  <span class="kr">match</span> i <span class="kr">with</span>
+  | RBcall sig ros args res s =&gt; s :: nil
+  | RBtailcall sig ros args =&gt; nil
+  | RBbuiltin ef args res s =&gt; s :: nil
+  | RBcond cond args ifso ifnot =&gt; ifso :: ifnot :: nil
+  | RBjumptable arg tbl =&gt; tbl
+  | RBreturn optarg =&gt; nil
+  | RBgoto n =&gt; n :: nil
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="c">(* Definition genv := Genv.t fundef unit.</span>
+<span class="c">Definition regset := Regmap.t val.</span>
+
+<span class="c">Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=</span>
+<span class="c">  match rl, vl with</span>
+<span class="c">  | r1 :: rs, v1 :: vs =&gt; Regmap.set r1 v1 (init_regs vs rs)</span>
+<span class="c">  | _, _ =&gt; Regmap.init Vundef</span>
+<span class="c">  end.</span>
+
+<span class="c">Inductive stackframe : Type :=</span>
+<span class="c">  | Stackframe:</span>
+<span class="c">      forall (res: reg)            (**r where to store the result *)</span>
+<span class="c">             (f: function)         (**r calling function *)</span>
+<span class="c">             (sp: val)             (**r stack pointer in calling function *)</span>
+<span class="c">             (pc: node)            (**r program point in calling function *)</span>
+<span class="c">             (rs: regset),         (**r register state in calling function *)</span>
+<span class="c">      stackframe.</span>
+
+<span class="c">Inductive cont : Type :=</span>
+<span class="c">  | C</span>
+<span class="c">  | N.</span>
+
+<span class="c">Inductive state : Type :=</span>
+<span class="c">  | State:</span>
+<span class="c">      forall (stack: list stackframe) (**r call stack *)</span>
+<span class="c">             (f: function)            (**r current function *)</span>
+<span class="c">             (sp: val)                (**r stack pointer *)</span>
+<span class="c">             (pc: node)               (**r current program point in [c] *)</span>
+<span class="c">             (rs: regset)             (**r register state *)</span>
+<span class="c">             (m: mem)                 (**r memory state *)</span>
+<span class="c">             (bblock: bblock)         (**r bblock being executed *)</span>
+<span class="c">             (c : cont),</span>
+<span class="c">      state</span>
+<span class="c">  | Callstate:</span>
+<span class="c">      forall (stack: list stackframe) (**r call stack *)</span>
+<span class="c">             (f: fundef)              (**r function to call *)</span>
+<span class="c">             (args: list val)         (**r arguments to the call *)</span>
+<span class="c">             (m: mem),                (**r memory state *)</span>
+<span class="c">      state</span>
+<span class="c">  | Returnstate:</span>
+<span class="c">      forall (stack: list stackframe) (**r call stack *)</span>
+<span class="c">             (v: val)                 (**r return value for the call *)</span>
+<span class="c">             (m: mem),                (**r memory state *)</span>
+<span class="c">      state.</span>
+
+<span class="c">Section RELSEM.</span>
+
+<span class="c">Variable ge: genv.</span>
+
+<span class="c">Definition find_function</span>
+<span class="c">      (ros: reg + ident) (rs: regset) : option fundef :=</span>
+<span class="c">  match ros with</span>
+<span class="c">  | inl r =&gt; Genv.find_funct ge rs#r</span>
+<span class="c">  | inr symb =&gt;</span>
+<span class="c">      match Genv.find_symbol ge symb with</span>
+<span class="c">      | None =&gt; None</span>
+<span class="c">      | Some b =&gt; Genv.find_funct_ptr ge b</span>
+<span class="c">      end</span>
+<span class="c">  end.</span>
+
+<span class="c">Inductive step : state -&gt; trace -&gt; state -&gt; Prop :=</span>
+<span class="c">  | exec_RBnop :</span>
+<span class="c">      forall s f sp pc rs m ls ci,</span>
+<span class="c">      step (State s f sp pc rs m (mk_bblock (RBnop :: ls) ci) C) E0</span>
+<span class="c">           (State s f sp (Pos.succ pc) rs m (mk_bblock ls ci) C)</span>
+<span class="c">  | exec_RBop :</span>
+<span class="c">      forall s f sp pc rs m ls args op res ci v,</span>
+<span class="c">      eval_operation ge sp op rs##args m = Some v -&gt;</span>
+<span class="c">      step (State s f sp pc rs m (mk_bblock (RBop op args res :: ls) ci) C) E0</span>
+<span class="c">           (State s f sp (Pos.succ pc) rs m (mk_bblock ls ci) C)</span>
+<span class="c">  | exec_RBload:</span>
+<span class="c">      forall s f sp pc rs m chunk addr args dst a v ls ci,</span>
+<span class="c">      eval_addressing ge sp addr rs##args = Some a -&gt;</span>
+<span class="c">      Mem.loadv chunk m a = Some v -&gt;</span>
+<span class="c">      step (State s f sp pc rs m (mk_bblock (RBload chunk addr args dst :: ls) ci) C)</span>
+<span class="c">        E0 (State s f sp (Pos.succ pc) (rs#dst &lt;- v) m (mk_bblock ls ci) C)</span>
+<span class="c">  | exec_RBstore:</span>
+<span class="c">      forall s f sp pc rs m chunk addr args src a m&#39; ls ci,</span>
+<span class="c">      eval_addressing ge sp addr rs##args = Some a -&gt;</span>
+<span class="c">      Mem.storev chunk m a rs#src = Some m&#39; -&gt;</span>
+<span class="c">      step (State s f sp pc rs m (mk_bblock (RBstore chunk addr args src :: ls) ci) C)</span>
+<span class="c">        E0 (State s f sp (Pos.succ pc) rs m&#39; (mk_bblock ls ci) C)</span>
+<span class="c">  | exec_RBcond:</span>
+<span class="c">      forall s f sp pc rs m cond args ifso ifnot b pc&#39;,</span>
+<span class="c">      eval_condition cond rs##args m = Some b -&gt;</span>
+<span class="c">      pc&#39; = (if b then ifso else ifnot) -&gt;</span>
+<span class="c">      step (State s f sp pc rs m (mk_bblock nil (RBcond cond args ifso ifnot)) C)</span>
+<span class="c">        E0 (State s f sp pc&#39; rs m (mk_bblock nil (RBcond cond args ifso ifnot)) N)</span>
+<span class="c">.</span>
+
+<span class="c">End RELSEM.</span>
+<span class="c">*)</span></span></span></pre>
+</div>
+</div></body>
+</html>

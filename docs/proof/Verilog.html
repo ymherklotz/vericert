@@ -1,0 +1,1073 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" class="alectryon-standalone" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.16: http://docutils.sourceforge.net/" />
+<title>Verilog.v</title>
+<link rel="stylesheet" href="alectryon.css" type="text/css" />
+<link rel="stylesheet" href="docutils_basic.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.css" type="text/css" />
+<link rel="stylesheet" href="tango_subtle.min.css" type="text/css" />
+<script type="text/javascript" src="alectryon.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/IBM-type/0.5.4/css/ibm-type.min.css" integrity="sha512-sky5cf9Ts6FY1kstGOBHSybfKqdHR41M0Ldb0BjNiv3ifltoQIsg0zIaQ+wwdwgQ0w9vKFW7Js50lxH9vqNSSw==" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/firacode/5.2.0/fira_code.min.css" integrity="sha512-MbysAYimH1hH2xYzkkMHB6MqxBqfP0megxsCLknbYqHVwXTCg9IqHbk+ZP/vnhO8UEW6PaXAkKe2vQ+SWACxxA==" crossorigin="anonymous" />
+</head>
+<body>
+<div class="alectryon-root alectryon-floating"><div class="document">
+
+
+<pre class="alectryon-io"><!-- Generator: Alectryon v1.0 --><span class="coq-wsp"><span class="highlight"><span class="c">(*</span>
+<span class="c"> * Vericert: Verified high-level synthesis.</span>
+<span class="c"> * Copyright (C) 2019-2020 Yann Herklotz &lt;yann@yannherklotz.com&gt;</span>
+<span class="c"> *</span>
+<span class="c"> * This program is free software: you can redistribute it and/or modify</span>
+<span class="c"> * it under the terms of the GNU General Public License as published by</span>
+<span class="c"> * the Free Software Foundation, either version 3 of the License, or</span>
+<span class="c"> * (at your option) any later version.</span>
+<span class="c"> *</span>
+<span class="c"> * This program is distributed in the hope that it will be useful,</span>
+<span class="c"> * but WITHOUT ANY WARRANTY; without even the implied warranty of</span>
+<span class="c"> * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the</span>
+<span class="c"> * GNU General Public License for more details.</span>
+<span class="c"> *</span>
+<span class="c"> * You should have received a copy of the GNU General Public License</span>
+<span class="c"> * along with this program.  If not, see &lt;https://www.gnu.org/licenses/&gt;.</span>
+<span class="c"> *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> Coq <span class="kn">Require Import</span>
+  Structures.OrderedTypeEx
+  FSets.FMapPositive
+  Program.Basics
+  PeanoNat
+  ZArith
+  Lists.List
+  Program.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Require Import</span> Lia.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Import</span> ListNotations.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> vericert <span class="kn">Require Import</span> Vericertlib <span class="kn">Show</span> ValueInt AssocMap Array.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> compcert <span class="kn">Require</span> Events.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">From</span> compcert <span class="kn">Require Import</span> Integers Errors Smallstep Globalenvs.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Local Open Scope</span> assocmap.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Set Implicit Arguments</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">reg</span> : <span class="kt">Type</span> := positive.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">node</span> : <span class="kt">Type</span> := positive.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">szreg</span> : <span class="kt">Type</span> := reg * nat.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Record</span> <span class="nf">associations</span> (<span class="nv">A</span> : <span class="kt">Type</span>) : <span class="kt">Type</span> :=
+  mkassociations {
+    assoc_blocking : AssocMap.t A;
+    assoc_nonblocking : AssocMap.t A
+  }.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">arr</span> := (Array (option value)).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">reg_associations</span> := associations value.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">arr_associations</span> := associations arr.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">assocmap_reg</span> := AssocMap.t value.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">assocmap_arr</span> := AssocMap.t arr.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">merge_regs</span> (<span class="nv">new</span> : assocmap_reg) (<span class="nv">old</span> : assocmap_reg) : assocmap_reg :=
+  AssocMapExt.merge value new old.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">merge_cell</span> (<span class="nv">new</span> : option value) (<span class="nv">old</span> : option value) : option value :=
+  <span class="kr">match</span> new, old <span class="kr">with</span>
+  | Some _, _ =&gt; new
+  | _, _ =&gt; old
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">merge_arr</span> (<span class="nv">new</span> : option arr) (<span class="nv">old</span> : option arr) : option arr :=
+  <span class="kr">match</span> new, old <span class="kr">with</span>
+  | Some new&#39;, Some old&#39; =&gt; Some (combine merge_cell new&#39; old&#39;)
+  | Some new&#39;, None =&gt; Some new&#39;
+  | None, Some old&#39; =&gt; Some old&#39;
+  | None, None =&gt; None
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">merge_arrs</span> (<span class="nv">new</span> : assocmap_arr) (<span class="nv">old</span> : assocmap_arr) : assocmap_arr :=
+  AssocMap.combine merge_arr new old.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">arr_assocmap_lookup</span> (<span class="nv">a</span> : assocmap_arr) (<span class="nv">r</span> : reg) (<span class="nv">i</span> : nat) : option value :=
+  <span class="kr">match</span> a ! r <span class="kr">with</span>
+  | None =&gt; None
+  | Some arr =&gt; Some (Option.default (NToValue <span class="mi">0</span>) (Option.join (array_get_error i arr)))
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">arr_assocmap_set</span> (<span class="nv">r</span> : reg) (<span class="nv">i</span> : nat) (<span class="nv">v</span> : value) (<span class="nv">a</span> : assocmap_arr) : assocmap_arr :=
+  <span class="kr">match</span> a ! r <span class="kr">with</span>
+  | None =&gt; a
+  | Some arr =&gt; a # r &lt;- (array_set i (Some v) arr)
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">block_arr</span> (<span class="nv">r</span> : reg) (<span class="nv">i</span> : nat) (<span class="nv">asa</span> : arr_associations) (<span class="nv">v</span> : value) : arr_associations :=
+  mkassociations (arr_assocmap_set r i v asa.(assoc_blocking)) asa.(assoc_nonblocking).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">nonblock_arr</span> (<span class="nv">r</span> : reg) (<span class="nv">i</span> : nat) (<span class="nv">asa</span> : arr_associations) (<span class="nv">v</span> : value) : arr_associations :=
+  mkassociations asa.(assoc_blocking) (arr_assocmap_set r i v asa.(assoc_nonblocking)).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">block_reg</span> (<span class="nv">r</span> : reg) (<span class="nv">asr</span> : reg_associations) (<span class="nv">v</span> : value) :=
+  mkassociations (AssocMap.<span class="nb">set</span> r v asr.(assoc_blocking)) asr.(assoc_nonblocking).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">nonblock_reg</span> (<span class="nv">r</span> : reg) (<span class="nv">asr</span> : reg_associations) (<span class="nv">v</span> : value) :=
+  mkassociations asr.(assoc_blocking) (AssocMap.<span class="nb">set</span> r v asr.(assoc_nonblocking)).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">scl_decl</span> : <span class="kt">Type</span> := VScalar (sz : nat).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">arr_decl</span> : <span class="kt">Type</span> := VArray (sz : nat) (ln : nat).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** * Verilog AST</span>
+
+<span class="sd">The Verilog AST is defined here, which is the target language of the</span>
+<span class="sd">compilation.</span>
+
+<span class="sd">** Value</span>
+
+<span class="sd">The Verilog [value] is a bitvector containg a size and the actual bitvector. In</span>
+<span class="sd">this case, the [Word.word] type is used as many theorems about that bitvector</span>
+<span class="sd">have already been proven. *)</span>
+
+<span class="sd">(** ** Binary Operators</span>
+
+<span class="sd">These are the binary operations that can be represented in Verilog. Ideally,</span>
+<span class="sd">multiplication and division would be done by custom modules which could al so be</span>
+<span class="sd">scheduled properly. However, for now every Verilog operator is assumed to take</span>
+<span class="sd">one clock cycle. *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">binop</span> : <span class="kt">Type</span> :=
+| Vadd : binop  <span class="sd">(** addition (binary [+]) *)</span>
+| Vsub : binop  <span class="sd">(** subtraction (binary [-]) *)</span>
+| Vmul : binop  <span class="sd">(** multiplication (binary [*]) *)</span>
+| Vdiv : binop  <span class="sd">(** division (binary [/]) *)</span>
+| Vdivu : binop  <span class="sd">(** division unsigned (binary [/]) *)</span>
+| Vmod : binop  <span class="sd">(** remainder ([%]) *)</span>
+| Vmodu : binop  <span class="sd">(** remainder unsigned ([%]) *)</span>
+| Vlt : binop   <span class="sd">(** less than ([&lt;]) *)</span>
+| Vltu : binop   <span class="sd">(** less than unsigned ([&lt;]) *)</span>
+| Vgt : binop   <span class="sd">(** greater than ([&gt;]) *)</span>
+| Vgtu : binop   <span class="sd">(** greater than unsigned ([&gt;]) *)</span>
+| Vle : binop   <span class="sd">(** less than or equal ([&lt;=]) *)</span>
+| Vleu : binop   <span class="sd">(** less than or equal unsigned ([&lt;=]) *)</span>
+| Vge : binop   <span class="sd">(** greater than or equal ([&gt;=]) *)</span>
+| Vgeu : binop   <span class="sd">(** greater than or equal unsigned ([&gt;=]) *)</span>
+| Veq : binop   <span class="sd">(** equal to ([==]) *)</span>
+| Vne : binop   <span class="sd">(** not equal to ([!=]) *)</span>
+| Vand : binop  <span class="sd">(** and (binary [&amp;]) *)</span>
+| Vor : binop   <span class="sd">(** or (binary [|]) *)</span>
+| Vxor : binop  <span class="sd">(** xor (binary [^|]) *)</span>
+| Vshl : binop  <span class="sd">(** shift left ([&lt;&lt;]) *)</span>
+| Vshr : binop <span class="sd">(** shift right ([&gt;&gt;&gt;]) *)</span>
+| Vshru : binop. <span class="sd">(** shift right unsigned ([&gt;&gt;]) *)</span></span></span></span></pre><p>Vror : binop (** shift right unsigned ([&gt;&gt;]) <a href="#id1"><span class="problematic" id="id2">*</span></a>)</p>
+<div class="system-message" id="id1">
+<p class="system-message-title">System Message: WARNING/2 (<tt class="docutils">src/hls/Verilog.v</tt>, line 147); <em><a href="#id2">backlink</a></em></p>
+Inline emphasis start-string without end-string.</div>
+<pre class="alectryon-io"><!-- Generator: Alectryon v1.0 --><span class="coq-wsp"><span class="highlight"><span class="sd">(** ** Unary Operators *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">unop</span> : <span class="kt">Type</span> :=
+| Vneg  <span class="sd">(** negation ([-]) *)</span>
+| Vnot. <span class="sd">(** not operation [!] *)</span></span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** ** Expressions *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">expr</span> : <span class="kt">Type</span> :=
+| Vlit : value -&gt; expr
+| Vvar : reg -&gt; expr
+| Vvari : reg -&gt; expr -&gt; expr
+| Vinputvar : reg -&gt; expr
+| Vbinop : binop -&gt; expr -&gt; expr -&gt; expr
+| Vunop : unop -&gt; expr -&gt; expr
+| Vternary : expr -&gt; expr -&gt; expr -&gt; expr.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">posToExpr</span> (<span class="nv">p</span> : positive) : expr :=
+  Vlit (posToValue p).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** ** Statements *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">stmnt</span> : <span class="kt">Type</span> :=
+| Vskip : stmnt
+| Vseq : stmnt -&gt; stmnt -&gt; stmnt
+| Vcond : expr -&gt; stmnt -&gt; stmnt -&gt; stmnt
+| Vcase : expr -&gt; list (expr * stmnt) -&gt; option stmnt -&gt; stmnt
+| Vblock : expr -&gt; expr -&gt; stmnt
+| Vnonblock : expr -&gt; expr -&gt; stmnt.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** ** Edges</span>
+
+<span class="sd">These define when an always block should be triggered, for example if the always</span>
+<span class="sd">block should be triggered synchronously at the clock edge, or asynchronously for</span>
+<span class="sd">combinational logic.</span>
+
+<span class="sd">[edge] is not part of [stmnt] in this formalisation because is closer to the</span>
+<span class="sd">semantics that are used. *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">edge</span> : <span class="kt">Type</span> :=
+| Vposedge : reg -&gt; edge
+| Vnegedge : reg -&gt; edge
+| Valledge : edge
+| Voredge : edge -&gt; edge -&gt; edge.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** ** Module Items</span>
+
+<span class="sd">Module items can either be declarations ([Vdecl]) or always blocks ([Valways]).</span>
+<span class="sd">The declarations are always register declarations as combinational logic can be</span>
+<span class="sd">done using combinational always block instead of continuous assignments. *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">io</span> : <span class="kt">Type</span> :=
+| Vinput : io
+| Voutput : io
+| Vinout : io.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">declaration</span> : <span class="kt">Type</span> :=
+| Vdecl : option io -&gt; reg -&gt; nat -&gt; declaration
+| Vdeclarr : option io -&gt; reg -&gt; nat -&gt; nat -&gt; declaration.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">module_item</span> : <span class="kt">Type</span> :=
+| Vdeclaration : declaration -&gt; module_item
+| Valways : edge -&gt; stmnt -&gt; module_item
+| Valways_ff : edge -&gt; stmnt -&gt; module_item
+| Valways_comb : edge -&gt; stmnt -&gt; module_item.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** The main module type containing all the important control signals</span>
+
+<span class="sd">- [mod_start] If set, starts the computations in the module.</span>
+<span class="sd">- [mod_reset] If set, reset the state in the module.</span>
+<span class="sd">- [mod_clk] The clock that controls the computation in the module.</span>
+<span class="sd">- [mod_args] The arguments to the module.</span>
+<span class="sd">- [mod_finish] Bit that is set if the result is ready.</span>
+<span class="sd">- [mod_return] The return value that was computed.</span>
+<span class="sd">- [mod_body] The body of the module, including the state machine.</span>
+<span class="sd">*)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Record</span> <span class="nf">module</span> : <span class="kt">Type</span> := mkmodule {
+  mod_start : reg;
+  mod_reset : reg;
+  mod_clk : reg;
+  mod_finish : reg;
+  mod_return : reg;
+  mod_st : reg; <span class="sd">(**r Variable that defines the current state, it should be internal. *)</span>
+  mod_stk : reg;
+  mod_stk_len : nat;
+  mod_args : list reg;
+  mod_body : list module_item;
+  mod_entrypoint : node;
+}.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">fundef</span> := AST.fundef module.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">program</span> := AST.program fundef unit.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** Convert a [positive] to an expression directly, setting it to the right</span>
+<span class="sd">    size. *)</span>
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">posToLit</span> (<span class="nv">p</span> : positive) : expr :=
+  Vlit (posToValue p).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">fext</span> := unit.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">fextclk</span> := nat -&gt; fext.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="sd">(** ** State</span>
+
+<span class="sd">The [state] contains the following items:</span>
+<span class="sd">n</span>
+<span class="sd">- Current [module] that is being worked on, so that the state variable can be</span>
+<span class="sd">retrieved and set appropriately.</span>
+<span class="sd">- Current [module_item] which is being worked on.</span>
+<span class="sd">- A contiunation ([cont]) which defines what to do next.  The option is to</span>
+<span class="sd">  either evaluate another module item or go to the next clock cycle.  Finally</span>
+<span class="sd">  it could also end if the finish flag of the module goes high.</span>
+<span class="sd">- Association list containing the blocking assignments made, or assignments made</span>
+<span class="sd">  in previous clock cycles.</span>
+<span class="sd">- Nonblocking association list containing all the nonblocking assignments made</span>
+<span class="sd">  in the current module.</span>
+<span class="sd">- The environment containing values for the input.</span>
+<span class="sd">- The program counter which determines the value for the state in this version of</span>
+<span class="sd">  Verilog, as the Verilog was generated by the RTL, which means that we have to</span>
+<span class="sd">  make an assumption about how it looks.  In this case, that it contains state</span>
+<span class="sd">  which determines which part of the Verilog is executed.  This is then the part</span>
+<span class="sd">  of the Verilog that should match with the RTL. *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">stackframe</span> : <span class="kt">Type</span> :=
+  Stackframe :
+    <span class="kr">forall</span>  (<span class="nv">res</span> : reg)
+            (<span class="nv">m</span> : module)
+            (<span class="nv">pc</span> : node)
+            (<span class="nv">reg_assoc</span> : assocmap_reg)
+            (<span class="nv">arr_assoc</span> : assocmap_arr),
+      stackframe.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">state</span> : <span class="kt">Type</span> :=
+| State :
+    <span class="kr">forall</span> (<span class="nv">stack</span> : list stackframe)
+           (<span class="nv">m</span> : module)
+           (<span class="nv">st</span> : node)
+           (<span class="nv">reg_assoc</span> : assocmap_reg)
+           (<span class="nv">arr_assoc</span> : assocmap_arr), state
+| Returnstate :
+    <span class="kr">forall</span> (<span class="nv">res</span> : list stackframe)
+           (<span class="nv">v</span> : value), state
+| Callstate :
+    <span class="kr">forall</span> (<span class="nv">stack</span> : list stackframe)
+           (<span class="nv">m</span> : module)
+           (<span class="nv">args</span> : list value), state.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">binop_run</span> (<span class="nv">op</span> : binop) (<span class="nv">v1</span> <span class="nv">v2</span> : value) : option value :=
+  <span class="kr">match</span> op <span class="kr">with</span>
+  | Vadd =&gt; Some (Int.add v1 v2)
+  | Vsub =&gt; Some (Int.sub v1 v2)
+  | Vmul =&gt; Some (Int.mul v1 v2)
+  | Vdiv =&gt; <span class="kr">if</span> Int.eq v2 Int.zero
+               || Int.eq v1 (Int.repr Int.min_signed) &amp;&amp; Int.eq v2 Int.mone
+            <span class="kr">then</span> None
+            <span class="kr">else</span> Some (Int.divs v1 v2)
+  | Vdivu =&gt; <span class="kr">if</span> Int.eq v2 Int.zero <span class="kr">then</span> None <span class="kr">else</span> Some (Int.divu v1 v2)
+  | Vmod =&gt; <span class="kr">if</span> Int.eq v2 Int.zero
+               || Int.eq v1 (Int.repr Int.min_signed) &amp;&amp; Int.eq v2 Int.mone
+            <span class="kr">then</span> None
+            <span class="kr">else</span> Some (Int.mods v1 v2)
+  | Vmodu =&gt; <span class="kr">if</span> Int.eq v2 Int.zero <span class="kr">then</span> None <span class="kr">else</span> Some (Int.modu v1 v2)
+  | Vlt =&gt; Some (boolToValue (Int.lt v1 v2))
+  | Vltu =&gt; Some (boolToValue (Int.ltu v1 v2))
+  | Vgt =&gt; Some (boolToValue (Int.lt v2 v1))
+  | Vgtu =&gt; Some (boolToValue (Int.ltu v2 v1))
+  | Vle =&gt; Some (boolToValue (negb (Int.lt v2 v1)))
+  | Vleu =&gt; Some (boolToValue (negb (Int.ltu v2 v1)))
+  | Vge =&gt; Some (boolToValue (negb (Int.lt v1 v2)))
+  | Vgeu =&gt; Some (boolToValue (negb (Int.ltu v1 v2)))
+  | Veq =&gt; Some (boolToValue (Int.eq v1 v2))
+  | Vne =&gt; Some (boolToValue (negb (Int.eq v1 v2)))
+  | Vand =&gt; Some (Int.<span class="kn">and</span> v1 v2)
+  | Vor =&gt; Some (Int.or v1 v2)
+  | Vxor =&gt; Some (Int.xor v1 v2)
+  | Vshl =&gt; Some (Int.shl v1 v2)
+  | Vshr =&gt; Some (Int.shr v1 v2)
+  | Vshru =&gt; Some (Int.shru v1 v2)
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">unop_run</span> (<span class="nv">op</span> : unop) (<span class="nv">v1</span> : value) : value :=
+  <span class="kr">match</span> op <span class="kr">with</span>
+  | Vneg =&gt; Int.neg v1
+  | Vnot =&gt; Int.not v1
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">expr_runp</span> : fext -&gt; assocmap -&gt; assocmap_arr -&gt; expr -&gt; value -&gt; <span class="kt">Prop</span> :=
+  | erun_Vlit :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">v</span>,
+      expr_runp fext reg stack (Vlit v) v
+  | erun_Vvar :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">v</span> <span class="nv">r</span>,
+      reg#r = v -&gt;
+      expr_runp fext reg stack (Vvar r) v
+  | erun_Vvari :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">v</span> <span class="nv">iexp</span> <span class="nv">i</span> <span class="nv">r</span>,
+      expr_runp fext reg stack iexp i -&gt;
+      arr_assocmap_lookup stack r (valueToNat i) = Some v -&gt;
+      expr_runp fext reg stack (Vvari r iexp) v
+  | erun_Vbinop :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">op</span> <span class="nv">l</span> <span class="nv">r</span> <span class="nv">lv</span> <span class="nv">rv</span> <span class="nv">resv</span>,
+      expr_runp fext reg stack l lv -&gt;
+      expr_runp fext reg stack r rv -&gt;
+      Some resv = binop_run op lv rv -&gt;
+      expr_runp fext reg stack (Vbinop op l r) resv
+  | erun_Vunop :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">u</span> <span class="nv">vu</span> <span class="nv">op</span> <span class="nv">oper</span> <span class="nv">resv</span>,
+      expr_runp fext reg stack u vu -&gt;
+      oper = unop_run op -&gt;
+      resv = oper vu -&gt;
+      expr_runp fext reg stack (Vunop op u) resv
+  | erun_Vternary_true :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">c</span> <span class="nv">ts</span> <span class="nv">fs</span> <span class="nv">vc</span> <span class="nv">vt</span>,
+      expr_runp fext reg stack c vc -&gt;
+      expr_runp fext reg stack ts vt -&gt;
+      valueToBool vc = true -&gt;
+      expr_runp fext reg stack (Vternary c ts fs) vt
+  | erun_Vternary_false :
+      <span class="kr">forall</span> <span class="nv">fext</span> <span class="nv">reg</span> <span class="nv">stack</span> <span class="nv">c</span> <span class="nv">ts</span> <span class="nv">fs</span> <span class="nv">vc</span> <span class="nv">vf</span>,
+      expr_runp fext reg stack c vc -&gt;
+      expr_runp fext reg stack fs vf -&gt;
+      valueToBool vc = false -&gt;
+      expr_runp fext reg stack (Vternary c ts fs) vf.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Constructors</span> expr_runp : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">handle_opt</span> {<span class="nv">A</span> : <span class="kt">Type</span>} (<span class="nv">err</span> : errmsg) (<span class="nv">val</span> : option A)
+  : res A :=
+  <span class="kr">match</span> val <span class="kr">with</span>
+  | Some a =&gt; OK a
+  | None =&gt; Error err
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">handle_def</span> {<span class="nv">A</span> : <span class="kt">Type</span>} (<span class="nv">a</span> : A) (<span class="nv">val</span> : option A)
+  : res A :=
+  <span class="kr">match</span> val <span class="kr">with</span>
+  | Some a&#39; =&gt; OK a&#39;
+  | None =&gt; OK a
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Local Open Scope</span> error_monad_scope.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="c">(*Definition access_fext (f : fext) (r : reg) : res value :=</span>
+<span class="c">  match AssocMap.get r f with</span>
+<span class="c">  | Some v =&gt; OK v</span>
+<span class="c">  | _ =&gt; OK (ZToValue 0)</span>
+<span class="c">  end.*)</span>
+
+<span class="c">(* TODO FIX Vvar case without default *)</span>
+<span class="c">(*Fixpoint expr_run (assoc : assocmap) (e : expr)</span>
+<span class="c">         {struct e} : res value :=</span>
+<span class="c">  match e with</span>
+<span class="c">  | Vlit v =&gt; OK v</span>
+<span class="c">  | Vvar r =&gt; match s with</span>
+<span class="c">              | State _ assoc _ _ _ =&gt; handle_def (ZToValue 32 0) assoc!r</span>
+<span class="c">              | _ =&gt; Error (msg &quot;Verilog: Wrong state&quot;)</span>
+<span class="c">              end</span>
+<span class="c">  | Vvari _ _ =&gt; Error (msg &quot;Verilog: variable indexing not modelled&quot;)</span>
+<span class="c">  | Vinputvar r =&gt; access_fext s r</span>
+<span class="c">  | Vbinop op l r =&gt;</span>
+<span class="c">    let lv := expr_run s l in</span>
+<span class="c">    let rv := expr_run s r in</span>
+<span class="c">    let oper := binop_run op in</span>
+<span class="c">    do lv&#39; &lt;- lv;</span>
+<span class="c">    do rv&#39; &lt;- rv;</span>
+<span class="c">    handle_opt (msg &quot;Verilog: sizes are not equal&quot;)</span>
+<span class="c">               (eq_to_opt lv&#39; rv&#39; (oper lv&#39; rv&#39;))</span>
+<span class="c">  | Vunop op e =&gt;</span>
+<span class="c">    let oper := unop_run op in</span>
+<span class="c">    do ev &lt;- expr_run s e;</span>
+<span class="c">    OK (oper ev)</span>
+<span class="c">  | Vternary c te fe =&gt;</span>
+<span class="c">    do cv &lt;- expr_run s c;</span>
+<span class="c">    if valueToBool cv then expr_run s te else expr_run s fe</span>
+<span class="c">  end.*)</span>
+
+<span class="sd">(** Return the location of the lhs of an assignment. *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">location</span> : <span class="kt">Type</span> :=
+| LocReg (_ : reg)
+| LocArray (_ : reg) (_ : nat).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">location_is</span> : fext -&gt; assocmap -&gt; assocmap_arr -&gt; expr -&gt; location -&gt; <span class="kt">Prop</span> :=
+| Base : <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">r</span>, location_is f asr asa (Vvar r) (LocReg r)
+| Indexed : <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">r</span> <span class="nv">iexp</span> <span class="nv">iv</span>,
+  expr_runp f asr asa iexp iv -&gt;
+  location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="c">(* Definition assign_name (f : fext) (asr: assocmap) (asa : assocmap_l)  (e : expr) : res reg := *)</span>
+<span class="c">(*   match e with *)</span>
+<span class="c">(*   | Vvar r =&gt; OK r *)</span>
+<span class="c">(*   | _ =&gt; Error (msg &quot;Verilog: expression not supported on lhs of assignment&quot;) *)</span>
+<span class="c">(*   end. *)</span>
+
+<span class="c">(*Fixpoint stmnt_height (st : stmnt) {struct st} : nat :=</span>
+<span class="c">  match st with</span>
+<span class="c">  | Vseq s1 s2 =&gt; S (stmnt_height s1 + stmnt_height s2)</span>
+<span class="c">  | Vcond _ s1 s2 =&gt; S (Nat.max (stmnt_height s1) (stmnt_height s2))</span>
+<span class="c">  | Vcase _ ls (Some st) =&gt;</span>
+<span class="c">    S (fold_right (fun t acc =&gt; Nat.max acc (stmnt_height (snd t))) 0%nat ls)</span>
+<span class="c">  | _ =&gt; 1</span>
+<span class="c">  end.</span>
+
+<span class="c">Fixpoint find_case_stmnt (s : state) (v : value) (cl : list (expr * stmnt))</span>
+<span class="c">         {struct cl} : option (res stmnt) :=</span>
+<span class="c">  match cl with</span>
+<span class="c">  | (e, st)::xs =&gt;</span>
+<span class="c">    match expr_run s e with</span>
+<span class="c">    | OK v&#39; =&gt;</span>
+<span class="c">      match eq_to_opt v v&#39; (veq v v&#39;) with</span>
+<span class="c">      | Some eq =&gt; if valueToBool eq then Some (OK st) else find_case_stmnt s v xs</span>
+<span class="c">      | None =&gt; Some (Error (msg &quot;Verilog: equality check sizes not equal&quot;))</span>
+<span class="c">      end</span>
+<span class="c">    | Error msg =&gt; Some (Error msg)</span>
+<span class="c">    end</span>
+<span class="c">  | _ =&gt; None</span>
+<span class="c">  end.</span>
+
+<span class="c">Fixpoint stmnt_run&#39; (n : nat) (s : state) (st : stmnt) {struct n} : res state :=</span>
+<span class="c">  match n with</span>
+<span class="c">  | S n&#39; =&gt;</span>
+<span class="c">    match st with</span>
+<span class="c">    | Vskip =&gt; OK s</span>
+<span class="c">    | Vseq s1 s2 =&gt;</span>
+<span class="c">      do s&#39; &lt;- stmnt_run&#39; n&#39; s s1;</span>
+<span class="c">      stmnt_run&#39; n&#39; s&#39; s2</span>
+<span class="c">    | Vcond c st sf =&gt;</span>
+<span class="c">      do cv &lt;- expr_run s c;</span>
+<span class="c">      if valueToBool cv</span>
+<span class="c">      then stmnt_run&#39; n&#39; s st</span>
+<span class="c">      else stmnt_run&#39; n&#39; s sf</span>
+<span class="c">    | Vcase e cl defst =&gt;</span>
+<span class="c">      do v &lt;- expr_run s e;</span>
+<span class="c">      match find_case_stmnt s v cl with</span>
+<span class="c">      | Some (OK st&#39;) =&gt; stmnt_run&#39; n&#39; s st&#39;</span>
+<span class="c">      | Some (Error msg) =&gt; Error msg</span>
+<span class="c">      | None =&gt; do s&#39; &lt;- handle_opt (msg &quot;Verilog: no case was matched&quot;)</span>
+<span class="c">                                    (option_map (stmnt_run&#39; n&#39; s) defst); s&#39;</span>
+<span class="c">      end</span>
+<span class="c">    | Vblock lhs rhs =&gt;</span>
+<span class="c">      match s with</span>
+<span class="c">      | State m assoc nbassoc f c =&gt;</span>
+<span class="c">        do name &lt;- assign_name lhs;</span>
+<span class="c">        do rhse &lt;- expr_run s rhs;</span>
+<span class="c">        OK (State m (PositiveMap.add name rhse assoc) nbassoc f c)</span>
+<span class="c">      | _ =&gt; Error (msg &quot;Verilog: Wrong state&quot;)</span>
+<span class="c">      end</span>
+<span class="c">    | Vnonblock lhs rhs =&gt;</span>
+<span class="c">      match s with</span>
+<span class="c">      | State m assoc nbassoc f c =&gt;</span>
+<span class="c">        do name &lt;- assign_name lhs;</span>
+<span class="c">        do rhse &lt;- expr_run s rhs;</span>
+<span class="c">        OK (State m assoc (PositiveMap.add name rhse nbassoc) f c)</span>
+<span class="c">      | _ =&gt; Error (msg &quot;Verilog: Wrong state&quot;)</span>
+<span class="c">      end</span>
+<span class="c">    end</span>
+<span class="c">  | _ =&gt; OK s</span>
+<span class="c">  end.</span>
+
+<span class="c">Definition stmnt_run (s : state) (st : stmnt) : res state :=</span>
+<span class="c">  stmnt_run&#39; (stmnt_height st) s st. *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">stmnt_runp</span>: fext -&gt; reg_associations -&gt; arr_associations -&gt;
+                      stmnt -&gt; reg_associations -&gt; arr_associations -&gt; <span class="kt">Prop</span> :=
+| stmnt_runp_Vskip:
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">ar</span> <span class="nv">al</span>, stmnt_runp f ar al Vskip ar al
+| stmnt_runp_Vseq:
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">st1</span> <span class="nv">st2</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">asr1</span> <span class="nv">asa1</span> <span class="nv">asr2</span> <span class="nv">asa2</span>,
+    stmnt_runp f asr0 asa0 st1 asr1 asa1 -&gt;
+    stmnt_runp f asr1 asa1 st2 asr2 asa2 -&gt;
+    stmnt_runp f asr0 asa0 (Vseq st1 st2) asr2 asa2
+| stmnt_runp_Vcond_true:
+    <span class="kr">forall</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">asr1</span> <span class="nv">asa1</span> <span class="nv">f</span> <span class="nv">c</span> <span class="nv">vc</span> <span class="nv">stt</span> <span class="nv">stf</span>,
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc -&gt;
+    valueToBool vc = true -&gt;
+    stmnt_runp f asr0 asa0 stt asr1 asa1 -&gt;
+    stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
+| stmnt_runp_Vcond_false:
+    <span class="kr">forall</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">asr1</span> <span class="nv">asa1</span> <span class="nv">f</span> <span class="nv">c</span> <span class="nv">vc</span> <span class="nv">stt</span> <span class="nv">stf</span>,
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) c vc -&gt;
+    valueToBool vc = false -&gt;
+    stmnt_runp f asr0 asa0 stf asr1 asa1 -&gt;
+    stmnt_runp f asr0 asa0 (Vcond c stt stf) asr1 asa1
+| stmnt_runp_Vcase_nomatch:
+    <span class="kr">forall</span> <span class="nv">e</span> <span class="nv">ve</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">f</span> <span class="nv">asr1</span> <span class="nv">asa1</span> <span class="nv">me</span> <span class="nv">mve</span> <span class="nv">sc</span> <span class="nv">cs</span> <span class="nv">def</span>,
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve -&gt;
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve -&gt;
+    mve &lt;&gt; ve -&gt;
+    stmnt_runp f asr0 asa0 (Vcase e cs def) asr1 asa1 -&gt;
+    stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
+| stmnt_runp_Vcase_match:
+    <span class="kr">forall</span> <span class="nv">e</span> <span class="nv">ve</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">f</span> <span class="nv">asr1</span> <span class="nv">asa1</span> <span class="nv">me</span> <span class="nv">mve</span> <span class="nv">sc</span> <span class="nv">cs</span> <span class="nv">def</span>,
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve -&gt;
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve -&gt;
+    mve = ve -&gt;
+    stmnt_runp f asr0 asa0 sc asr1 asa1 -&gt;
+    stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
+| stmnt_runp_Vcase_default:
+    <span class="kr">forall</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">asr1</span> <span class="nv">asa1</span> <span class="nv">f</span> <span class="nv">st</span> <span class="nv">e</span> <span class="nv">ve</span>,
+    expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve -&gt;
+    stmnt_runp f asr0 asa0 st asr1 asa1 -&gt;
+    stmnt_runp f asr0 asa0 (Vcase e nil (Some st)) asr1 asa1
+| stmnt_runp_Vblock_reg:
+    <span class="kr">forall</span> <span class="nv">lhs</span> <span class="nv">r</span> <span class="nv">rhs</span> <span class="nv">rhsval</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">f</span>,
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocReg r) -&gt;
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval -&gt;
+    stmnt_runp f asr asa
+                 (Vblock lhs rhs)
+                 (block_reg r asr rhsval) asa
+| stmnt_runp_Vnonblock_reg:
+    <span class="kr">forall</span> <span class="nv">lhs</span> <span class="nv">r</span> <span class="nv">rhs</span> <span class="nv">rhsval</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">f</span>,
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocReg r) -&gt;
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval -&gt;
+    stmnt_runp f asr asa
+                 (Vnonblock lhs rhs)
+                 (nonblock_reg r asr rhsval) asa
+| stmnt_runp_Vblock_arr:
+    <span class="kr">forall</span> <span class="nv">lhs</span> <span class="nv">r</span> <span class="nv">i</span> <span class="nv">rhs</span> <span class="nv">rhsval</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">f</span>,
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocArray r i) -&gt;
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval -&gt;
+    stmnt_runp f asr asa
+                 (Vblock lhs rhs)
+                 asr (block_arr r i asa rhsval)
+| stmnt_runp_Vnonblock_arr:
+    <span class="kr">forall</span> <span class="nv">lhs</span> <span class="nv">r</span> <span class="nv">i</span> <span class="nv">rhs</span> <span class="nv">rhsval</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">f</span>,
+    location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocArray r i) -&gt;
+    expr_runp f asr.(assoc_blocking) asa.(assoc_blocking) rhs rhsval -&gt;
+    stmnt_runp f asr asa
+                 (Vnonblock lhs rhs)
+                 asr (nonblock_arr r i asa rhsval).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Constructors</span> stmnt_runp : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="c">(*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=</span>
+<span class="c">  let run := fun st ls =&gt;</span>
+<span class="c">              do s&#39; &lt;- stmnt_run s st;</span>
+<span class="c">              mi_step s&#39; ls</span>
+<span class="c">  in</span>
+<span class="c">  match m with</span>
+<span class="c">  | (Valways _ st)::ls =&gt; run st ls</span>
+<span class="c">  | (Valways_ff _ st)::ls =&gt; run st ls</span>
+<span class="c">  | (Valways_comb _ st)::ls =&gt; run st ls</span>
+<span class="c">  | (Vdecl _ _)::ls =&gt; mi_step s ls</span>
+<span class="c">  | (Vdeclarr _ _ _)::ls =&gt; mi_step s ls</span>
+<span class="c">  | nil =&gt; OK s</span>
+<span class="c">  end.*)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">mi_stepp</span> : fext -&gt; reg_associations -&gt; arr_associations -&gt;
+                     module_item -&gt; reg_associations -&gt; arr_associations -&gt; <span class="kt">Prop</span> :=
+| mi_stepp_Valways :
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">sr0</span> <span class="nv">sa0</span> <span class="nv">st</span> <span class="nv">sr1</span> <span class="nv">sa1</span> <span class="nv">c</span>,
+    stmnt_runp f sr0 sa0 st sr1 sa1 -&gt;
+    mi_stepp f sr0 sa0 (Valways c st) sr1 sa1
+| mi_stepp_Valways_ff :
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">sr0</span> <span class="nv">sa0</span> <span class="nv">st</span> <span class="nv">sr1</span> <span class="nv">sa1</span> <span class="nv">c</span>,
+    stmnt_runp f sr0 sa0 st sr1 sa1 -&gt;
+    mi_stepp f sr0 sa0 (Valways_ff c st) sr1 sa1
+| mi_stepp_Valways_comb :
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">sr0</span> <span class="nv">sa0</span> <span class="nv">st</span> <span class="nv">sr1</span> <span class="nv">sa1</span> <span class="nv">c</span>,
+    stmnt_runp f sr0 sa0 st sr1 sa1 -&gt;
+    mi_stepp f sr0 sa0 (Valways_comb c st) sr1 sa1
+| mi_stepp_Vdecl :
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">sr</span> <span class="nv">sa</span> <span class="nv">d</span>,
+    mi_stepp f sr sa (Vdeclaration d) sr sa.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Constructors</span> mi_stepp : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">mis_stepp</span> : fext -&gt; reg_associations -&gt; arr_associations -&gt;
+                      list module_item -&gt; reg_associations -&gt; arr_associations -&gt; <span class="kt">Prop</span> :=
+| mis_stepp_Cons :
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">mi</span> <span class="nv">mis</span> <span class="nv">sr0</span> <span class="nv">sa0</span> <span class="nv">sr1</span> <span class="nv">sa1</span> <span class="nv">sr2</span> <span class="nv">sa2</span>,
+    mi_stepp f sr0 sa0 mi sr1 sa1 -&gt;
+    mis_stepp f sr1 sa1 mis sr2 sa2 -&gt;
+    mis_stepp f sr0 sa0 (mi :: mis) sr2 sa2
+| mis_stepp_Nil :
+    <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">sr</span> <span class="nv">sa</span>,
+    mis_stepp f sr sa nil sr sa.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Constructors</span> mis_stepp : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="c">(*Definition mi_step_commit (s : state) (m : list module_item) : res state :=</span>
+<span class="c">  match mi_step s m with</span>
+<span class="c">  | OK (State m assoc nbassoc f c) =&gt;</span>
+<span class="c">    OK (State m (merge_assocmap nbassoc assoc) empty_assocmap f c)</span>
+<span class="c">  | Error msg =&gt; Error msg</span>
+<span class="c">  | _ =&gt; Error (msg &quot;Verilog: Wrong state&quot;)</span>
+<span class="c">  end.</span>
+
+<span class="c">Fixpoint mi_run (f : fextclk) (assoc : assocmap) (m : list module_item) (n : nat)</span>
+<span class="c">         {struct n} : res assocmap :=</span>
+<span class="c">  match n with</span>
+<span class="c">  | S n&#39; =&gt;</span>
+<span class="c">    do assoc&#39; &lt;- mi_run f assoc m n&#39;;</span>
+<span class="c">    match mi_step_commit (State assoc&#39; empty_assocmap f (Pos.of_nat n&#39;)) m with</span>
+<span class="c">    | OK (State assoc _ _ _) =&gt; OK assoc</span>
+<span class="c">    | Error m =&gt; Error m</span>
+<span class="c">    end</span>
+<span class="c">  | O =&gt; OK assoc</span>
+<span class="c">  end.*)</span>
+
+<span class="sd">(** Resets the module into a known state, so that it can be executed.  This is</span>
+<span class="sd">assumed to be the starting state of the module, and may have to be changed if</span>
+<span class="sd">other arguments to the module are also to be supported. *)</span>
+
+<span class="c">(*Definition initial_fextclk (m : module) : fextclk :=</span>
+<span class="c">  fun x =&gt; match x with</span>
+<span class="c">           | S O =&gt; (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)</span>
+<span class="c">           | _ =&gt; (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)</span>
+<span class="c">           end.*)</span>
+
+<span class="c">(*Definition module_run (n : nat) (m : module) : res assocmap :=</span>
+<span class="c">  mi_run (initial_fextclk m) empty_assocmap (mod_body m) n.*)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Local Close Scope</span> error_monad_scope.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+<span class="c">(*Theorem value_eq_size_if_eq:</span>
+<span class="c">  forall lv rv EQ,</span>
+<span class="c">  vsize lv = vsize rv -&gt; value_eq_size lv rv = left EQ.</span>
+<span class="c">Proof. intros. unfold value_eq_size.</span>
+
+<span class="c">Theorem expr_run_same:</span>
+<span class="c">  forall assoc e v, expr_run assoc e = OK v &lt;-&gt; expr_runp assoc e v.</span>
+<span class="c">Proof.</span>
+<span class="c">  split; generalize dependent v; generalize dependent assoc.</span>
+<span class="c">  - induction e.</span>
+<span class="c">    + intros. inversion H. constructor.</span>
+<span class="c">    + intros. inversion H. constructor. assumption.</span>
+<span class="c">    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (expr_run assoc e2) eqn:?.</span>
+<span class="c">      unfold eq_to_opt in H1. destruct (value_eq_size v0 v1) eqn:?. inversion H1.</span>
+<span class="c">      constructor. apply IHe1. assumption. apply IHe2. assumption. reflexivity. discriminate. discriminate.</span>
+<span class="c">      discriminate.</span>
+<span class="c">    + intros. inversion H. destruct (expr_run assoc e) eqn:?. unfold option_map in H1.</span>
+<span class="c">      inversion H1. constructor. apply IHe. assumption. reflexivity. discriminate.</span>
+<span class="c">    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (valueToBool v0) eqn:?.</span>
+<span class="c">      eapply erun_Vternary_true. apply IHe1. eassumption. apply IHe2. eassumption. assumption.</span>
+<span class="c">      eapply erun_Vternary_false. apply IHe1. eassumption. apply IHe3. eassumption. assumption.</span>
+<span class="c">      discriminate.</span>
+<span class="c">  - induction e.</span>
+<span class="c">    + intros. inversion H. reflexivity.</span>
+<span class="c">    + intros. inversion H. subst. simpl. assumption.</span>
+<span class="c">    + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4.</span>
+<span class="c">      apply IHe2 in H6. rewrite H6. unfold eq_to_opt. assert (vsize lv = vsize rv).</span>
+<span class="c">      apply EQ. apply (value_eq_size_if_eq lv rv EQ) in H0. rewrite H0. reflexivity.</span>
+<span class="c">    + intros. inversion H. subst. simpl. destruct (expr_run assoc e) eqn:?. simpl.</span>
+<span class="c">      apply IHe in H3. rewrite Heqo in H3.</span>
+<span class="c">      inversion H3. subst. reflexivity. apply IHe in H3. rewrite Heqo in H3. discriminate.</span>
+<span class="c">    + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4. rewrite H7.</span>
+<span class="c">      apply IHe2 in H6. rewrite H6. reflexivity.</span>
+<span class="c">      subst. simpl. apply IHe1 in H4. rewrite H4. rewrite H7. apply IHe3.</span>
+<span class="c">      assumption.</span>
+<span class="c">Qed.</span>
+
+<span class="c"> *)</span>
+
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Fixpoint</span> <span class="nf">init_params</span> (<span class="nv">vl</span> : list value) (<span class="nv">rl</span> : list reg) {<span class="nv">struct</span> <span class="nv">rl</span>} :=
+  <span class="kr">match</span> rl, vl <span class="kr">with</span>
+  | r :: rl&#39;, v :: vl&#39; =&gt; AssocMap.<span class="nb">set</span> r v (init_params vl&#39; rl&#39;)
+  | _, _ =&gt; empty_assocmap
+  <span class="kr">end</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">genv</span> := Globalenvs.Genv.t fundef unit.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">empty_stack</span> (<span class="nv">m</span> : module) : assocmap_arr :=
+  (AssocMap.<span class="nb">set</span> m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty arr)).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">step</span> : genv -&gt; state -&gt; Events.trace -&gt; state -&gt; <span class="kt">Prop</span> :=
+  | step_module :
+      <span class="kr">forall</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">asr&#39;</span> <span class="nv">asa&#39;</span> <span class="nv">basr1</span> <span class="nv">nasr1</span> <span class="nv">basa1</span> <span class="nv">nasa1</span> <span class="nv">f</span> <span class="nv">stval</span> <span class="nv">pstval</span> <span class="nv">m</span> <span class="nv">sf</span> <span class="nv">st</span> <span class="nv">g</span> <span class="nv">ist</span>,
+      asr!(m.(mod_reset)) = Some (ZToValue <span class="mi">0</span>) -&gt;
+      asr!(m.(mod_finish)) = Some (ZToValue <span class="mi">0</span>) -&gt;
+      asr!(m.(mod_st)) = Some ist -&gt;
+      valueToPos ist = st -&gt;
+      mis_stepp f (mkassociations asr empty_assocmap)
+                  (mkassociations asa (empty_stack m))
+                  m.(mod_body)
+                  (mkassociations basr1 nasr1)
+                  (mkassociations basa1 nasa1)-&gt;
+      asr&#39; = merge_regs nasr1 basr1 -&gt;
+      asa&#39; = merge_arrs nasa1 basa1 -&gt;
+      asr&#39;!(m.(mod_st)) = Some stval -&gt;
+      valueToPos stval = pstval -&gt;
+      step g (State sf m st asr asa) Events.E0 (State sf m pstval asr&#39; asa&#39;)
+| step_finish :
+    <span class="kr">forall</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">sf</span> <span class="nv">retval</span> <span class="nv">m</span> <span class="nv">st</span> <span class="nv">g</span>,
+    asr!(m.(mod_finish)) = Some (ZToValue <span class="mi">1</span>) -&gt;
+    asr!(m.(mod_return)) = Some retval -&gt;
+    step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
+| step_call :
+    <span class="kr">forall</span> <span class="nv">g</span> <span class="nv">res</span> <span class="nv">m</span> <span class="nv">args</span>,
+    step g (Callstate res m args) Events.E0
+         (State res m m.(mod_entrypoint)
+          (AssocMap.<span class="nb">set</span> (mod_reset m) (ZToValue <span class="mi">0</span>)
+           (AssocMap.<span class="nb">set</span> (mod_finish m) (ZToValue <span class="mi">0</span>)
+            (AssocMap.<span class="nb">set</span> m.(mod_st) (posToValue m.(mod_entrypoint))
+             (init_params args m.(mod_args)))))
+          (empty_stack m))
+| step_return :
+    <span class="kr">forall</span> <span class="nv">g</span> <span class="nv">m</span> <span class="nv">asr</span> <span class="nv">i</span> <span class="nv">r</span> <span class="nv">sf</span> <span class="nv">pc</span> <span class="nv">mst</span> <span class="nv">asa</span>,
+    mst = mod_st m -&gt;
+    step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
+         (State sf m pc ((asr # mst &lt;- (posToValue pc)) # r &lt;- i) asa).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Constructors</span> step : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">initial_state</span> (<span class="nv">p</span>: program): state -&gt; <span class="kt">Prop</span> :=
+  | initial_state_intro: <span class="kr">forall</span> <span class="nv">b</span> <span class="nv">m0</span> <span class="nv">m</span>,
+      <span class="kr">let</span> <span class="nv">ge</span> := Globalenvs.Genv.globalenv p <span class="kr">in</span>
+      Globalenvs.Genv.init_mem p = Some m0 -&gt;
+      Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b -&gt;
+      Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) -&gt;
+      initial_state p (Callstate nil m nil).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Inductive</span> <span class="nf">final_state</span> : state -&gt; Integers.int -&gt; <span class="kt">Prop</span> :=
+| final_state_intro : <span class="kr">forall</span> <span class="nv">retval</span> <span class="nv">retvali</span>,
+    retvali = valueToInt retval -&gt;
+    final_state (Returnstate nil retval) retvali.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Definition</span> <span class="nf">semantics</span> (<span class="nv">m</span> : program) :=
+  Smallstep.Semantics step (initial_state m) final_state
+                      (Globalenvs.Genv.globalenv m).</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk0" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk0"><span class="highlight"><span class="kn">Lemma</span> <span class="nf">expr_runp_determinate</span> :
+  <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">e</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">v</span>,
+  expr_runp f asr asa e v -&gt;
+  <span class="kr">forall</span> <span class="nv">v&#39;</span>,
+  expr_runp f asr asa e v&#39; -&gt;
+  v&#39; = v.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">e</span> : expr) (<span class="nv">asr</span> : assocmap)
+  (<span class="nv">asa</span> : assocmap_arr) (<span class="nv">v</span> : value),
+expr_runp f asr asa e v -&gt;
+<span class="kr">forall</span> <span class="nv">v&#39;</span> : value, expr_runp f asr asa e v&#39; -&gt; v&#39; = v</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk1" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk1"><span class="highlight"><span class="kn">Proof</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">e</span> : expr) (<span class="nv">asr</span> : assocmap)
+  (<span class="nv">asa</span> : assocmap_arr) (<span class="nv">v</span> : value),
+expr_runp f asr asa e v -&gt;
+<span class="kr">forall</span> <span class="nv">v&#39;</span> : value, expr_runp f asr asa e v&#39; -&gt; v&#39; = v</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="nb">induction</span> e; <span class="nb">intros</span>;
+
+  <span class="kp">repeat</span> (<span class="kp">try</span> <span class="kr">match goal with</span>
+              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] =&gt; invert H
+              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] =&gt; invert H
+              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] =&gt; invert H
+              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] =&gt; invert H
+              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] =&gt; invert H
+              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] =&gt; invert H
+              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] =&gt; invert H
+
+              | [ H1 : <span class="kr">forall</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">v</span>, expr_runp _ asr asa <span class="nl">?e</span> v -&gt; _,
+                  H2 : expr_runp _ _ _ <span class="nl">?e</span> _ |- _ ] =&gt;
+                learn (H1 _ _ _ H2)
+              | [ H1 : <span class="kr">forall</span> <span class="nv">v</span>, expr_runp _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> v -&gt; _,
+                  H2 : expr_runp _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _ |- _ ] =&gt;
+                learn (H1 _ H2)
+              <span class="kr">end</span>; crush).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Qed</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Resolve</span> expr_runp_determinate : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk2" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk2"><span class="highlight"><span class="kn">Lemma</span> <span class="nf">location_is_determinate</span> :
+  <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">asr</span> <span class="nv">asa</span> <span class="nv">e</span> <span class="nv">l</span>,
+  location_is f asr asa e l -&gt;
+  <span class="kr">forall</span> <span class="nv">l&#39;</span>,
+  location_is f asr asa e l&#39; -&gt;
+  l&#39; = l.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">asr</span> : assocmap)
+  (<span class="nv">asa</span> : assocmap_arr) (<span class="nv">e</span> : expr) (<span class="nv">l</span> : location),
+location_is f asr asa e l -&gt;
+<span class="kr">forall</span> <span class="nv">l&#39;</span> : location,
+location_is f asr asa e l&#39; -&gt; l&#39; = l</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk3" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk3"><span class="highlight"><span class="kn">Proof</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">asr</span> : assocmap)
+  (<span class="nv">asa</span> : assocmap_arr) (<span class="nv">e</span> : expr) (<span class="nv">l</span> : location),
+location_is f asr asa e l -&gt;
+<span class="kr">forall</span> <span class="nv">l&#39;</span> : location,
+location_is f asr asa e l&#39; -&gt; l&#39; = l</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="nb">induction</span> <span class="mi">1</span>; <span class="nb">intros</span>;
+
+  <span class="kp">repeat</span> (<span class="kp">try</span> <span class="kr">match goal with</span>
+              | [ H : location_is _ _ _ _ _ |- _ ] =&gt; invert H
+              | [ H1 : expr_runp _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _,
+                  H2 : expr_runp _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _ |- _ ] =&gt;
+                learn (expr_runp_determinate H1 H2)
+              <span class="kr">end</span>; crush).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Qed</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk4" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk4"><span class="highlight"><span class="kn">Lemma</span> <span class="nf">stmnt_runp_determinate</span> :
+  <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">s</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">asr1</span> <span class="nv">asa1</span>,
+  stmnt_runp f asr0 asa0 s asr1 asa1 -&gt;
+  <span class="kr">forall</span> <span class="nv">asr1&#39;</span> <span class="nv">asa1&#39;</span>,
+  stmnt_runp f asr0 asa0 s asr1&#39; asa1&#39; -&gt;
+  asr1&#39; = asr1 /\ asa1&#39; = asa1.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">s</span> : stmnt)
+  (<span class="nv">asr0</span> : reg_associations) (<span class="nv">asa0</span> : arr_associations)
+  (<span class="nv">asr1</span> : reg_associations) (<span class="nv">asa1</span> : arr_associations),
+stmnt_runp f asr0 asa0 s asr1 asa1 -&gt;
+<span class="kr">forall</span> (<span class="nv">asr1&#39;</span> : reg_associations)
+  (<span class="nv">asa1&#39;</span> : arr_associations),
+stmnt_runp f asr0 asa0 s asr1&#39; asa1&#39; -&gt;
+asr1&#39; = asr1 /\ asa1&#39; = asa1</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="nb">induction</span> <span class="mi">1</span>; <span class="nb">intros</span>;
+
+  <span class="kp">repeat</span> (<span class="kp">try</span> <span class="kr">match goal with</span>
+             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] =&gt; invert H
+             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] =&gt; invert H
+             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] =&gt; invert H
+             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] =&gt; invert H
+             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] =&gt; invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (_ :: _) _) _ _ |- _ ] =&gt; invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ []  _) _ _ |- _ ] =&gt; invert H
+
+             | [ H1 : expr_runp _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _,
+                 H2 : expr_runp _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _ |- _ ] =&gt;
+               learn (expr_runp_determinate H1 H2)
+
+             | [ H1 : location_is _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _,
+                 H2 : location_is _ <span class="nl">?asr</span> <span class="nl">?asa</span> <span class="nl">?e</span> _ |- _ ] =&gt;
+               learn (location_is_determinate H1 H2)
+
+             | [ H1 : <span class="kr">forall</span> <span class="nv">asr1</span> <span class="nv">asa1</span>, stmnt_runp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?s</span> asr1 asa1 -&gt; _,
+                 H2 : stmnt_runp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?s</span> _ _ |- _ ] =&gt;
+               learn (H1 _ _ H2)
+              <span class="kr">end</span>; crush).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Qed</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Hint Resolve</span> stmnt_runp_determinate : verilog.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk5" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk5"><span class="highlight"><span class="kn">Lemma</span> <span class="nf">mi_stepp_determinate</span> :
+  <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">m</span> <span class="nv">asr1</span> <span class="nv">asa1</span>,
+  mi_stepp f asr0 asa0 m asr1 asa1 -&gt;
+  <span class="kr">forall</span> <span class="nv">asr1&#39;</span> <span class="nv">asa1&#39;</span>,
+  mi_stepp f asr0 asa0 m asr1&#39; asa1&#39; -&gt;
+  asr1&#39; = asr1 /\ asa1&#39; = asa1.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">asr0</span> : reg_associations)
+  (<span class="nv">asa0</span> : arr_associations) (<span class="nv">m</span> : module_item)
+  (<span class="nv">asr1</span> : reg_associations) (<span class="nv">asa1</span> : arr_associations),
+mi_stepp f asr0 asa0 m asr1 asa1 -&gt;
+<span class="kr">forall</span> (<span class="nv">asr1&#39;</span> : reg_associations)
+  (<span class="nv">asa1&#39;</span> : arr_associations),
+mi_stepp f asr0 asa0 m asr1&#39; asa1&#39; -&gt;
+asr1&#39; = asr1 /\ asa1&#39; = asa1</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk6" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk6"><span class="highlight"><span class="kn">Proof</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">asr0</span> : reg_associations)
+  (<span class="nv">asa0</span> : arr_associations) (<span class="nv">m</span> : module_item)
+  (<span class="nv">asr1</span> : reg_associations) (<span class="nv">asa1</span> : arr_associations),
+mi_stepp f asr0 asa0 m asr1 asa1 -&gt;
+<span class="kr">forall</span> (<span class="nv">asr1&#39;</span> : reg_associations)
+  (<span class="nv">asa1&#39;</span> : arr_associations),
+mi_stepp f asr0 asa0 m asr1&#39; asa1&#39; -&gt;
+asr1&#39; = asr1 /\ asa1&#39; = asa1</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk7" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk7"><span class="highlight"><span class="nb">intros</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">f</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">fext</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asr0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">reg_associations</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asa0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">arr_associations</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">m</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">module_item</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asr1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">reg_associations</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asa1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">arr_associations</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mi_stepp f asr0 asa0 m asr1 asa1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asr1'</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">reg_associations</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asa1'</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">arr_associations</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mi_stepp f asr0 asa0 m asr1&#39; asa1&#39;</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">asr1&#39; = asr1 /\ asa1&#39; = asa1</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="nb">destruct</span> m; invert H; invert H0;
+
+  <span class="kp">repeat</span> (<span class="kp">try</span> <span class="kr">match goal with</span>
+              | [ H1 : stmnt_runp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?s</span> _ _,
+                  H2 : stmnt_runp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?s</span> _ _ |- _ ] =&gt;
+                learn (stmnt_runp_determinate H1 H2)
+              <span class="kr">end</span>; crush).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Qed</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk8" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk8"><span class="highlight"><span class="kn">Lemma</span> <span class="nf">mis_stepp_determinate</span> :
+  <span class="kr">forall</span> <span class="nv">f</span> <span class="nv">asr0</span> <span class="nv">asa0</span> <span class="nv">m</span> <span class="nv">asr1</span> <span class="nv">asa1</span>,
+  mis_stepp f asr0 asa0 m asr1 asa1 -&gt;
+  <span class="kr">forall</span> <span class="nv">asr1&#39;</span> <span class="nv">asa1&#39;</span>,
+  mis_stepp f asr0 asa0 m asr1&#39; asa1&#39; -&gt;
+  asr1&#39; = asr1 /\ asa1&#39; = asa1.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">asr0</span> : reg_associations)
+  (<span class="nv">asa0</span> : arr_associations) (<span class="nv">m</span> : list module_item)
+  (<span class="nv">asr1</span> : reg_associations) (<span class="nv">asa1</span> : arr_associations),
+mis_stepp f asr0 asa0 m asr1 asa1 -&gt;
+<span class="kr">forall</span> (<span class="nv">asr1&#39;</span> : reg_associations)
+  (<span class="nv">asa1&#39;</span> : arr_associations),
+mis_stepp f asr0 asa0 m asr1&#39; asa1&#39; -&gt;
+asr1&#39; = asr1 /\ asa1&#39; = asa1</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk9" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk9"><span class="highlight"><span class="kn">Proof</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> (<span class="nv">f</span> : fext) (<span class="nv">asr0</span> : reg_associations)
+  (<span class="nv">asa0</span> : arr_associations) (<span class="nv">m</span> : list module_item)
+  (<span class="nv">asr1</span> : reg_associations) (<span class="nv">asa1</span> : arr_associations),
+mis_stepp f asr0 asa0 m asr1 asa1 -&gt;
+<span class="kr">forall</span> (<span class="nv">asr1&#39;</span> : reg_associations)
+  (<span class="nv">asa1&#39;</span> : arr_associations),
+mis_stepp f asr0 asa0 m asr1&#39; asa1&#39; -&gt;
+asr1&#39; = asr1 /\ asa1&#39; = asa1</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="nb">induction</span> <span class="mi">1</span>; <span class="nb">intros</span>;
+
+  <span class="kp">repeat</span> (<span class="kp">try</span> <span class="kr">match goal with</span>
+              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] =&gt; invert H
+              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] =&gt; invert H
+
+              | [ H1 : mi_stepp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?s</span> _ _,
+                  H2 : mi_stepp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?s</span> _ _ |- _ ] =&gt;
+                learn (mi_stepp_determinate H1 H2)
+
+             | [ H1 : <span class="kr">forall</span> <span class="nv">asr1</span> <span class="nv">asa1</span>, mis_stepp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?m</span> asr1 asa1 -&gt; _,
+                 H2 : mis_stepp _ <span class="nl">?asr0</span> <span class="nl">?asa0</span> <span class="nl">?m</span> _ _ |- _ ] =&gt;
+               learn (H1 _ _ H2)
+              <span class="kr">end</span>; crush).</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Qed</span>.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp"><span class="highlight">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chka" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chka"><span class="highlight"><span class="kn">Lemma</span> <span class="nf">semantics_determinate</span> :
+  <span class="kr">forall</span> (<span class="nv">p</span>: program), Smallstep.determinate (semantics p).</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> <span class="nv">p</span> : program, determinate (semantics p)</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chkb" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chkb"><span class="highlight"><span class="kn">Proof</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight"><span class="kr">forall</span> <span class="nv">p</span> : program, determinate (semantics p)</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chkc" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chkc"><span class="highlight"><span class="nb">intros</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">determinate (semantics p)</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chkd" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chkd"><span class="highlight"><span class="nb">constructor</span>; <span class="nb">set</span> (ge := Globalenvs.Genv.globalenv p); simplify.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t1 s1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t2 s2</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">Events.match_traces (Genv.globalenv p) t1 t2</span></div></blockquote><div class="coq-extra-goals"><input class="coq-extra-goal-toggle" id="verilog-v-chke" style="display: none" type="checkbox"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t1 s1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t2 s2</span></span></span></span></div></div><label class="goal-separator coq-extra-goal-label" for="verilog-v-chke"><hr></label><div class="goal-conclusion"><span class="highlight">t1 = t2 -&gt; s1 = s2</span></div></blockquote><input class="coq-extra-goal-toggle" id="verilog-v-chkf" style="display: none" type="checkbox"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div></div><label class="goal-separator coq-extra-goal-label" for="verilog-v-chkf"><hr></label><div class="goal-conclusion"><span class="highlight">single_events (semantics p)</span></div></blockquote><input class="coq-extra-goal-toggle" id="verilog-v-chk10" style="display: none" type="checkbox"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s1, s2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">initial_state p s1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">initial_state p s2</span></span></span></span></div></div><label class="goal-separator coq-extra-goal-label" for="verilog-v-chk10"><hr></label><div class="goal-conclusion"><span class="highlight">s1 = s2</span></div></blockquote><input class="coq-extra-goal-toggle" id="verilog-v-chk11" style="display: none" type="checkbox"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">r</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">int</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">final_state s r</span></span></span></span></div></div><label class="goal-separator coq-extra-goal-label" for="verilog-v-chk11"><hr></label><div class="goal-conclusion"><span class="highlight">nostep step (Genv.globalenv p) s</span></div></blockquote><input class="coq-extra-goal-toggle" id="verilog-v-chk12" style="display: none" type="checkbox"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">r1, r2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">int</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">final_state s r1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">final_state s r2</span></span></span></span></div></div><label class="goal-separator coq-extra-goal-label" for="verilog-v-chk12"><hr></label><div class="goal-conclusion"><span class="highlight">r1 = r2</span></div></blockquote></div></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk13" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk13"><span class="highlight">-</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t1 s1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t2 s2</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">Events.match_traces (Genv.globalenv p) t1 t2</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight">invert H; invert H0; <span class="nb">constructor</span>. <span class="c">(* Traces are always empty *)</span></span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk14" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk14"><span class="highlight">-</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t1 s1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">step (Genv.globalenv p) s t2 s2</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">t1 = t2 -&gt; s1 = s2</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk15" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk15"><span class="highlight">invert H; invert H0; crush.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asr</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asa</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">m</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">module</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">sf</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">list stackframe</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ist</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basr0, nasr0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basa0, nasa0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">stval0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basr1, nasr1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basa1, nasa1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">stval</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">f</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">fext</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_reset m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_finish m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H3</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_st m) = Some ist</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H5</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mis_stepp f
+  {|
+  assoc_blocking := asr;
+  assoc_nonblocking := empty_assocmap |}
+  {|
+  assoc_blocking := asa;
+  assoc_nonblocking := empty_stack m |}
+  (mod_body m)
+  {|
+  assoc_blocking := basr1;
+  assoc_nonblocking := nasr1 |}
+  {|
+  assoc_blocking := basa1;
+  assoc_nonblocking := nasa1 |}</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H8</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">(merge_regs nasr1 basr1) ! (mod_st m) =
+Some stval</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">f0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">fext</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H10</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_reset m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H11</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_finish m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H12</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_st m) = Some ist</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H15</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mis_stepp f0
+  {|
+  assoc_blocking := asr;
+  assoc_nonblocking := empty_assocmap |}
+  {|
+  assoc_blocking := asa;
+  assoc_nonblocking := empty_stack m |}
+  (mod_body m)
+  {|
+  assoc_blocking := basr0;
+  assoc_nonblocking := nasr0 |}
+  {|
+  assoc_blocking := basa0;
+  assoc_nonblocking := nasa0 |}</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H20</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">(merge_regs nasr0 basr0) ! (mod_st m) =
+Some stval0</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H3</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H2</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H1</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">State sf m (valueToPos stval) (merge_regs nasr1 basr1)
+  (merge_arrs nasa1 basa1) =
+State sf m (valueToPos stval0)
+  (merge_regs nasr0 basr0) (merge_arrs nasa0 basa0)</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk16" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk16"><span class="highlight"><span class="nb">assert</span> (f = f0) <span class="bp">by</span> (<span class="nb">destruct</span> f; <span class="nb">destruct</span> f0; <span class="nb">auto</span>); <span class="nb">subst</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asr</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asa</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">m</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">module</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">sf</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">list stackframe</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ist</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basr0, nasr0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basa0, nasa0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">stval0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basr1, nasr1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basa1, nasa1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">stval</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_reset m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_finish m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H3</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_st m) = Some ist</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">f0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">fext</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H5</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mis_stepp f0
+  {|
+  assoc_blocking := asr;
+  assoc_nonblocking := empty_assocmap |}
+  {|
+  assoc_blocking := asa;
+  assoc_nonblocking := empty_stack m |}
+  (mod_body m)
+  {|
+  assoc_blocking := basr1;
+  assoc_nonblocking := nasr1 |}
+  {|
+  assoc_blocking := basa1;
+  assoc_nonblocking := nasa1 |}</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H8</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">(merge_regs nasr1 basr1) ! (mod_st m) =
+Some stval</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H10</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_reset m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H11</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_finish m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H12</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_st m) = Some ist</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H15</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mis_stepp f0
+  {|
+  assoc_blocking := asr;
+  assoc_nonblocking := empty_assocmap |}
+  {|
+  assoc_blocking := asa;
+  assoc_nonblocking := empty_stack m |}
+  (mod_body m)
+  {|
+  assoc_blocking := basr0;
+  assoc_nonblocking := nasr0 |}
+  {|
+  assoc_blocking := basa0;
+  assoc_nonblocking := nasa0 |}</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H20</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">(merge_regs nasr0 basr0) ! (mod_st m) =
+Some stval0</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H3</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H2</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H1</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">State sf m (valueToPos stval) 
+  (merge_regs nasr1 basr1) 
+  (merge_arrs nasa1 basa1) =
+State sf m (valueToPos stval0)
+  (merge_regs nasr0 basr0) 
+  (merge_arrs nasa0 basa0)</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">    </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk17" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk17"><span class="highlight"><span class="nb">pose proof</span> (mis_stepp_determinate H5 H15).</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asr</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">asa</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">m</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">module</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">sf</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">list stackframe</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ist</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basr0, nasr0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basa0, nasa0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">stval0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basr1, nasr1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">basa1, nasa1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">AssocMap.t arr</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">stval</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">value</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_reset m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_finish m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H3</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_st m) = Some ist</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">f0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">fext</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H5</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mis_stepp f0
+  {|
+  assoc_blocking := asr;
+  assoc_nonblocking := empty_assocmap |}
+  {|
+  assoc_blocking := asa;
+  assoc_nonblocking := empty_stack m |}
+  (mod_body m)
+  {|
+  assoc_blocking := basr1;
+  assoc_nonblocking := nasr1 |}
+  {|
+  assoc_blocking := basa1;
+  assoc_nonblocking := nasa1 |}</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H8</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">(merge_regs nasr1 basr1) ! (mod_st m) =
+Some stval</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H10</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_reset m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H11</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_finish m) = Some (ZToValue <span class="mi">0</span>)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H12</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">asr ! (mod_st m) = Some ist</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H15</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">mis_stepp f0
+  {|
+  assoc_blocking := asr;
+  assoc_nonblocking := empty_assocmap |}
+  {|
+  assoc_blocking := asa;
+  assoc_nonblocking := empty_stack m |}
+  (mod_body m)
+  {|
+  assoc_blocking := basr0;
+  assoc_nonblocking := nasr0 |}
+  {|
+  assoc_blocking := basa0;
+  assoc_nonblocking := nasa0 |}</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H20</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">(merge_regs nasr0 basr0) ! (mod_st m) =
+Some stval0</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H3</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H2</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">Learn1</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Learnt H1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">{|
+assoc_blocking := basr0;
+assoc_nonblocking := nasr0 |} =
+{|
+assoc_blocking := basr1;
+assoc_nonblocking := nasr1 |} /\
+{|
+assoc_blocking := basa0;
+assoc_nonblocking := nasa0 |} =
+{|
+assoc_blocking := basa1;
+assoc_nonblocking := nasa1 |}</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">State sf m (valueToPos stval) 
+  (merge_regs nasr1 basr1) 
+  (merge_arrs nasa1 basa1) =
+State sf m (valueToPos stval0)
+  (merge_regs nasr0 basr0) 
+  (merge_arrs nasa0 basa0)</span></div></blockquote></div></div></small><span class="coq-wsp">
+</span></span><span class="coq-wsp">    </span><span class="coq-sentence"><span class="coq-input"><span class="highlight">crush.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk18" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk18"><span class="highlight">-</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">single_events (semantics p)</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk19" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk19"><span class="highlight"><span class="nb">constructor</span>.</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Smallstep.state (semantics p)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">t</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Events.trace</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s'</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Smallstep.state (semantics p)</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Step (semantics p) s t s&#39;</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">(Datatypes.length t &lt;= <span class="mi">0</span>)%nat</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight">invert H; crush.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk1a" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk1a"><span class="highlight">-</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s1, s2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">initial_state p s1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">initial_state p s2</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">s1 = s2</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight">invert H; invert H0; <span class="nb">unfold</span> ge0, ge1 <span class="kr">in</span> *; crush.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk1b" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk1b"><span class="highlight">-</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">r</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">int</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">final_state s r</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">nostep step (Genv.globalenv p) s</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="nb">red</span>; simplify; <span class="nb">intro</span>; invert H0; invert H; crush.</span></span><span class="coq-wsp">
+</span></span><span class="coq-wsp">  </span><span class="coq-sentence"><input class="coq-toggle" id="verilog-v-chk1c" style="display: none" type="checkbox"><label class="coq-input" for="verilog-v-chk1c"><span class="highlight">-</span></label><small class="coq-output"><div class="coq-output-sticky-wrapper"><div class="coq-goals"><blockquote class="coq-goal"><div class="goal-hyps"><div class="goal-hyp"><span class="hyp-names">p</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">program</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">ge</span><span><span class="hyp-body-block"><span class="hyp-punct">:=</span><span class="hyp-body"><span class="highlight">Genv.globalenv p</span></span></span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">Genv.t fundef ()</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">s</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">state</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">r1, r2</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">int</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">final_state s r1</span></span></span></span></div><div class="goal-hyp"><span class="hyp-names">H0</span><span><span class="hyp-type-block"><span class="hyp-punct">:</span><span class="hyp-type"><span class="highlight">final_state s r2</span></span></span></span></div></div><span class="goal-separator"><hr></span><div class="goal-conclusion"><span class="highlight">r1 = r2</span></div></blockquote></div></div></small><span class="coq-wsp"> </span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight">invert H; invert H0; crush.</span></span><span class="coq-wsp">
+</span></span><span class="coq-sentence"><span class="coq-input"><span class="highlight"><span class="kn">Qed</span>.</span></span></span></pre>
+</div>
+</div></body>
+</html>
