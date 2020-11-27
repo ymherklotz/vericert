@@ -16,9 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import List.
-Import ListNotations.
-
 From compcert Require Import Maps.
 From compcert Require Errors.
 From compcert Require Import AST.
@@ -30,11 +27,8 @@ Definition transl_list_fun (a : node * Verilog.stmnt) :=
 
 Definition transl_list st := map transl_list_fun st.
 
-Definition scl_to_Vdecl_fun (a : reg * scl_decl) :=
-  match a with
-  | (r, (VScalar io sz)) => (Vdecl io r sz)
-  | (r, VWire sz) => (Vdeclwire r sz)
-  end.
+Definition scl_to_Vdecl_fun (a : reg * (option io * scl_decl)) :=
+  match a with (r, (io, VScalar sz)) => (Vdecl io r sz) end.
 
 Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
 
@@ -42,12 +36,6 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
   match a with (r, (io, VArray sz l)) => (Vdeclarr io r sz l) end.
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
-
-Definition inst_to_Vdecl_fun (m: HTL.module) (a: positive * HTL.instantiation) :=
-  match a with (_, HTLinstantiation mod_name inst_name args fin dst) =>
-               (Vinstancedecl mod_name inst_name ([mod_start m; mod_reset m; mod_clk m] ++ args ++ [dst;fin])) end.
-
-Definition inst_to_Vdecl (m: HTL.module) := map (inst_to_Vdecl_fun m).
 
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := transl_list (PTree.elements m.(mod_controllogic)) in
@@ -58,8 +46,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                                                (Vcase (Vvar m.(mod_st)) case_el_ctrl (Some Vskip)))
       :: Valways (Vposedge m.(mod_clk)) (Vcase (Vvar m.(mod_st)) case_el_data (Some Vskip))
       :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
-                                               ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))
-                                               ++ inst_to_Vdecl m (AssocMap.elements m.(mod_insts))) in
+                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
   Verilog.mkmodule m.(mod_start)
                    m.(mod_reset)
                    m.(mod_clk)

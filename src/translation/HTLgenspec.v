@@ -167,12 +167,12 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk stk_len m start rst clk insts scldecls arrdecls wf,
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf,
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk insts scldecls arrdecls wf) ->
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls wf) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
@@ -444,10 +444,10 @@ Proof.
   - monadInv H. apply add_instr_freshreg_trans in EQ2. apply translate_arr_access_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
   - monadInv H. apply add_instr_freshreg_trans in EQ0. apply translate_arr_access_freshreg_trans in EQ. congruence.
-  (* - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0. *)
-  (*   congruence. *)
+  - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
+    congruence.
   (*- inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.*)
-Admitted.
+Qed.
 Hint Resolve transf_instr_freshreg_trans : htlspec.
 
 Lemma collect_trans_instr_freshreg_trans :
@@ -509,7 +509,6 @@ Lemma iter_expand_instr_spec :
                       c!pc = Some instr ->
                       tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st) stack).
 Proof.
-(* FIXME Broken by mpardalos
   induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
@@ -578,8 +577,7 @@ Proof.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
-*)
-Admitted.
+Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma create_arr_inv : forall w x y z a b c d,
@@ -616,9 +614,7 @@ Proof.
     monadInv Heqr.
 
   repeat unfold_match EQ9. monadInv EQ9.
-Admitted.
 
-(* FIXME Broken by @mpardalos
   (* TODO: We should be able to fold this into the automation. *)
   pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN. inv STK_LEN. inv H5.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ) as FIN_VAL. inv FIN_VAL.
@@ -643,4 +639,3 @@ Admitted.
   eapply iter_expand_instr_spec; eauto with htlspec.
   apply PTree.elements_complete.
 Qed.
-*)

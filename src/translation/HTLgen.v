@@ -16,9 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import List.
-Import ListNotations.
-
 From compcert Require Import Maps.
 From compcert Require Errors Globalenvs Integers.
 From compcert Require Import AST RTL.
@@ -34,9 +31,8 @@ Record state: Type := mkstate {
   st_st : reg;
   st_freshreg: reg;
   st_freshstate: node;
-  st_scldecls: AssocMap.t scl_decl;
+  st_scldecls: AssocMap.t (option io * scl_decl);
   st_arrdecls: AssocMap.t (option io * arr_decl);
-  st_insts: AssocMap.t instantiation;
   st_datapath: datapath;
   st_controllogic: controllogic;
 }.
@@ -45,9 +41,8 @@ Definition init_state (st : reg) : state :=
   mkstate st
           1%positive
           1%positive
-          (AssocMap.empty scl_decl)
+          (AssocMap.empty (option io * scl_decl))
           (AssocMap.empty (option io * arr_decl))
-          (AssocMap.empty instantiation)
           (AssocMap.empty stmnt)
           (AssocMap.empty stmnt).
 
@@ -64,8 +59,6 @@ Module HTLState <: State.
         (forall n,
             s1.(st_datapath)!n = None \/ s2.(st_datapath)!n = s1.(st_datapath)!n) ->
         (forall n,
-            s1.(st_insts)!n = None \/ s2.(st_insts)!n = s1.(st_insts)!n) ->
-        (forall n,
             s1.(st_controllogic)!n = None
             \/ s2.(st_controllogic)!n = s1.(st_controllogic)!n) ->
         st_incr s1 s2.
@@ -80,9 +73,8 @@ Module HTLState <: State.
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
     intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
-    - destruct H4 with n; destruct H9 with n; intuition congruence.
-    - destruct H5 with n; destruct H10 with n; intuition congruence.
-    - destruct H6 with n; destruct H11 with n; intuition congruence.
+    - destruct H4 with n; destruct H8 with n; intuition congruence.
+    - destruct H5 with n; destruct H9 with n; intuition congruence.
   Qed.
 
 End HTLState.
@@ -124,7 +116,6 @@ Lemma add_instr_state_incr :
        (st_freshstate s)
        s.(st_scldecls)
        s.(st_arrdecls)
-       s.(st_insts)
        (AssocMap.set n st s.(st_datapath))
        (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
 Proof.
@@ -140,9 +131,8 @@ Lemma declare_reg_state_incr :
        s.(st_st)
        s.(st_freshreg)
        s.(st_freshstate)
-       (AssocMap.set r (VScalar i sz) s.(st_scldecls))
+       (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
        s.(st_arrdecls)
-       s.(st_insts)
        s.(st_datapath)
        s.(st_controllogic)).
 Proof. auto with htlh. Qed.
@@ -152,9 +142,8 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_st)
                 s.(st_freshreg)
                 s.(st_freshstate)
-                (AssocMap.set r (VScalar i sz) s.(st_scldecls))
+                (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
                 s.(st_arrdecls)
-                s.(st_insts)
                 s.(st_datapath)
                 s.(st_controllogic))
               (declare_reg_state_incr i s r sz).
@@ -169,7 +158,6 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
-               s.(st_insts)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
          (add_instr_state_incr s n n' st STM TRANS)
@@ -187,7 +175,6 @@ Lemma add_instr_skip_state_incr :
        (st_freshstate s)
        s.(st_scldecls)
        s.(st_arrdecls)
-       s.(st_insts)
        (AssocMap.set n st s.(st_datapath))
        (AssocMap.set n Vskip s.(st_controllogic))).
 Proof.
@@ -206,7 +193,6 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
-               s.(st_insts)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n Vskip s.(st_controllogic)))
          (add_instr_skip_state_incr s n st STM TRANS)
@@ -224,7 +210,6 @@ Lemma add_node_skip_state_incr :
        (st_freshstate s)
        s.(st_scldecls)
        s.(st_arrdecls)
-       s.(st_insts)
        (AssocMap.set n Vskip s.(st_datapath))
        (AssocMap.set n st s.(st_controllogic))).
 Proof.
@@ -243,51 +228,11 @@ Definition add_node_skip (n : node) (st : stmnt) : mon unit :=
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
-               s.(st_insts)
                (AssocMap.set n Vskip s.(st_datapath))
                (AssocMap.set n st s.(st_controllogic)))
          (add_node_skip_state_incr s n st STM TRANS)
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
-
-Fixpoint assocmap_nextavailable {A: Type} (m: AssocMap.t A) : positive :=
-  match m with
-  | AssocMap.Leaf => 1
-  | AssocMap.Node _ _ r => (assocmap_nextavailable r)~1
-  end.
-
-Theorem assocmap_nextavailable_correct : forall (A: Type) m, m!(@assocmap_nextavailable A m) = None.
-Proof. induction m; tauto. Qed.
-
-Lemma add_instance_state_incr :
-  forall s inst,
-    st_incr s
-      (mkstate
-        s.(st_st)
-        s.(st_freshreg)
-        s.(st_freshstate)
-        s.(st_scldecls)
-        s.(st_arrdecls)
-        (AssocMap.set (assocmap_nextavailable s.(st_insts)) inst s.(st_insts))
-        s.(st_datapath)
-        s.(st_controllogic)).
-Proof.
-Admitted.
-
-Definition add_instance (mod_name: ident) (args: list reg) (finished: reg) (dst: reg) : mon unit :=
-  fun s =>
-        let instname := assocmap_nextavailable s.(st_insts) in
-        let inst := HTL.HTLinstantiation mod_name instname args dst finished in
-        OK tt (mkstate
-              s.(st_st)
-              s.(st_freshreg)
-              s.(st_freshstate)
-              s.(st_scldecls)
-              s.(st_arrdecls)
-              (AssocMap.set instname inst s.(st_insts))
-              s.(st_datapath)
-              s.(st_controllogic))
-       (add_instance_state_incr s inst).
 
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
 Definition block (dst : reg) (e : expr) := Vblock (Vvar dst) e.
@@ -441,7 +386,6 @@ Lemma add_branch_instr_state_incr:
                 (st_freshstate s)
                 s.(st_scldecls)
                 s.(st_arrdecls)
-                s.(st_insts)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
 Proof.
@@ -460,7 +404,6 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 (st_freshstate s)
                 s.(st_scldecls)
                 s.(st_arrdecls)
-                s.(st_insts)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
@@ -501,58 +444,6 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-Lemma create_reg_state_incr:
-  forall s sz i,
-    st_incr s (mkstate
-         s.(st_st)
-         (Pos.succ (st_freshreg s))
-         (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (VScalar i sz) s.(st_scldecls))
-         s.(st_arrdecls)
-         s.(st_insts)
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_reg (i : option io) (sz : nat) : mon reg :=
-  fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
-                   s.(st_st)
-                   (Pos.succ r)
-                   (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (VScalar i sz) s.(st_scldecls))
-                   (st_arrdecls s)
-                   (st_insts s)
-                   (st_datapath s)
-                   (st_controllogic s))
-              (create_reg_state_incr s sz i).
-
-Lemma create_wire_state_incr:
-  forall s sz,
-    st_incr s (mkstate
-         s.(st_st)
-         (Pos.succ (st_freshreg s))
-         (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (VWire sz) s.(st_scldecls))
-         s.(st_arrdecls)
-         s.(st_insts)
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_wire (sz : nat) : mon reg :=
-  fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
-                   s.(st_st)
-                   (Pos.succ r)
-                   (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (VWire sz) s.(st_scldecls))
-                   (st_arrdecls s)
-                   (st_insts s)
-                   (st_datapath s)
-                   (st_controllogic s))
-              (create_wire_state_incr s sz).
-
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
@@ -578,14 +469,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
         do dst <- translate_arr_access mem addr args stack;
         add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
       else error (Errors.msg "State is larger than 2^32.")
-    | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
-    | Icall sig (inr fn) args dst n' =>
-      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
-        do finished <- create_wire 1;
-        do res <- create_wire 32;
-        (* TODO implement control and datapaths for instantiated module *)
-        add_instance fn args finished res
-      else error (Errors.msg "State is larger than 2^32.")
+    | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
     | Icond cond args n1 n2 =>
@@ -607,6 +491,30 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     end
   end.
 
+Lemma create_reg_state_incr:
+  forall s sz i,
+    st_incr s (mkstate
+         s.(st_st)
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+         s.(st_arrdecls)
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_reg (i : option io) (sz : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+                   (st_arrdecls s)
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_reg_state_incr s sz i).
+
 Lemma create_arr_state_incr:
   forall s sz ln i,
     st_incr s (mkstate
@@ -615,7 +523,6 @@ Lemma create_arr_state_incr:
          (st_freshstate s)
          s.(st_scldecls)
          (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
-         (st_insts s)
          (st_datapath s)
          (st_controllogic s)).
 Proof. constructor; simpl; auto with htlh. Qed.
@@ -628,7 +535,6 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
                    (st_freshstate s)
                    s.(st_scldecls)
                    (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
-                   (st_insts s)
                    (st_datapath s)
                    (st_controllogic s))
               (create_arr_state_incr s sz ln i).
@@ -692,7 +598,6 @@ Definition transf_module (f: function) : mon module :=
            start
            rst
            clk
-           current_state.(st_insts)
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
@@ -705,9 +610,8 @@ Definition max_state (f: function) : state :=
   mkstate st
           (Pos.succ st)
           (Pos.succ (max_pc_function f))
-          (AssocMap.set st (VScalar None 32) (st_scldecls (init_state st)))
+          (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
-          (st_insts (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 

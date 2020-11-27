@@ -36,11 +36,6 @@ let fold_map f s = List.map f s |> concat
 
 let pstr pp = fprintf pp "%s"
 
-let rec intersperse c = function
-  | [] -> []
-  | [x] -> [x]
-  | x :: xs -> x :: c :: intersperse c xs
-
 let pprint_binop l r =
   let unsigned op = sprintf "{%s %s %s}" l op r in
   let signed op = sprintf "{$signed(%s) %s $signed(%s)}" l op r in
@@ -74,8 +69,6 @@ let unop = function
   | Vnot -> " ! "
 
 let register a = sprintf "reg_%d" (P.to_int a)
-let vmodule a = sprintf "%s" (extern_atom a)
-let instance a = sprintf "instance_%d" (P.to_int a)
 
 (*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
 
@@ -141,12 +134,6 @@ let print_io = function
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
   | Vdeclarr (io, r, sz, ln) -> concat [indent i; declarearr (print_io io) (r, sz, ln)]
-  | Vdeclwire (r, sz) -> concat [indent i; declare "wire" (r, sz)]
-  | Vinstancedecl (m, name, args) -> concat [
-      indent i; vmodule m; " ";
-      instance name; "("; concat (intersperse ", " (List.map register args)); ")";
-      ";\n"
-    ]
 
 (* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function
@@ -157,6 +144,11 @@ let pprint_module_item i = function
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
   | Valways_comb (e, s) ->
     concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
+
+let rec intersperse c = function
+  | [] -> []
+  | [x] -> [x]
+  | x :: xs -> x :: c :: intersperse c xs
 
 let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
 
