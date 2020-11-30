@@ -32,8 +32,13 @@ Local Open Scope assocmap.
 
 Definition reg := positive.
 Definition node := positive.
+Definition ident := positive.
 
-Definition datapath := PTree.t Verilog.stmnt.
+Inductive datapath_stmnt :=
+| HTLcall : ident -> list reg -> reg -> datapath_stmnt
+| HTLVstmnt : Verilog.stmnt -> datapath_stmnt.
+
+Definition datapath := PTree.t datapath_stmnt.
 Definition controllogic := PTree.t Verilog.stmnt.
 
 Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
@@ -101,6 +106,16 @@ Inductive state : Type :=
            (m : module)
            (args : list value), state.
 
+Inductive datapath_stmnt_runp:
+  Verilog.fext -> Verilog.reg_associations -> Verilog.arr_associations ->
+  datapath_stmnt -> Verilog.reg_associations -> Verilog.arr_associations -> Prop :=
+(* TODO give it an actual semantics *)
+| stmnt_runp_HTLcall : forall f ar al i args dst,
+    datapath_stmnt_runp f ar al (HTLcall i args dst) ar al
+| stmnt_runp_HTLVstmnt : forall asr0 asa0 asr1 asa1 f stmnt,
+    Verilog.stmnt_runp f asr0 asa0 stmnt asr1 asa1 ->
+    datapath_stmnt_runp f asr0 asa0 (HTLVstmnt stmnt) asr1 asa1.
+
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
     forall g m st sf ctrl data
@@ -121,7 +136,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1) ->
       basr1!(m.(mod_st)) = Some (posToValue st) ->
-      Verilog.stmnt_runp f
+      datapath_stmnt_runp f
         (Verilog.mkassociations basr1 nasr1)
         (Verilog.mkassociations basa1 nasa1)
         data

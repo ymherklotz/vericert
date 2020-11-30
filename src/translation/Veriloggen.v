@@ -21,11 +21,22 @@ From compcert Require Errors.
 From compcert Require Import AST.
 From vericert Require Import Verilog HTL Vericertlib AssocMap ValueInt.
 
-Definition transl_list_fun (a : node * Verilog.stmnt) :=
-  let (n, stmnt) := a in
-  (Vlit (posToValue n), stmnt).
+Definition transl_datapath_fun (a : node * HTL.datapath_stmnt) :=
+  let (n, s) := a in
+  (Vlit (posToValue n),
+   match s with
+   | HTLcall m args dst => Vskip
+   | HTLVstmnt s => s
+   end).
 
-Definition transl_list st := map transl_list_fun st.
+
+Definition transl_datapath st := map transl_datapath_fun st.
+
+Definition transl_ctrl_fun (a : node * Verilog.stmnt) :=
+  let (n, stmnt) := a
+  in (Vlit (posToValue n), stmnt).
+
+Definition transl_ctrl st := map transl_ctrl_fun st.
 
 Definition scl_to_Vdecl_fun (a : reg * (option io * scl_decl)) :=
   match a with (r, (io, VScalar sz)) => (Vdecl io r sz) end.
@@ -38,8 +49,8 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
 Definition transl_module (m : HTL.module) : Verilog.module :=
-  let case_el_ctrl := transl_list (PTree.elements m.(mod_controllogic)) in
-  let case_el_data := transl_list (PTree.elements m.(mod_datapath)) in
+  let case_el_ctrl := transl_ctrl (PTree.elements m.(mod_controllogic)) in
+  let case_el_data := transl_datapath (PTree.elements m.(mod_datapath)) in
   let body :=
       Valways (Vposedge m.(mod_clk)) (Vcond (Vbinop Veq (Vvar m.(mod_reset)) (Vlit (ZToValue 1)))
                                                (Vnonblock (Vvar m.(mod_st)) (Vlit (posToValue m.(mod_entrypoint))))

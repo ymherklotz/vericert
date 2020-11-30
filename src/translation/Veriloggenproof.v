@@ -97,17 +97,29 @@ Proof.
   intros. unfold posToValue. rewrite Int.unsigned_repr; lia.
 Qed.
 
-Lemma transl_list_fun_fst :
+Lemma transl_ctrl_fun_fst :
   forall p1 p2 a b,
     0 <= Z.pos p1 <= Int.max_unsigned ->
     0 <= Z.pos p2 <= Int.max_unsigned ->
-    transl_list_fun (p1, a) = transl_list_fun (p2, b) ->
+    transl_ctrl_fun (p1, a) = transl_ctrl_fun (p2, b) ->
     (p1, a) = (p2, b).
 Proof.
-  intros. unfold transl_list_fun in H1. apply pair_equal_spec in H1.
+  intros. unfold transl_ctrl_fun in H1. apply pair_equal_spec in H1.
   destruct H1. rewrite H2. apply Vlit_inj in H1.
   apply posToValue_inj in H1; try assumption.
   rewrite H1; auto.
+Qed.
+
+Lemma transl_data_fun_fst :
+  forall p1 p2 a b,
+    0 <= Z.pos p1 <= Int.max_unsigned ->
+    0 <= Z.pos p2 <= Int.max_unsigned ->
+    transl_datapath_fun (p1, a) = transl_datapath_fun (p2, b) ->
+    p1 = p2.
+Proof.
+  intros.
+  unfold transl_datapath_fun in H1. apply pair_equal_spec in H1. destruct H1.
+  apply Vlit_inj in H1. apply posToValue_inj in H1; assumption.
 Qed.
 
 Lemma Zle_relax :
@@ -121,7 +133,7 @@ Lemma transl_in :
   forall l p,
   0 <= Z.pos p <= Int.max_unsigned ->
   (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
-  In (Vlit (posToValue p)) (map fst (map transl_list_fun l)) ->
+  In (Vlit (posToValue p)) (map fst (map transl_ctrl_fun l)) ->
   In p (map fst l).
 Proof.
   induction l.
@@ -136,12 +148,12 @@ Lemma transl_notin :
   forall l p,
     0 <= Z.pos p <= Int.max_unsigned ->
     (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
-    ~ In p (List.map fst l) -> ~ In (Vlit (posToValue p)) (List.map fst (transl_list l)).
+    ~ In p (List.map fst l) -> ~ In (Vlit (posToValue p)) (List.map fst (transl_ctrl l)).
 Proof.
   induction l; auto. intros. destruct a. unfold not in *. intros.
   simplify.
   destruct (peq p0 p). apply H1. auto. apply H1.
-  unfold transl_list in *. inv H2. apply Vlit_inj in H. apply posToValue_inj in H.
+  unfold transl_ctrl in *. inv H2. apply Vlit_inj in H. apply posToValue_inj in H.
   contradiction.
   auto with verilogproof. auto.
   right. apply transl_in; auto.
@@ -150,7 +162,7 @@ Qed.
 Lemma transl_norepet :
   forall l,
     (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
-    list_norepet (List.map fst l) -> list_norepet (List.map fst (transl_list l)).
+    list_norepet (List.map fst l) -> list_norepet (List.map fst (transl_ctrl l)).
 Proof.
   induction l.
   - intros. simpl. apply list_norepet_nil.
@@ -161,7 +173,7 @@ Proof.
     simplify. inv H0. assumption.
 Qed.
 
-Lemma transl_list_correct :
+Lemma transl_ctrl_correct :
   forall l v ev f asr asa asrn asan asr' asa' asrn' asan',
     (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
     list_norepet (List.map fst l) ->
@@ -178,7 +190,7 @@ Lemma transl_list_correct :
         stmnt_runp f
                    {| assoc_blocking := asr; assoc_nonblocking := asrn |}
                    {| assoc_blocking := asa; assoc_nonblocking := asan |}
-                   (Vcase (Vvar ev) (transl_list l) (Some Vskip))
+                   (Vcase (Vvar ev) (transl_ctrl l) (Some Vskip))
                    {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
                    {| assoc_blocking := asa'; assoc_nonblocking := asan' |}).
 Proof.
@@ -202,7 +214,30 @@ Proof.
     eapply IHl. auto. inv NOREP. auto. eassumption. inv IN. inv H. contradiction. apply H.
     trivial. assumption.
 Qed.
-Hint Resolve transl_list_correct : verilogproof.
+Hint Resolve transl_ctrl_correct : verilogproof.
+
+(* FIXME Probably wrong we probably need some statemnt about datapath_statement_runp *)
+Lemma transl_datapath_correct :
+  forall l v ev f asr asa asrn asan asr' asa' asrn' asan',
+    (forall p0, In p0 (List.map fst l) -> 0 < Z.pos p0 <= Int.max_unsigned) ->
+    list_norepet (List.map fst l) ->
+    asr!ev = Some v ->
+    (forall p s,
+        In (p, s) l ->
+        v = posToValue p ->
+        stmnt_runp f
+                   {| assoc_blocking := asr; assoc_nonblocking := asrn |}
+                   {| assoc_blocking := asa; assoc_nonblocking := asan |}
+                   s
+                   {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
+                   {| assoc_blocking := asa'; assoc_nonblocking := asan' |} ->
+        stmnt_runp f
+                   {| assoc_blocking := asr; assoc_nonblocking := asrn |}
+                   {| assoc_blocking := asa; assoc_nonblocking := asan |}
+                   (Vcase (Vvar ev) (transl_ctrl l) (Some Vskip))
+                   {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
+                   {| assoc_blocking := asa'; assoc_nonblocking := asan' |}).
+Proof. Admitted.
 
 Lemma pc_wf :
   forall A m p v,
@@ -288,7 +323,7 @@ Section CORRECTNESS.
 
       econstructor. simpl. auto. auto.
 
-      eapply transl_list_correct.
+      eapply transl_ctrl_correct.
       intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _]. auto.
       apply Maps.PTree.elements_keys_norepet. eassumption.
       2: { apply valueToPos_inj. apply unsigned_posToValue_le.
@@ -302,6 +337,8 @@ Section CORRECTNESS.
 
       econstructor. econstructor.
 
+      { admit.
+      (*
       eapply transl_list_correct.
       intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP]. auto.
       apply Maps.PTree.elements_keys_norepet. eassumption.
@@ -313,10 +350,11 @@ Section CORRECTNESS.
            split. lia. apply HP. eassumption. eassumption. trivial.
       }
       apply Maps.PTree.elements_correct. eassumption. eassumption.
+      *)
+      }
 
       apply mis_stepp_decl. trivial. trivial. simpl. eassumption. auto.
       rewrite valueToPos_posToValue. constructor; assumption. lia.
-
     - econstructor; split. apply Smallstep.plus_one. apply step_finish. assumption. eassumption.
       constructor; assumption.
     - econstructor; split. apply Smallstep.plus_one. constructor.
@@ -325,7 +363,7 @@ Section CORRECTNESS.
     - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
 
       apply match_state. assumption.
-  Qed.
+  Admitted.
   Hint Resolve transl_step_correct : verilogproof.
 
   Lemma transl_initial_states :

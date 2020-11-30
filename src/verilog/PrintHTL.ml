@@ -31,6 +31,8 @@ open VericertClflags
 
 let pstr pp = fprintf pp "%s"
 
+let concat = String.concat ""
+
 let rec intersperse c = function
   | [] -> []
   | [x] -> [x]
@@ -41,6 +43,16 @@ let registers a = String.concat "" (intersperse ", " (List.map register a))
 
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
+
+let pprint_datapath_stmnt i = function
+  | HTLVstmnt s -> pprint_stmnt i s
+  | HTLcall (name, args, dst) -> concat [
+      register dst; " = ";
+      extern_atom name; "("; concat (intersperse ", " (List.map register args)); ");\n"
+    ]
+
+let print_datapath_instruction pp (pc, i) =
+  fprintf pp "%5d:\t%s" pc (pprint_datapath_stmnt 0 i)
 
 let ptree_to_list ptree =
   List.sort
@@ -54,7 +66,7 @@ let print_module pp id f =
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
   fprintf pp "datapath {\n";
-  List.iter (print_instruction pp) datapath;
+  List.iter (print_datapath_instruction pp) datapath;
   fprintf pp "  }\n\n  controllogic {\n";
   List.iter (print_instruction pp) controllogic;
   fprintf pp "  }\n}\n\n"
