@@ -108,7 +108,6 @@ Definition CompCert's_passes :=
   ::: mkpass Cminorgenproof.match_prog
   ::: mkpass Selectionproof.match_prog
   ::: mkpass RTLgenproof.match_prog
-  ::: mkpass Inliningproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
@@ -120,32 +119,32 @@ Theorem transf_hls_match:
   forall p tp,
     transf_hls p = OK tp ->
     match_prog p tp.
-Proof. Admitted.
-  (* intros p tp T. *)
-  (* unfold transf_hls in T. simpl in T. *)
-  (* destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1; simpl in T; try discriminate. *)
-  (* destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2; simpl in T; try discriminate. *)
-  (* destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate. *)
-  (* destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4; simpl in T; try discriminate. *)
-  (* destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate. *)
-  (* rewrite ! compose_print_identity in T. *)
-  (* destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate. *)
-  (* unfold transf_backend in T. simpl in T. rewrite ! compose_print_identity in T. *)
+Proof.
+  intros p tp T.
+  unfold transf_hls in T. simpl in T.
+  destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1; simpl in T; try discriminate.
+  destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2; simpl in T; try discriminate.
+  destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate.
+  destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4; simpl in T; try discriminate.
+  destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
+  rewrite ! compose_print_identity in T.
+  destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
+  unfold transf_backend in T. simpl in T. rewrite ! compose_print_identity in T.
   (* destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate. *)
-  (* destruct (HTLgen.transl_program p7) as [p8|e] eqn:P8; simpl in T; try discriminate. *)
-  (* set (p9 := Veriloggen.transl_program p8) in *. *)
-  (* unfold match_prog; simpl. *)
-  (* exists p1; split. apply SimplExprproof.transf_program_match; auto. *)
-  (* exists p2; split. apply SimplLocalsproof.match_transf_program; auto. *)
-  (* exists p3; split. apply Cshmgenproof.transf_program_match; auto. *)
-  (* exists p4; split. apply Cminorgenproof.transf_program_match; auto. *)
-  (* exists p5; split. apply Selectionproof.transf_program_match; auto. *)
-  (* exists p6; split. apply RTLgenproof.transf_program_match; auto. *)
+  destruct (HTLgen.transl_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
+  set (p8 := Veriloggen.transl_program p7) in *.
+  unfold match_prog; simpl.
+  exists p1; split. apply SimplExprproof.transf_program_match; auto.
+  exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
+  exists p3; split. apply Cshmgenproof.transf_program_match; auto.
+  exists p4; split. apply Cminorgenproof.transf_program_match; auto.
+  exists p5; split. apply Selectionproof.transf_program_match; auto.
+  exists p6; split. apply RTLgenproof.transf_program_match; auto.
   (* exists p7; split. apply Inliningproof.transf_program_match; auto. *)
-  (* exists p8; split. apply HTLgenproof.transf_program_match; auto. *)
-  (* exists p9; split. apply Veriloggenproof.transf_program_match; auto. *)
-  (* inv T. reflexivity. *)
-(* Qed. *)
+  exists p7; split. apply HTLgenproof.transf_program_match; auto.
+  exists p8; split. apply Veriloggenproof.transf_program_match; auto.
+  inv T. reflexivity.
+Qed.
 
 Remark forward_simulation_identity:
   forall sem, forward_simulation sem sem.
@@ -164,6 +163,7 @@ Theorem cstrategy_semantic_preservation:
   /\ backward_simulation (atomic (Cstrategy.semantics p)) (Verilog.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
+
 Ltac DestructM :=
   match goal with
     [ H: exists p, _ /\ _ |- _ ] =>
@@ -171,7 +171,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p9)).
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p8)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -185,8 +185,6 @@ Ltac DestructM :=
     eapply Selectionproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply RTLgenproof.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply Inliningproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct. eassumption.
   eapply Veriloggenproof.transf_program_correct; eassumption.
