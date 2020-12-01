@@ -993,7 +993,6 @@ Section CORRECTNESS.
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
           match_states (RTL.State s f sp pc' (Registers.Regmap.set res0 v rs) m) R2.
   Proof.
-    (*
     intros s f sp pc rs m op args res0 pc' v H H0 R1 MSTATE.
     inv_state. inv MARR.
     exploit eval_correct; eauto. intros. inversion H1. inversion H2.
@@ -1005,7 +1004,7 @@ Section CORRECTNESS.
     econstructor; simpl; trivial.
     constructor; trivial.
     econstructor; simpl; eauto.
-    simpl. econstructor. econstructor.
+    simpl. econstructor. econstructor. econstructor.
     apply H5. simplify.
 
     all: big_tac.
@@ -1031,8 +1030,7 @@ Section CORRECTNESS.
       by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
     unfold Ple in HPle. lia.
     Unshelve. exact tt.
-    *)
-  Admitted.
+  Qed.
   Hint Resolve transl_iop_correct : htlproof.
 
   Ltac tac :=
@@ -1142,7 +1140,6 @@ Section CORRECTNESS.
     intros s f sp pc rs m chunk addr args dst pc' a v H H0 H1 R1 MSTATE.
     inv_state.
 
-    (* FIXME this tactic loops indefinitely *)
     inv_arr_access.
 
     + (** Preamble *)
@@ -1216,13 +1213,12 @@ Section CORRECTNESS.
       inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
       clear NORMALISE_BOUND.
 
-      (*
 
       (** Start of proof proper *)
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
@@ -1356,7 +1352,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
@@ -1460,7 +1456,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. econstructor. crush.
 
       all: big_tac.
@@ -1510,8 +1506,7 @@ Section CORRECTNESS.
       exact tt.
       exact (Values.Vint (Int.repr 0)).
       exact tt.
-  *)
-  Admitted.
+  Qed.
   Hint Resolve transl_iload_correct : htlproof.
 
   Lemma transl_istore_correct:
