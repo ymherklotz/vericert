@@ -473,6 +473,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        do _ <- declare_reg None dst 32;
         add_instr n n' (HTLcall fn args dst)
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
