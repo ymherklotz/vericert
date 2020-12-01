@@ -124,6 +124,10 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
       tr_instr fin rtrn st stk (RTL.Iop op args dst n) (vstmnt (Vnonblock (Vvar dst) e)) (state_goto st n)
+| tr_instr_Icall :
+    forall n sig fn args dst,
+      Z.pos n <= Int.max_unsigned ->
+      tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLcall fn args dst) (state_goto st n)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       Z.pos n1 <= Int.max_unsigned ->
@@ -480,6 +484,7 @@ Ltac inv_add_instr' H :=
 Ltac inv_add_instr :=
   match goal with
   | H: (if ?c then _ else _) _ = OK _ _ _ |- _ => destruct c eqn:EQN; try discriminate; inv_add_instr
+  | H: (match ?e with | inr _ => _ | inl _ => _ end) _ = OK _ _ _ |- _ => destruct e eqn:EQI; try discriminate; inv_add_instr
   | H: context[add_instr_skip _ _ _] |- _ =>
     inv_add_instr' H
   | H: context[add_instr_skip _ _] |- _ =>
@@ -542,9 +547,17 @@ Proof.
         econstructor. apply Z.leb_le; assumption.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
-    + admit. (* instr1 = Icall *)
-    + admit. (* instr1 = Icall *)
-    + admit. (* instr1 = Icall *)
+
+    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate.
+    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate.
+    + destruct H2.
+      * inversion H2.
+        replace (st_st s2) with (st_st s0) by congruence.
+        replace (st_st s1) with (st_st s0) by congruence.
+        econstructor.
+        apply Z.leb_le. assumption.
+      * apply in_map with (f := fst) in H2. contradiction.
+
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct H2.
@@ -580,7 +593,7 @@ Proof.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
-Admitted.
+Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma create_arr_inv : forall w x y z a b c d,
