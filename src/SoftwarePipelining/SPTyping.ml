@@ -520,7 +520,7 @@ let type_function f =
                  | false -> false with
                      | true -> check_successor f f.fn_entrypoint
                      | false -> false with
-			 | true -> Printf.fprintf SPDebug.dc "The code is well typed\n"
-			 | false -> failwith "Type checking failure\n")
+             | true -> Printf.fprintf SPDebug.dc "The code is well typed\n"
+             | false -> failwith "Type checking failure\n")
     | None -> failwith "Type inference failure\n"
 *)
