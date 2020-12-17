@@ -22,7 +22,8 @@ From vericert Require
      RTLBlockgen
      RTLBlock
      HTLSchedulegen
-     HTLgen.
+     HTLgen
+     Pipeline.
 
 From Coq Require DecidableClass.
 
@@ -169,6 +170,7 @@ Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
+Extract Constant Pipeline.pipeline => "SoftwarePipelining.pipeline".
 Extract Constant RTLBlockgen.partition => "Partition.partition".
 Extract Constant HTLSchedulegen.transl_module => "Schedule.transl_module".
 
@@ -179,9 +181,9 @@ Cd "src/extraction".
 Separate Extraction
          Verilog.module vericert.Compiler.transf_hls
          vericert.Compiler.transf_hls_temp
-         vericert.Compiler.transf_hls_opt
          RTLBlockgen.transl_program RTLBlock.successors_instr
          HTLgen.tbl_to_case_expr
+         Pipeline.pipeline
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
