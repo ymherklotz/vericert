@@ -49,3 +49,4 @@ dune-project
 .merlin
 
 /docs/html
+.DS_Store
