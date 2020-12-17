@@ -7,5 +7,5 @@
 (library
  (public_name vericert)
  (modules_without_implementation c debugTypes dwarfTypes)
- (libraries menhirLib str unix)
+ (libraries menhirLib str unix ocamlgraph)
  (flags (:standard -warn-error -A)))

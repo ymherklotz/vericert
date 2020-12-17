@@ -28,9 +28,9 @@ stdenv.mkDerivation {
   name = "vericert";
   src = ./.;
 
-  buildInputs = [ ncoq dune
-                  ocaml ocamlPackages.findlib ocamlPackages.menhir ocamlPackages.utop
-                  gcc bbv
+  buildInputs = [ ncoq dune gcc
+                  ocaml ocamlPackages.findlib ocamlPackages.menhir
+                  ocamlPackages.ocamlgraph
                 ];
 
   enableParallelBuilding = true;
