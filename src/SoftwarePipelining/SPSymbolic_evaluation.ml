@@ -13,7 +13,8 @@
 open Registers
 open Op
 open AST
-open Base_types
+open SPBase_types
+open Camlcoq
 
 type symbolic_value =
   | Sreg of reg
@@ -42,14 +43,14 @@ let find res st =
     | Not_found -> Sreg res
 
 let rec get_args st = function
-  | CList.Coq_nil -> []
-  | CList.Coq_cons (arg,args) -> find arg st :: get_args st args
+  | [] -> []
+  | arg::args -> find arg st :: get_args st args
       
 let rec symbolic_evaluation st sm cs = function
   | [] -> (st,sm,cs)
   | Inop :: l -> symbolic_evaluation st sm cs l
 
-  | Iop (Omove, CList.Coq_cons (src,CList.Coq_nil), dst) :: l ->  
+  | Iop (Omove, [src], dst) :: l ->
       symbolic_evaluation (State.add dst (find src st) st) sm cs l      
 
   | Iop (op, args, dst) :: l -> 
@@ -73,7 +74,7 @@ type osv =
   | Ostore of memory_chunk * addressing 
 
 let string_of_osv = function
-  | Oresource (Reg r) -> Printf.sprintf "reg %i" (Int32.to_int (Camlcoq.camlint_of_positive r))
+  | Oresource (Reg r) -> Printf.sprintf "reg %i" (P.to_int r)
   | Oresource Mem -> "mem" 
   | Oop op -> string_of_op op
   | Oload (mc,addr) -> "load" 
@@ -201,7 +202,7 @@ let convert_sym st sm regs =
 let display_st name l regs =
   let (st,sm,_) = symbolic_evaluation initial_state initial_mem initial_cons l in
   let g = convert_sym st sm regs in
-  let addr = Debug.name ^ name in
+  let addr = SPDebug.name ^ name in
   dot_output_ss g addr  ;
   ignore (Sys.command ("(dot -Tpng " ^ addr ^ " -o " ^ addr  ^ ".png ; rm -f " ^ addr ^ ") & ")) (* & *)
   

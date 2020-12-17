@@ -11,9 +11,9 @@
 
 
 open Graph.Pack.Digraph
-open Basic
+open SPBasic
 
-module NI : Map.S with type key = Basic.G.V.t 
+module NI : Map.S with type key = SPBasic.G.V.t
 
 (* piepeliner takes a data dependency graph and returns a schedule with an initiation interval
    fails if cannot find any schedule *)

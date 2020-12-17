@@ -11,7 +11,7 @@
 
 
 open Graph.Pack.Digraph
-open Basic
+open SPBasic
 
 module NI = Map.Make (struct type t = G.V.t let compare = compare end)
 
@@ -173,6 +173,6 @@ let pipeliner ddg heightr =
 
 let print_schedule sched =
   NI.iter (fun node time ->
-	      Printf.fprintf Debug.dc "%s |---> %i \n" (string_of_node node) time
+	      Printf.fprintf SPDebug.dc "%s |---> %i \n" (string_of_node node) time
 	   ) sched
     

@@ -10,8 +10,8 @@
 (***********************************************************************)
 
 
-open Basic
-open IMS
+open SPBasic
+open SPIMS
 
 module Mult = Map.Make (struct type t = reg let compare = compare end)
  
@@ -27,13 +27,13 @@ let sched_max_time sched =
 	  ) sched 0 
 
 let print_table t s =
-  Printf.fprintf Debug.dc "%s : \n" s;
+  Printf.fprintf SPDebug.dc "%s : \n" s;
   let string_of_node_ev node = 
     match node with
       | Some node -> string_of_node node
       | None -> "_"
   in
-  Array.iteri (fun i node -> Printf.fprintf Debug.dc "%i :: %s \n" i (string_of_node_ev node)) t
+  Array.iteri (fun i node -> Printf.fprintf SPDebug.dc "%i :: %s \n" i (string_of_node_ev node)) t
 
 let durations ddg sched ii =
   
@@ -82,7 +82,7 @@ let mve_kernel t ddg sched ii mult unroll =
   for i = 0 to (ii - 1) do
     let fregs = fresh_regs unroll in
     Array.iter print_reg  fregs;
-    Printf.fprintf Debug.dc "\n"; 
+    Printf.fprintf SPDebug.dc "\n";
     Array.set regs i fregs
   done;
 
@@ -113,7 +113,7 @@ let mve_kernel t ddg sched ii mult unroll =
 		      else regs.(i mod ii).(index r i - 1) in
 		    if (not (List.mem (r,new_reg) !used_regs)) then used_regs := (r,new_reg) :: !used_regs;
 		    let inst = reforge_writes insti_mod new_reg in 
-		    Printf.fprintf Debug.dc "Reecriture : %s --> %s \n" (string_of_node insti) (string_of_node inst);  
+		    Printf.fprintf SPDebug.dc "Reecriture : %s --> %s \n" (string_of_node insti) (string_of_node inst);
 		    Array.set new_t i (Some inst);
 		    let succs = get_succs_raw ddg insti in 
 		    List.iter (fun node ->
@@ -152,14 +152,14 @@ let mve_kernel t ddg sched ii mult unroll =
 
 				 (*   then  *)
 
-				 Printf.fprintf Debug.dc "i = %i - def = %i - use = %i - time = %i \n"
+				 Printf.fprintf SPDebug.dc "i = %i - def = %i - use = %i - time = %i \n"
 				   i (NI.find insti sched) (NI.find node sched) schedtime;
 				 
 
  				 (* let id = pos i node insti in *)
 				 let id = schedtime mod (unroll * ii) (* le tout modulo la tabl *) in
 				 let id = (id + (unroll * ii)) mod (unroll * ii) in 
- 			 	 Printf.fprintf Debug.dc "Positions to treat : %i \n" id; 
+ 			 	 Printf.fprintf SPDebug.dc "Positions to treat : %i \n" id;
 				 let insttt = match new_t.(id) with
 				   | Some inst -> inst
 				   | None -> failwith "There should be an instruction" 
@@ -266,35 +266,35 @@ let way_out prolog epilog used_regs =
 
 let mve ddg sched ii =
   assert (size_of_map1 sched = G.nb_vertex ddg);
-  Printf.fprintf Debug.dc "L'intervalle d'initiation est de : %i \n" ii;
-  Printf.fprintf Debug.dc "L'ordonnancement est le suivant : \n";
+  Printf.fprintf SPDebug.dc "L'intervalle d'initiation est de : %i \n" ii;
+  Printf.fprintf SPDebug.dc "L'ordonnancement est le suivant : \n";
   print_schedule sched;
   let (mult,unroll) = multiplicity ddg sched ii in  
   let unroll = unroll in  (* changer pour tester, default doit etre egal a unroll *)
-  Printf.fprintf Debug.dc "Table de multiplicite : \n";
-  Mult.iter (fun key mu -> print_reg key ; Printf.fprintf Debug.dc " |-> %i\n" mu) mult;
-  Printf.fprintf Debug.dc "Taux de deroulement de : %i \n" unroll;
+  Printf.fprintf SPDebug.dc "Table de multiplicite : \n";
+  Mult.iter (fun key mu -> print_reg key ; Printf.fprintf SPDebug.dc " |-> %i\n" mu) mult;
+  Printf.fprintf SPDebug.dc "Taux de deroulement de : %i \n" unroll;
   let steady_state = crunch_and_unroll sched ii unroll in
   let (steady_state,used_regs) = mve_kernel steady_state ddg sched ii mult unroll in
   print_table steady_state "Table finale"; 
   let min = ((sched_max_time sched) / ii) + 1 in
-  Printf.fprintf Debug.dc "min : %i \n" min; 
+  Printf.fprintf SPDebug.dc "min : %i \n" min;
   let iteration_table = compute_iteration_table sched ii in
-  Printf.fprintf Debug.dc "Table d'iteration \n";
+  Printf.fprintf SPDebug.dc "Table d'iteration \n";
   Array.iteri (fun i elt ->
 		 match elt with
 		   | Some elt ->
-		       Printf.fprintf Debug.dc "%i : %i\n" i elt
-		   | None -> Printf.fprintf Debug.dc "%i : _ \n" i
+		       Printf.fprintf SPDebug.dc "%i : %i\n" i elt
+		   | None -> Printf.fprintf SPDebug.dc "%i : _ \n" i
 	      ) iteration_table;
   let prolog = compute_prolog steady_state min ii unroll sched iteration_table in
   let prolog = List.filter (fun e -> not (is_cond e)) prolog in
   let epilog = compute_epilog steady_state min ii unroll sched iteration_table in
   let epilog = List.filter (fun e -> not (is_cond e)) epilog in
-  Printf.fprintf Debug.dc "Prologue: \n"; 
-  List.iter (fun node -> Printf.fprintf Debug.dc "%s \n" (string_of_node node)) prolog; 
-  Printf.fprintf Debug.dc "Epilogue: \n"; 
-  List.iter (fun node -> Printf.fprintf Debug.dc "%s \n" (string_of_node node)) epilog;  
+  Printf.fprintf SPDebug.dc "Prologue: \n";
+  List.iter (fun node -> Printf.fprintf SPDebug.dc "%s \n" (string_of_node node)) prolog;
+  Printf.fprintf SPDebug.dc "Epilogue: \n";
+  List.iter (fun node -> Printf.fprintf SPDebug.dc "%s \n" (string_of_node node)) epilog;
   let way_out = way_out prolog epilog used_regs in
   (steady_state,prolog,epilog,min - 1,unroll,entrance used_regs, way_out)
 

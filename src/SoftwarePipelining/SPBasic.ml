@@ -10,22 +10,23 @@
 (***********************************************************************)
 
 
-open Lengauer
 open RTL
 open Camlcoq
 open Graph.Pack.Digraph
 open Op
 open Registers
+open Memory
 open Mem
 open AST
-open Base_types
-open Symbolic_evaluation
+open SPBase_types
+open SPSymbolic_evaluation
 
 type node = instruction * int
 module G = Graph.Persistent.Digraph.AbstractLabeled
   (struct type t = node end)
   (struct type t = int let compare = compare let default = 0 end)
-module Topo = Graph.Topological.Make (G) 
+module Topo = Graph.Topological.Make (G)
+module Dom = Graph.Dominator.Make (G)
 module Index = Map.Make (struct type t = int let compare = compare end)
 
 let string_of_instruction node =
@@ -36,7 +37,7 @@ let string_of_instruction node =
   | (Istore (chunk, mode, args, src),n) -> Printf.sprintf "%i store %i %s" n (to_int src) (string_of_args args)
   | (Icall (sign, id, args, dst),n) -> Printf.sprintf "%i call" n
   | (Itailcall (sign, id, args),n) -> Printf.sprintf "%i tailcall" n
-  | (Ialloc (dst, size),n) -> Printf.sprintf "%i %i := alloc" n (to_int dst)
+(*  | (Ialloc (dst, size),n) -> Printf.sprintf "%i %i := alloc" n (to_int dst) *)
   | (Icond (cond, args),n) -> Printf.sprintf "%i cond %s %s" n (string_of_cond cond) (string_of_args args)
   | (Ireturn (res),n) -> Printf.sprintf "%i return" n
 
@@ -60,14 +61,13 @@ let dot_output g f =
   close_out oc
 
 let display g name =
-  let addr = Debug.name ^ name in
+  let addr = SPDebug.name ^ name in
   dot_output g addr  ;
   ignore (Sys.command ("(dot -Tpng " ^ addr ^ " -o " ^ addr  ^ ".png ; rm -f " ^ addr ^ ") & "))
 
 (******************************************)
  
 type cfg = {graph : G.t; start : G.V.t}
-
 
 (* convert traduit un graphe RTL compcert en un graphe RTL ocamlgraph*)
 
@@ -84,13 +84,13 @@ let convert f  =
 		      ) f.fn_code (G.empty,Index.empty) 
   in
 
-  let succ = RTL.successors f in
+  let succ = RTL.successors_map f in
   let rec link n succs g =
     match succs with
-      | CList.Coq_nil -> g
-      | CList.Coq_cons (pos,CList.Coq_nil) -> 
+      | [] -> g
+      | pos::[] ->
 	  G.add_edge g (Index.find (to_int n) index) (Index.find (to_int pos) index)
-      | CList.Coq_cons (pos1, (CList.Coq_cons (pos2,CList.Coq_nil))) ->
+      | pos1::pos2::[] ->
 	  let g = G.add_edge_e g (G.E.create (Index.find (to_int n) index) 1 (Index.find (to_int pos1) index)) in
 	  G.add_edge_e g (G.E.create (Index.find (to_int n) index) 2 (Index.find (to_int pos2) index))
       | _ -> failwith "convert : trop de successeurs"
@@ -98,7 +98,8 @@ let convert f  =
   in
 
   let graph = Maps.PTree.fold ( fun g key inst ->
-				  link key (succ key) g
+				  link key (match Maps.PTree.get key succ with
+            Some x -> x | _ -> failwith "Could not index") g
 			      ) f.fn_code graph
   in
   
@@ -131,39 +132,19 @@ let convert_back g =
  
   
 
-(* dominator_tree calcule l arbre de domination grace au code de FP *)
+(* dominator_tree calcule l'arbre de domination grace au code de FP *)
 let dominator_tree f =
-    
-  let module X =
-    struct 
-      type node = G.V.t
-      let n = G.nb_vertex f.graph 
-      let index (node : G.V.t) = snd(G.V.label node) - 1
-      let successors fu n =
-	List.iter fu (G.succ f.graph n) 
-      let predecessors fu n = 
-	List.iter fu (G.pred f.graph n)
-      let start = f.start 
-    end
-  in 
+  Dom.compute_idom f.graph f.start
 
-  let module Y = Lengauer.Run (X) 
-
-  in 
- 
-  Y.dominator
- 
-
-   
 (* detect_loops, find the loops in the graph and returns the list of nodes in it,
    in dominating order !!! This is of great importance, we suppose that it is ordered
    when we build the dependency graph *)
 let detect_loops graph dom_tree =
-  
-  let rec is_dominating v1 v2 l = (* does v1 dominates v2 *)
+  let rec is_dominating v1 v2 l = (* does v1 dominate v2 *)
     match dom_tree v2 with
-      | None -> None
-      | Some v -> if v1 = v then Some (v :: l) else is_dominating v1 v (v :: l)
+      | v -> if v1 = v then Some (v :: l)
+             else is_dominating v1 v (v :: l)
+      | exception (Not_found) -> None
   in
 
   G.fold_edges (fun v1 v2 loops -> 
@@ -171,7 +152,7 @@ let detect_loops graph dom_tree =
 		    | None -> loops
 		    | Some loop -> (v2,loop) :: loops
 	       ) graph []
-    
+
 let print_index node =
   Printf.printf "%i " (snd (G.V.label node))
 
@@ -183,7 +164,7 @@ let print_instruction node =
   | (Istore (chunk, mode, args, src),n) -> Printf.printf "%i : Istore \n" n    
   | (Icall (sign, id, args, dst),n) -> Printf.printf "%i : Icall \n" n   
   | (Itailcall (sign, id, args),n) -> Printf.printf "%i : Itailcall \n" n   
-  | (Ialloc (dst, size),n) -> Printf.printf "%i : Ialloc \n" n  
+  (*| (Ialloc (dst, size),n) -> Printf.printf "%i : Ialloc \n" n  *)
   | (Icond (cond, args),n) -> Printf.printf "%i : Icond \n" n    
   | (Ireturn (res),n) -> Printf.printf "%i : Ireturn \n" n   
  
@@ -195,7 +176,7 @@ let is_rewritten node r =
     | Istore (chunk, mode, args, src) -> false
     | Icall (sign, id, args, dst) -> failwith "call in a loop"
     | Itailcall (sign, id, args) -> failwith "tailcall in a loop"
-    | Ialloc (dst, size) -> if dst = r then failwith "J'ai degote une boucle ZARBI !!!" else false
+(*    | Ialloc (dst, size) -> if dst = r then failwith "J'ai degote une boucle ZARBI !!!" else false *)
     | Icond (cond, args) -> false 
     | Ireturn (res) -> failwith "return in a loop"
 
@@ -209,7 +190,7 @@ let is_pipelinable loop = (* true if loop is innermost and without control *)
  
   let is_acceptable node =
     match fst (G.V.label node) with
-      | Icall _ | Itailcall _ | Ireturn _ | Icond _ | Ialloc _ | Iop ((Ocmp _),_,_)-> false
+      | Icall _ | Itailcall _ | Ireturn _ | Icond _ (*| Ialloc _*) | Iop ((Ocmp _),_,_)-> false
       | _ -> true
   in
 	  
@@ -236,7 +217,7 @@ let is_pipelinable loop = (* true if loop is innermost and without control *)
 	  begin
 	    match args with 
 	      | [] -> false
-	      | r :: [] -> not (is_variant r loop) 
+	      | r :: [] -> is_variant r loop (* used to be not *)
 	      | r1 :: r2 :: [] ->
 		  begin
 		    match is_variant r1 loop, is_variant r2 loop with
@@ -250,8 +231,12 @@ let is_pipelinable loop = (* true if loop is innermost and without control *)
       | _ -> false
   in
 
-  match loop with
-    | v1 :: v2 :: l -> is_nop v1 && is_branching v2 && is_OK_aux l && is_bounded v2 loop
+  match List.rev loop with
+    | v2 :: v1 :: l -> ((*Printf.printf "is_nop: %s | " (is_nop v1 |> string_of_bool);*)
+                        Printf.printf "is_branching: %s | " (is_branching v2 |> string_of_bool);
+                        Printf.printf "is_OK_aux: %s | " (is_OK_aux l |> string_of_bool);
+                        Printf.printf "is_bounded: %s\n" (is_bounded v2 loop |> string_of_bool);
+                        (*is_nop v1 && *)is_branching v2 && is_OK_aux l && is_bounded v2 loop)
     | _ -> false
  
 let print_loops loops = 
@@ -275,8 +260,8 @@ let map_get key map =
 
 let rec to_res l = 
   match l with
-    | CList.Coq_nil -> []
-    | CList.Coq_cons (e,l) -> Reg e :: to_res l
+    | [] -> []
+    | e :: l -> Reg e :: to_res l
 
 let resources_reads_of node = 
   match fst (G.V.label node) with
@@ -286,7 +271,7 @@ let resources_reads_of node =
     | Istore (chunk, mode, args, src) -> Mem :: Reg src :: (to_res args)
     | Icall (sign, id, args, dst) -> failwith "Resource read of call"
     | Itailcall (sign, id, args) -> failwith "Resource read of tailcall"
-    | Ialloc (dst, size) -> [Mem] 
+    (*| Ialloc (dst, size) -> [Mem] *)
     | Icond (cond, args) -> to_res args
     | Ireturn (res) -> failwith "Resource read of return"
     
@@ -298,7 +283,7 @@ let resources_writes_of node =
     | Istore (chunk, mode, args, src) -> [Mem]
     | Icall (sign, id, args, dst) -> failwith "Resource read of call"
     | Itailcall (sign, id, args) -> failwith "Resource read of tailcall"
-    | Ialloc (dst, size) -> (Reg dst) :: [Mem]
+    (*| Ialloc (dst, size) -> (Reg dst) :: [Mem]*)
     | Icond (cond, args) -> []
     | Ireturn (res) -> failwith "Resource read of return"
  
@@ -429,7 +414,7 @@ let patch_graph graph entry lastone loop bound min ur r1 r2 r3 r4 next_pc prolog
   let next_pc = next_pc + 1 in
   let n4 = G.V.create (Iop ((Omulimm ur ),to_coq_list [r2],r3),next_pc) in
   let next_pc = next_pc + 1 in
-  let n5 = G.V.create (Iop ((Oaddimm (Camlcoq.z_of_camlint (Int32.of_int (-1)))),to_coq_list [r3],bound),next_pc) in (* retouchee, [r3],bound *)
+  let n5 = G.V.create (Iop ((Olea (Aindexed (Z.of_sint (-1)))),to_coq_list [r3],bound),next_pc) in (* retouchee, [r3],bound *)
   let next_pc = next_pc + 1 in
   let graph = G.add_vertex graph n1 in
   let graph = G.add_vertex graph n2 in
@@ -478,7 +463,7 @@ let patch_graph graph entry lastone loop bound min ur r1 r2 r3 r4 next_pc prolog
   let next_pc = next_pc + 1 in
   
   (* 7. Creation du ramp up *)
-  let ramp_up = List.map (fun (a,b) -> Iop (Omove,CList.Coq_cons (b,CList.Coq_nil),a)) ramp_up in
+  let ramp_up = List.map (fun (a,b) -> Iop (Omove, [b], a)) ramp_up in
   let (graph,next_pc,ramp_up) = List.fold_right (fun e (g,npc,l) -> 
 					   let n = G.V.create (e,npc) in
 					   (G.add_vertex g n, npc+1, n :: l)
@@ -486,7 +471,7 @@ let patch_graph graph entry lastone loop bound min ur r1 r2 r3 r4 next_pc prolog
 
   let next_pc = next_pc + 1 in
 
-  let ramp_down = List.map (fun (a,b) -> Iop (Omove,CList.Coq_cons (b,CList.Coq_nil),a)) ramp_down in
+  let ramp_down = List.map (fun (a,b) -> Iop (Omove,[b],a)) ramp_down in
   let (graph,next_pc,ramp_down) = List.fold_right (fun e (g,npc,l) -> 
 					   let n = G.V.create (e,npc) in
 					   (G.add_vertex g n, npc+1, n :: l)
@@ -500,7 +485,6 @@ let patch_graph graph entry lastone loop bound min ur r1 r2 r3 r4 next_pc prolog
   let graph = link ramp_up graph (List.hd prolog) in
   let graph = link epilog graph (List.hd ramp_down) in
   let graph = link ramp_down graph n6 in
-
 
   let graph = G.add_edge graph n5 (List.hd ramp_up) in
   let graph = G.add_edge_e graph (G.E.create pipe_cond 1 (List.hd epilog)) in
@@ -519,25 +503,25 @@ let regs_of_node node =
   | (Istore (chunk, mode, args, src),n) -> src :: (to_caml_list args)
   | (Icall (sign, id, args, dst),n) -> dst :: (to_caml_list args)
   | (Itailcall (sign, id, args),n) -> (to_caml_list args)
-  | (Ialloc (dst, size),n) -> [dst]
+  (*| (Ialloc (dst, size),n) -> [dst]*)
   | (Icond (cond, args),n) -> (to_caml_list args)
-  | (Ireturn (res),n) -> match res with Datatypes.Some res -> [res] | _ -> [] 
+  | (Ireturn (res),n) -> match res with Some res -> [res] | _ -> []
 
 let max_reg_of_graph graph params =
-  Printf.fprintf Debug.dc "Calcul du registre de depart.\n";
+  Printf.fprintf SPDebug.dc "Calcul du registre de depart.\n";
   let regs =  G.fold_vertex (fun node regs ->
 			       (regs_of_node node) @ regs
 			    ) graph [] in
   let regs = regs @ params in
   let max_reg = List.fold_right (fun reg max ->
-				   Printf.fprintf Debug.dc "%i " (Int32.to_int (Camlcoq.camlint_of_positive reg));
-				   if Int32.compare (Camlcoq.camlint_of_positive reg) max > 0 
-				   then (Camlcoq.camlint_of_positive reg)
+				   Printf.fprintf SPDebug.dc "%i " (P.to_int reg);
+				   if Int32.compare (P.to_int32 reg) max > 0
+				   then (P.to_int32 reg)
 				   else max
 				) regs Int32.zero in
   
-  Printf.fprintf Debug.dc "MAX REG = %i\n" (Int32.to_int max_reg);
-  BinPos.coq_Psucc (Camlcoq.positive_of_camlint max_reg)
+  Printf.fprintf SPDebug.dc "MAX REG = %i\n" (Int32.to_int max_reg);
+  BinPos.Pos.succ (P.of_int32 max_reg)
  
 let get_bound node loop =
   match G.V.label node with
@@ -546,7 +530,7 @@ let get_bound node loop =
 	begin
 	  match args with 
 	    | [] -> failwith "get_bound: condition sans variables"
-	    | r :: [] -> if is_variant r loop then failwith "Pas de borene dans la boucle" else r
+	    | r :: [] -> if is_variant r loop then failwith "Pas de borne dans la boucle" else r
 	    | r1 :: r2 :: [] ->
 		begin
 		  match is_variant r1 loop, is_variant r2 loop with
@@ -568,20 +552,21 @@ let get_nextpc graph =
 
 let substitute_pipeline graph loop steady_state prolog epilog min unrolling ru rd params =
   let n1 = max_reg_of_graph graph params in
-  let n2 = (BinPos.coq_Psucc n1) in
-  let n3 = (BinPos.coq_Psucc n2) in
-  let n4 = (BinPos.coq_Psucc n3) in  
+  let n2 = (BinPos.Pos.succ n1) in
+  let n3 = (BinPos.Pos.succ n2) in
+  let n4 = (BinPos.Pos.succ n3) in
   let way_in = (List.hd loop) in
   let way_out = (List.hd (List.rev loop)) in
-  let bound = (get_bound (List.hd (List.tl loop)) loop) in
-  let min = (Camlcoq.z_of_camlint (Int32.of_int min)) in
-  let unrolling = (Camlcoq.z_of_camlint (Int32.of_int unrolling)) in
+  let bound = (get_bound way_out loop) in
+  let min = Z.of_sint min in
+  let unrolling = Z.of_sint unrolling in
   let next_pc = get_nextpc graph in
   patch_graph graph way_in way_out steady_state bound min unrolling n1 n2 n3 n4 next_pc prolog epilog ru rd 
  
-let get_loops cfg = 
+let get_loops cfg =
   let domi = dominator_tree cfg in
   let loops = detect_loops cfg.graph domi in
+  print_loops loops;
   let loops = List.filter (fun loop -> is_pipelinable (snd (loop))) loops in 
   loops
 
@@ -592,7 +577,7 @@ let delete_indexes l = List.map (fun e -> fst (G.V.label e) ) l
 
 type reg = Registers.reg 
 
-let fresh = ref BinPos.Coq_xH
+let fresh = ref BinNums.Coq_xH
 
 let distance e = 
   match G.E.label e with
@@ -617,15 +602,15 @@ let latency n = (* A raffiner *)
 	begin
 	  match op with
 	    | Omove -> 1
-	    | Oaddimm _ -> 1
-	    | Oadd -> 2
-	    | Omul -> 3 
+	    (*| Oaddimm _ -> 1*)
+	    (*| Oadd -> 2*)
+	    | Omul -> 3
 	    | Odiv -> 30
 	    | Omulimm _ -> 5
 	    | _ -> 2
 	end
     | Iload _ -> 10
-    | Ialloc _ -> 20
+(*    | Ialloc _ -> 20*)
     | _ -> 1
   
 let reforge_writes inst r = 
@@ -636,20 +621,20 @@ let reforge_writes inst r =
     | Istore (chunk, mode, args, src) -> Istore (chunk, mode, args, src)
     | Icall (sign, id, args, dst) -> failwith "reforge_writes: call"
     | Itailcall (sign, id, args) -> failwith "reforge_writes: tailcall"
-    | Ialloc (dst, size) -> Ialloc (r, size)
+(*    | Ialloc (dst, size) -> Ialloc (r, size)*)
     | Icond (cond, args) -> Icond (cond, args)
     | Ireturn (res) -> failwith "reforge_writes: return")
 	, snd (G.V.label inst))
 
 let rec reforge_args args oldr newr =
   match args with
-    | CList.Coq_nil -> CList.Coq_nil
-    | CList.Coq_cons (e,l) -> CList.Coq_cons ((if e = oldr then newr else e), (reforge_args l oldr newr))
+    | [] -> []
+    | e :: l -> (if e = oldr then newr else e) :: (reforge_args l oldr newr)
 
 let rec mem_args args r =
   match args with
-    | CList.Coq_nil -> false
-    | CList.Coq_cons (e,l) -> if e = r then true else mem_args l r
+    | [] -> false
+    | e :: l -> if e = r then true else mem_args l r
 
 let check_read_exists inst r =
   match fst (G.V.label inst) with
@@ -659,7 +644,7 @@ let check_read_exists inst r =
     | Istore (chunk, mode, args, src) -> src = r || mem_args args r
     | Icall (sign, id, args, dst) -> mem_args args r
     | Itailcall (sign, id, args) -> false
-    | Ialloc (dst, size) -> false
+    (*| Ialloc (dst, size) -> false*)
     | Icond (cond, args) -> mem_args args r
     | Ireturn (res) -> false
 
@@ -672,7 +657,7 @@ let reforge_reads inst oldr newr  =
     | Istore (chunk, mode, args, src) -> Istore (chunk, mode, reforge_args args oldr newr , if src = oldr then newr else src)
     | Icall (sign, id, args, dst) -> failwith "reforge_reads: call"
     | Itailcall (sign, id, args) -> failwith "reforge_reads: tailcall"
-    | Ialloc (dst, size) -> Ialloc (dst, size)
+    (*| Ialloc (dst, size) -> Ialloc (dst, size)*)
     | Icond (cond, args) -> Icond (cond, reforge_args args oldr newr)
     | Ireturn (res) -> failwith "reforge_reads: return")
 	, snd (G.V.label inst))
@@ -694,19 +679,19 @@ let written inst =
     | Istore (chunk, mode, args, src) -> None
     | Icall (sign, id, args, dst) -> failwith "written: call"
     | Itailcall (sign, id, args) -> failwith "written: tailcall"
-    | Ialloc (dst, size) -> Some dst
+    (*| Ialloc (dst, size) -> Some dst*)
     | Icond (cond, args) -> None
     | Ireturn (res) -> failwith "written: return"
 
 let fresh_regs n =
-  let t = Array.make n (BinPos.Coq_xH) in
+  let t = Array.make n (BinNums.Coq_xH) in
   for i = 0 to (n - 1) do
     Array.set t i (!fresh);
-    fresh := BinPos.coq_Psucc !fresh 
+    fresh := BinPos.Pos.succ !fresh
   done;
   t
   
-let print_reg r = Printf.fprintf Debug.dc "%i " (Int32.to_int (Camlcoq.camlint_of_positive r))
+let print_reg r = Printf.fprintf SPDebug.dc "%i " (P.to_int r)
 
 let is_cond node =
   match fst (G.V.label node) with
@@ -720,7 +705,7 @@ let watch_regs l = List.fold_right (fun (a,b) l ->
 				      if List.mem a l then l else a :: l
 				   ) l []
 
-let make_moves = List.map (fun (a,b) -> Iop (Omove,CList.Coq_cons (b,CList.Coq_nil),a))
+let make_moves = List.map (fun (a,b) -> Iop (Omove,[b],a))
 
 let rec repeat l n =
   match n with
@@ -730,38 +715,38 @@ let rec repeat l n =
 let fv = ref 0
 
 let apply_pipeliner f p ?(debug=false) = 
-  Printf.fprintf Debug.dc "******************** NEW FUNCTION ***********************\n";
+  Printf.fprintf SPDebug.dc "******************** NEW FUNCTION ***********************\n";
   let cfg = convert f in
   incr fv;
   if debug then display cfg.graph ("input" ^ (string_of_int !fv));
   let loops = get_loops cfg in
+  Printf.fprintf SPDebug.dc "Loops: %d\n" (List.length loops);
   let ddgs = List.map (fun (qqch,loop) -> (loop,build_inter_dependency_graph loop)) loops in
   
   let lv = ref 0 in
 
   let graph = List.fold_right (fun (loop,ddg) graph ->
-				 Printf.fprintf Debug.dc "__________________ NEW LOOP ____________________\n";
+				 Printf.fprintf SPDebug.dc "__________________ NEW LOOP ____________________\n";
 				 Printf.printf "Pipelinable loop: ";
 				 incr lv;
-				 fresh := (BinPos.coq_Psucc 
-					     (BinPos.coq_Psucc 
-						(BinPos.coq_Psucc 
-						   (BinPos.coq_Psucc 
-						      (BinPos.coq_Psucc 
+				 fresh := (BinPos.Pos.succ
+					     (BinPos.Pos.succ
+						(BinPos.Pos.succ
+						   (BinPos.Pos.succ
+						      (BinPos.Pos.succ
 							 (max_reg_of_graph graph (to_caml_list f.fn_params) 
 							 ))))));
-				 Printf.fprintf Debug.dc "FRESH = %i \n" 
-				   (Int32.to_int (Camlcoq.camlint_of_positive !fresh));
+				 Printf.fprintf SPDebug.dc "FRESH = %i \n"
+				   (P.to_int !fresh);
 				 match p ddg with
 				   | Some pipe ->
 				       Printf.printf "Rock On ! Min = %i - Unroll = %i\n" pipe.min pipe.unrolling;
 				       let p = (make_moves pipe.ramp_up) @ (delete_indexes pipe.prolog) in
 				       let e = (delete_indexes pipe.epilog) @ (make_moves pipe.ramp_down) in
-				       let b = delete_indexes (List.tl (List.tl loop)) in
+				       let b = delete_indexes (List.tl (List.rev loop)) in
 				       let bt = (List.tl (delete_indexes pipe.steady_state)) in					   
-				       let cond1 = fst (G.V.label (List.hd (List.tl loop))) in
+				       let cond1 = fst (G.V.label (List.hd (List.rev loop))) in
 				       let cond2 = (List.hd (delete_indexes pipe.steady_state)) in
-				   
 				       
 				       let bu = symbolic_evaluation (repeat b (pipe.min + 1)) in
 				       let pe = symbolic_evaluation (p @ e) in
@@ -770,8 +755,8 @@ let apply_pipeliner f p ?(debug=false) =
 				       let regs = watch_regs pipe.ramp_down in
 				       let c1 = symbolic_condition cond1 (repeat b pipe.unrolling) in
 				       let d1 = symbolic_condition cond1 (repeat b (pipe.min + 1)) in
-				       let c2 = symbolic_condition cond2 p in
-				       let d2 = symbolic_condition cond2 ((make_moves pipe.ramp_up) @ bt) in
+				       (*let c2 = symbolic_condition cond2 p in
+				       let d2 = symbolic_condition cond2 ((make_moves pipe.ramp_up) @ bt) in*)
     
 				       
 
@@ -784,19 +769,19 @@ let apply_pipeliner f p ?(debug=false) =
 					 (if symbolic_equivalence bte ebu regs then "OK" else "FAIL");
 				       Printf.printf "Egalite fondamentale : %s \n"
 					 (if symbolic_equivalence sbt sep (watch_regs pipe.ramp_up) then "OK" else "FAIL");
-				       Printf.printf "Condition initiale : %s \n"
+				     (*  Printf.printf "Condition initiale : %s \n"
 					 (if c1 = c2 then "OK" else "FAIL");
 				       Printf.printf "Condition stable : %s \n"
 					 (if d1 = d2 then "OK" else "FAIL");
 
 
-				       Printf.fprintf Debug.dc "pbte\n";
+				       Printf.fprintf SPDebug.dc "pbte\n";*)
 				       List.iter (fun e -> 
-						    Printf.fprintf Debug.dc "%s\n" 
+						    Printf.fprintf SPDebug.dc "%s\n"
 						      (string_of_node (G.V.create (e,0)))
 						 ) (p @ bt @ e);
-				       Printf.fprintf Debug.dc "bu\n";
-				       List.iter (fun e -> Printf.fprintf Debug.dc "%s\n" 
+				       Printf.fprintf SPDebug.dc "bu\n";
+				       List.iter (fun e -> Printf.fprintf SPDebug.dc "%s\n"
 						    (string_of_node (G.V.create (e,0)))
 						 ) (repeat b (pipe.unrolling + pipe.min));
 
@@ -827,8 +812,8 @@ let apply_pipeliner f p ?(debug=false) =
 		    fn_stacksize = f.fn_stacksize;
 		    fn_code = tg; 
 		    fn_entrypoint = f.fn_entrypoint; 
-		    fn_nextpc = Camlcoq.positive_of_camlint (Int32.of_int (get_nextpc (graph)))
+		    (*fn_nextpc = P.of_int ((get_nextpc (graph)))*)
 		   } in
-  Typing.type_function tg_to_type;
+  (*SPTyping.type_function tg_to_type;*)
 
-  tg
+  tg_to_type

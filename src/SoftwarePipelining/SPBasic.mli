@@ -32,7 +32,7 @@ type pipeline = {
 (* Operations on ddg *)
 
 val display : G.t -> string -> unit
-val apply_pipeliner : RTL.coq_function -> (G.t -> pipeline option) -> ?debug:bool -> RTL.code
+val apply_pipeliner : RTL.coq_function -> (G.t -> pipeline option) -> ?debug:bool -> RTL.coq_function
 val get_succs_raw : G.t -> G.V.t -> G.V.t list
 
 (* Operations on instructions, the nodes of the data dependency graph *)
@@ -55,13 +55,3 @@ val distance : G.E.t -> int
 
 val fresh_regs : int -> reg array 
 val print_reg : reg -> unit
-
-
-
-
-
-
-
-
-
-

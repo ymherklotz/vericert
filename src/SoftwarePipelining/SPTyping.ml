@@ -10,8 +10,8 @@
 (***********************************************************************)
 
 
-open Datatypes
-open CList
+(*open Datatypes
+open List
 open Camlcoq
 open Maps
 open AST
@@ -24,8 +24,6 @@ open Coqlib
 open Errors
 open Specif
 
-
-
 exception Type_error of string
 
 let env = ref (PTree.empty : typ PTree.t)
@@ -34,29 +32,29 @@ let set_type r ty =
   match PTree.get r !env with
   | None -> env := PTree.set r ty !env
   | Some ty' -> if ty <> ty' then 
-      begin 
-	Printf.fprintf Debug.dc "Failed to type register : %i " (Int32.to_int (Camlcoq.camlint_of_positive r));
-	raise (Type_error "type mismatch")
+      begin
+        Printf.fprintf SPDebug.dc "Failed to type register : %i " (P.to_int r);
+        raise (Type_error "type mismatch")
       end
 
 let rec set_types rl tyl =
   match rl, tyl with
-  | Coq_nil, Coq_nil -> ()
-  | Coq_cons(r1, rs), Coq_cons(ty1, tys) -> set_type r1 ty1; set_types rs tys
+  | [], [] -> ()
+  | r1 :: rs, ty1 :: tys -> set_type r1 ty1; set_types rs tys
   | _, _ -> raise (Type_error "arity mismatch")
 
 (* First pass: process constraints of the form typeof(r) = ty *)
 
-let type_instr retty (Coq_pair(pc, i)) =
-  Printf.fprintf Debug.dc "typage de l'instruction : %i \n" (Int32.to_int (Camlcoq.camlint_of_positive pc)); 
+let type_instr retty (pc, i) =
+  Printf.fprintf SPDebug.dc "typage de l'instruction : %i \n" (P.to_int pc);
   match i with
   | Inop(_) ->
       ()
   | Iop(Omove, _, _, _) -> 
       ()
   | Iop(op, args, res, _) ->
-      let (Coq_pair(targs, tres)) = type_of_operation op in
-      set_types args targs; set_type res tres
+    let (targs, tres) = type_of_operation op in
+    set_types args targs; set_type res tres
   | Iload(chunk, addr, args, dst, _) ->
       set_types args (type_of_addressing addr);
       set_type dst (type_of_chunk chunk)
@@ -70,7 +68,7 @@ let type_instr retty (Coq_pair(pc, i)) =
         | Coq_inr _ -> ()
         end;
         set_types args sg.sig_args;
-        set_type res (match sg.sig_res with None -> Tint | Some ty -> ty)
+        set_type res (match sg.sig_res with Tret t -> t | _ -> Tint);
       with Type_error msg ->
         let name =
           match ros with
@@ -96,28 +94,28 @@ let type_instr retty (Coq_pair(pc, i)) =
         raise(Type_error (Printf.sprintf "type mismatch in Itailcall(%s): %s"
                                          name msg))
       end
-  | Ialloc(arg, res, _) ->
-      set_type arg Tint; set_type res Tint
+(*  | Ialloc(arg, res, _) ->
+      set_type arg Tint; set_type res Tint*)
   | Icond(cond, args, _, _) ->
       set_types args (type_of_condition cond)
   | Ireturn(optres) ->
       begin match optres, retty with
-      | None, None -> ()
-      | Some r, Some ty -> set_type r ty
+      | None, Tvoid -> ()
+      | Some r, Tret ty -> set_type r ty
       | _, _ -> raise (Type_error "type mismatch in Ireturn")
       end
 
 let type_pass1 retty instrs = 
-  coqlist_iter (type_instr retty) instrs
+  List.iter (type_instr retty) instrs
 
 (* Second pass: extract move constraints typeof(r1) = typeof(r2)
    and solve them iteratively *)
 
 let rec extract_moves = function
-  | Coq_nil -> []
-  | Coq_cons(Coq_pair(pc, i), rem) ->
+  | [] -> []
+  | (pc, i) :: rem ->
       match i with
-      | Iop(Omove, Coq_cons(r1, Coq_nil), r2, _) ->
+      | Iop(Omove, [r1], r2, _) ->
           (r1, r2) :: extract_moves rem
       | Iop(Omove, _, _, _) ->
           raise (Type_error "wrong Omove")
@@ -198,14 +196,14 @@ let check_reg env r ty =
 
 let rec check_regs env rl tyl =
   match rl with
-    | Coq_nil ->
+    | [] ->
         (match tyl with
-           | Coq_nil -> true
-           | Coq_cons (t, l) -> false)
-    | Coq_cons (r1, rs) ->
+           | [] -> true
+           | (t :: l) -> false)
+    | r1 :: rs ->
         (match tyl with
-           | Coq_nil -> false
-           | Coq_cons (ty, tys) ->
+           | [] -> false
+           | (ty :: tys) ->
                (match typ_eq (env r1) ty with
                   | true -> check_regs env rs tys
                   | false -> false))
@@ -213,7 +211,7 @@ let rec check_regs env rl tyl =
 (** val check_op : regenv -> operation -> reg list -> reg -> bool **)
 
 let check_op env op args res0 =
-  let Coq_pair (targs, tres) = type_of_operation op in
+  let (targs, tres) = type_of_operation op in
   (match check_regs env args targs with
      | true ->
          (match typ_eq (env res0) tres with
@@ -252,14 +250,14 @@ let check_instr funct env = function
              (match check_op env op args res0 with
                 | true -> check_successor funct s
                 | false -> false)
-         | Oaddrsymbol (i0, i1) ->
+(*         | Oaddrsymbol (i0, i1) ->
              (match check_op env op args res0 with
                 | true -> check_successor funct s
-                | false -> false)
-         | Oaddrstack i0 ->
+                | false -> false)*)
+(*         | Oaddrstack i0 ->
              (match check_op env op args res0 with
                 | true -> check_successor funct s
-                | false -> false)
+                | false -> false)*)
          | Ocast8signed ->
              (match check_op env op args res0 with
                 | true -> check_successor funct s
@@ -276,14 +274,14 @@ let check_instr funct env = function
              (match check_op env op args res0 with
                 | true -> check_successor funct s
                 | false -> false)
-         | Oadd ->
+(*         | Oadd ->
              (match check_op env op args res0 with
                 | true -> check_successor funct s
                 | false -> false)
          | Oaddimm i0 ->
              (match check_op env op args res0 with
                 | true -> check_successor funct s
-                | false -> false)
+                | false -> false)*)
          | Osub ->
              (match check_op env op args res0 with
                 | true -> check_successor funct s
@@ -463,13 +461,13 @@ let check_instr funct env = function
                | false -> false with
          | true -> tailcall_is_possible sig0
          | false -> false)
-  | Ialloc (arg, res0, s) ->
+(*  | Ialloc (arg, res0, s) ->
       (match typ_eq (env arg) Tint with
          | true ->
              (match typ_eq (env res0) Tint with
                 | true -> check_successor funct s
                 | false -> false)
-         | false -> false)
+         | false -> false)*)
   | Icond (cond, args, s1, s2) ->
       (match match check_regs env args (type_of_condition cond) with
                | true -> check_successor funct s1
@@ -522,7 +520,7 @@ let type_function f =
                  | false -> false with
                      | true -> check_successor f f.fn_entrypoint
                      | false -> false with
-			 | true -> Printf.fprintf Debug.dc "The code is well typed\n"
+			 | true -> Printf.fprintf SPDebug.dc "The code is well typed\n"
 			 | false -> failwith "Type checking failure\n")
     | None -> failwith "Type inference failure\n"
-			     
+*)

@@ -10,9 +10,9 @@
 (***********************************************************************)
 
 
-open Basic
-open IMS
-open MVE
+open SPBasic
+open SPIMS
+open SPMVE
 open RTL
 
 let clean t = 
@@ -57,8 +57,8 @@ let order = ref []
 
 let pipeliner ddg =  
   order := List.flatten (Scc.scc_list ddg);
-  let (sched,ii) = IMS.pipeliner ddg random in
-  let (steady,prolog,epilog,min,unroll,entrance,way_out) = MVE.mve ddg sched ii in
+  let (sched,ii) = SPIMS.pipeliner ddg random in
+  let (steady,prolog,epilog,min,unroll,entrance,way_out) = SPMVE.mve ddg sched ii in
   let steady_state = clean steady in
   if min <= 0 then None 
   else
@@ -66,8 +66,5 @@ let pipeliner ddg =
 	 ramp_up = entrance; ramp_down = way_out}
       
 
-let main f = 
-  Basic.apply_pipeliner f pipeliner ~debug:false
-
-  
-
+let pipeline f =
+  SPBasic.apply_pipeliner f pipeliner ~debug:true
