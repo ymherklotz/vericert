@@ -217,7 +217,7 @@ let is_pipelinable loop = (* true if loop is innermost and without control *)
       begin
         match args with
         | [] -> false
-        | r :: [] -> not (is_variant r loop) (* used to be not *)
+        | r :: [] -> is_variant r loop (* used to be not *)
         | r1 :: r2 :: [] ->
           begin
             match is_variant r1 loop, is_variant r2 loop with
@@ -530,7 +530,7 @@ let get_bound node loop =
     begin
       match args with
       | [] -> failwith "get_bound: condition sans variables"
-      | r :: [] -> if is_variant r loop then failwith "Pas de borne dans la boucle" else r
+      | r :: [] -> if is_variant r loop then failwith "Pas de borne dans la boucle"  else r (* Modified false to true condition. *)
       | r1 :: r2 :: [] ->
         begin
           match is_variant r1 loop, is_variant r2 loop with
