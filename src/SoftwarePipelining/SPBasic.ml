@@ -1,5 +1,5 @@
 (***********************************************************************)
-(*                                                                     *)
+ (*                                                                     *)
 (*                        Compcert Extensions                          *)
 (*                                                                     *)
 (*                       Jean-Baptiste Tristan                         *)
@@ -604,12 +604,12 @@ let latency n = (* A raffiner *)
       | Omove -> 1
       (*| Oaddimm _ -> 1*)
       (*| Oadd -> 2*)
-      | Omul -> 3
+      | Omul -> 4
       | Odiv -> 30
-      | Omulimm _ -> 5
+      | Omulimm _ -> 4
       | _ -> 2
     end
-  | Iload _ -> 10
+  | Iload _ -> 1
   (*    | Ialloc _ -> 20*)
   | _ -> 1
 

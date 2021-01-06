@@ -82,7 +82,7 @@ let bad_successors ddg schedule node ii =
       | None -> bad
     ) succs []
 
-let get_condition ddg = 
+let get_condition ddg =
   let cond = G.fold_vertex (fun node cond ->
       if is_cond node then Some node else cond
     ) ddg None in
@@ -90,6 +90,10 @@ let get_condition ddg =
   | Some cond -> cond
   | None -> failwith "The loop does not contain a condition. Aborting\n"
 
+(* Perform iterative modulo scheduling, using a heuristic for the next instruction to schedule
+ * [heightr], the data dependency graph to schedule [ddg], the minimum II [min_ii] and the maximum
+ * II [max_interval].
+ *)
 let modulo_schedule heightr ddg min_ii max_interval =
 
   let ii = ref (min_ii - 1) in 
@@ -104,12 +108,18 @@ let modulo_schedule heightr ddg min_ii max_interval =
     (* Printf.printf "NOUVEAU II %i \n" !ii; *)
     let budget = ref (G.nb_vertex ddg * 10) in
     let lasttime = ref NI.empty in
+    (* Create the map with schedules, and add the schedule for the condition.  This should go at the
+     * end, but in this case is set to the start. *)
     let schedtime = ref (NI.add cond (Some 0) NI.empty) in
+    (* Create an array that is as large as the current II, which will determine where each
+     * instruction will be placed. *)
     let mrt = Array.make !ii None in
+    (* Set the condition to be the initial instruction at time 0. *)
     Array.set mrt 0 (Some cond);
 
     while (!budget > 0 && not (finished ddg !schedtime)) do (* Pretty inefficient *)
-      budget := !budget - 1; 
+      budget := !budget - 1;
+      (* Get next instruction to schedule. *)
       let h = heightr ddg !schedtime in
       let mintime = estart ddg !schedtime h !ii in
       (* Printf.printf "tmin (%s) = %i \n" (string_of_node h) mintime; *)
@@ -123,7 +133,7 @@ let modulo_schedule heightr ddg min_ii max_interval =
       in
       (* Printf.printf "Chosen time for %s : %i \n" (string_of_node h) time; *)
       schedtime := NI.add h (Some time) !schedtime;
-      lasttime := NI.add h time !lasttime; 
+      lasttime := NI.add h time !lasttime;
 
       let killed = bad_successors ddg !schedtime h !ii in
       List.iter (fun n -> (* Printf.printf "Killing %s" (string_of_node n) ; *)schedtime := NI.add n None !schedtime) killed;
@@ -158,12 +168,14 @@ let modulo_schedule heightr ddg min_ii max_interval =
   then (!sched,!ii)
   else failwith "IMS failure"
 
-
+(* Take the number of vertices as the minimum resource-constrained II.  However, the II might
+   actually be less than that in some cases, so this should be adjusted accordingly. *)
 let res_m_ii ddg =
   G.nb_vertex ddg
 
 let pipeliner ddg heightr =
   let mii = res_m_ii ddg in
+  Printf.fprintf SPDebug.dc "MII: %i\n" mii;
   let (schedule,ii) = modulo_schedule heightr ddg mii (10 * mii) in
   (NI.fold (fun n v map -> 
        match v with

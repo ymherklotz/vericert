@@ -38,6 +38,10 @@ let find node schedule opt =
   try NI.find node schedule with
   | Not_found -> opt
 
+(* A random heuristic is used to pick the next instruction to be scheduled from the unscheduled
+ * instructions.  The scheduled instructions are given to the function, and the unscheduled
+ * instructions are created by taking all the instructions that are not in the scheduled list.
+ *)
 let random ddg schedule = 
   let unscheduled = G.fold_vertex (fun node l ->
       match find node schedule None with
@@ -55,7 +59,7 @@ module Scc = Graph.Components.Make (G)
 
 let order = ref []
 
-let pipeliner ddg =  
+let pipeliner ddg =
   order := List.flatten (Scc.scc_list ddg);
   let (sched,ii) = SPIMS.pipeliner ddg random in
   let (steady,prolog,epilog,min,unroll,entrance,way_out) = SPMVE.mve ddg sched ii in
