@@ -1,6 +1,7 @@
 (* 
  * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ *               2020 James Pollard <j@mes.dev>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
