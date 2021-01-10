@@ -34,6 +34,7 @@ nra.cache
 Makefile.coq
 Makefile.coq.conf
 .coqdeps.d
+.Makefile.coq.d
 
 src/extraction/*.ml
 src/extraction/*.mli
@@ -50,3 +51,14 @@ dune-project
 
 /docs/html
 .DS_Store
+debug/*
+
+# CompCert
+*.rtl.*
+*.rtl
+*.ltl
+a.out
+lib/COMPCERTSTAMP
+
+# Misc
+lpsolve.txt
