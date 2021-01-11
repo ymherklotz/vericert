@@ -185,14 +185,20 @@ Using IMap we can create a map from resources to any other type, as resources ca
 identified as positive numbers.
 |*)
 
-Module Rmap := Maps.IMap(R_indexed).
+Module Rtree := Maps.ITree(R_indexed).
 
-Definition forest : Type := Rmap.t expression.
+Definition forest : Type := Rtree.t expression.
 
 Definition regset := Registers.Regmap.t val.
 
-Notation "a # b" := (Rmap.get b a) (at level 1).
-Notation "a # b <- c" := (Rmap.set b c a) (at level 1, b at next level).
+Definition get_forest v f :=
+  match Rtree.get v f with
+  | None => Ebase v
+  | Some v' => v'
+  end.
+
+Notation "a # b" := (get_forest b a) (at level 1).
+Notation "a # b <- c" := (Rtree.set b c a) (at level 1, b at next level).
 
 Record sem_state := mk_sem_state {
                     sem_state_stackp : val;
