@@ -185,7 +185,9 @@ Using IMap we can create a map from resources to any other type, as resources ca
 identified as positive numbers.
 |*)
 
-Module Rmap  := Maps.IMap(R_indexed).
+Module Rmap := Maps.IMap(R_indexed).
+
+Definition forest : Type := Rmap.t expression.
 
 Definition regset := Registers.Regmap.t val.
 
@@ -247,6 +249,22 @@ with sem_val_list :
             sem_value parent st e v ->
             sem_val_list parent st l lv ->
             sem_val_list parent st (Econs e l) (v :: lv).
+
+Inductive sem_regset :
+   val -> sem_state -> forest -> regset -> Prop :=
+  | Sregset:
+        forall parent st f rs',
+        (forall x, sem_value parent st (f # (Reg x)) (Registers.Regmap.get x rs')) ->
+        sem_regset parent st f rs'.
+
+Inductive sem :
+   val -> sem_state -> forest -> sem_state -> Prop :=
+  | Sem:
+        forall st rs' fr' m' f parent,
+        sem_regset parent st f rs' ->
+        sem_mem parent st (f # Mem) m' ->
+        sem parent st fr' (mk_sem_state (sem_state_stackp st) rs' m').
+
 
 End SEMANTICS.
 
