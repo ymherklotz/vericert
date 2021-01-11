@@ -362,6 +362,16 @@ Proof.
    congruence.
 Qed.
 
+Definition empty : forest := Rtree.empty _.
+
+Lemma get_empty:
+  forall r, empty#r = Ebase r.
+Proof.
+  intros r. unfold get_forest.
+  destruct (Rtree.get r empty) eqn:Heq; auto.
+  rewrite Rtree.gempty in Heq. discriminate.
+Qed.
+
 (*|
 We define the top-level oracle that will check if two basic blocks are equivalent after a scheduling
 transformation.
