@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import Globalenvs Values Integers Floats.
+Require Import Globalenvs Values Integers Floats Maps.
 Require RTLBlock RTLPar Op Memory AST Registers.
 Require Import Vericertlib.
 
@@ -185,7 +185,7 @@ Using IMap we can create a map from resources to any other type, as resources ca
 identified as positive numbers.
 |*)
 
-Module Rtree := Maps.ITree(R_indexed).
+Module Rtree := ITree(R_indexed).
 
 Definition forest : Type := Rtree.t expression.
 
@@ -299,8 +299,8 @@ with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
   | _, _ => false
   end.
 
-Scheme expression_ind2:= Induction for expression Sort Prop
-  with expression_list_ind2:= Induction for expression_list Sort Prop.
+Scheme expression_ind2 := Induction for expression Sort Prop
+  with expression_list_ind2 := Induction for expression_list Sort Prop.
 
 Lemma beq_expression_correct:
   forall e1 e2, beq_expression e1 e2 = true -> e1 = e2.
@@ -364,6 +364,30 @@ Qed.
 
 Definition empty : forest := Rtree.empty _.
 
+(*|
+This function checks if all the elements in [fa] are in [fb], but not the other way round.
+|*)
+
+Definition check_partial (fa fb : forest) : bool :=
+  PTree.fold (fun b i el => b && (match PTree.get i fb with
+                                    | Some el' => beq_expression el el'
+                                    | None => false
+                                  end)) fa true.
+
+Definition check := Rtree.beq beq_expression.
+
+Lemma check_correct: forall (fa fb : forest) (x : resource),
+  check fa fb = true -> (forall x, fa # x = fb # x).
+Proof.
+  unfold check, get_forest.
+  intros fa fb res Hbeq x.
+  pose proof Hbeq as Hbeq2.
+  pose proof (Rtree.beq_sound beq_expression fa fb) as Hsound.
+  specialize (Hsound Hbeq2 x).
+  destruct (Rtree.get x fa) eqn:?; destruct (Rtree.get x fb) eqn:?; try contradiction.
+  apply beq_expression_correct. assumption. trivial.
+Qed.
+
 Lemma get_empty:
   forall r, empty#r = Ebase r.
 Proof.
@@ -372,10 +396,111 @@ Proof.
   rewrite Rtree.gempty in Heq. discriminate.
 Qed.
 
+Lemma map0:
+  forall r,
+  empty # r = Ebase r.
+Proof.
+  intros. eapply get_empty.
+Qed.
+
+Lemma map1:
+  forall w dst dst',
+  dst <> dst' ->
+  (empty # dst <- w) # dst' = Ebase dst'.
+Proof.
+  intros.
+  unfold get_forest.
+  rewrite Rtree.gso. eapply map0. auto.
+Qed.
+
+Lemma genmap1:
+  forall (f : forest) w dst dst',
+  dst <> dst' ->
+  (f # dst <- w) # dst' = f # dst'.
+Proof.
+  intros.
+  unfold get_forest.
+  rewrite Rtree.gso. reflexivity. auto.
+Qed.
+
+Lemma map2:
+  forall (v : expression) x rs,
+  (rs # x <- v) # x = v.
+Proof.
+  intros.
+  unfold get_forest.
+  rewrite Rtree.gss. trivial.
+Qed.
+
+Lemma tri1:
+  forall x y,
+  Reg x <> Reg y -> x <> y.
+Proof.
+  intros. unfold not in *; intros.
+  rewrite H0 in H. generalize (H (refl_equal (Reg y))).
+  auto.
+Qed.
+
+(*|
+Update functions.
+|*)
+
+Fixpoint list_translation (l : list reg) (f : forest) {struct l} : expression_list :=
+  match l with
+  | nil => Enil
+  | i :: l => Econs (f # (Reg i)) (list_translation l f)
+  end.
+
+Definition update_block (f : forest) (i : RTLBlock.instruction) : forest :=
+  match i with
+  | RTLBlock.RBnop => f
+  | RTLBlock.RBop op rl r =>
+    f # (Reg r) <- (Eop op (list_translation rl f))
+  | RTLBlock.RBload chunk addr rl r =>
+    f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
+  | RTLBlock.RBstore chunk addr rl r =>
+    f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
+  end.
+
+Definition update_par (f : forest) (i : RTLPar.instruction) : forest :=
+  match i with
+  | RTLPar.RPnop => f
+  | RTLPar.RPop op rl r =>
+    f # (Reg r) <- (Eop op (list_translation rl f))
+  | RTLPar.RPload chunk addr rl r =>
+    f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
+  | RTLPar.RPstore chunk addr rl r =>
+    f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
+  end.
+
+(*|
+Get a sequence from the basic block.
+|*)
+
+Fixpoint abstract_sequence_block (f : forest) (b : list RTLBlock.instruction) : forest :=
+  match b with
+  | nil => f
+  | i :: l => abstract_sequence_block (update_block f i) l
+  end.
+
+Fixpoint abstract_sequence_par (f : forest) (b : list RTLPar.instruction) : forest :=
+  match b with
+  | nil => f
+  | i :: l => abstract_sequence_par (update_par f i) l
+  end.
+
+(*|
+Check equivalence of control flow instructions.  As none of the basic blocks should have been moved, none of the labels should be different, meaning the control-flow instructions should match exactly.
+|*)
+
+Definition check_control_flow_instr (c1 : RTLBlock.control_flow_inst) (c2 : RTLPar.control_flow_inst) : bool :=
+  true.
+
 (*|
 We define the top-level oracle that will check if two basic blocks are equivalent after a scheduling
 transformation.
 |*)
 
-Definition schedule_oracle (p : RTLBlock.bblock) (pt : RTLPar.bblock) : bool :=
-  true.
+Definition schedule_oracle (bb : RTLBlock.bblock) (bbt : RTLPar.bblock) : bool :=
+  check (abstract_sequence_block empty (RTLBlock.bb_body bb))
+        (abstract_sequence_par empty (concat (RTLPar.bb_body bbt))).
