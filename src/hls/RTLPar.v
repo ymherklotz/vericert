@@ -76,6 +76,48 @@ Definition successors_instr (i : control_flow_inst) : list node :=
   | RPgoto n => n :: nil
   end.
 
+Definition max_reg_instr (m: positive) (i: instruction) :=
+  match i with
+  | RPnop => m
+  | RPop op args res => fold_left Pos.max args (Pos.max res m)
+  | RPload chunk addr args dst => fold_left Pos.max args (Pos.max dst m)
+  | RPstore chunk addr args src => fold_left Pos.max args (Pos.max src m)
+  end.
+
+Definition max_reg_cfi (m : positive) (i : control_flow_inst) :=
+  match i with
+  | RPcall sig (inl r) args res s => fold_left Pos.max args (Pos.max r (Pos.max res m))
+  | RPcall sig (inr id) args res s => fold_left Pos.max args (Pos.max res m)
+  | RPtailcall sig (inl r) args => fold_left Pos.max args (Pos.max r m)
+  | RPtailcall sig (inr id) args => fold_left Pos.max args m
+  | RPbuiltin ef args res s =>
+      fold_left Pos.max (params_of_builtin_args args)
+        (fold_left Pos.max (params_of_builtin_res res) m)
+  | RPcond cond args ifso ifnot => fold_left Pos.max args m
+  | RPjumptable arg tbl => Pos.max arg m
+  | RPreturn None => m
+  | RPreturn (Some arg) => Pos.max arg m
+  | RPgoto n => m
+  end.
+
+Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
+  let max_body := fold_left (fun x l => fold_left max_reg_instr l x) bb.(bb_body) m in
+  match bb.(bb_exit) with
+  | Some e => max_reg_cfi max_body e
+  | None => max_body
+  end.
+
+Definition max_reg_function (f: function) :=
+  Pos.max
+    (PTree.fold max_reg_bblock f.(fn_code) 1%positive)
+    (fold_left Pos.max f.(fn_params) 1%positive).
+
+Definition max_pc_function (f: function) : positive :=
+  PTree.fold (fun m pc i => (Pos.max m
+                                     (pc + match Zlength i.(bb_body)
+                                           with Z.pos p => p | _ => 1 end))%positive)
+             f.(fn_code) 1%positive.
+
 (*Inductive state : Type :=
   | State:
       forall (stack: list stackframe) (**r call stack *)
