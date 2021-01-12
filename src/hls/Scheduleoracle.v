@@ -1,3 +1,7 @@
+(*|
+.. coq:: none
+|*)
+
 (*
  * Vericert: Verified high-level synthesis.
  * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
@@ -367,12 +371,6 @@ Definition empty : forest := Rtree.empty _.
 (*|
 This function checks if all the elements in [fa] are in [fb], but not the other way round.
 |*)
-
-Definition check_partial (fa fb : forest) : bool :=
-  PTree.fold (fun b i el => b && (match PTree.get i fb with
-                                    | Some el' => beq_expression el el'
-                                    | None => false
-                                  end)) fa true.
 
 Definition check := Rtree.beq beq_expression.
 
