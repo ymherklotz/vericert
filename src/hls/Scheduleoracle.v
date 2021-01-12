@@ -483,14 +483,21 @@ Fixpoint abstract_sequence_block (f : forest) (b : list RTLBlock.instruction) : 
   | i :: l => abstract_sequence_block (update_block f i) l
   end.
 
-Fixpoint abstract_sequence_par (f : forest) (b : list RTLPar.instruction) : forest :=
+Fixpoint abstract_sequence_par' (f : forest) (b : list RTLPar.instruction) : forest :=
   match b with
   | nil => f
-  | i :: l => abstract_sequence_par (update_par f i) l
+  | i :: l => abstract_sequence_par' (update_par f i) l
+  end.
+
+Fixpoint abstract_sequence_par (f : forest) (b : list (list RTLPar.instruction)) : forest :=
+  match b with
+  | nil => f
+  | i :: l => abstract_sequence_par (abstract_sequence_par' f i) l
   end.
 
 (*|
-Check equivalence of control flow instructions.  As none of the basic blocks should have been moved, none of the labels should be different, meaning the control-flow instructions should match exactly.
+Check equivalence of control flow instructions.  As none of the basic blocks should have been moved,
+none of the labels should be different, meaning the control-flow instructions should match exactly.
 |*)
 
 Definition check_control_flow_instr (c1 : RTLBlock.control_flow_inst) (c2 : RTLPar.control_flow_inst) : bool :=
@@ -503,4 +510,4 @@ transformation.
 
 Definition schedule_oracle (bb : RTLBlock.bblock) (bbt : RTLPar.bblock) : bool :=
   check (abstract_sequence_block empty (RTLBlock.bb_body bb))
-        (abstract_sequence_par empty (concat (RTLPar.bb_body bbt))).
+        (abstract_sequence_par empty (RTLPar.bb_body bbt)).
