@@ -21,7 +21,6 @@ From vericert Require
      Compiler
      RTLBlockgen
      RTLBlock
-     HTLSchedulegen
      HTLgen
      Pipeline.
 
@@ -172,7 +171,7 @@ Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
 Extract Constant Pipeline.pipeline => "SoftwarePipelining.pipeline".
 Extract Constant RTLBlockgen.partition => "Partition.partition".
-Extract Constant HTLSchedulegen.transl_module => "Schedule.transl_module".
+Extract Constant RTLPargen.schedule => "Schedule.schedule_fn".
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.

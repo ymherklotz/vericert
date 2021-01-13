@@ -74,7 +74,8 @@ From vericert Require
      HTLgen
      RTLBlock
      RTLBlockgen
-     HTLSchedulegen
+     RTLPargen
+     HTLPargen
      Pipeline.
 
 From compcert Require Import Smallstep.
@@ -245,7 +246,8 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 8)
   @@@ RTLBlockgen.transl_program
    @@ print print_RTLBlock
-  @@@ HTLSchedulegen.transl_program
+  @@@ RTLPargen.transl_program
+  @@@ HTLPargen.transl_program
    @@ print print_HTL
    @@ Veriloggen.transl_program.
 
