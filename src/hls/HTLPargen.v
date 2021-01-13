@@ -20,6 +20,8 @@ From compcert Require Errors Globalenvs Integers.
 From compcert Require Import Maps AST.
 From vericert Require Import Verilog RTLPar HTL Vericertlib AssocMap ValueInt Statemonad.
 
+Import Lia.
+
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
 Hint Resolve AssocMap.gss : htlh.
@@ -56,8 +58,6 @@ Module HTLState <: State.
         Ple s1.(st_freshreg) s2.(st_freshreg) ->
         Ple s1.(st_freshstate) s2.(st_freshstate) ->
         (forall n,
-            s1.(st_datapath)!n = None \/ s2.(st_datapath)!n = s1.(st_datapath)!n) ->
-        (forall n,
             s1.(st_controllogic)!n = None
             \/ s2.(st_controllogic)!n = s1.(st_controllogic)!n) ->
         st_incr s1 s2.
@@ -72,8 +72,7 @@ Module HTLState <: State.
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
     intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
-    - destruct H4 with n; destruct H8 with n; intuition congruence.
-    - destruct H5 with n; destruct H9 with n; intuition congruence.
+    destruct H4 with n; destruct H7 with n; intuition congruence.
   Qed.
 
 End HTLState.
@@ -104,25 +103,6 @@ Proof.
   intros. case (s.(st_controllogic)!n); tauto.
 Defined.
 
-Lemma add_instr_state_incr :
-  forall s n n' st,
-    (st_datapath s)!n = None ->
-    (st_controllogic s)!n = None ->
-    st_incr s
-    (mkstate
-       s.(st_st)
-       s.(st_freshreg)
-       (st_freshstate s)
-       s.(st_scldecls)
-       s.(st_arrdecls)
-       (AssocMap.set n st s.(st_datapath))
-       (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
-Proof.
-  constructor; intros;
-    try (simpl; destruct (peq n n0); subst);
-    auto with htlh.
-Qed.
-
 Lemma declare_reg_state_incr :
   forall i s r sz,
     st_incr s
@@ -147,10 +127,28 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_controllogic))
               (declare_reg_state_incr i s r sz).
 
+Lemma add_instr_state_incr :
+  forall s n n' st,
+    (st_controllogic s)!n = None ->
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       (AssocMap.set n st s.(st_datapath))
+       (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
+Proof.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
+
 Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
   fun s =>
-    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
-    | left STM, left TRANS =>
+    match check_empty_node_controllogic s n with
+    | left TRANS =>
       OK tt (mkstate
                s.(st_st)
                s.(st_freshreg)
@@ -159,13 +157,12 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
-         (add_instr_state_incr s n n' st STM TRANS)
-    | _, _ => Error (Errors.msg "HTL.add_instr")
+         (add_instr_state_incr s n n' st TRANS)
+    | _ => Error (Errors.msg "HTL.add_instr")
     end.
 
 Lemma add_instr_skip_state_incr :
   forall s n st,
-    (st_datapath s)!n = None ->
     (st_controllogic s)!n = None ->
     st_incr s
     (mkstate
@@ -184,8 +181,8 @@ Qed.
 
 Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
   fun s =>
-    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
-    | left STM, left TRANS =>
+    match check_empty_node_controllogic s n with
+    | left TRANS =>
       OK tt (mkstate
                s.(st_st)
                s.(st_freshreg)
@@ -194,13 +191,12 @@ Definition add_instr_skip (n : node) (st : stmnt) : mon unit :=
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n Vskip s.(st_controllogic)))
-         (add_instr_skip_state_incr s n st STM TRANS)
-    | _, _ => Error (Errors.msg "HTL.add_instr")
+         (add_instr_skip_state_incr s n st TRANS)
+    | _ => Error (Errors.msg "HTL.add_instr_skip")
     end.
 
 Lemma add_node_skip_state_incr :
   forall s n st,
-    (st_datapath s)!n = None ->
     (st_controllogic s)!n = None ->
     st_incr s
     (mkstate
@@ -219,8 +215,8 @@ Qed.
 
 Definition add_node_skip (n : node) (st : stmnt) : mon unit :=
   fun s =>
-    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
-    | left STM, left TRANS =>
+    match check_empty_node_controllogic s n with
+    | left TRANS =>
       OK tt (mkstate
                s.(st_st)
                s.(st_freshreg)
@@ -229,8 +225,8 @@ Definition add_node_skip (n : node) (st : stmnt) : mon unit :=
                s.(st_arrdecls)
                (AssocMap.set n Vskip s.(st_datapath))
                (AssocMap.set n st s.(st_controllogic)))
-         (add_node_skip_state_incr s n st STM TRANS)
-    | _, _ => Error (Errors.msg "HTL.add_instr")
+         (add_node_skip_state_incr s n st TRANS)
+    | _ => Error (Errors.msg "HTL.add_node_skip")
     end.
 
 Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
@@ -377,7 +373,6 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
 
 Lemma add_branch_instr_state_incr:
   forall s e n n1 n2,
-    (st_datapath s) ! n = None ->
     (st_controllogic s) ! n = None ->
     st_incr s (mkstate
                  s.(st_st)
@@ -395,8 +390,8 @@ Qed.
 
 Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
   fun s =>
-    match check_empty_node_datapath s n, check_empty_node_controllogic s n with
-    | left NSTM, left NTRANS =>
+    match check_empty_node_controllogic s n with
+    | left NTRANS =>
       OK tt (mkstate
                s.(st_st)
                 (st_freshreg s)
@@ -405,8 +400,8 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
-         (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
-    | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
+         (add_branch_instr_state_incr s e n n1 n2 NTRANS)
+    | _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
@@ -508,8 +503,9 @@ Proof.
   rewrite PTree.gempty. congruence.
   (* inductive case *)
   intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
-  inv H2. xomega.
-  apply Ple_trans with a. auto. xomega.
+  inv H2. unfold Ple, Plt in *. lia.
+  apply Ple_trans with a. auto.
+  unfold Ple, Plt in *. lia.
 Qed.
 
 Lemma max_pc_wf :
@@ -523,19 +519,103 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition Poslength {A : Type} (l : list A) : positive :=
+Definition poslength {A : Type} (l : list A) : positive :=
   match Zlength l with
   | Z.pos p => p
   | _ => 1
   end.
 
-Fixpoint Penumerate {A : Type} (p : positive) (l : list A) {struct l} : list (positive * A) :=
+Fixpoint penumerate {A : Type} (p : positive) (l : list A) {struct l} : list (positive * A) :=
   match l with
-  | x :: xs => (p, x) :: Penumerate (Pos.succ p) xs
+  | x :: xs => (p, x) :: penumerate (Pos.succ p) xs
   | nil => nil
   end.
 
-Parameter translate_inst_list : reg -> reg -> reg -> node * list instruction -> mon unit.
+Lemma add_data_instr_state_incr :
+  forall s n st,
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       (AssocMap.set n (Vseq (AssocMapExt.get_default _ Vskip n s.(st_datapath)) st) s.(st_datapath))
+       s.(st_controllogic)).
+Proof.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
+
+Definition add_data_instr (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    OK tt (mkstate
+         s.(st_st)
+         s.(st_freshreg)
+         (st_freshstate s)
+         s.(st_scldecls)
+         s.(st_arrdecls)
+         (AssocMap.set n (Vseq (AssocMapExt.get_default _ Vskip n s.(st_datapath)) st) s.(st_datapath))
+         s.(st_controllogic))
+       (add_data_instr_state_incr s n st).
+
+Lemma add_control_instr_state_incr :
+  forall s n st,
+  (st_controllogic s) ! n = None ->
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       s.(st_datapath)
+       (AssocMap.set n st s.(st_controllogic))).
+Proof.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
+
+Definition add_control_instr (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    match check_empty_node_controllogic s n with
+    | left CTRL =>
+      OK tt (mkstate
+           s.(st_st)
+           s.(st_freshreg)
+           (st_freshstate s)
+           s.(st_scldecls)
+           s.(st_arrdecls)
+           s.(st_datapath)
+           (AssocMap.set n st s.(st_controllogic)))
+         (add_control_instr_state_incr s n st CTRL)
+    | _ => Error (Errors.msg "HTLPargen.add_control_instr: control logic is not empty")
+    end.
+
+Definition translate_inst (fin rtrn stack : reg) (n : node) (i : instruction) : mon unit :=
+  match i with
+  | RPnop =>
+    add_data_instr n Vskip
+  | RPop op args dst =>
+    do instr <- translate_instr op args;
+    do _ <- declare_reg None dst 32;
+    add_data_instr n (nonblock dst instr)
+  | RPload chunk addr args dst =>
+    do src <- translate_arr_access chunk addr args stack;
+    do _ <- declare_reg None dst 32;
+    add_data_instr n (nonblock dst src)
+  | RPstore chunk addr args src =>
+    do dst <- translate_arr_access chunk addr args stack;
+    add_data_instr n (Vnonblock dst (Vvar src))
+  end.
+
+Definition translate_inst_list (fin rtrn stack : reg) (ni : node * list instruction) : mon unit :=
+  let (n, li) := ni in
+  do _ <- collectlist (translate_inst fin rtrn stack n) li;
+  do st <- get;
+  add_control_instr n (state_goto st.(st_st) (Pos.succ n)).
 
 Definition translate_cfi (fin rtrn stack : reg) (ni : node * control_flow_inst) : mon unit :=
   let (n, cfi) := ni in
@@ -561,9 +641,9 @@ Definition translate_cfi (fin rtrn stack : reg) (ni : node * control_flow_inst) 
 
 Definition transf_bblock (fin rtrn stack : reg) (ni : node * bblock) : mon unit :=
   let (n, bb) := ni in
-  do _ <- collectlist (translate_inst_list fin rtrn stack) (Penumerate n bb.(bb_body));
+  do _ <- collectlist (translate_inst_list fin rtrn stack) (penumerate n bb.(bb_body));
   match bb.(bb_exit) with
-  | Some e => translate_cfi fin rtrn stack ((n + Poslength bb.(bb_body))%positive, e)
+  | Some e => translate_cfi fin rtrn stack ((n + poslength bb.(bb_body))%positive, e)
   | None => ret tt
   end.
 
