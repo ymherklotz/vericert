@@ -14,5 +14,5 @@ The project is currently a work in progress, so proofs remain to be finished.  C
 
 * Content
 
-- [[./proof/toc.html][Vericert Proof]]
+- [[./proof/index.org][Vericert Proof]]
 - [[./documentation.org][Vericert Documentation]]

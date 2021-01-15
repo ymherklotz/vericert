@@ -9,7 +9,7 @@ Vericert translates C code into a hardware description language called Verilog, 
 #+attr_html: :width 600
 #+caption: Current design of Vericert, where HTL is an intermediate language representing a finite state machine with data-path (FSMD) and Verilog is the target language.
 #+name: fig:design
-[[./images/design.jpg]]
+[[../images/design.jpg]]
 
 The design shown in Figure [[fig:design]] shows how Vericert leverages an existing verified C compiler called [[https://compcert.org/compcert-C.html][CompCert]] to perform this translation.
 

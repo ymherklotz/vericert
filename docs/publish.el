@@ -16,14 +16,14 @@
 (defvar vericert/site-attachments nil)
 (defvar vericert/base "")
 
-(setq vericert/base "/vericert")
+(setq vericert/base "")
 
 (setq vericert/header (concat "<div id=\"left-bar\">
 <header id=\"header\" class=\"status\">
 <div class=\"logo\"><a href=\"" vericert/base "\">Vericert</a></div>
 <nav id=\"navbar\">
-<span><a href=\"" vericert/base "/documentation.html\">Documentation</a></span>
-<span><a href=\"" vericert/base "/proof/toc.html\">Proof</a></span>
+<span><a href=\"" vericert/base "/docs/\">Documentation</a></span>
+<span><a href=\"" vericert/base "/proof/\">Proof</a></span>
 </nav>
 <p>Vericert is the first formally verified high-level synthesis tool.</p>
 </header>
