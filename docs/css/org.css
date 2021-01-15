@@ -2,7 +2,6 @@ body {
     width: 95%;
     font-size: 14px;
     margin: 2% auto;
-    line-height: 1.4em;
     font-family: "Alegreya", serif;
     color: #333;
     background-color: #fdf6e3;
@@ -71,6 +70,7 @@ body {
 
     #navbar > span > a:hover {
         border-bottom: none;
+        color: #003355;
     }
 
     a.toc-link {
@@ -137,11 +137,6 @@ dl {
 .abstract p:last-of-type:before {
     content: "    ";
     white-space: pre;
-}
-
-.status {
-    font-size: 90%;
-    margin: 2em auto;
 }
 
 [class^="section-number-"] {

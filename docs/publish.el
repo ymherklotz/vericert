@@ -9,6 +9,8 @@
 
 (require 'org)
 (require 'ox-publish)
+(require 'ox-html)
+(require 'htmlize)
 
 (defvar vericert/header "")
 (defvar vericert/site-attachments nil)
@@ -39,7 +41,7 @@
       org-export-with-section-numbers t
       org-export-with-toc t)
 
-(setq org-html-divs '((preamble "header" "header")
+(setq org-html-divs '((preamble "div" "nothing")
                       (content "main" "content")
                       (postamble "footer" "postamble"))
       org-html-container-element "section"
