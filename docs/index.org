@@ -15,4 +15,4 @@ The project is currently a work in progress, so proofs remain to be finished.  C
 * Content
 
 - [[./proof/index.org][Vericert Proof]]
-- [[./documentation.org][Vericert Documentation]]
+- [[./docs/index.org][Vericert Documentation]]
