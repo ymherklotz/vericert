@@ -16,7 +16,7 @@
 (defvar vericert/site-attachments nil)
 (defvar vericert/base "")
 
-(setq vericert/base "")
+(setq vericert/base "/vericert")
 
 (setq vericert/header (concat "<div id=\"left-bar\">
 <header id=\"header\" class=\"status\">
