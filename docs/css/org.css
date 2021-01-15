@@ -1,5 +1,5 @@
 body {
-    font-size: 14px;
+    font-size: 18px;
     font-family: "Alegreya", serif;
     margin: 0;
     color: #333;
@@ -610,10 +610,10 @@ p.verse {
 
 }
 
-@media screen and (max-width: 699px) {
+@media screen and (max-width: 799px) {
 
     body {
-        font-size: 18px;
+        font-size: 20px;
     }
 
     #content {
@@ -643,7 +643,7 @@ p.verse {
 
     #navbar {
         float: right;
-        margin: 1em 0.5em;
+        margin: 1em 0.3em;
     }
 
     #navbar > span {
@@ -676,7 +676,7 @@ p.verse {
     }
 }
 
-@media screen and (min-width: 700px) and (max-width: 1049px) {
+@media screen and (min-width: 800px) and (max-width: 1199px) {
     body {
         max-width: 700px;
         margin-left: 15rem;
@@ -694,7 +694,7 @@ p.verse {
     }
 
     .logo {
-        font-size: 3.5em;
+        font-size: 2.5em;
     }
 
     #navbar > span {
@@ -702,7 +702,7 @@ p.verse {
     }
 
     #navbar > span > a {
-        font-size: 1.5em;
+        font-size: 1.2em;
     }
 
     a.toc-link {
@@ -723,9 +723,9 @@ p.verse {
     }
 }
 
-@media screen and (min-width: 1050px) {
+@media screen and (min-width: 1200px) {
     body {
-        max-width: 700px;
+        max-width: 800px;
         margin-left: 20rem;
         margin-right: 2.5rem;
     }
