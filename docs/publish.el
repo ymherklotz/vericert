@@ -63,6 +63,8 @@
              :html-head-extra
              (concat "<script src=\"https://cdnjs.cloudflare.com/ajax/libs/tocbot/4.11.1/tocbot.min.js\"></script>
 <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/tocbot/4.11.1/tocbot.css\">
+<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\">
+<link href=\"https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap\" rel=\"stylesheet\">
 <link rel=\"stylesheet\" href=\"" vericert/base "/css/fonts.css\" type=\"text/css\" />
 <link rel=\"stylesheet\" href=\"" vericert/base "/css/org.css\" type=\"text/css\" media=\"screen\" />")
              :html-preamble t
