@@ -2674,7 +2674,7 @@ Section CORRECTNESS.
         exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1; eauto with htlproof; (intros; inv_state).
-  Qed.
+  Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
   Theorem transf_program_correct:

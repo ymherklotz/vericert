@@ -448,7 +448,10 @@ Proof.
   - monadInv H. apply add_instr_freshreg_trans in EQ2. apply translate_arr_access_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
   - monadInv H. apply add_instr_freshreg_trans in EQ0. apply translate_arr_access_freshreg_trans in EQ. congruence.
-  - unfold_match H. apply add_instr_freshreg_trans in H. assumption.
+  - unfold_match H. monadInv H.
+    apply declare_reg_freshreg_trans in EQ.
+    apply add_instr_freshreg_trans in EQ0.
+    congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.
   (*- inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.*)
