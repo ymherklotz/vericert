@@ -1,3 +1,0 @@
-#+title: Vericert Proof
-
-- [[./Compiler.html][Compiler]]
