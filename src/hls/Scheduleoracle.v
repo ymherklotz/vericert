@@ -155,7 +155,7 @@ Module R_indexed.
 
   Lemma index_inj:  forall (x y: t), index x = index y -> x = y.
   Proof.
-    destruct x; destruct y; intro; try (simpl in H; congruence).
+    destruct x; destruct y; intro; try (simpl in *; congruence).
   Qed.
 
   Definition eq := resource_eq.
@@ -311,59 +311,14 @@ Lemma beq_expression_correct:
 Proof.
   intro e1.
   apply expression_ind2 with
-      (P := fun (e1: expression) => forall e2, beq_expression e1 e2 = true -> e1 = e2)
-      (P0 := fun (e1: expression_list) => forall e2, beq_expression_list e1 e2 = true -> e1 = e2).
-  (* Ebase *)
-  intros r e2.
-  destruct e2; simpl; try congruence.
-  case (resource_eq r r0); congruence.
-
-  (* Eop *)
-   intros o e HR e2. destruct e2; simpl; try congruence.
-   case (operation_eq o o0); intros. generalize (HR _ H).
-   congruence. congruence.
-
-   (* Eload *)
-   intros m a e HR e3 HR3. destruct e2 ; simpl ; try congruence.
-   case (memory_chunk_eq m m0).
-   case (addressing_eq a a0).
-   caseEq (beq_expression_list e e0).
-   caseEq (beq_expression e3 e2).
-   intros.
-   generalize (HR e0 H0). generalize (HR3 e2 H). intros.
-   subst. trivial.
-   intros; discriminate.
-   intros; discriminate.
-   intros; discriminate.
-   intros; discriminate.
-
-   (* Estore *)
-   intros e3 HR2 m a e HR e4 HR4 e2.
-   destruct e2; simpl; try congruence.
-   case (memory_chunk_eq m m0). case (addressing_eq a a0).
-   (*case (beq_expression_list e e0). case (beq_expression e3 e2). *)
-   intros.
-   caseEq (beq_expression_list e e0). intro. rewrite H0 in H.
-   caseEq (beq_expression e3 e2_1). intro. rewrite H1 in H.
-   generalize (HR2 e2_1 H1). intro. generalize (HR e0 H0).
-   generalize (HR4 e2_2 H).
-   congruence.
-   intro. rewrite H1 in H. discriminate.
-   intro. rewrite H0 in H. discriminate.
-   intros; congruence.
-   intros; congruence.
-
-   (* Enil *)
-   intro e2.
-   unfold beq_expression_list.
-   case e2; intros; try congruence; trivial.
-
-   (* Econs *)
-   intros e HR1 e0 HR2 e2.
-   destruct e2; simpl; try congruence.
-   caseEq (beq_expression e e2); caseEq (beq_expression_list e0 e3); simpl; try congruence.
-   intros. clear H1. generalize (HR1 e2 H0). generalize (HR2 e3 H).
-   congruence.
+      (P := fun (e1 : expression) =>
+            forall e2, beq_expression e1 e2 = true -> e1 = e2)
+      (P0 := fun (e1 : expression_list) =>
+             forall e2, beq_expression_list e1 e2 = true -> e1 = e2); simplify;
+    repeat match goal with
+           | [ H : context[match ?x with _ => _ end] |- _ ] => destruct x eqn:?
+           | [ H : context[if ?x then _ else _] |- _ ] => destruct x eqn:?
+           end; subst; f_equal; crush.
 Qed.
 
 Definition empty : forest := Rtree.empty _.
@@ -397,9 +352,7 @@ Qed.
 Lemma map0:
   forall r,
   empty # r = Ebase r.
-Proof.
-  intros. eapply get_empty.
-Qed.
+Proof. intros. eapply get_empty. Qed.
 
 Lemma map1:
   forall w dst dst',
@@ -470,6 +423,13 @@ Definition update_par (f : forest) (i : RTLPar.instruction) : forest :=
   | RTLPar.RPstore chunk addr rl r =>
     f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
   end.
+
+(*|
+Implementing which are necessary to show the correctness of the translation validation by showing
+that there aren't any more effects in the resultant RTLPar code than in the RTLBlock code.
+|*)
+
+
 
 (*|
 Get a sequence from the basic block.
