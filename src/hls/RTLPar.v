@@ -16,34 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require Import Coqlib Maps.
-From compcert Require Import AST Integers Values Events Memory Globalenvs Smallstep.
-From compcert Require Import Op Registers.
+Require Import compcert.backend.Registers.
+Require Import compcert.common.AST.
+Require Import compcert.common.Events.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Values.
+Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require Import compcert.verilog.Op.
 
-Definition node := positive.
+Require Import vericert.hls.RTLBlockInstr.
 
-Inductive instruction : Type :=
-| RPnop : instruction
-| RPop : operation -> list reg -> reg -> instruction
-| RPload : memory_chunk -> addressing -> list reg -> reg -> instruction
-| RPstore : memory_chunk -> addressing -> list reg -> reg -> instruction.
-
-Definition bblock_body : Type := list (list instruction).
-
-Inductive control_flow_inst : Type :=
-| RPcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst
-| RPtailcall : signature -> reg + ident -> list reg -> control_flow_inst
-| RPbuiltin : external_function -> list (builtin_arg reg) ->
-              builtin_res reg -> node -> control_flow_inst
-| RPcond : condition -> list reg -> node -> node -> control_flow_inst
-| RPjumptable : reg -> list node -> control_flow_inst
-| RPreturn : option reg -> control_flow_inst
-| RPgoto : node -> control_flow_inst.
-
-Record bblock : Type := mk_bblock {
-    bb_body: bblock_body;
-    bb_exit: option control_flow_inst
-  }.
+Definition bblock := RTLBlockInstr.bblock (list (list instr)).
 
 Definition code : Type := PTree.t bblock.
 
@@ -65,41 +52,6 @@ Definition funsig (fd: fundef) :=
   | External ef => ef_sig ef
   end.
 
-Definition successors_instr (i : control_flow_inst) : list node :=
-  match i with
-  | RPcall sig ros args res s => s :: nil
-  | RPtailcall sig ros args => nil
-  | RPbuiltin ef args res s => s :: nil
-  | RPcond cond args ifso ifnot => ifso :: ifnot :: nil
-  | RPjumptable arg tbl => tbl
-  | RPreturn optarg => nil
-  | RPgoto n => n :: nil
-  end.
-
-Definition max_reg_instr (m: positive) (i: instruction) :=
-  match i with
-  | RPnop => m
-  | RPop op args res => fold_left Pos.max args (Pos.max res m)
-  | RPload chunk addr args dst => fold_left Pos.max args (Pos.max dst m)
-  | RPstore chunk addr args src => fold_left Pos.max args (Pos.max src m)
-  end.
-
-Definition max_reg_cfi (m : positive) (i : control_flow_inst) :=
-  match i with
-  | RPcall sig (inl r) args res s => fold_left Pos.max args (Pos.max r (Pos.max res m))
-  | RPcall sig (inr id) args res s => fold_left Pos.max args (Pos.max res m)
-  | RPtailcall sig (inl r) args => fold_left Pos.max args (Pos.max r m)
-  | RPtailcall sig (inr id) args => fold_left Pos.max args m
-  | RPbuiltin ef args res s =>
-      fold_left Pos.max (params_of_builtin_args args)
-        (fold_left Pos.max (params_of_builtin_res res) m)
-  | RPcond cond args ifso ifnot => fold_left Pos.max args m
-  | RPjumptable arg tbl => Pos.max arg m
-  | RPreturn None => m
-  | RPreturn (Some arg) => Pos.max arg m
-  | RPgoto n => m
-  end.
-
 Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
   let max_body := fold_left (fun x l => fold_left max_reg_instr l x) bb.(bb_body) m in
   match bb.(bb_exit) with
@@ -118,7 +70,24 @@ Definition max_pc_function (f: function) : positive :=
                                            with Z.pos p => p | _ => 1 end))%positive)
              f.(fn_code) 1%positive.
 
-(*Inductive state : Type :=
+Definition genv := Genv.t fundef unit.
+
+Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
+  match rl, vl with
+  | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
+  | _, _ => Regmap.init Vundef
+  end.
+
+Inductive stackframe : Type :=
+  | Stackframe:
+      forall (res: reg)            (**r where to store the result *)
+             (f: function)         (**r calling function *)
+             (sp: val)             (**r stack pointer in calling function *)
+             (pc: node)            (**r program point in calling function *)
+             (rs: regset),         (**r register state in calling function *)
+      stackframe.
+
+Inductive state : Type :=
   | State:
       forall (stack: list stackframe) (**r call stack *)
              (f: function)            (**r current function *)
@@ -138,4 +107,108 @@ Definition max_pc_function (f: function) : positive :=
              (v: val)                 (**r return value for the call *)
              (m: mem),                (**r memory state *)
       state.
-*)
+
+Section RELSEM.
+
+  Context (ge : genv).
+
+  Definition find_function
+             (ros: reg + ident) (rs: regset) : option fundef :=
+    match ros with
+    | inl r => Genv.find_funct ge rs#r
+    | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+    end.
+
+  Inductive step_instruction : state -> trace -> state -> Prop :=
+  | exec_Inop:
+      forall s f sp pc rs m pc',
+        (fn_code f)!pc = Some(RPnop pc') ->
+        step (State s f sp pc rs m)
+             E0 (State s f sp pc' rs m)
+  | exec_Iop:
+      forall s f sp pc rs m op args res pc' v,
+        (fn_code f)!pc = Some(Iop op args res pc') ->
+        eval_operation ge sp op rs##args m = Some v ->
+        step (State s f sp pc rs m)
+             E0 (State s f sp pc' (rs#res <- v) m)
+  | exec_Iload:
+      forall s f sp pc rs m chunk addr args dst pc' a v,
+        (fn_code f)!pc = Some(Iload chunk addr args dst pc') ->
+        eval_addressing ge sp addr rs##args = Some a ->
+        Mem.loadv chunk m a = Some v ->
+        step (State s f sp pc rs m)
+             E0 (State s f sp pc' (rs#dst <- v) m)
+  | exec_Istore:
+      forall s f sp pc rs m chunk addr args src pc' a m',
+        (fn_code f)!pc = Some(Istore chunk addr args src pc') ->
+        eval_addressing ge sp addr rs##args = Some a ->
+        Mem.storev chunk m a rs#src = Some m' ->
+        step (State s f sp pc rs m)
+             E0 (State s f sp pc' rs m')
+  | exec_Icall:
+      forall s f sp pc rs m sig ros args res pc' fd,
+        (fn_code f)!pc = Some(Icall sig ros args res pc') ->
+        find_function ros rs = Some fd ->
+        funsig fd = sig ->
+        step (State s f sp pc rs m)
+             E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
+  | exec_Itailcall:
+      forall s f stk pc rs m sig ros args fd m',
+        (fn_code f)!pc = Some(Itailcall sig ros args) ->
+        find_function ros rs = Some fd ->
+        funsig fd = sig ->
+        Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+        step (State s f (Vptr stk Ptrofs.zero) pc rs m)
+             E0 (Callstate s fd rs##args m')
+  | exec_Ibuiltin:
+      forall s f sp pc rs m ef args res pc' vargs t vres m',
+        (fn_code f)!pc = Some(Ibuiltin ef args res pc') ->
+        eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
+        external_call ef ge vargs m t vres m' ->
+        step (State s f sp pc rs m)
+             t (State s f sp pc' (regmap_setres res vres rs) m')
+  | exec_Icond:
+      forall s f sp pc rs m cond args ifso ifnot b pc',
+        (fn_code f)!pc = Some(Icond cond args ifso ifnot) ->
+        eval_condition cond rs##args m = Some b ->
+        pc' = (if b then ifso else ifnot) ->
+        step (State s f sp pc rs m)
+             E0 (State s f sp pc' rs m)
+  | exec_Ijumptable:
+      forall s f sp pc rs m arg tbl n pc',
+        (fn_code f)!pc = Some(Ijumptable arg tbl) ->
+        rs#arg = Vint n ->
+        list_nth_z tbl (Int.unsigned n) = Some pc' ->
+        step (State s f sp pc rs m)
+             E0 (State s f sp pc' rs m)
+  | exec_Ireturn:
+      forall s f stk pc rs m or m',
+        (fn_code f)!pc = Some(Ireturn or) ->
+        Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+        step (State s f (Vptr stk Ptrofs.zero) pc rs m)
+             E0 (Returnstate s (regmap_optget or Vundef rs) m')
+  | exec_function_internal:
+      forall s f args m m' stk,
+        Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+        step (Callstate s (Internal f) args m)
+             E0 (State s
+                       f
+                       (Vptr stk Ptrofs.zero)
+                       f.(fn_entrypoint)
+                           (init_regs args f.(fn_params))
+                           m')
+  | exec_function_external:
+      forall s ef args res t m m',
+        external_call ef ge args m t res m' ->
+        step (Callstate s (External ef) args m)
+             t (Returnstate s res m')
+  | exec_return:
+      forall res f sp pc rs s vres m,
+        step (Returnstate (Stackframe res f sp pc rs :: s) vres m)
+             E0 (State s f sp pc (rs#res <- vres) m).
+
+End RELSEM.

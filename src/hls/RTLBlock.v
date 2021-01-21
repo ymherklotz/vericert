@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2021 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,36 +16,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import Coqlib Maps.
-Require Import AST Integers Values Events Memory Globalenvs Smallstep.
-Require Import Op Registers.
+Require Import compcert.backend.Registers.
+Require Import compcert.common.AST.
+Require Import compcert.common.Events.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Values.
+Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require Import compcert.verilog.Op.
 
-Definition node := positive.
+Require Import vericert.hls.RTLBlockInstr.
 
-Inductive instruction : Type :=
-| RBnop : instruction
-| RBop : operation -> list reg -> reg -> instruction
-| RBload : memory_chunk -> addressing -> list reg -> reg -> instruction
-| RBstore : memory_chunk -> addressing -> list reg -> reg -> instruction.
+Definition bblock_body : Type := list instr.
 
-Definition bblock_body : Type := list instruction.
-
-Inductive control_flow_inst : Type :=
-| RBcall : signature -> reg + ident -> list reg -> reg -> node -> control_flow_inst
-| RBtailcall : signature -> reg + ident -> list reg -> control_flow_inst
-| RBbuiltin : external_function -> list (builtin_arg reg) ->
-              builtin_res reg -> node -> control_flow_inst
-| RBcond : condition -> list reg -> node -> node -> control_flow_inst
-| RBjumptable : reg -> list node -> control_flow_inst
-| RBreturn : option reg -> control_flow_inst
-| RBgoto : node -> control_flow_inst.
-
-Record bblock : Type := mk_bblock {
-    bb_body: bblock_body;
-    bb_exit: option control_flow_inst
-  }.
-
-Definition code : Type := PTree.t bblock.
+Definition code : Type := PTree.t (bblock bblock_body).
 
 Record function: Type := mkfunction {
   fn_sig: signature;
@@ -65,18 +52,7 @@ Definition funsig (fd: fundef) :=
   | External ef => ef_sig ef
   end.
 
-Definition successors_instr (i : control_flow_inst) : list node :=
-  match i with
-  | RBcall sig ros args res s => s :: nil
-  | RBtailcall sig ros args => nil
-  | RBbuiltin ef args res s => s :: nil
-  | RBcond cond args ifso ifnot => ifso :: ifnot :: nil
-  | RBjumptable arg tbl => tbl
-  | RBreturn optarg => nil
-  | RBgoto n => n :: nil
-  end.
-
-(* Definition genv := Genv.t fundef unit.
+Definition genv := Genv.t fundef unit.
 Definition regset := Regmap.t val.
 
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
@@ -84,6 +60,12 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
   | _, _ => Regmap.init Vundef
   end.
+
+Section RELSEM.
+
+End RELSEM.
+
+(*
 
 Inductive stackframe : Type :=
   | Stackframe:
