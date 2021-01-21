@@ -16,11 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require Errors Globalenvs Integers.
-From compcert Require Import Maps AST.
-From vericert Require Import Verilog RTLPar HTL Vericertlib AssocMap ValueInt Statemonad.
+Require Import Coq.micromega.Lia.
 
-Import Lia.
+Require Import compcert.common.AST.
+Require compcert.common.Errors.
+Require compcert.common.Globalenvs.
+Require compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+
+Require Import vericert.common.Statemonad.
+Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.Verilog.
+Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.HTL.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.ValueInt.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.

@@ -18,9 +18,11 @@
 
 Set Implicit Arguments.
 
-Require Import Lia.
-Require Import Vericertlib.
-From Coq Require Import Lists.List Datatypes.
+Require Import Coq.Init.Datatypes.
+Require Import Coq.Lists.List.
+Require Import Coq.micromega.Lia.
+
+Require Import vericert.common.Vericertlib.
 
 Import ListNotations.
 
@@ -74,7 +76,7 @@ Lemma array_set_wf {A : Type} :
 Proof.
   induction l; intros; destruct i; auto.
 
-  invert H; crush; auto.
+  invert H; crush.
 Qed.
 
 Definition array_set {A : Type} (i : nat) (x : A) (a : Array A) :=

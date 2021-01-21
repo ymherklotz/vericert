@@ -20,9 +20,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import Globalenvs Values Integers Floats Maps.
-Require RTLBlock RTLPar Op Memory AST Registers.
-Require Import Vericertlib.
+Require compcert.backend.Registers.
+Require compcert.common.AST.
+Require Import compcert.common.Globalenvs.
+Require compcert.common.Memory.
+Require Import compcert.common.Values.
+Require Import compcert.lib.Floats.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require compcert.verilog.Op.
+Require vericert.hls.RTLBlock.
+Require vericert.hls.RTLPar.
+Require Import vericert.common.Vericertlib.
 
 (*|
 Schedule Oracle
@@ -154,9 +163,7 @@ Module R_indexed.
     end.
 
   Lemma index_inj:  forall (x y: t), index x = index y -> x = y.
-  Proof.
-    destruct x; destruct y; intro; try (simpl in *; congruence).
-  Qed.
+  Proof. destruct x; destruct y; crush. Qed.
 
   Definition eq := resource_eq.
 End R_indexed.
@@ -309,7 +316,7 @@ Scheme expression_ind2 := Induction for expression Sort Prop
 Lemma beq_expression_correct:
   forall e1 e2, beq_expression e1 e2 = true -> e1 = e2.
 Proof.
-  intro e1.
+  intro e1;
   apply expression_ind2 with
       (P := fun (e1 : expression) =>
             forall e2, beq_expression e1 e2 = true -> e1 = e2)
@@ -332,65 +339,93 @@ Definition check := Rtree.beq beq_expression.
 Lemma check_correct: forall (fa fb : forest) (x : resource),
   check fa fb = true -> (forall x, fa # x = fb # x).
 Proof.
-  unfold check, get_forest.
-  intros fa fb res Hbeq x.
-  pose proof Hbeq as Hbeq2.
-  pose proof (Rtree.beq_sound beq_expression fa fb) as Hsound.
-  specialize (Hsound Hbeq2 x).
-  destruct (Rtree.get x fa) eqn:?; destruct (Rtree.get x fb) eqn:?; try contradiction.
-  apply beq_expression_correct. assumption. trivial.
+  unfold check, get_forest; intros;
+  pose proof beq_expression_correct;
+  match goal with
+    [ Hbeq : context[Rtree.beq], y : Rtree.elt |- _ ] =>
+    apply (Rtree.beq_sound beq_expression fa fb) with (x := y) in Hbeq
+  end;
+  repeat destruct_match; crush.
 Qed.
 
 Lemma get_empty:
   forall r, empty#r = Ebase r.
 Proof.
-  intros r. unfold get_forest.
-  destruct (Rtree.get r empty) eqn:Heq; auto.
-  rewrite Rtree.gempty in Heq. discriminate.
+  intros; unfold get_forest;
+  destruct_match; auto; [ ];
+  match goal with
+    [ H : context[Rtree.get _ empty] |- _ ] => rewrite Rtree.gempty in H
+  end; discriminate.
+Qed.
+
+Fixpoint beq2 {A B : Type} (beqA : A -> B -> bool) (m1 : PTree.t A) (m2 : PTree.t B) {struct m1} : bool :=
+  match m1, m2 with
+  | PTree.Leaf, _ => PTree.bempty m2
+  | _, PTree.Leaf => PTree.bempty m1
+  | PTree.Node l1 o1 r1, PTree.Node l2 o2 r2 =>
+    match o1, o2 with
+    | None, None => true
+    | Some y1, Some y2 => beqA y1 y2
+    | _, _ => false
+    end
+    && beq2 beqA l1 l2 && beq2 beqA r1 r2
+  end.
+
+Lemma beq2_correct:
+  forall A B beqA m1 m2,
+    @beq2 A B beqA m1 m2 = true <->
+    (forall (x: PTree.elt),
+        match PTree.get x m1, PTree.get x m2 with
+        | None, None => True
+        | Some y1, Some y2 => beqA y1 y2 = true
+        | _, _ => False
+        end).
+Proof.
+  induction m1; intros.
+  - simpl. rewrite PTree.bempty_correct. split; intros.
+    rewrite PTree.gleaf. rewrite H. auto.
+    generalize (H x). rewrite PTree.gleaf. destruct (PTree.get x m2); tauto.
+  - destruct m2.
+    + unfold beq2. rewrite PTree.bempty_correct. split; intros.
+      rewrite H. rewrite PTree.gleaf. auto.
+      generalize (H x). rewrite PTree.gleaf. destruct (PTree.get x (PTree.Node m1_1 o m1_2)); tauto.
+    + simpl. split; intros.
+      * destruct (andb_prop _ _ H). destruct (andb_prop _ _ H0).
+        rewrite IHm1_1 in H3. rewrite IHm1_2 in H1.
+        destruct x; simpl. apply H1. apply H3.
+        destruct o; destruct o0; auto || congruence.
+      * apply andb_true_intro. split. apply andb_true_intro. split.
+        generalize (H xH); simpl. destruct o; destruct o0; tauto.
+        apply IHm1_1. intros; apply (H (xO x)).
+        apply IHm1_2. intros; apply (H (xI x)).
 Qed.
 
 Lemma map0:
   forall r,
   empty # r = Ebase r.
-Proof. intros. eapply get_empty. Qed.
+Proof. intros; eapply get_empty. Qed.
 
 Lemma map1:
   forall w dst dst',
   dst <> dst' ->
   (empty # dst <- w) # dst' = Ebase dst'.
-Proof.
-  intros.
-  unfold get_forest.
-  rewrite Rtree.gso. eapply map0. auto.
-Qed.
+Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply map0. Qed.
 
 Lemma genmap1:
   forall (f : forest) w dst dst',
   dst <> dst' ->
   (f # dst <- w) # dst' = f # dst'.
-Proof.
-  intros.
-  unfold get_forest.
-  rewrite Rtree.gso. reflexivity. auto.
-Qed.
+Proof. intros; unfold get_forest; rewrite Rtree.gso; auto. Qed.
 
 Lemma map2:
   forall (v : expression) x rs,
   (rs # x <- v) # x = v.
-Proof.
-  intros.
-  unfold get_forest.
-  rewrite Rtree.gss. trivial.
-Qed.
+Proof. intros; unfold get_forest; rewrite Rtree.gss; trivial. Qed.
 
 Lemma tri1:
   forall x y,
   Reg x <> Reg y -> x <> y.
-Proof.
-  intros. unfold not in *; intros.
-  rewrite H0 in H. generalize (H (refl_equal (Reg y))).
-  auto.
-Qed.
+Proof. unfold not; intros; subst; auto. Qed.
 
 (*|
 Update functions.

@@ -17,13 +17,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import BinInt.
-Require Import Lia.
-Require Import ZBinary.
+Require Import Coq.ZArith.BinInt.
+Require Import Coq.micromega.Lia.
+Require Import Coq.Numbers.Integer.Binary.ZBinary.
 
-From compcert Require Import Integers Coqlib.
+Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Integers.
 
-Require Import Vericertlib.
+Require Import vericert.common.Vericertlib.
 
 Local Open Scope Z_scope.
 
@@ -337,7 +338,7 @@ Module IntExtra.
     assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
     fold (testbit (shru n (repr Byte.zwordsize)) i). rewrite bits_shru.
     change (unsigned (repr Byte.zwordsize)) with Byte.zwordsize.
-    apply zlt_true. omega. omega.
+    apply zlt_true. lia. lia.
   Qed.
 
   Lemma bits_byte3:
@@ -347,7 +348,7 @@ Module IntExtra.
     assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
     fold (testbit (shru n (repr (2 * Byte.zwordsize))) i). rewrite bits_shru.
     change (unsigned (repr (2 * Byte.zwordsize))) with (2 * Byte.zwordsize).
-    apply zlt_true. omega. omega.
+    apply zlt_true. lia. lia.
   Qed.
 
   Lemma bits_byte4:
@@ -357,7 +358,7 @@ Module IntExtra.
     assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
     fold (testbit (shru n (repr (3 * Byte.zwordsize))) i). rewrite bits_shru.
     change (unsigned (repr (3 * Byte.zwordsize))) with (3 * Byte.zwordsize).
-    apply zlt_true. omega. omega.
+    apply zlt_true. lia. lia.
   Qed.
 
   Lemma bits_ofwords:

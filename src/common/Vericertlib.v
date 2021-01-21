@@ -1,6 +1,7 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2019-2021 Yann Herklotz <yann@yannherklotz.com>
+ *               2020 James Pollard <j@mes.dev>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,21 +17,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Export
-     String
-     ZArith
-     Znumtheory
-     List
-     Bool.
+Set Implicit Arguments.
 
-Require Import Lia.
+Require Export Coq.Bool.Bool.
+Require Export Coq.Lists.List.
+Require Export Coq.Strings.String.
+Require Export Coq.ZArith.ZArith.
+Require Export Coq.ZArith.Znumtheory.
+Require Import Coq.micromega.Lia.
 
-From vericert Require Import Show.
+Require Export compcert.lib.Coqlib.
+Require Import compcert.lib.Integers.
+
+Require Export vericert.common.VericertTactics.
+Require Import vericert.common.Show.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
-From compcert.lib Require Export Coqlib.
-From compcert Require Import Integers.
 
 Local Open Scope Z_scope.
 
@@ -70,7 +73,9 @@ Ltac solve_by_invert := solve_by_inverts 1.
 Ltac invert x := inversion x; subst; clear x.
 
 Ltac destruct_match :=
-  match goal with | [ |- context[match ?x with | _ => _ end ] ] => destruct x end.
+  match goal with | [ |- context[match ?x with | _ => _ end ] ] => destruct x eqn:? end.
+
+Ltac auto_destruct x := destruct_with_eqn x; simpl in *; try discriminate; try congruence.
 
 Ltac nicify_hypotheses :=
   repeat match goal with
@@ -180,7 +185,8 @@ Ltac liapp :=
          | _ => idtac
          end.
 
-Ltac crush := simplify; try discriminate; try congruence; try lia; liapp; try assumption.
+Ltac crush := simplify; try discriminate; try congruence; try lia; liapp;
+              try assumption; try (solve [auto]).
 
 Global Opaque Nat.div.
 Global Opaque Z.mul.

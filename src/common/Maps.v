@@ -17,13 +17,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From vericert Require Import Vericertlib.
-
-From compcert Require Export Maps.
-From compcert Require Import Errors.
-Import PTree.
-
 Set Implicit Arguments.
+
+Require Export compcert.lib.Maps.
+
+Require Import compcert.common.Errors.
+
+Require Import vericert.common.Vericertlib.
+
+Import PTree.
 
 Local Open Scope error_monad_scope.
 

@@ -36,49 +36,39 @@ Imports
 We first need to import all of the modules that are used in the correctness proof, which includes all of the passes that are performed in Vericert and the CompCert front end.
 |*)
 
-From vericert Require Import HTLgenproof.
+Require compcert.backend.Selection.
+Require compcert.backend.RTL.
+Require compcert.backend.RTLgen.
+Require compcert.backend.Tailcall.
+Require compcert.backend.Inlining.
+Require compcert.backend.Renumber.
+Require compcert.backend.Constprop.
+Require compcert.backend.CSE.
+Require compcert.backend.Deadcode.
+Require compcert.backend.Unusedglob.
+Require compcert.cfrontend.Csyntax.
+Require compcert.cfrontend.SimplExpr.
+Require compcert.cfrontend.SimplLocals.
+Require compcert.cfrontend.Cshmgen.
+Require compcert.cfrontend.Cminorgen.
+Require compcert.driver.Compiler.
 
-From compcert.common Require Import
-    Errors
-    Linking.
+Require Import compcert.common.Errors.
+Require Import compcert.common.Linking.
+Require Import compcert.common.Smallstep.
+Require Import compcert.lib.Coqlib.
 
-From compcert.lib Require Import
-    Coqlib.
+Require vericert.hls.Verilog.
+Require vericert.hls.Veriloggen.
+Require vericert.hls.Veriloggenproof.
+Require vericert.hls.HTLgen.
+Require vericert.hls.RTLBlock.
+Require vericert.hls.RTLBlockgen.
+Require vericert.hls.RTLPargen.
+Require vericert.hls.HTLPargen.
+Require vericert.hls.Pipeline.
 
-From compcert.backend Require
-    Selection
-    RTL
-    RTLgen
-    Tailcall
-    Inlining
-    Renumber
-    Constprop
-    CSE
-    Deadcode
-    Unusedglob.
-
-From compcert.cfrontend Require
-    Csyntax
-    SimplExpr
-    SimplLocals
-    Cshmgen
-    Cminorgen.
-
-From compcert.driver Require
-    Compiler.
-
-From vericert Require
-     Verilog
-     Veriloggen
-     Veriloggenproof
-     HTLgen
-     RTLBlock
-     RTLBlockgen
-     RTLPargen
-     HTLPargen
-     Pipeline.
-
-From compcert Require Import Smallstep.
+Require Import vericert.hls.HTLgenproof.
 
 (*|
 Declarations
