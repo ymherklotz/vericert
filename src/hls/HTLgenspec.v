@@ -17,10 +17,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require RTL Op Maps Errors.
-From compcert Require Import Maps Integers.
-From vericert Require Import Vericertlib Verilog ValueInt HTL HTLgen AssocMap.
-Require Import Lia.
+Require Import Coq.micromega.Lia.
+
+Require compcert.backend.RTL.
+Require compcert.common.Errors.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require compcert.verilog.Op.
+
+Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.Verilog.
+Require Import vericert.hls.ValueInt.
+Require Import vericert.hls.HTL.
+Require Import vericert.hls.HTLgen.
+Require Import vericert.hls.AssocMap.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 Hint Resolve Maps.PTree.elements_correct : htlspec.

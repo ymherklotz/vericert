@@ -17,8 +17,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From vericert Require Import Vericertlib ValueInt.
-From compcert Require Import Maps.
+Require Import compcert.lib.Maps.
+
+Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.ValueInt.
 
 Definition reg := positive.
 

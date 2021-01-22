@@ -17,11 +17,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import FSets.FMapPositive.
-From vericert Require Import Vericertlib ValueInt AssocMap Array.
-From vericert Require Verilog.
-From compcert Require Events Globalenvs Smallstep Integers Values.
-From compcert Require Import Maps.
+Require Import Coq.FSets.FMapPositive.
+
+Require compcert.common.Events.
+Require compcert.common.Globalenvs.
+Require compcert.common.Smallstep.
+Require compcert.common.Values.
+Require compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+
+Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.ValueInt.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.Array.
+Require vericert.hls.Verilog.
 
 (** The purpose of the hardware transfer language (HTL) is to create a more
 hardware-like layout that is still similar to the register transfer language

@@ -17,10 +17,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require Import Maps.
-From compcert Require Errors Globalenvs Integers.
-From compcert Require Import AST RTL.
-From vericert Require Import Verilog HTL Vericertlib AssocMap ValueInt Statemonad.
+Require Import Coq.micromega.Lia.
+
+Require Import compcert.lib.Maps.
+Require compcert.common.Errors.
+Require compcert.common.Globalenvs.
+Require compcert.lib.Integers.
+Require Import compcert.common.AST.
+Require Import compcert.backend.RTL.
+
+Require Import vericert.common.Statemonad.
+Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.HTL.
+Require Import vericert.hls.ValueInt.
+Require Import vericert.hls.Verilog.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
@@ -557,8 +568,8 @@ Proof.
   rewrite PTree.gempty. congruence.
   (* inductive case *)
   intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
-  inv H2. xomega.
-  apply Ple_trans with a. auto. xomega.
+  inv H2. unfold Ple; lia.
+  apply Ple_trans with a. auto. unfold Ple; lia.
 Qed.
 
 Lemma max_pc_wf :
@@ -572,7 +583,7 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition transf_module (f: function) : mon module :=
+Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
@@ -586,7 +597,7 @@ Definition transf_module (f: function) : mon module :=
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
     | left LEDATA, left LECTRL =>
-        ret (mkmodule
+        ret (HTL.mkmodule
            f.(RTL.fn_params)
            current_state.(st_datapath)
            current_state.(st_controllogic)
@@ -616,7 +627,7 @@ Definition max_state (f: function) : state :=
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
-Definition transl_module (f : function) : Errors.res module :=
+Definition transl_module (f : function) : Errors.res HTL.module :=
   run_mon (max_state f) (transf_module f).
 
 Definition transl_fundef := transf_partial_fundef transl_module.

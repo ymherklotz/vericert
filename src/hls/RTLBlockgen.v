@@ -16,13 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require
-     RTL.
-From compcert Require Import
-     AST
-     Maps.
-From vericert Require Import
-     RTLBlock.
+Require compcert.backend.RTL.
+Require Import compcert.common.AST.
+Require Import compcert.lib.Maps.
+
+Require Import vericert.hls.RTLBlock.
 
 Parameter partition : RTL.function -> Errors.res function.
 
