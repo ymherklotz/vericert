@@ -26,11 +26,12 @@ Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Statemonad.
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.Verilog.
-Require Import vericert.hls.RTLPar.
-Require Import vericert.hls.HTL.
 Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.HTL.
+Require Import vericert.hls.RTLBlockInstr.
+Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.ValueInt.
+Require Import vericert.hls.Verilog.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
@@ -81,7 +82,8 @@ Module HTLState <: State.
   Lemma st_trans :
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
-    intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
+    intros. inv H. inv H0.
+    apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
     destruct H4 with n; destruct H7 with n; intuition congruence.
   Qed.
 
@@ -251,7 +253,8 @@ Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
 Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
   Vbinop op (Vvar r) (Vlit (ZToValue l)).
 
-Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
+Definition translate_comparison (c : Integers.comparison) (args : list reg)
+  : mon expr :=
   match c, args with
   | Integers.Ceq, r1::r2::nil => ret (bop Veq r1 r2)
   | Integers.Cne, r1::r2::nil => ret (bop Vne r1 r2)
@@ -259,11 +262,12 @@ Definition translate_comparison (c : Integers.comparison) (args : list reg) : mo
   | Integers.Cgt, r1::r2::nil => ret (bop Vgt r1 r2)
   | Integers.Cle, r1::r2::nil => ret (bop Vle r1 r2)
   | Integers.Cge, r1::r2::nil => ret (bop Vge r1 r2)
-  | _, _ => error (Errors.msg "Htlgen: comparison instruction not implemented: other")
+  | _, _ => error (Errors.msg
+                 "Htlgen: comparison instruction not implemented: other")
   end.
 
-Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) (i: Integers.int)
-  : mon expr :=
+Definition translate_comparison_imm (c : Integers.comparison) (args : list reg)
+           (i: Integers.int) : mon expr :=
   match c, args with
   | Integers.Ceq, r1::nil => ret (boplit Veq r1 i)
   | Integers.Cne, r1::nil => ret (boplit Vne r1 i)
@@ -271,37 +275,46 @@ Definition translate_comparison_imm (c : Integers.comparison) (args : list reg) 
   | Integers.Cgt, r1::nil => ret (boplit Vgt r1 i)
   | Integers.Cle, r1::nil => ret (boplit Vle r1 i)
   | Integers.Cge, r1::nil => ret (boplit Vge r1 i)
-  | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
+  | _, _ => error (Errors.msg
+                 "Htlgen: comparison_imm instruction not implemented: other")
   end.
 
-Definition translate_comparisonu (c : Integers.comparison) (args : list reg) : mon expr :=
+Definition translate_comparisonu (c : Integers.comparison) (args : list reg)
+  : mon expr :=
   match c, args with
   | Integers.Clt, r1::r2::nil => ret (bop Vltu r1 r2)
   | Integers.Cgt, r1::r2::nil => ret (bop Vgtu r1 r2)
   | Integers.Cle, r1::r2::nil => ret (bop Vleu r1 r2)
   | Integers.Cge, r1::r2::nil => ret (bop Vgeu r1 r2)
-  | _, _ => error (Errors.msg "Htlgen: comparison instruction not implemented: other")
+  | _, _ => error (Errors.msg
+                 "Htlgen: comparison instruction not implemented: other")
   end.
 
-Definition translate_comparison_immu (c : Integers.comparison) (args : list reg) (i: Integers.int)
-  : mon expr :=
+Definition translate_comparison_immu (c : Integers.comparison)
+           (args : list reg) (i: Integers.int) : mon expr :=
   match c, args with
   | Integers.Clt, r1::nil => ret (boplit Vltu r1 i)
   | Integers.Cgt, r1::nil => ret (boplit Vgtu r1 i)
   | Integers.Cle, r1::nil => ret (boplit Vleu r1 i)
   | Integers.Cge, r1::nil => ret (boplit Vgeu r1 i)
-  | _, _ => error (Errors.msg "Htlgen: comparison_imm instruction not implemented: other")
+  | _, _ => error (Errors.msg
+                 "Htlgen: comparison_imm instruction not implemented: other")
   end.
 
-Definition translate_condition (c : Op.condition) (args : list reg) : mon expr :=
+Definition translate_condition (c : Op.condition) (args : list reg)
+  : mon expr :=
   match c, args with
   | Op.Ccomp c, _ => translate_comparison c args
   | Op.Ccompu c, _ => translate_comparisonu c args
   | Op.Ccompimm c i, _ => translate_comparison_imm c args i
   | Op.Ccompuimm c i, _ => translate_comparison_immu c args i
-  | Op.Cmaskzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmaskzero")
-  | Op.Cmasknotzero n, _ => error (Errors.msg "Htlgen: condition instruction not implemented: Cmasknotzero")
-  | _, _ => error (Errors.msg "Htlgen: condition instruction not implemented: other")
+  | Op.Cmaskzero n, _ =>
+    error (Errors.msg "Htlgen: condition instruction not implemented: Cmaskzero")
+  | Op.Cmasknotzero n, _ =>
+    error (Errors.msg
+         "Htlgen: condition instruction not implemented: Cmasknotzero")
+  | _, _ =>
+    error (Errors.msg "Htlgen: condition instruction not implemented: other")
   end.
 
 Definition check_address_parameter_signed (p : Z) : bool :=
@@ -311,30 +324,31 @@ Definition check_address_parameter_signed (p : Z) : bool :=
 Definition check_address_parameter_unsigned (p : Z) : bool :=
   Z.leb p Integers.Ptrofs.max_unsigned.
 
-Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : mon expr :=
+Definition translate_eff_addressing (a: Op.addressing) (args: list reg)
+  : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
   | Op.Aindexed off, r1::nil =>
     if (check_address_parameter_signed off)
     then ret (boplitz Vadd r1 off)
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed): address out of bounds")
+    else error (Errors.msg ("HTLPargen: translate_eff_addressing (Aindexed): address out of bounds"))
   | Op.Ascaled scale offset, r1::nil =>
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (boplitz Vmul r1 scale) (Vlit (ZToValue offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ascaled): address out of bounds")
+    else error (Errors.msg "HTLPargen: translate_eff_addressing (Ascaled): address out of bounds")
   | Op.Aindexed2 offset, r1::r2::nil =>
     if (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (bop Vadd r1 r2) (Vlit (ZToValue offset)))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address out of bounds")
+    else error (Errors.msg "HTLPargen: translate_eff_addressing (Aindexed2): address out of bounds")
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
     then ret (Vbinop Vadd (Vvar r1) (Vbinop Vadd (boplitz Vmul r2 scale) (Vlit (ZToValue offset))))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address out of bounds")
+    else error (Errors.msg "HTLPargen: translate_eff_addressing (Aindexed2scaled): address out of bounds")
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
     then ret (Vlit (ZToValue a))
-    else error (Errors.msg "Veriloggen: translate_eff_addressing (Ainstack): address out of bounds")
-  | _, _ => error (Errors.msg "Veriloggen: translate_eff_addressing unsuported addressing")
+    else error (Errors.msg "HTLPargen: translate_eff_addressing (Ainstack): address out of bounds")
+  | _, _ => error (Errors.msg "HTLPargen: translate_eff_addressing unsuported addressing")
   end.
 
 (** Translate an instruction to a statement. FIX mulhs mulhu *)
@@ -535,7 +549,8 @@ Definition poslength {A : Type} (l : list A) : positive :=
   | _ => 1
   end.
 
-Fixpoint penumerate {A : Type} (p : positive) (l : list A) {struct l} : list (positive * A) :=
+Fixpoint penumerate {A : Type} (p : positive) (l : list A) {struct l}
+  : list (positive * A) :=
   match l with
   | x :: xs => (p, x) :: penumerate (Pos.succ p) xs
   | nil => nil
@@ -550,7 +565,8 @@ Lemma add_data_instr_state_incr :
        (st_freshstate s)
        s.(st_scldecls)
        s.(st_arrdecls)
-       (AssocMap.set n (Vseq (AssocMapExt.get_default _ Vskip n s.(st_datapath)) st) s.(st_datapath))
+       (AssocMap.set n (Vseq (AssocMapExt.get_default
+                            _ Vskip n s.(st_datapath)) st) s.(st_datapath))
        s.(st_controllogic)).
 Proof.
   constructor; intros;
@@ -601,77 +617,92 @@ Definition add_control_instr (n : node) (st : stmnt) : mon unit :=
            s.(st_datapath)
            (AssocMap.set n st s.(st_controllogic)))
          (add_control_instr_state_incr s n st CTRL)
-    | _ => Error (Errors.msg "HTLPargen.add_control_instr: control logic is not empty")
+    | _ =>
+      Error (Errors.msg "HTLPargen.add_control_instr: control logic is not empty")
     end.
 
-Definition translate_inst (fin rtrn stack : reg) (n : node) (i : instruction) : mon unit :=
+Definition translate_inst (fin rtrn stack : reg) (n : node) (i : instr)
+  : mon unit :=
   match i with
-  | RPnop =>
+  | RBnop =>
     add_data_instr n Vskip
-  | RPop op args dst =>
+  | RBop op args dst =>
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
     add_data_instr n (nonblock dst instr)
-  | RPload chunk addr args dst =>
+  | RBload chunk addr args dst =>
     do src <- translate_arr_access chunk addr args stack;
     do _ <- declare_reg None dst 32;
     add_data_instr n (nonblock dst src)
-  | RPstore chunk addr args src =>
+  | RBstore chunk addr args src =>
     do dst <- translate_arr_access chunk addr args stack;
     add_data_instr n (Vnonblock dst (Vvar src))
   end.
 
-Definition translate_inst_list (fin rtrn stack : reg) (ni : node * list instruction) : mon unit :=
+Definition translate_inst_list (fin rtrn stack : reg) (ni : node * list instr)
+  : mon unit :=
   let (n, li) := ni in
   do _ <- collectlist (translate_inst fin rtrn stack n) li;
   do st <- get;
   add_control_instr n (state_goto st.(st_st) (Pos.succ n)).
 
-Definition translate_cfi (fin rtrn stack : reg) (ni : node * control_flow_inst) : mon unit :=
+Definition translate_cfi (fin rtrn stack : reg) (ni : node * cf_instr)
+  : mon unit :=
   let (n, cfi) := ni in
   match cfi with
-  | RPgoto n' =>
+  | RBgoto n' =>
     do st <- get;
     add_node_skip n (state_goto st.(st_st) n')
-  | RPcond c args n1 n2 =>
+  | RBcond c args n1 n2 =>
     do e <- translate_condition c args;
     add_branch_instr e n n1 n2
-  | RPreturn r =>
+  | RBreturn r =>
     match r with
     | Some r' =>
-      add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r')))
+      add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z)))
+                             (block rtrn (Vvar r')))
     | None =>
-      add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z))))
+      add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z)))
+                             (block rtrn (Vlit (ZToValue 0%Z))))
     end
-  | RPjumptable r ln => error (Errors.msg "HTLPargen: RPjumptable not supported.")
-  | RPcall sig ri rl r n => error (Errors.msg "HTLPargen: RPcall not supported.")
-  | RPtailcall sig ri lr => error (Errors.msg "HTLPargen: RPtailcall not supported.")
-  | RPbuiltin e lb b n => error (Errors.msg "HTLPargen: RPbuildin not supported.")
+  | RBjumptable r ln =>
+    error (Errors.msg "HTLPargen: RPjumptable not supported.")
+  | RBcall sig ri rl r n =>
+    error (Errors.msg "HTLPargen: RPcall not supported.")
+  | RBtailcall sig ri lr =>
+    error (Errors.msg "HTLPargen: RPtailcall not supported.")
+  | RBbuiltin e lb b n =>
+    error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
-Definition transf_bblock (fin rtrn stack : reg) (ni : node * bblock) : mon unit :=
+Definition transf_bblock (fin rtrn stack : reg) (ni : node * bblock)
+  : mon unit :=
   let (n, bb) := ni in
-  do _ <- collectlist (translate_inst_list fin rtrn stack) (penumerate n bb.(bb_body));
-  match bb.(bb_exit) with
-  | Some e => translate_cfi fin rtrn stack ((n + poslength bb.(bb_body))%positive, e)
-  | None => ret tt
-  end.
+  do _ <- collectlist (translate_inst_list fin rtrn stack)
+                      (penumerate n bb.(bb_body));
+  translate_cfi fin rtrn stack
+                ((n + poslength bb.(bb_body))%positive, bb.(bb_exit)).
 
-Definition transf_module (f: function) : mon module :=
+Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
-    do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_bblock fin rtrn stack) (Maps.PTree.elements f.(RTLPar.fn_code));
-    do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTLPar.fn_params);
+    do (stack, stack_len) <- create_arr None 32
+                                        (Z.to_nat (f.(fn_stacksize) / 4));
+    do _ <- collectlist (transf_bblock fin rtrn stack)
+                        (Maps.PTree.elements f.(RTLPar.fn_code));
+    do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
+                        f.(RTLPar.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
     do current_state <- get;
-    match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
+    match zle (Z.pos (max_pc_map current_state.(st_datapath)))
+              Integers.Int.max_unsigned,
+          zle (Z.pos (max_pc_map current_state.(st_controllogic)))
+              Integers.Int.max_unsigned with
     | left LEDATA, left LECTRL =>
-        ret (mkmodule
+        ret (HTL.mkmodule
            f.(RTLPar.fn_params)
            current_state.(st_datapath)
            current_state.(st_controllogic)
@@ -701,7 +732,7 @@ Definition max_state (f: function) : state :=
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
-Definition transl_module (f : function) : Errors.res module :=
+Definition transl_module (f : function) : Errors.res HTL.module :=
   run_mon (max_state f) (transf_module f).
 
 Definition transl_fundef := transf_partial_fundef transl_module.

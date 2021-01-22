@@ -31,6 +31,7 @@ Require Import compcert.lib.Maps.
 Require compcert.verilog.Op.
 Require vericert.hls.RTLBlock.
 Require vericert.hls.RTLPar.
+Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.common.Vericertlib.
 
 (*|
@@ -132,7 +133,12 @@ Proof.
   decide equality.
 Defined.
 
-Lemma instruction_eq: forall (x y : RTLBlock.instruction), {x = y} + {x <> y}.
+Lemma sig_eq : forall (x y : AST.signature), {x = y} + {x <> y}.
+Proof.
+  repeat decide equality.
+Defined.
+
+Lemma instr_eq: forall (x y : instr), {x = y} + {x <> y}.
 Proof.
   generalize Pos.eq_dec; intro.
   generalize typ_eq; intro.
@@ -146,6 +152,26 @@ Proof.
   generalize list_reg_eq; intro.
   generalize AST.ident_eq; intro.
   decide equality.
+Defined.
+
+Lemma cf_instr_eq: forall (x y : cf_instr), {x = y} + {x <> y}.
+Proof.
+  generalize Pos.eq_dec; intro.
+  generalize typ_eq; intro.
+  generalize Int.eq_dec; intro.
+  generalize Int64.eq_dec; intro.
+  generalize Float.eq_dec; intro.
+  generalize Float32.eq_dec; intro.
+  generalize Ptrofs.eq_dec; intro.
+  generalize memory_chunk_eq; intro.
+  generalize addressing_eq; intro.
+  generalize operation_eq; intro.
+  generalize condition_eq; intro.
+  generalize signature_eq; intro.
+  generalize list_operation_eq; intro.
+  generalize list_reg_eq; intro.
+  generalize AST.ident_eq; intro.
+  repeat decide equality.
 Defined.
 
 (*|
@@ -437,25 +463,14 @@ Fixpoint list_translation (l : list reg) (f : forest) {struct l} : expression_li
   | i :: l => Econs (f # (Reg i)) (list_translation l f)
   end.
 
-Definition update_block (f : forest) (i : RTLBlock.instruction) : forest :=
+Definition update (f : forest) (i : instr) : forest :=
   match i with
-  | RTLBlock.RBnop => f
-  | RTLBlock.RBop op rl r =>
+  | RBnop => f
+  | RBop op rl r =>
     f # (Reg r) <- (Eop op (list_translation rl f))
-  | RTLBlock.RBload chunk addr rl r =>
+  | RBload chunk addr rl r =>
     f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
-  | RTLBlock.RBstore chunk addr rl r =>
-    f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
-  end.
-
-Definition update_par (f : forest) (i : RTLPar.instruction) : forest :=
-  match i with
-  | RTLPar.RPnop => f
-  | RTLPar.RPop op rl r =>
-    f # (Reg r) <- (Eop op (list_translation rl f))
-  | RTLPar.RPload chunk addr rl r =>
-    f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
-  | RTLPar.RPstore chunk addr rl r =>
+  | RBstore chunk addr rl r =>
     f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
   end.
 
@@ -470,22 +485,16 @@ that there aren't any more effects in the resultant RTLPar code than in the RTLB
 Get a sequence from the basic block.
 |*)
 
-Fixpoint abstract_sequence_block (f : forest) (b : list RTLBlock.instruction) : forest :=
+Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   match b with
   | nil => f
-  | i :: l => abstract_sequence_block (update_block f i) l
+  | i :: l => abstract_sequence (update f i) l
   end.
 
-Fixpoint abstract_sequence_par' (f : forest) (b : list RTLPar.instruction) : forest :=
+Fixpoint abstract_sequence_par (f : forest) (b : list (list instr)) : forest :=
   match b with
   | nil => f
-  | i :: l => abstract_sequence_par' (update_par f i) l
-  end.
-
-Fixpoint abstract_sequence_par (f : forest) (b : list (list RTLPar.instruction)) : forest :=
-  match b with
-  | nil => f
-  | i :: l => abstract_sequence_par (abstract_sequence_par' f i) l
+  | i :: l => abstract_sequence_par (abstract_sequence f i) l
   end.
 
 (*|
@@ -493,8 +502,8 @@ Check equivalence of control flow instructions.  As none of the basic blocks sho
 none of the labels should be different, meaning the control-flow instructions should match exactly.
 |*)
 
-Definition check_control_flow_instr (c1 : RTLBlock.control_flow_inst) (c2 : RTLPar.control_flow_inst) : bool :=
-  true.
+Definition check_control_flow_instr (c1 c2: cf_instr) : bool :=
+  if cf_instr_eq c1 c2 then true else false.
 
 (*|
 We define the top-level oracle that will check if two basic blocks are equivalent after a scheduling
@@ -502,5 +511,5 @@ transformation.
 |*)
 
 Definition schedule_oracle (bb : RTLBlock.bblock) (bbt : RTLPar.bblock) : bool :=
-  check (abstract_sequence_block empty (RTLBlock.bb_body bb))
-        (abstract_sequence_par empty (RTLPar.bb_body bbt)).
+  check (abstract_sequence empty (bb_body bb))
+        (abstract_sequence_par empty (bb_body bbt)).

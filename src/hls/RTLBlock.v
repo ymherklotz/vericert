@@ -31,8 +31,9 @@ Require Import compcert.verilog.Op.
 Require Import vericert.hls.RTLBlockInstr.
 
 Definition bblock_body : Type := list instr.
+Definition bblock := bblock bblock_body.
 
-Definition code : Type := PTree.t (@bblock bblock_body).
+Definition code : Type := PTree.t bblock.
 
 Record function: Type := mkfunction {
   fn_sig: signature;

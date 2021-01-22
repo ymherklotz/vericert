@@ -30,7 +30,8 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.hls.RTLBlockInstr.
 
-Definition bblock := RTLBlockInstr.bblock (list (list instr)).
+Definition bblock_body := list (list instr).
+Definition bblock := RTLBlockInstr.bblock bblock_body.
 
 Definition code : Type := PTree.t bblock.
 
