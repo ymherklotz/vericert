@@ -1,0 +1,127 @@
+* Vericert
+   :PROPERTIES:
+:CUSTOM_ID: vericert
+:END:
+#+html: <a href="https://github.com/ymherklotz/vericert/actions"><img src="https://github.com/ymherklotz/vericert/workflows/CI/badge.svg" /></a>
+#+html: <a href="https://vericert.ymhg.org/"><img src="https://github.com/ymherklotz/vericert-docs/workflows/docs/badge.svg" /></a>
+
+A formally verified high-level synthesis (HLS) tool written in Coq,
+building on top of [[https://github.com/AbsInt/CompCert][CompCert]].
+This ensures the correctness of the C to Verilog translation according
+to our Verilog semantics and CompCert's C semantics, removing the need
+to check the resulting hardware for behavioural correctness.
+
+** Features
+   :PROPERTIES:
+   :CUSTOM_ID: features
+   :END:
+The project is currently a work in progress, so proofs remain to be
+finished. Currently, the following C features are supported, but are not
+all proven correct yet:
+
+- all int operations,
+- non-recursive function calls,
+- local arrays and pointers
+- control-flow structures such as if-statements, for-loops, etc...
+
+** Building
+   :PROPERTIES:
+   :CUSTOM_ID: building
+   :END:
+To build Vericert, the provided [[/Makefile][Makefile]] can be used.
+External dependencies are needed to build the project, which can be
+pulled in automatically with [[https://nixos.org/nix/][nix]] using the
+provided [[/default.nix][default.nix]] and [[/shell.nix][shell.nix]]
+files.
+
+The project is written in Coq, a theorem prover, which is extracted to
+OCaml so that it can then be compiled and executed. The dependencies of
+this project are the following:
+
+- [[https://coq.inria.fr/][Coq]]: theorem prover that is used to also
+  program the HLS tool.
+- [[https://ocaml.org/][OCaml]]: the OCaml compiler to compile the
+  extracted files.
+- [[https://github.com/mit-plv/bbv][bbv]]: an efficient bit vector
+  library.
+- [[https://github.com/ocaml/dune][dune]]: build tool for ocaml projects
+  to gather all the ocaml files and compile them in the right order.
+- [[http://gallium.inria.fr/~fpottier/menhir/][menhir]]: parser
+  generator for ocaml.
+- [[https://github.com/ocaml/ocamlfind][findlib]] to find installed
+  OCaml libraries.
+- [[https://gcc.gnu.org/][GCC]]: compiler to help build CompCert.
+
+These dependencies can be installed manually, or automatically through
+Nix.
+
+*** Downloading CompCert
+    :PROPERTIES:
+    :CUSTOM_ID: downloading-compcert
+    :END:
+CompCert is added as a submodule in the =lib/CompCert= directory. It is
+needed to run the build process below, as it is the one dependency that
+is not downloaded by nix, and has to be downloaded together with the
+repository. To clone CompCert together with this project, you can run:
+
+#+begin_src shell
+  git clone --recursive https://github.com/ymherklotz/vericert
+#+end_src
+
+If the repository is already cloned, you can run the following command
+to make sure that CompCert is also downloaded:
+
+#+begin_src shell
+  git submodule update --init
+#+end_src
+
+*** Setting up Nix
+    :PROPERTIES:
+    :CUSTOM_ID: setting-up-nix
+    :END:
+Nix is a package manager that can create an isolated environment so that
+the builds are reproducible. Once nix is installed, it can be used in
+the following way.
+
+To open a shell which includes all the necessary dependencies, one can
+use:
+
+#+begin_src shell
+  nix-shell
+#+end_src
+
+which will open a shell that has all the dependencies loaded.
+
+*** Makefile build
+    :PROPERTIES:
+    :CUSTOM_ID: makefile-build
+    :END:
+If the dependencies were installed manually, or if one is in the
+=nix-shell=, the project can be built by running:
+
+#+begin_src shell
+  make -j8
+#+end_src
+
+and installed locally, or under the =PREFIX= location using:
+
+#+begin_src shell
+  make install
+#+end_src
+
+Which will install the binary in =./bin/vericert= by default. However,
+this can be changed by changing the =PREFIX= environment variable, in
+which case the binary will be installed in =$PREFIX/bin/vericert=.
+
+** Running
+   :PROPERTIES:
+   :CUSTOM_ID: running
+   :END:
+To test out =vericert= you can try the following examples which are in
+the test folder using the following:
+
+#+begin_src shell
+  ./bin/vericert test/loop.c -o loop.v
+  ./bin/vericert test/conditional.c -o conditional.v
+  ./bin/vericert test/add.c -o add.v
+#+end_src

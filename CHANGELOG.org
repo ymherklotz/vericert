@@ -1,0 +1,42 @@
+# -*- fill-column: 80 -*-
+
+* Vericert Changelog
+
+** Unreleased
+
+*** New Features
+
+- Add *RTLBlock*, a basic block intermediate language that is based on CompCert's
+  RTL.
+- Add *RTLPar*, which can execute groups of instructions in parallel.
+- Add scheduling pass to go from RTLBlock to RTLPar.
+
+** v1.1.0 - 2020-12-17
+
+Add a stable release with all proofs completed.
+
+** v1.0.1 - 2020-08-14
+
+Release a new minor version fixing all proofs and fixing scripts to generate the
+badges.
+
+*** Bug Fixes
+
+- Fix some of the proofs which were not passing.
+
+** v1.0.0 - 2020-08-13
+
+First release of a fully verified version of Vericert with support for the
+translation of many C constructs to Verilog.
+
+*** New Features
+
+- Most int instructions and operators.
+- Non-recursive function calls.
+- Local arrays, structs and unions of type int.
+- Pointer arithmetic with int.
+
+** v0.1.0 - 2020-04-03
+
+This is the first release with working HLS but without any proofs associated
+with it.
