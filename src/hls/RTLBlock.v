@@ -32,7 +32,7 @@ Require Import vericert.hls.RTLBlockInstr.
 
 Definition bblock_body : Type := list instr.
 
-Definition code : Type := PTree.t (bblock bblock_body).
+Definition code : Type := PTree.t (@bblock bblock_body).
 
 Record function: Type := mkfunction {
   fn_sig: signature;
@@ -52,16 +52,59 @@ Definition funsig (fd: fundef) :=
   | External ef => ef_sig ef
   end.
 
-Definition genv := Genv.t fundef unit.
-Definition regset := Regmap.t val.
+Inductive stackframe : Type :=
+| Stackframe:
+    forall (res: reg)            (**r where to store the result *)
+           (f: function)         (**r calling function *)
+           (sp: val)             (**r stack pointer in calling function *)
+           (pc: node)            (**r program point in calling function *)
+           (rs: regset),         (**r register state in calling function *)
+    stackframe.
 
-Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
-  match rl, vl with
-  | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
-  | _, _ => Regmap.init Vundef
-  end.
+Inductive state : Type :=
+| State:
+    forall (stack: list stackframe) (**r call stack *)
+           (f: function)            (**r current function *)
+           (sp: val)                (**r stack pointer *)
+           (pc: node)               (**r current program point in [c] *)
+           (rs: regset)             (**r register state *)
+           (m: mem),                (**r memory state *)
+    state
+| Callstate:
+    forall (stack: list stackframe) (**r call stack *)
+           (f: fundef)              (**r function to call *)
+           (args: list val)         (**r arguments to the call *)
+           (m: mem),                (**r memory state *)
+    state
+| Returnstate:
+    forall (stack: list stackframe) (**r call stack *)
+           (v: val)                 (**r return value for the call *)
+           (m: mem),                (**r memory state *)
+    state.
+
+Definition genv := Genv.t fundef unit.
 
 Section RELSEM.
+
+  Context (ge: genv).
+
+  Definition find_function
+             (ros: reg + ident) (rs: regset) : option fundef :=
+    match ros with
+    | inl r => Genv.find_funct ge rs#r
+    | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+    end.
+
+  Inductive step: state -> trace -> state -> Prop :=
+  | exec_bblock:
+      forall f pc bb cfi,
+      (fn_code f)!pc = Some (mk_bblock _ bb cfi) ->
+      step_instr_list (InstrState rs m) bb (InstrState rs' m')
+      step .
 
 End RELSEM.
 

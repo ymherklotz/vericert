@@ -49,6 +49,7 @@ Record bblock (bblock_body : Type) : Type := mk_bblock {
     bb_body: bblock_body;
     bb_exit: option cf_instr
   }.
+Arguments mk_bblock [bblock_body].
 Arguments bb_body [bblock_body].
 Arguments bb_exit [bblock_body].
 
@@ -96,37 +97,41 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   end.
 
 Inductive instr_state : Type :=
-  | InstrState :
-      forall (rs : regset)
-             (m : mem),
-      instr_state.
+| InstrState:
+    forall (rs: regset)
+           (m: mem),
+    instr_state.
+
+Inductive cf_instr_state : Type :=
+| CfInstrState:
+    forall ()
 
 Section RELSEM.
 
-  Context (fundef : Type).
+  Context (fundef: Type).
 
   Definition genv := Genv.t fundef unit.
 
-  Context (ge : genv) (sp : val).
+  Context (ge: genv) (sp: val).
 
-  Inductive step_instr : instr_state -> instr -> instr_state -> Prop :=
-  | exec_RBnop :
+  Inductive step_instr: instr_state -> instr -> instr_state -> Prop :=
+  | exec_RBnop:
       forall rs m,
       step_instr (InstrState rs m) RBnop (InstrState rs m)
-  | exec_RBop :
+  | exec_RBop:
       forall op v res args rs m,
       eval_operation ge sp op rs##args m = Some v ->
       step_instr (InstrState rs m)
                  (RBop op args res)
                  (InstrState (rs#res <- v) m)
-  | exec_RBload :
+  | exec_RBload:
       forall addr rs args a chunk m v dst,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.loadv chunk m a = Some v ->
       step_instr (InstrState rs m)
                  (RBload chunk addr args dst)
                  (InstrState (rs#dst <- v) m)
-  | exec_RBstore :
+  | exec_RBstore:
       forall addr rs args a chunk m src m',
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.storev chunk m a rs#src = Some m' ->
@@ -134,14 +139,16 @@ Section RELSEM.
                  (RBstore chunk addr args src)
                  (InstrState rs m').
 
-  Inductive step_instr_list : instr_state -> list instr -> instr_state -> Prop :=
-    | exec_RBcons :
+  Inductive step_instr_list: instr_state -> list instr -> instr_state -> Prop :=
+    | exec_RBcons:
         forall state i state' state'' instrs,
         step_instr state i state' ->
         step_instr_list state' instrs state'' ->
         step_instr_list state (i :: instrs) state''
-    | exec_RBnil :
+    | exec_RBnil:
         forall state,
         step_instr_list state nil state.
+
+  Inductive step_cf_instr:
 
 End RELSEM.
