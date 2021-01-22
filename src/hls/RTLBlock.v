@@ -168,7 +168,24 @@ Section RELSEM.
       forall res f sp pc rs s vres m,
       step (Returnstate (Stackframe res f sp pc rs :: s) vres m)
         E0 (State s f sp pc (rs#res <- vres) m).
+
 End RELSEM.
+
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      funsig f = signature_main ->
+      initial_state p (Callstate nil f nil m0).
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall r m,
+      final_state (Returnstate nil (Vint r) m) r.
+
+Definition semantics (p: program) :=
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
 
 (*
 
