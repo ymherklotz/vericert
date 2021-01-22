@@ -17,10 +17,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From compcert Require RTL Registers AST.
-From compcert Require Import Integers Globalenvs Memory Linking.
-From vericert Require Import Vericertlib HTLgenspec HTLgen ValueInt AssocMap Array IntegerExtra ZExtra.
-From vericert Require HTL Verilog.
+Require compcert.backend.RTL.
+Require compcert.backend.Registers.
+Require compcert.common.AST.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Linking.
+Require Import compcert.common.Memory.
+Require Import compcert.lib.Integers.
+
+Require Import vericert.common.IntegerExtra.
+Require Import vericert.common.Vericertlib.
+Require Import vericert.common.ZExtra.
+Require Import vericert.hls.Array.
+Require Import vericert.hls.AssocMap.
+Require vericert.hls.HTL.
+Require Import vericert.hls.HTLgen.
+Require Import vericert.hls.HTLgenspec.
+Require Import vericert.hls.ValueInt.
+Require vericert.hls.Verilog.
 
 Require Import Lia.
 
