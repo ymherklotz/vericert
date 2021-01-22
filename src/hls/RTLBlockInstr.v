@@ -47,7 +47,7 @@ Inductive cf_instr : Type :=
 
 Record bblock (bblock_body : Type) : Type := mk_bblock {
     bb_body: bblock_body;
-    bb_exit: option cf_instr
+    bb_exit: cf_instr
   }.
 Arguments mk_bblock [bblock_body].
 Arguments bb_body [bblock_body].
@@ -102,10 +102,6 @@ Inductive instr_state : Type :=
            (m: mem),
     instr_state.
 
-Inductive cf_instr_state : Type :=
-| CfInstrState:
-    forall ()
-
 Section RELSEM.
 
   Context (fundef: Type).
@@ -148,7 +144,5 @@ Section RELSEM.
     | exec_RBnil:
         forall state,
         step_instr_list state nil state.
-
-  Inductive step_cf_instr:
 
 End RELSEM.
