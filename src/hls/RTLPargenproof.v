@@ -41,12 +41,6 @@ Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
       (STACKS: list_forall2 match_stackframes sf sf'),
       match_states (RTLBlock.State sf f sp pc rs mem)
                    (RTLPar.State sf' tf sp pc rs mem)
-| match_block:
-    forall sf sf' f tf sp cfi rs mem
-      (TRANSL: transl_function f = OK tf)
-      (STACKS: list_forall2 match_stackframes sf sf'),
-      match_states (RTLBlock.Block sf f sp cfi rs mem)
-                   (RTLPar.Block sf' tf sp (mk_bblock nil cfi) rs mem)
 | match_returnstate:
     forall stack stack' v mem
       (STACKS: list_forall2 match_stackframes stack stack'),
