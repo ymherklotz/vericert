@@ -218,13 +218,13 @@ End RENUMBER.
 Section TRANSLATE.
   Local Open Scope error_monad_scope.
 
-  Definition called_functions : (list (Verilog.node * HTL.datapath_stmnt)) -> list ident :=
-    flat_map (fun (a : (positive * HTL.datapath_stmnt)) =>
-            let (n, stmt) := a in
-            match stmt with
-            | HTL.HTLcall fn _ _ => fn::nil
-            | _ => nil
-            end).
+  Definition called_functions (stmnts : list (Verilog.node * HTL.datapath_stmnt)) : list ident :=
+    List.nodup Pos.eq_dec (flat_map (fun (a : (positive * HTL.datapath_stmnt)) =>
+                   let (n, stmt) := a in
+                   match stmt with
+                   | HTL.HTLcall fn _ _ => fn::nil
+                   | _ => nil
+                   end) stmnts).
 
   Definition find_module (program : HTL.program) (name : ident) : Errors.res HTL.module :=
     match option_map snd (find (fun named_module => Pos.eqb (fst named_module) name) program.(prog_defs)) with
@@ -255,20 +255,31 @@ Section TRANSLATE.
 
       (* Inlining *)
       let inline_names := called_functions (PTree.elements (HTL.mod_datapath m)) in
-      do inline_modules <- Errors.mmap (find_module program) inline_names;
-      do translated_modules <- Errors.mmap (transf_module fuel' program) inline_modules;
-
-      let (renumbered_modules, last_reg) :=
+      do htl_modules <- Errors.mmap (find_module program) inline_names;
+      do translated_modules <- Errors.mmap (transf_module fuel' program) htl_modules;
+      let (renumbered_modules, _) :=
           fold_left (fun (acc : list Verilog.module * positive) module =>
                    let (acc_lst, freshreg) := acc in
-                   let init_state := mkstate freshreg (PTree.empty reg) in
+                   let init_state :=
+                       mkstate freshreg
+                               (PTree.set (mod_clk module) (HTL.mod_clk m)
+                                          (PTree.empty reg)) in
                    match renumber_module module init_state with
                    | Error _ => (acc_lst, freshreg)
                    | OK vmodule (mkstate freshreg' _) _  => (vmodule :: acc_lst, freshreg)
                    end)
-        translated_modules ((nil, inline_start_reg))
-      in
-      (* renumber_modules_mon in *)
+                    translated_modules (nil, inline_start_reg) in
+      let cleaned_modules :=
+          map (map_body
+             (Option.map_option (fun a => match a with
+                                       | Vdeclaration (Vdecl (Some _) reg sz) =>
+                                         if Pos.eqb reg (HTL.mod_clk m)
+                                         then None
+                                         else Some (Vdeclaration (Vdecl None reg sz))
+                                       | Vdeclaration (Vdeclarr (Some _) reg sz len) =>
+                                         Some (Vdeclaration (Vdeclarr None reg sz len))
+                                       | _ => Some a
+                                       end))) renumbered_modules in
 
       let body : list Verilog.module_item:=
           Valways (Vposedge (HTL.mod_clk m)) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
@@ -277,7 +288,7 @@ Section TRANSLATE.
                   :: Valways (Vposedge (HTL.mod_clk m)) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
                   :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements (HTL.mod_arrdecls m))
                                                            ++ scl_to_Vdecl (AssocMap.elements (HTL.mod_scldecls m)))
-                  ++ List.flat_map Verilog.mod_body renumbered_modules in
+                  ++ List.flat_map Verilog.mod_body cleaned_modules in
 
       Errors.OK (Verilog.mkmodule
                (HTL.mod_start m)
