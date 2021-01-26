@@ -75,7 +75,7 @@ Inductive state : Type :=
     forall (stack: list stackframe) (**r call stack *)
            (f: function)            (**r current function *)
            (sp: val)                (**r stack pointer *)
-           (cfi: cf_instr)          (**r The control flow instruction to execute. *)
+           (bb: bblock)             (**r Current basic block *)
            (rs: regset)             (**r register state *)
            (m: mem),                (**r memory state *)
     state
@@ -109,46 +109,50 @@ Section RELSEM.
     end.
 
   Inductive step: state -> trace -> state -> Prop :=
-  | exec_bblock:
-      forall stack f sp pc rs m rs' m' bb cfi,
-      (fn_code f)!pc = Some (mk_bblock bb cfi) ->
+  | exec_bblock_start:
+      forall stack f sp pc rs m bb,
+      (fn_code f)!pc = Some bb ->
+      step (State stack f sp pc rs m) E0 (Block stack f sp bb rs m)
+  | exec_bblock_instr:
+      forall stack f sp bb cfi rs m rs' m',
       step_instr_list _ ge sp (InstrState rs m) bb (InstrState rs' m') ->
-      step (State stack f sp pc rs m) E0 (Block stack f sp cfi rs' m')
+      step (Block stack f sp (mk_bblock bb cfi) rs m)
+           E0 (Block stack f sp (mk_bblock nil cfi) rs' m')
   | exec_RBcall:
       forall s f sp rs m res fd ros sig args pc',
       find_function ros rs = Some fd ->
       funsig fd = sig ->
-      step (Block s f sp (RBcall sig ros args res pc') rs m)
+      step (Block s f sp (mk_bblock nil (RBcall sig ros args res pc')) rs m)
            E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
   | exec_RBtailcall:
       forall s f stk rs m sig ros args fd m',
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step (Block s f (Vptr stk Ptrofs.zero) (RBtailcall sig ros args) rs m)
+      step (Block s f (Vptr stk Ptrofs.zero) (mk_bblock nil (RBtailcall sig ros args)) rs m)
         E0 (Callstate s fd rs##args m')
   | exec_RBbuiltin:
       forall s f sp rs m ef args res pc' vargs t vres m',
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
-      step (Block s f sp (RBbuiltin ef args res pc') rs m)
+      step (Block s f sp (mk_bblock nil (RBbuiltin ef args res pc')) rs m)
          t (State s f sp pc' (regmap_setres res vres rs) m')
   | exec_RBcond:
       forall s f sp rs m cond args ifso ifnot b pc',
       eval_condition cond rs##args m = Some b ->
       pc' = (if b then ifso else ifnot) ->
-      step (Block s f sp (RBcond cond args ifso ifnot) rs m)
+      step (Block s f sp (mk_bblock nil (RBcond cond args ifso ifnot)) rs m)
         E0 (State s f sp pc' rs m)
   | exec_RBjumptable:
       forall s f sp rs m arg tbl n pc',
       rs#arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some pc' ->
-      step (Block s f sp (RBjumptable arg tbl) rs m)
+      step (Block s f sp (mk_bblock nil (RBjumptable arg tbl)) rs m)
         E0 (State s f sp pc' rs m)
   | exec_Ireturn:
       forall s f stk rs m or m',
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step (Block s f (Vptr stk Ptrofs.zero) (RBreturn or) rs m)
+      step (Block s f (Vptr stk Ptrofs.zero) (mk_bblock nil (RBreturn or)) rs m)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_function_internal:
       forall s f args m m' stk,
