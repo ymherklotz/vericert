@@ -114,16 +114,16 @@ Ltac monadInv H :=
 statemachine that is created by the translation contains the correct
 translations for each of the elements *)
 
-Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -> stmnt -> Prop :=
+Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -> control_stmnt -> Prop :=
 | tr_instr_Inop :
     forall n,
       Z.pos n <= Int.max_unsigned ->
-      tr_instr fin rtrn st stk (RTL.Inop n) (vstmnt Vskip) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Inop n) (data_vstmnt Vskip) (state_goto st n)
 | tr_instr_Iop :
     forall n op args dst s s' e i,
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (vstmnt (Vnonblock (Vvar dst) e)) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (data_vstmnt (Vnonblock (Vvar dst) e)) (state_goto st n)
 | tr_instr_Icall :
     forall n sig fn args dst,
       Z.pos n <= Int.max_unsigned ->
@@ -133,24 +133,24 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
       Z.pos n1 <= Int.max_unsigned ->
       Z.pos n2 <= Int.max_unsigned ->
       translate_condition cond args s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) (vstmnt Vskip) (state_cond st c n1 n2)
+      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) (data_vstmnt Vskip) (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-    tr_instr fin rtrn st stk (RTL.Ireturn None) (vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z)))
-                                                  (block rtrn (Vlit (ZToValue 0%Z))))) Vskip
+    tr_instr fin rtrn st stk (RTL.Ireturn None) (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z)))
+                                                  (block rtrn (Vlit (ZToValue 0%Z))))) (ctrl_vstmnt Vskip)
 | tr_instr_Ireturn_Some :
     forall r,
       tr_instr fin rtrn st stk (RTL.Ireturn (Some r))
-               (vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r)))) Vskip
+               (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r)))) (ctrl_vstmnt Vskip)
 | tr_instr_Iload :
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (vstmnt (nonblock dst c)) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (data_vstmnt (nonblock dst c)) (state_goto st n)
 | tr_instr_Istore :
     forall mem addr args s s' i c src n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (vstmnt (Vnonblock c (Vvar src)))
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (data_vstmnt (Vnonblock c (Vvar src)))
                (state_goto st n).
 (*| tr_instr_Ijumptable :
     forall cexpr tbl r,
@@ -415,6 +415,13 @@ Lemma add_instr_freshreg_trans :
 Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Qed.
 Hint Resolve add_instr_freshreg_trans : htlspec.
 
+Lemma add_instr_wait_freshreg_trans :
+  forall m n n' st s r s' i,
+  add_instr_wait m n n' st s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold add_instr_wait in H. repeat (unfold_match H). inv H. auto. Qed.
+Hint Resolve add_instr_freshreg_trans : htlspec.
+
 Lemma add_branch_instr_freshreg_trans :
   forall n n0 n1 e s r s' i,
   add_branch_instr e n n0 n1 s = OK r s' i ->
@@ -459,7 +466,7 @@ Proof.
     apply declare_reg_freshreg_trans in EQ.
     apply add_instr_freshreg_trans in EQ0.
     apply create_state_freshreg_trans in EQ1.
-    apply add_instr_freshreg_trans in EQ3.
+    apply add_instr_wait_freshreg_trans in EQ3.
     congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.

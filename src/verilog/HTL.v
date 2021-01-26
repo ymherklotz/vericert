@@ -37,10 +37,14 @@ Definition ident := positive.
 Inductive datapath_stmnt :=
 | HTLfork : ident -> list reg -> datapath_stmnt
 | HTLjoin : ident -> reg -> datapath_stmnt
-| HTLVstmnt : Verilog.stmnt -> datapath_stmnt.
+| HTLDataVstmnt : Verilog.stmnt -> datapath_stmnt.
+
+Inductive control_stmnt :=
+| HTLwait : ident -> reg -> Verilog.expr -> control_stmnt
+| HTLCtrlVstmnt : Verilog.stmnt -> control_stmnt.
 
 Definition datapath := PTree.t datapath_stmnt.
-Definition controllogic := PTree.t Verilog.stmnt.
+Definition controllogic := PTree.t control_stmnt.
 
 Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
   forall p0 : positive,
@@ -115,9 +119,19 @@ Inductive datapath_stmnt_runp:
     datapath_stmnt_runp f ar al (HTLfork i args) ar al
 | stmnt_runp_HTLcall : forall f ar al i dst,
     datapath_stmnt_runp f ar al (HTLjoin i dst) ar al
-| stmnt_runp_HTLVstmnt : forall asr0 asa0 asr1 asa1 f stmnt,
+| stmnt_runp_HTLDataVstmnt : forall asr0 asa0 asr1 asa1 f stmnt,
     Verilog.stmnt_runp f asr0 asa0 stmnt asr1 asa1 ->
-    datapath_stmnt_runp f asr0 asa0 (HTLVstmnt stmnt) asr1 asa1.
+    datapath_stmnt_runp f asr0 asa0 (HTLDataVstmnt stmnt) asr1 asa1.
+
+Inductive control_stmnt_runp:
+  Verilog.fext -> Verilog.reg_associations -> Verilog.arr_associations ->
+  control_stmnt -> Verilog.reg_associations -> Verilog.arr_associations -> Prop :=
+(* TODO give it an actual semantics *)
+| stmnt_runp_HTLwait : forall f ar al i reg expr,
+    control_stmnt_runp f ar al (HTLwait i reg expr) ar al
+| stmnt_runp_HTLCtrlVstmnt : forall asr0 asa0 asr1 asa1 f stmnt,
+    Verilog.stmnt_runp f asr0 asa0 stmnt asr1 asa1 ->
+    control_stmnt_runp f asr0 asa0 (HTLCtrlVstmnt stmnt) asr1 asa1.
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
@@ -132,7 +146,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr!(m.(mod_st)) = Some (posToValue st) ->
       m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
-      Verilog.stmnt_runp f
+      control_stmnt_runp f
         (Verilog.mkassociations asr empty_assocmap)
         (Verilog.mkassociations asa (empty_stack m))
         ctrl

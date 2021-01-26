@@ -390,7 +390,7 @@ Section CORRECTNESS.
   Lemma op_stack_based :
     forall F V sp v m args rs op ge pc' res0 pc f e fin rtrn st stk,
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
-               (vstmnt (Verilog.Vnonblock (Verilog.Vvar res0) e))
+               (data_vstmnt (Verilog.Vnonblock (Verilog.Vvar res0) e))
                (state_goto st pc') ->
       reg_stack_based_pointers sp rs ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
@@ -966,12 +966,13 @@ Section CORRECTNESS.
     inv CONST; assumption.
     inv CONST; assumption. 
     (* processing of state *)
-    econstructor.
+    constructor.
     crush.
-    econstructor.
-    econstructor.
-    econstructor.
-    econstructor.
+    constructor.
+    constructor.
+    constructor.
+    constructor.
+    constructor.
 
     all: invert MARR; big_tac.
 
@@ -1004,7 +1005,7 @@ Section CORRECTNESS.
     econstructor; simpl; trivial.
     constructor; trivial.
     econstructor; simpl; eauto.
-    simpl. econstructor. econstructor. econstructor.
+    simpl. econstructor. econstructor. econstructor. constructor.
     apply H5. simplify.
 
     all: big_tac.
@@ -1222,7 +1223,7 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
-      econstructor. econstructor.
+      econstructor. econstructor. econstructor.
 
       all: big_tac.
 
@@ -1457,7 +1458,7 @@ Section CORRECTNESS.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
       econstructor. econstructor. econstructor. econstructor. crush.
-      econstructor. econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. econstructor. crush.
 
       all: big_tac.
 
@@ -1572,7 +1573,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. econstructor.
+      econstructor. econstructor. econstructor. econstructor. econstructor.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor.
       econstructor.
@@ -1851,7 +1852,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. econstructor.
+      econstructor. econstructor. econstructor. econstructor. constructor.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor.
       econstructor. econstructor. econstructor. econstructor.
@@ -2104,7 +2105,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. econstructor.
+      econstructor. econstructor. econstructor. econstructor. econstructor.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor. econstructor. econstructor. econstructor.
 
@@ -2336,7 +2337,7 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      econstructor; simpl; trivial.
+      econstructor; econstructor; simpl; trivial.
       constructor; trivial.
       eapply Verilog.erun_Vternary_true; simpl; eauto.
       eapply eval_cond_correct; eauto. intros.
@@ -2353,7 +2354,7 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      econstructor; simpl; trivial.
+      econstructor; econstructor; simpl; trivial.
       constructor; trivial.
       eapply Verilog.erun_Vternary_false; simpl; eauto.
       eapply eval_cond_correct; eauto. intros.
@@ -2407,7 +2408,7 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      constructor.
+      constructor. econstructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
       constructor.
@@ -2438,7 +2439,7 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      constructor. constructor.
+      constructor. constructor. econstructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
       constructor. constructor. constructor.

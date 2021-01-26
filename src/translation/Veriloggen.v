@@ -54,14 +54,18 @@ Definition transl_datapath_fun (a : Verilog.node * HTL.datapath_stmnt) :=
    match s with
    | HTL.HTLfork m args => Verilog.Vskip (* inline_call m args *)
    | HTL.HTLjoin m dst => Verilog.Vskip (* inline_call m args *)
-   | HTL.HTLVstmnt s => s
+   | HTL.HTLDataVstmnt s => s
    end).
 
 Definition transl_datapath st := map transl_datapath_fun st.
 
-Definition transl_ctrl_fun (a : Verilog.node * Verilog.stmnt) :=
-  let (n, stmnt) := a
-  in (Verilog.Vlit (posToValue n), stmnt).
+Definition transl_ctrl_fun (a : Verilog.node * HTL.control_stmnt) :=
+  let (n, s) := a in
+  (Verilog.Vlit (posToValue n),
+   match s with
+   | HTL.HTLwait _ _ _ => Vskip
+   | HTL.HTLCtrlVstmnt s => s
+   end).
 
 Definition transl_ctrl st := map transl_ctrl_fun st.
 
