@@ -130,10 +130,10 @@ Section RELSEM.
     end.
 
   Inductive step: state -> trace -> state -> Prop :=
-  | exec_bblock_enter:
-      forall stack f sp pc rs m rs' m' bb,
+  | exec_bblock_start:
+      forall stack f sp pc rs m bb,
       (fn_code f)!pc = Some bb ->
-      step (State stack f sp pc rs m) E0 (Block stack f sp bb rs' m')
+      step (State stack f sp pc rs m) E0 (Block stack f sp bb rs m)
   | exec_bblock_instr_cons:
       forall sp rs m rs' m' stack f bb bbs cfi,
       step_instr_list _ ge sp (InstrState rs m) bb (InstrState rs' m') ->
