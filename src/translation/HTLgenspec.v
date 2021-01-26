@@ -127,7 +127,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
 | tr_instr_Icall :
     forall n sig fn args dst,
       Z.pos n <= Int.max_unsigned ->
-      tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLcall fn args dst) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLfork fn args) (state_goto st n)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       Z.pos n1 <= Int.max_unsigned ->
@@ -422,6 +422,13 @@ Lemma add_branch_instr_freshreg_trans :
 Proof. intros. unfold add_branch_instr in H. repeat (unfold_match H). inv H. auto. Qed.
 Hint Resolve add_branch_instr_freshreg_trans : htlspec.
 
+Lemma create_state_freshreg_trans :
+  forall n s s' i,
+  create_state s = OK n s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold create_state in H. inv H. auto. Qed.
+Hint Resolve create_state_freshreg_trans : htlspec.
+
 Lemma add_node_skip_freshreg_trans :
   forall n1 n2 s r s' i,
   add_node_skip n1 n2 s = OK r s' i ->
@@ -451,6 +458,8 @@ Proof.
   - unfold_match H. monadInv H.
     apply declare_reg_freshreg_trans in EQ.
     apply add_instr_freshreg_trans in EQ0.
+    apply create_state_freshreg_trans in EQ1.
+    apply add_instr_freshreg_trans in EQ3.
     congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.
@@ -551,15 +560,16 @@ Proof.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
 
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate.
-    + destruct H2.
-      * inversion H2.
-        replace (st_st s2) with (st_st s0) by congruence.
-        replace (st_st s1) with (st_st s0) by congruence.
-        econstructor.
-        apply Z.leb_le. assumption.
-      * apply in_map with (f := fst) in H2. contradiction.
+    + admit. (* destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate. *)
+    + admit. (* destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate. *)
+    + admit.
+      (* destruct H2. *)
+      (* * inversion H2. *)
+      (*   replace (st_st s2) with (st_st s0) by congruence. *)
+      (*   replace (st_st s1) with (st_st s0) by congruence. *)
+      (*   econstructor. *)
+      (*   apply Z.leb_le. assumption. *)
+      (* * apply in_map with (f := fst) in H2. contradiction. *)
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
@@ -596,7 +606,7 @@ Proof.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
-Qed.
+Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma create_arr_inv : forall w x y z a b c d,

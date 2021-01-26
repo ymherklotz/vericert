@@ -152,6 +152,30 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_controllogic))
               (declare_reg_state_incr i s r sz).
 
+Lemma create_state_state_incr:
+  forall s,
+    st_incr s (mkstate
+         s.(st_st)
+         (st_freshreg s)
+         (Pos.succ (st_freshstate s))
+         (st_scldecls s)
+         (st_arrdecls s)
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_state : mon node :=
+  fun s => let r := s.(st_freshstate) in
+           OK r (mkstate
+                   s.(st_st)
+                   (st_freshreg s)
+                   (Pos.succ (st_freshstate s))
+                   (st_scldecls s)
+                   (st_arrdecls s)
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_state_state_incr s).
+
 Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
     match check_empty_node_datapath s n, check_empty_node_controllogic s n with
@@ -474,7 +498,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do _ <- declare_reg None dst 32;
-        add_instr n n' (HTLcall fn args dst)
+        do join_state <- create_state;
+        do _ <- add_instr n join_state (HTLfork fn args);
+        add_instr join_state n' (HTLjoin fn dst)
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")

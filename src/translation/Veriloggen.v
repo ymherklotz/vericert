@@ -52,7 +52,8 @@ Definition transl_datapath_fun (a : Verilog.node * HTL.datapath_stmnt) :=
   let (n, s) := a in
   (Verilog.Vlit (posToValue n),
    match s with
-   | HTL.HTLcall m args dst => Verilog.Vskip (* inline_call m args *)
+   | HTL.HTLfork m args => Verilog.Vskip (* inline_call m args *)
+   | HTL.HTLjoin m dst => Verilog.Vskip (* inline_call m args *)
    | HTL.HTLVstmnt s => s
    end).
 
@@ -222,7 +223,7 @@ Section TRANSLATE.
     List.nodup Pos.eq_dec (flat_map (fun (a : (positive * HTL.datapath_stmnt)) =>
                    let (n, stmt) := a in
                    match stmt with
-                   | HTL.HTLcall fn _ _ => fn::nil
+                   | HTL.HTLfork fn _ => fn::nil
                    | _ => nil
                    end) stmnts).
 

@@ -46,9 +46,11 @@ let print_instruction pp (pc, i) =
 
 let pprint_datapath_stmnt i = function
   | HTLVstmnt s -> pprint_stmnt i s
-  | HTLcall (name, args, dst) -> concat [
-      register dst; " = ";
-      extern_atom name; "("; concat (intersperse ", " (List.map register args)); ");\n"
+  | HTLfork (name, args) -> concat [
+      "fork "; extern_atom name; "("; concat (intersperse ", " (List.map register args)); ");\n"
+    ]
+  | HTLjoin (name, dst) -> concat [
+      register dst; " <= join "; extern_atom name; ";\n"
     ]
 
 let print_datapath_instruction pp (pc, i) =

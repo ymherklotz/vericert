@@ -35,7 +35,8 @@ Definition node := positive.
 Definition ident := positive.
 
 Inductive datapath_stmnt :=
-| HTLcall : ident -> list reg -> reg -> datapath_stmnt
+| HTLfork : ident -> list reg -> datapath_stmnt
+| HTLjoin : ident -> reg -> datapath_stmnt
 | HTLVstmnt : Verilog.stmnt -> datapath_stmnt.
 
 Definition datapath := PTree.t datapath_stmnt.
@@ -110,8 +111,10 @@ Inductive datapath_stmnt_runp:
   Verilog.fext -> Verilog.reg_associations -> Verilog.arr_associations ->
   datapath_stmnt -> Verilog.reg_associations -> Verilog.arr_associations -> Prop :=
 (* TODO give it an actual semantics *)
-| stmnt_runp_HTLcall : forall f ar al i args dst,
-    datapath_stmnt_runp f ar al (HTLcall i args dst) ar al
+| stmnt_runp_HTLfork : forall f ar al i args,
+    datapath_stmnt_runp f ar al (HTLfork i args) ar al
+| stmnt_runp_HTLcall : forall f ar al i dst,
+    datapath_stmnt_runp f ar al (HTLjoin i dst) ar al
 | stmnt_runp_HTLVstmnt : forall asr0 asa0 asr1 asa1 f stmnt,
     Verilog.stmnt_runp f asr0 asa0 stmnt asr1 asa1 ->
     datapath_stmnt_runp f asr0 asa0 (HTLVstmnt stmnt) asr1 asa1.
