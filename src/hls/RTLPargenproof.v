@@ -18,8 +18,8 @@
 
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
-Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Linking.
+Require Import compcert.common.Globalenvs.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
@@ -98,8 +98,38 @@ Section CORRECTNESS.
 
   Lemma senv_preserved:
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
-  Proof
-    (Genv.senv_transf_partial TRANSL).
+  Proof (Genv.senv_transf_partial TRANSL).
+
+  Lemma sig_transl_function:
+    forall (f: RTLBlock.fundef) (tf: RTLPar.fundef),
+      transl_fundef f = OK tf ->
+      RTLPar.funsig tf = RTLBlock.funsig f.
+  Proof.
+    unfold transl_fundef, transf_partial_fundef, transl_function; intros;
+    repeat destruct_match; crush;
+    match goal with H: OK _ = OK _ |- _ => inv H end; auto.
+  Qed.
+
+  Lemma find_function_translated:
+    forall ros rs f,
+      RTLBlock.find_function ge ros rs = Some f ->
+      exists tf, RTLPar.find_function tge ros rs = Some tf
+                 /\ transl_fundef f = OK tf.
+  Proof.
+    destruct ros; simplify;
+    [ exploit functions_translated; eauto
+    | rewrite symbols_preserved; destruct_match;
+      try (apply function_ptr_translated); crush ].
+  Qed.
+
+  Lemma schedule_oracle_nil:
+    forall bb cfi,
+      schedule_oracle {| bb_body := nil; bb_exit := cfi |} bb = true ->
+      is_empty (bb_body bb) /\ bb_exit bb = cfi.
+  Proof.
+    unfold schedule_oracle, check_control_flow_instr, is_empty.
+    simplify; repeat destruct_match; crush.
+  Qed.
 
   Theorem transl_step_correct :
     forall (S1 : RTLBlock.state) t S2,
@@ -118,12 +148,27 @@ Section CORRECTNESS.
         destruct (check_scheduled_trees (RTLBlock.fn_code f) (fn_code (schedule f))) eqn:?;
                  [| discriminate ]; inv H2
       | [ H: context[check_scheduled_trees] |- _ ] =>
-        eapply check_scheduled_trees_correct in H; [| solve [ eauto ] ]
+        let H2 := fresh "CHECK" in
+        learn H as H2;
+        eapply check_scheduled_trees_correct in H2; [| solve [eauto] ]
+      | [ H: schedule_oracle {| bb_body := nil; bb_exit := _ |} ?bb = true |- _ ] =>
+        let H2 := fresh "SCHED" in
+        learn H as H2;
+        apply schedule_oracle_nil in H2
       | [ H: exists _, _ |- _ ] => inv H
+      | _ => progress simplify
       end.
 
-    induction 1; simplify; repeat t; simplify.
+    induction 1; repeat t.
 
-    - repeat econstructor; eauto.
-    - admit.
-    - repeat econstructor; eauto.
+    { repeat econstructor; eauto. }
+    { admit. }
+    { destruct bb'; exploit find_function_translated; simplify;
+        repeat econstructor; eauto using sig_transl_function. }
+    { destruct bb'; exploit find_function_translated; simplify;
+        repeat econstructor; eauto using sig_transl_function. }
+    { destruct bb'; simplify; subst; repeat econstructor; eauto using Events.eval_builtin_args_preserved, Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
+    { destruct bb'; simplify; subst; repeat econstructor; eauto. }
+    { destruct bb'; simplify; subst; repeat econstructor; eauto. }
+    { destruct bb'; simplify; subst; repeat econstructor; eauto. }
+    { repeat econstructor; eauto. }

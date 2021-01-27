@@ -485,13 +485,13 @@ Get a sequence from the basic block.
 Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   match b with
   | nil => f
-  | i :: l => abstract_sequence (update f i) l
+  | i :: l => update (abstract_sequence f l) i
   end.
 
 Fixpoint abstract_sequence_par (f : forest) (b : list (list instr)) : forest :=
   match b with
   | nil => f
-  | i :: l => abstract_sequence_par (abstract_sequence f i) l
+  | i :: l => abstract_sequence (abstract_sequence_par f l) i
   end.
 
 (*|
@@ -507,9 +507,21 @@ We define the top-level oracle that will check if two basic blocks are equivalen
 transformation.
 |*)
 
+Definition empty_trees (bb: RTLBlock.bblock_body) (bbt: RTLPar.bblock_body) : bool :=
+  match bb with
+  | nil =>
+    match bbt with
+    | nil => true
+    | _ => false
+    end
+  | _ => true
+  end.
+
 Definition schedule_oracle (bb: RTLBlock.bblock) (bbt: RTLPar.bblock) : bool :=
   check (abstract_sequence empty (bb_body bb))
-        (abstract_sequence_par empty (bb_body bbt)).
+        (abstract_sequence_par empty (bb_body bbt)) &&
+  check_control_flow_instr (bb_exit bb) (bb_exit bbt) &&
+  empty_trees (bb_body bb) (bb_body bbt).
 
 Definition check_scheduled_trees := beq2 schedule_oracle.
 
@@ -539,9 +551,13 @@ Proof. solve_scheduled_trees_correct. Qed.
 Parameter schedule : RTLBlock.function -> RTLPar.function.
 
 Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :=
-  let tf := schedule f in
-  if check_scheduled_trees f.(RTLBlock.fn_code) tf.(fn_code) then
-    Errors.OK tf
+  let tfcode := fn_code (schedule f) in
+  if check_scheduled_trees f.(RTLBlock.fn_code) tfcode then
+    Errors.OK (mkfunction f.(RTLBlock.fn_sig)
+                          f.(RTLBlock.fn_params)
+                          f.(RTLBlock.fn_stacksize)
+                          tfcode
+                          f.(RTLBlock.fn_entrypoint))
   else
     Errors.Error (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
 

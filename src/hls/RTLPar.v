@@ -28,10 +28,14 @@ Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
+Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
 
 Definition bblock_body := list (list instr).
 Definition bblock := RTLBlockInstr.bblock bblock_body.
+
+Definition is_empty (b: bblock_body) : Prop :=
+  Forall (fun n => Forall (fun m => m = RBnop) n) b.
 
 Definition code : Type := PTree.t bblock.
 
@@ -140,40 +144,46 @@ Section RELSEM.
       step (Block stack f sp (mk_bblock (bb :: bbs) cfi) rs m) E0
            (Block stack f sp (mk_bblock bbs cfi) rs' m')
   | exec_RBcall:
-      forall s f sp rs m res fd ros sig args pc',
+      forall s f sp rs m res fd ros sig args pc' el,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
-      step (Block s f sp (mk_bblock nil (RBcall sig ros args res pc')) rs m)
+      is_empty el ->
+      step (Block s f sp (mk_bblock el (RBcall sig ros args res pc')) rs m)
            E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
   | exec_RBtailcall:
-      forall s f stk rs m sig ros args fd m',
+      forall s f stk rs m sig ros args fd m' el,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step (Block s f (Vptr stk Ptrofs.zero) (mk_bblock nil (RBtailcall sig ros args)) rs m)
+      is_empty el ->
+      step (Block s f (Vptr stk Ptrofs.zero) (mk_bblock el (RBtailcall sig ros args)) rs m)
         E0 (Callstate s fd rs##args m')
   | exec_RBbuiltin:
-      forall s f sp rs m ef args res pc' vargs t vres m',
+      forall s f sp rs m ef args res pc' vargs t vres m' el,
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
-      step (Block s f sp (mk_bblock nil (RBbuiltin ef args res pc')) rs m)
+      is_empty el ->
+      step (Block s f sp (mk_bblock el (RBbuiltin ef args res pc')) rs m)
          t (State s f sp pc' (regmap_setres res vres rs) m')
   | exec_RBcond:
-      forall s f sp rs m cond args ifso ifnot b pc',
+      forall s f sp rs m cond args ifso ifnot b pc' el,
       eval_condition cond rs##args m = Some b ->
       pc' = (if b then ifso else ifnot) ->
-      step (Block s f sp (mk_bblock nil (RBcond cond args ifso ifnot)) rs m)
+      is_empty el ->
+      step (Block s f sp (mk_bblock el (RBcond cond args ifso ifnot)) rs m)
         E0 (State s f sp pc' rs m)
   | exec_RBjumptable:
-      forall s f sp rs m arg tbl n pc',
+      forall s f sp rs m arg tbl n pc' el,
       rs#arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some pc' ->
-      step (Block s f sp (mk_bblock nil (RBjumptable arg tbl)) rs m)
+      is_empty el ->
+      step (Block s f sp (mk_bblock el (RBjumptable arg tbl)) rs m)
         E0 (State s f sp pc' rs m)
   | exec_Ireturn:
-      forall s f stk rs m or m',
+      forall s f stk rs m or m' el,
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step (Block s f (Vptr stk Ptrofs.zero) (mk_bblock nil (RBreturn or)) rs m)
+      is_empty el ->
+      step (Block s f (Vptr stk Ptrofs.zero) (mk_bblock el (RBreturn or)) rs m)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_function_internal:
       forall s f args m m' stk,
