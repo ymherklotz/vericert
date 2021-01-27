@@ -171,4 +171,7 @@ Section CORRECTNESS.
     { destruct bb'; simplify; subst; repeat econstructor; eauto. }
     { destruct bb'; simplify; subst; repeat econstructor; eauto. }
     { destruct bb'; simplify; subst; repeat econstructor; eauto. }
-    { repeat econstructor; eauto. }
+    { unfold bind in *. destruct_match; try discriminate. repeat t. inv TRANSL0.
+      repeat econstructor; eauto. }
+    { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
+    { inv STACKS. inv H1. repeat econstructor; eauto. }
