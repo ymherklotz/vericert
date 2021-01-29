@@ -46,11 +46,21 @@ Section RELSEM.
 
   Context (ge: genv).
 
+  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
+    | exec_RBcons:
+        forall state i state' state'' instrs sp,
+        step_instr ge sp state i state' ->
+        step_instr_list sp state' instrs state'' ->
+        step_instr_list sp state (i :: instrs) state''
+    | exec_RBnil:
+        forall state sp,
+        step_instr_list sp state nil state.
+
   Inductive step_instr_block (sp : val)
     : instr_state -> bb -> instr_state -> Prop :=
   | exec_instr_block_cons:
     forall state i state' state'' instrs,
-      step_instr_list ge sp state i state' ->
+      step_instr_list sp state i state' ->
       step_instr_block sp state' instrs state'' ->
       step_instr_block sp state (i :: instrs) state''
   | exec_instr_block_nil:

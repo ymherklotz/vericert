@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require compcert.backend.Registers.
+Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
 Require compcert.common.Memory.
@@ -449,19 +449,34 @@ Lemma tri1:
   Reg x <> Reg y -> x <> y.
 Proof. crush. Qed.
 
+Definition ge_preserved {A B C D: Type} (ge: Genv.t A B) (tge: Genv.t C D) : Prop :=
+  (forall sp op vl, Op.eval_operation ge sp op vl =
+                    Op.eval_operation tge sp op vl)
+  /\ (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                         Op.eval_addressing tge sp addr vl).
+
+Lemma ge_preserved_same:
+  forall A B ge, @ge_preserved A B A B ge ge.
+Proof. unfold ge_preserved; auto. Qed.
+Hint Resolve ge_preserved_same : rtlpar.
+
+Definition reg_lessdef (rs rs': regset) := forall x, rs !! x = rs' !! x.
+
+Lemma regs_lessdef_regs:
+  forall rs1 rs2, reg_lessdef rs1 rs2 ->
+  forall rl, rs1##rl = rs2##rl.
+Proof. induction rl; crush. Qed.
+
 Inductive sem_state_ld : sem_state -> sem_state -> Prop :=
 | sem_state_ld_intro:
   forall rs rs' m m',
-    (forall x, rs !! x = rs' !! x) ->
+    reg_lessdef rs rs' ->
     m = m' ->
     sem_state_ld (mk_sem_state rs m) (mk_sem_state rs' m').
 
 Lemma sems_det:
   forall A ge tge sp st f,
-  (forall sp op vl, Op.eval_operation ge sp op vl =
-                    Op.eval_operation tge sp op vl) ->
-  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
-                      Op.eval_addressing tge sp addr vl) ->
+  ge_preserved ge tge ->
   forall v v' mv mv',
   (sem_value A ge sp st f v /\ sem_value A tge sp st f v' -> v = v') /\
   (sem_mem A ge sp st f mv /\ sem_mem A tge sp st f mv' -> mv = mv').
@@ -469,19 +484,17 @@ Proof. Admitted.
 
 Lemma sem_value_det:
   forall A ge tge sp st f v v',
-  (forall sp op vl, Op.eval_operation ge sp op vl =
-                    Op.eval_operation tge sp op vl) ->
-  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
-                      Op.eval_addressing tge sp addr vl) ->
+  ge_preserved ge tge ->
   sem_value A ge sp st f v ->
   sem_value A tge sp st f v' ->
   v = v'.
 Proof.
   intros;
-  generalize (sems_det A ge tge sp st f H H0 v v'
+  generalize (sems_det A ge tge sp st f H v v'
                       st.(sem_state_memory) st.(sem_state_memory));
   crush.
 Qed.
+Hint Resolve sem_value_det : rtlpar.
 
 Lemma sem_value_det':
   forall FF ge sp s f v v',
@@ -489,75 +502,64 @@ Lemma sem_value_det':
   sem_value FF ge sp s f v' ->
   v = v'.
 Proof.
-  simplify; eauto using sem_value_det.
+  simplify; eauto with rtlpar.
 Qed.
 
 Lemma sem_mem_det:
   forall A ge tge sp st f m m',
-  (forall sp op vl, Op.eval_operation ge sp op vl =
-                    Op.eval_operation tge sp op vl) ->
-  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
-                      Op.eval_addressing tge sp addr vl) ->
+  ge_preserved ge tge ->
   sem_mem A ge sp st f m ->
   sem_mem A tge sp st f m' ->
   m = m'.
 Proof.
   intros;
-  generalize (sems_det A ge tge sp st f H H0 sp sp m m');
+  generalize (sems_det A ge tge sp st f H sp sp m m');
   crush.
 Qed.
+Hint Resolve sem_mem_det : rtlpar.
 
 Lemma sem_mem_det':
   forall FF ge sp s f m m',
-  sem_mem FF ge sp s f m ->
-  sem_mem FF ge sp s f m' ->
-  m = m'.
+    sem_mem FF ge sp s f m ->
+    sem_mem FF ge sp s f m' ->
+    m = m'.
 Proof.
-  simplify; eauto using sem_mem_det.
+  simplify; eauto with rtlpar.
 Qed.
 
 Lemma sem_regset_det:
   forall FF ge tge sp st f v v',
-  (forall sp op vl, Op.eval_operation ge sp op vl =
-                    Op.eval_operation tge sp op vl) ->
-  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
-                      Op.eval_addressing tge sp addr vl) ->
-  sem_regset FF ge sp st f v ->
-  sem_regset FF tge sp st f v' ->
-  (forall x, v !! x = v' !! x).
+    ge_preserved ge tge ->
+    sem_regset FF ge sp st f v ->
+    sem_regset FF tge sp st f v' ->
+    reg_lessdef v v'.
 Proof.
-  intros.
-  inversion H1; subst. inversion H2; subst.
-  generalize (H3 x); intro. generalize (H4 x); intro.
-  eapply sem_value_det; eauto.
+  intros; unfold reg_lessdef;
+  inv H0; inv H1;
+  eauto with rtlpar.
 Qed.
-
-Hint Resolve sem_value_det : rtlpar.
-Hint Resolve sem_mem_det : rtlpar.
 Hint Resolve sem_regset_det : rtlpar.
 
 Lemma sem_det:
   forall FF ge tge sp st f st' st'',
-  (forall sp op vl, Op.eval_operation ge sp op vl =
-                    Op.eval_operation tge sp op vl) ->
-  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
-                      Op.eval_addressing tge sp addr vl) ->
-  sem FF ge sp st f st' ->
-  sem FF tge sp st f st'' ->
-  sem_state_ld st' st''.
+    ge_preserved ge tge ->
+    sem FF ge sp st f st' ->
+    sem FF tge sp st f st'' ->
+    sem_state_ld st' st''.
 Proof.
   intros.
   destruct st; destruct st'; destruct st''.
-  inv H1; inv H2.
+  inv H0; inv H1.
   constructor; eauto with rtlpar.
 Qed.
+Hint Resolve sem_det : rtlpar.
 
 Lemma sem_det':
   forall FF ge sp st f st' st'',
     sem FF ge sp st f st' ->
     sem FF ge sp st f st'' ->
     sem_state_ld st' st''.
-Proof. eauto using sem_det. Qed.
+Proof. eauto with rtlpar. Qed.
 
 (*|
 Update functions.
@@ -660,9 +662,11 @@ Abstract computations
 
 Lemma abstract_execution_correct:
   forall bb bb' cfi ge tge sp rs m rs' m',
-  schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
-  @step_instr_list RTLBlock.fundef ge sp (InstrState rs m) bb (InstrState rs' m') ->
-  step_instr_block tge sp (InstrState rs m) bb' (InstrState rs' m').
+    ge_preserved ge tge ->
+    schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
+    RTLBlock.step_instr_list ge sp (InstrState rs m) bb (InstrState rs' m') ->
+    exists rs'', RTLPar.step_instr_block tge sp (InstrState rs m) bb' (InstrState rs'' m')
+                 /\ reg_lessdef rs' rs''.
 Proof. Admitted.
 
 (*|

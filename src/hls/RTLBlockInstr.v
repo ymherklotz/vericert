@@ -202,16 +202,6 @@ Section RELSEM.
                  (RBstore chunk addr args src)
                  (InstrState rs m').
 
-  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
-    | exec_RBcons:
-        forall state i state' state'' instrs sp,
-        step_instr sp state i state' ->
-        step_instr_list sp state' instrs state'' ->
-        step_instr_list sp state (i :: instrs) state''
-    | exec_RBnil:
-        forall state sp,
-        step_instr_list sp state nil state.
-
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:
     forall s f sp rs m res fd ros sig args pc pc',
