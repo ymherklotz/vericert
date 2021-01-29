@@ -24,8 +24,8 @@ Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlock.
-Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLPargen.
 
 Definition match_prog (prog : RTLBlock.program) (tprog : RTLPar.program) :=
@@ -35,34 +35,27 @@ Inductive match_stackframes: RTLBlock.stackframe -> RTLPar.stackframe -> Prop :=
 | match_stackframe:
     forall f tf res sp pc rs,
       transl_function f = OK tf ->
-      match_stackframes (RTLBlock.Stackframe res f sp pc rs)
-                        (RTLPar.Stackframe res tf sp pc rs).
+      match_stackframes (Stackframe res f sp pc rs)
+                        (Stackframe res tf sp pc rs).
 
 Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
 | match_state:
     forall sf f sp pc rs mem sf' tf
       (TRANSL: transl_function f = OK tf)
       (STACKS: list_forall2 match_stackframes sf sf'),
-      match_states (RTLBlock.State sf f sp pc rs mem)
-                   (RTLPar.State sf' tf sp pc rs mem)
-| match_block:
-    forall sf f sp bb bb' rs mem sf' tf
-    (TRANSL: transl_function f = OK tf)
-    (STACKS: list_forall2 match_stackframes sf sf')
-    (BB: schedule_oracle bb bb' = true),
-    match_states (RTLBlock.Block sf f sp bb rs mem)
-                 (RTLPar.Block sf' tf sp bb' rs mem)
+      match_states (State sf f sp pc rs mem)
+                   (State sf' tf sp pc rs mem)
 | match_returnstate:
     forall stack stack' v mem
       (STACKS: list_forall2 match_stackframes stack stack'),
-      match_states (RTLBlock.Returnstate stack v mem)
-                   (RTLPar.Returnstate stack' v mem)
+      match_states (Returnstate stack v mem)
+                   (Returnstate stack' v mem)
 | match_initial_call:
     forall stack stack' f tf args m
       (TRANSL: transl_fundef f = OK tf)
       (STACKS: list_forall2 match_stackframes stack stack'),
-      match_states (RTLBlock.Callstate stack f args m)
-      (RTLPar.Callstate stack' tf args m).
+      match_states (Callstate stack f args m)
+                   (Callstate stack' tf args m).
 
 Section CORRECTNESS.
 
@@ -103,7 +96,7 @@ Section CORRECTNESS.
   Lemma sig_transl_function:
     forall (f: RTLBlock.fundef) (tf: RTLPar.fundef),
       transl_fundef f = OK tf ->
-      RTLPar.funsig tf = RTLBlock.funsig f.
+      funsig tf = funsig f.
   Proof.
     unfold transl_fundef, transf_partial_fundef, transl_function; intros;
     repeat destruct_match; crush;
@@ -112,8 +105,8 @@ Section CORRECTNESS.
 
   Lemma find_function_translated:
     forall ros rs f,
-      RTLBlock.find_function ge ros rs = Some f ->
-      exists tf, RTLPar.find_function tge ros rs = Some tf
+      find_function ge ros rs = Some f ->
+      exists tf, find_function tge ros rs = Some tf
                  /\ transl_fundef f = OK tf.
   Proof.
     destruct ros; simplify;
@@ -125,11 +118,27 @@ Section CORRECTNESS.
   Lemma schedule_oracle_nil:
     forall bb cfi,
       schedule_oracle {| bb_body := nil; bb_exit := cfi |} bb = true ->
-      is_empty (bb_body bb) /\ bb_exit bb = cfi.
+      bb_body bb = nil /\ bb_exit bb = cfi.
   Proof.
-    unfold schedule_oracle, check_control_flow_instr, is_empty.
+    unfold schedule_oracle, check_control_flow_instr.
     simplify; repeat destruct_match; crush.
   Qed.
+
+  Lemma schedule_oracle_nil2:
+    forall cfi,
+      schedule_oracle {| bb_body := nil; bb_exit := cfi |}
+                      {| bb_body := nil; bb_exit := cfi |} = true.
+  Proof.
+    unfold schedule_oracle, check_control_flow_instr.
+    simplify; repeat destruct_match; crush.
+  Qed.
+
+  Lemma schedule_sem_correct:
+    forall bb bb' cfi sp rs m rs' m',
+      schedule_oracle {| bb_body := bb; bb_exit := cfi |} {| bb_body := bb'; bb_exit := cfi |} = true ->
+      step_instr_list ge sp (InstrState rs m) bb (InstrState rs' m') ->
+      step_instr_block tge sp (InstrState rs m) bb' (InstrState rs' m').
+  Proof. Admitted.
 
   Theorem transl_step_correct :
     forall (S1 : RTLBlock.state) t S2,
@@ -145,7 +154,7 @@ Section CORRECTNESS.
         let H2 := fresh "TRANSL" in
         learn H as H2;
         unfold transl_function in H2;
-        destruct (check_scheduled_trees (RTLBlock.fn_code f) (fn_code (schedule f))) eqn:?;
+        destruct (check_scheduled_trees (fn_code f) (fn_code (schedule f))) eqn:?;
                  [| discriminate ]; inv H2
       | [ H: context[check_scheduled_trees] |- _ ] =>
         let H2 := fresh "CHECK" in
@@ -161,17 +170,9 @@ Section CORRECTNESS.
 
     induction 1; repeat t.
 
-    { repeat econstructor; eauto. }
-    { admit. }
-    { destruct bb'; exploit find_function_translated; simplify;
-        repeat econstructor; eauto using sig_transl_function. }
-    { destruct bb'; exploit find_function_translated; simplify;
-        repeat econstructor; eauto using sig_transl_function. }
-    { destruct bb'; simplify; subst; repeat econstructor; eauto using Events.eval_builtin_args_preserved, Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
-    { destruct bb'; simplify; subst; repeat econstructor; eauto. }
-    { destruct bb'; simplify; subst; repeat econstructor; eauto. }
-    { destruct bb'; simplify; subst; repeat econstructor; eauto. }
+    admit.
     { unfold bind in *. destruct_match; try discriminate. repeat t. inv TRANSL0.
       repeat econstructor; eauto. }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
     { inv STACKS. inv H1. repeat econstructor; eauto. }
+  Qed.
