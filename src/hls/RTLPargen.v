@@ -28,8 +28,8 @@ Require compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlock.
-Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.RTLBlockInstr.
 
 (*|
 Schedule Oracle
@@ -235,7 +235,6 @@ Notation "a # b" := (get_forest b a) (at level 1).
 Notation "a # b <- c" := (Rtree.set b c a) (at level 1, b at next level).
 
 Record sem_state := mk_sem_state {
-                    sem_state_stackp : val;
                     sem_state_regset : regset;
                     sem_state_memory : Memory.mem
                     }.
@@ -252,59 +251,58 @@ Context (A : Set) (genv : Genv.t A unit).
 Inductive sem_value :
       val -> sem_state -> expression -> val -> Prop :=
   | Sbase_reg:
-          forall parent st r,
-          sem_value parent st (Ebase (Reg r)) (Registers.Regmap.get r (sem_state_regset st))
+          forall sp st r,
+          sem_value sp st (Ebase (Reg r)) (Registers.Regmap.get r (sem_state_regset st))
   | Sop:
-          forall parent st op args v lv,
-          sem_val_list parent st args lv ->
-          Op.eval_operation genv (sem_state_stackp st) op lv (sem_state_memory st) = Some v ->
-          sem_value parent st (Eop op args) v
+          forall st op args v lv sp,
+          sem_val_list sp st args lv ->
+          Op.eval_operation genv sp op lv (sem_state_memory st) = Some v ->
+          sem_value sp st (Eop op args) v
   | Sload :
-          forall parent st mem_exp addr chunk args a v m' lv ,
-          sem_mem parent st mem_exp m' ->
-          sem_val_list parent st args lv ->
-          Op.eval_addressing genv (sem_state_stackp st) addr lv = Some a ->
+          forall st mem_exp addr chunk args a v m' lv sp,
+          sem_mem sp st mem_exp m' ->
+          sem_val_list sp st args lv ->
+          Op.eval_addressing genv sp addr lv = Some a ->
           Memory.Mem.loadv chunk m' a = Some v ->
-          sem_value parent st (Eload chunk addr args mem_exp) v
+          sem_value sp st (Eload chunk addr args mem_exp) v
 with sem_mem :
-           val -> sem_state -> expression -> Memory.mem -> Prop :=
+          val -> sem_state -> expression -> Memory.mem -> Prop :=
   | Sstore :
-          forall parent st mem_exp val_exp m'' addr v a m' chunk args lv,
-          sem_mem parent st mem_exp m' ->
-          sem_value parent st val_exp v ->
-          sem_val_list parent st args lv ->
-          Op.eval_addressing genv (sem_state_stackp st) addr lv = Some a ->
+          forall st mem_exp val_exp m'' addr v a m' chunk args lv sp,
+          sem_mem sp st mem_exp m' ->
+          sem_value sp st val_exp v ->
+          sem_val_list sp st args lv ->
+          Op.eval_addressing genv sp addr lv = Some a ->
           Memory.Mem.storev chunk m' a v = Some m'' ->
-          sem_mem parent st (Estore mem_exp chunk addr args val_exp) m''
+          sem_mem sp st (Estore mem_exp chunk addr args val_exp) m''
     | Sbase_mem :
-            forall parent st m,
-            sem_mem parent st (Ebase Mem) m
+            forall st m sp,
+            sem_mem sp st (Ebase Mem) m
 with sem_val_list :
-           val -> sem_state -> expression_list -> list val -> Prop :=
+          val -> sem_state -> expression_list -> list val -> Prop :=
     | Snil :
-            forall parent st,
-            sem_val_list parent st Enil nil
+            forall st sp,
+            sem_val_list sp st Enil nil
     | Scons :
-            forall parent st e v l lv,
-            sem_value parent st e v ->
-            sem_val_list parent st l lv ->
-            sem_val_list parent st (Econs e l) (v :: lv).
+            forall st e v l lv sp,
+            sem_value sp st e v ->
+            sem_val_list sp st l lv ->
+            sem_val_list sp st (Econs e l) (v :: lv).
 
 Inductive sem_regset :
-   val -> sem_state -> forest -> regset -> Prop :=
+  val -> sem_state -> forest -> regset -> Prop :=
   | Sregset:
-        forall parent st f rs',
-        (forall x, sem_value parent st (f # (Reg x)) (Registers.Regmap.get x rs')) ->
-        sem_regset parent st f rs'.
+        forall st f rs' sp,
+        (forall x, sem_value sp st (f # (Reg x)) (Registers.Regmap.get x rs')) ->
+        sem_regset sp st f rs'.
 
 Inductive sem :
-   val -> sem_state -> forest -> sem_state -> Prop :=
+  val -> sem_state -> forest -> sem_state -> Prop :=
   | Sem:
-        forall st rs' fr' m' f parent,
-        sem_regset parent st f rs' ->
-        sem_mem parent st (f # Mem) m' ->
-        sem parent st fr' (mk_sem_state (sem_state_stackp st) rs' m').
-
+        forall st rs' m' f sp,
+        sem_regset sp st f rs' ->
+        sem_mem sp st (f # Mem) m' ->
+        sem sp st f (mk_sem_state rs' m').
 
 End SEMANTICS.
 
@@ -411,7 +409,8 @@ Proof.
   - destruct m2.
     + unfold beq2. rewrite PTree.bempty_correct. split; intros.
       rewrite H. rewrite PTree.gleaf. auto.
-      generalize (H x). rewrite PTree.gleaf. destruct (PTree.get x (PTree.Node m1_1 o m1_2)); tauto.
+      generalize (H x). rewrite PTree.gleaf.
+      destruct (PTree.get x (PTree.Node m1_1 o m1_2)); tauto.
     + simpl. split; intros.
       * destruct (andb_prop _ _ H). destruct (andb_prop _ _ H0).
         rewrite IHm1_1 in H3. rewrite IHm1_2 in H1.
@@ -448,7 +447,117 @@ Proof. intros; unfold get_forest; rewrite Rtree.gss; trivial. Qed.
 Lemma tri1:
   forall x y,
   Reg x <> Reg y -> x <> y.
-Proof. unfold not; intros; subst; auto. Qed.
+Proof. crush. Qed.
+
+Inductive sem_state_ld : sem_state -> sem_state -> Prop :=
+| sem_state_ld_intro:
+  forall rs rs' m m',
+    (forall x, rs !! x = rs' !! x) ->
+    m = m' ->
+    sem_state_ld (mk_sem_state rs m) (mk_sem_state rs' m').
+
+Lemma sems_det:
+  forall A ge tge sp st f,
+  (forall sp op vl, Op.eval_operation ge sp op vl =
+                    Op.eval_operation tge sp op vl) ->
+  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                      Op.eval_addressing tge sp addr vl) ->
+  forall v v' mv mv',
+  (sem_value A ge sp st f v /\ sem_value A tge sp st f v' -> v = v') /\
+  (sem_mem A ge sp st f mv /\ sem_mem A tge sp st f mv' -> mv = mv').
+Proof. Admitted.
+
+Lemma sem_value_det:
+  forall A ge tge sp st f v v',
+  (forall sp op vl, Op.eval_operation ge sp op vl =
+                    Op.eval_operation tge sp op vl) ->
+  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                      Op.eval_addressing tge sp addr vl) ->
+  sem_value A ge sp st f v ->
+  sem_value A tge sp st f v' ->
+  v = v'.
+Proof.
+  intros;
+  generalize (sems_det A ge tge sp st f H H0 v v'
+                      st.(sem_state_memory) st.(sem_state_memory));
+  crush.
+Qed.
+
+Lemma sem_value_det':
+  forall FF ge sp s f v v',
+  sem_value FF ge sp s f v ->
+  sem_value FF ge sp s f v' ->
+  v = v'.
+Proof.
+  simplify; eauto using sem_value_det.
+Qed.
+
+Lemma sem_mem_det:
+  forall A ge tge sp st f m m',
+  (forall sp op vl, Op.eval_operation ge sp op vl =
+                    Op.eval_operation tge sp op vl) ->
+  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                      Op.eval_addressing tge sp addr vl) ->
+  sem_mem A ge sp st f m ->
+  sem_mem A tge sp st f m' ->
+  m = m'.
+Proof.
+  intros;
+  generalize (sems_det A ge tge sp st f H H0 sp sp m m');
+  crush.
+Qed.
+
+Lemma sem_mem_det':
+  forall FF ge sp s f m m',
+  sem_mem FF ge sp s f m ->
+  sem_mem FF ge sp s f m' ->
+  m = m'.
+Proof.
+  simplify; eauto using sem_mem_det.
+Qed.
+
+Lemma sem_regset_det:
+  forall FF ge tge sp st f v v',
+  (forall sp op vl, Op.eval_operation ge sp op vl =
+                    Op.eval_operation tge sp op vl) ->
+  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                      Op.eval_addressing tge sp addr vl) ->
+  sem_regset FF ge sp st f v ->
+  sem_regset FF tge sp st f v' ->
+  (forall x, v !! x = v' !! x).
+Proof.
+  intros.
+  inversion H1; subst. inversion H2; subst.
+  generalize (H3 x); intro. generalize (H4 x); intro.
+  eapply sem_value_det; eauto.
+Qed.
+
+Hint Resolve sem_value_det : rtlpar.
+Hint Resolve sem_mem_det : rtlpar.
+Hint Resolve sem_regset_det : rtlpar.
+
+Lemma sem_det:
+  forall FF ge tge sp st f st' st'',
+  (forall sp op vl, Op.eval_operation ge sp op vl =
+                    Op.eval_operation tge sp op vl) ->
+  (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                      Op.eval_addressing tge sp addr vl) ->
+  sem FF ge sp st f st' ->
+  sem FF tge sp st f st'' ->
+  sem_state_ld st' st''.
+Proof.
+  intros.
+  destruct st; destruct st'; destruct st''.
+  inv H1; inv H2.
+  constructor; eauto with rtlpar.
+Qed.
+
+Lemma sem_det':
+  forall FF ge sp st f st' st'',
+    sem FF ge sp st f st' ->
+    sem FF ge sp st f st'' ->
+    sem_state_ld st' st''.
+Proof. eauto using sem_det. Qed.
 
 (*|
 Update functions.
@@ -474,11 +583,7 @@ Definition update (f : forest) (i : instr) : forest :=
 (*|
 Implementing which are necessary to show the correctness of the translation validation by showing
 that there aren't any more effects in the resultant RTLPar code than in the RTLBlock code.
-|*)
 
-
-
-(*|
 Get a sequence from the basic block.
 |*)
 
@@ -507,7 +612,7 @@ We define the top-level oracle that will check if two basic blocks are equivalen
 transformation.
 |*)
 
-Definition empty_trees (bb: RTLBlock.bblock_body) (bbt: RTLPar.bblock_body) : bool :=
+Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
   match bb with
   | nil =>
     match bbt with
@@ -548,16 +653,33 @@ Lemma check_scheduled_trees_correct2:
         PTree.get x f2 = None).
 Proof. solve_scheduled_trees_correct. Qed.
 
+(*|
+Abstract computations
+=====================
+|*)
+
+Lemma abstract_execution_correct:
+  forall bb bb' cfi ge tge sp rs m rs' m',
+  schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
+  @step_instr_list RTLBlock.fundef ge sp (InstrState rs m) bb (InstrState rs' m') ->
+  step_instr_block tge sp (InstrState rs m) bb' (InstrState rs' m').
+Proof. Admitted.
+
+(*|
+Top-level functions
+===================
+|*)
+
 Parameter schedule : RTLBlock.function -> RTLPar.function.
 
 Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :=
   let tfcode := fn_code (schedule f) in
-  if check_scheduled_trees f.(RTLBlock.fn_code) tfcode then
-    Errors.OK (mkfunction f.(RTLBlock.fn_sig)
-                          f.(RTLBlock.fn_params)
-                          f.(RTLBlock.fn_stacksize)
+  if check_scheduled_trees f.(fn_code) tfcode then
+    Errors.OK (mkfunction f.(fn_sig)
+                          f.(fn_params)
+                          f.(fn_stacksize)
                           tfcode
-                          f.(RTLBlock.fn_entrypoint))
+                          f.(fn_entrypoint))
   else
     Errors.Error (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
 

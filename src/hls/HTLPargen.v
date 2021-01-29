@@ -519,7 +519,7 @@ Definition max_pc_map (m : Maps.PTree.t stmnt) :=
 Lemma max_pc_map_sound:
   forall m pc i, m!pc = Some i -> Ple pc (max_pc_map m).
 Proof.
-  intros until i. unfold max_pc_function.
+  intros until i.
   apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
   (* extensionality *)
   intros. apply H0. rewrite H; auto.
@@ -690,9 +690,9 @@ Definition transf_module (f: function) : mon HTL.module :=
     do (stack, stack_len) <- create_arr None 32
                                         (Z.to_nat (f.(fn_stacksize) / 4));
     do _ <- collectlist (transf_bblock fin rtrn stack)
-                        (Maps.PTree.elements f.(RTLPar.fn_code));
+                        (Maps.PTree.elements f.(fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
-                        f.(RTLPar.fn_params);
+                        f.(fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
@@ -703,7 +703,7 @@ Definition transf_module (f: function) : mon HTL.module :=
               Integers.Int.max_unsigned with
     | left LEDATA, left LECTRL =>
         ret (HTL.mkmodule
-           f.(RTLPar.fn_params)
+           f.(fn_params)
            current_state.(st_datapath)
            current_state.(st_controllogic)
            f.(fn_entrypoint)
@@ -748,7 +748,7 @@ Definition main_is_internal (p : RTLPar.program) : bool :=
   | _ => false
   end.
 
-Definition transl_program (p : RTLPar.program) : Errors.res HTL.program :=
+Definition transl_program (p : RTLBlockInstr.program) : Errors.res HTL.program :=
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").
