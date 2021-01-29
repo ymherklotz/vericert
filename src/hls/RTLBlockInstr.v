@@ -18,9 +18,12 @@
 
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
+Require Import compcert.common.Events.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Values.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
@@ -44,14 +47,6 @@ Inductive cf_instr : Type :=
 | RBjumptable : reg -> list node -> cf_instr
 | RBreturn : option reg -> cf_instr
 | RBgoto : node -> cf_instr.
-
-Record bblock (bblock_body : Type) : Type := mk_bblock {
-    bb_body: bblock_body;
-    bb_exit: cf_instr
-  }.
-Arguments mk_bblock [bblock_body].
-Arguments bb_body [bblock_body].
-Arguments bb_exit [bblock_body].
 
 Definition successors_instr (i : cf_instr) : list node :=
   match i with
@@ -102,47 +97,157 @@ Inductive instr_state : Type :=
            (m: mem),
     instr_state.
 
+Section DEFINITION.
+
+  Context {bblock_body: Type}.
+
+  Record bblock : Type := mk_bblock {
+                          bb_body: bblock_body;
+                          bb_exit: cf_instr
+                          }.
+
+  Definition code: Type := PTree.t bblock.
+
+  Record function: Type := mkfunction {
+    fn_sig: signature;
+    fn_params: list reg;
+    fn_stacksize: Z;
+    fn_code: code;
+    fn_entrypoint: node
+  }.
+
+  Definition fundef := AST.fundef function.
+
+  Definition program := AST.program fundef unit.
+
+  Definition funsig (fd: fundef) :=
+    match fd with
+    | Internal f => fn_sig f
+    | External ef => ef_sig ef
+    end.
+
+  Inductive stackframe : Type :=
+  | Stackframe:
+      forall (res: reg)            (**r where to store the result *)
+             (f: function)         (**r calling function *)
+             (sp: val)             (**r stack pointer in calling function *)
+             (pc: node)            (**r program point in calling function *)
+             (rs: regset),         (**r register state in calling function *)
+      stackframe.
+
+  Inductive state : Type :=
+  | State:
+      forall (stack: list stackframe) (**r call stack *)
+             (f: function)            (**r current function *)
+             (sp: val)                (**r stack pointer *)
+             (pc: node)               (**r current program point in [c] *)
+             (rs: regset)             (**r register state *)
+             (m: mem),                (**r memory state *)
+      state
+  | Callstate:
+      forall (stack: list stackframe) (**r call stack *)
+             (f: fundef)              (**r function to call *)
+             (args: list val)         (**r arguments to the call *)
+             (m: mem),                (**r memory state *)
+      state
+  | Returnstate:
+      forall (stack: list stackframe) (**r call stack *)
+             (v: val)                 (**r return value for the call *)
+             (m: mem),                (**r memory state *)
+      state.
+
+End DEFINITION.
+
 Section RELSEM.
 
-  Context (fundef: Type).
+  Context {bblock_body : Type}.
 
-  Definition genv := Genv.t fundef unit.
+  Definition genv := Genv.t (@fundef bblock_body) unit.
 
-  Context (ge: genv) (sp: val).
+  Context (ge: genv).
 
-  Inductive step_instr: instr_state -> instr -> instr_state -> Prop :=
+  Definition find_function
+             (ros: reg + ident) (rs: regset) : option fundef :=
+    match ros with
+    | inl r => Genv.find_funct ge rs#r
+    | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+    end.
+
+  Inductive step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
   | exec_RBnop:
-      forall rs m,
-      step_instr (InstrState rs m) RBnop (InstrState rs m)
+      forall rs m sp,
+      step_instr sp (InstrState rs m) RBnop (InstrState rs m)
   | exec_RBop:
-      forall op v res args rs m,
+      forall op v res args rs m sp,
       eval_operation ge sp op rs##args m = Some v ->
-      step_instr (InstrState rs m)
+      step_instr sp (InstrState rs m)
                  (RBop op args res)
                  (InstrState (rs#res <- v) m)
   | exec_RBload:
-      forall addr rs args a chunk m v dst,
+      forall addr rs args a chunk m v dst sp,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.loadv chunk m a = Some v ->
-      step_instr (InstrState rs m)
+      step_instr sp (InstrState rs m)
                  (RBload chunk addr args dst)
                  (InstrState (rs#dst <- v) m)
   | exec_RBstore:
-      forall addr rs args a chunk m src m',
+      forall addr rs args a chunk m src m' sp,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.storev chunk m a rs#src = Some m' ->
-      step_instr (InstrState rs m)
+      step_instr sp (InstrState rs m)
                  (RBstore chunk addr args src)
                  (InstrState rs m').
 
-  Inductive step_instr_list: instr_state -> list instr -> instr_state -> Prop :=
+  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
     | exec_RBcons:
-        forall state i state' state'' instrs,
-        step_instr state i state' ->
-        step_instr_list state' instrs state'' ->
-        step_instr_list state (i :: instrs) state''
+        forall state i state' state'' instrs sp,
+        step_instr sp state i state' ->
+        step_instr_list sp state' instrs state'' ->
+        step_instr_list sp state (i :: instrs) state''
     | exec_RBnil:
-        forall state,
-        step_instr_list state nil state.
+        forall state sp,
+        step_instr_list sp state nil state.
+
+  Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
+  | exec_RBcall:
+    forall s f sp rs m res fd ros sig args pc pc',
+      find_function ros rs = Some fd ->
+      funsig fd = sig ->
+      step_cf_instr (State s f sp pc rs m) (RBcall sig ros args res pc')
+           E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
+  | exec_RBtailcall:
+      forall s f stk rs m sig ros args fd m' pc,
+      find_function ros rs = Some fd ->
+      funsig fd = sig ->
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs m) (RBtailcall sig ros args)
+        E0 (Callstate s fd rs##args m')
+  | exec_RBbuiltin:
+      forall s f sp rs m ef args res pc' vargs t vres m' pc,
+      eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      step_cf_instr (State s f sp pc rs m) (RBbuiltin ef args res pc')
+         t (State s f sp pc' (regmap_setres res vres rs) m')
+  | exec_RBcond:
+      forall s f sp rs m cond args ifso ifnot b pc pc',
+      eval_condition cond rs##args m = Some b ->
+      pc' = (if b then ifso else ifnot) ->
+      step_cf_instr (State s f sp pc rs m) (RBcond cond args ifso ifnot)
+        E0 (State s f sp pc' rs m)
+  | exec_RBjumptable:
+      forall s f sp rs m arg tbl n pc pc',
+      rs#arg = Vint n ->
+      list_nth_z tbl (Int.unsigned n) = Some pc' ->
+      step_cf_instr (State s f sp pc rs m) (RBjumptable arg tbl)
+        E0 (State s f sp pc' rs m)
+  | exec_Ireturn:
+      forall s f stk rs m or pc m',
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs m) (RBreturn or)
+        E0 (Returnstate s (regmap_optget or Vundef rs) m').
 
 End RELSEM.
