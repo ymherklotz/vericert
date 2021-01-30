@@ -182,6 +182,30 @@ Section CORRECTNESS.
   Qed.
   Hint Resolve eval_addressing_eq : rtlgp.
 
+  Lemma ge_preserved_lem:
+    ge_preserved ge tge.
+  Proof using TRANSL.
+    unfold ge_preserved.
+    eauto with rtlgp.
+  Qed.
+  Hint Resolve ge_preserved_lem : rtlgp.
+
+  Lemma lessdef_regmap_optget:
+    forall or rs rs',
+      regs_lessdef rs rs' ->
+      Val.lessdef (regmap_optget or Vundef rs) (regmap_optget or Vundef rs').
+  Proof using. destruct or; crush. Qed.
+  Hint Resolve lessdef_regmap_optget : rtlgp.
+
+  Lemma int_lessdef:
+    forall rs rs',
+      regs_lessdef rs rs' ->
+      (forall arg v,
+          rs !! arg = Vint v ->
+          rs' !! arg = Vint v).
+  Proof using. intros ? ? H; intros; specialize (H arg); inv H; crush. Qed.
+  Hint Resolve int_lessdef : rtlgp.
+
   Ltac semantics_simpl :=
     match goal with
     | [ H: match_states _ _ |- _ ] =>
@@ -191,7 +215,9 @@ Section CORRECTNESS.
       let H2 := fresh "TRANSL" in
       learn H as H2;
       unfold transl_function in H2;
-      destruct (check_scheduled_trees (@fn_code RTLBlock.bb f) (@fn_code RTLPar.bb (schedule f))) eqn:?;
+      destruct (check_scheduled_trees
+                  (@fn_code RTLBlock.bb f)
+                  (@fn_code RTLPar.bb (schedule f))) eqn:?;
                [| discriminate ]; inv H2
     | [ H: context[check_scheduled_trees] |- _ ] =>
       let H2 := fresh "CHECK" in
@@ -203,6 +229,16 @@ Section CORRECTNESS.
       apply schedule_oracle_nil in H2
     | [ H: find_function _ _ _ = Some _ |- _ ] =>
       learn H; exploit find_function_translated; eauto; inversion 1
+    | [ H: Mem.free ?m _ _ _ = Some ?m', H2: Mem.extends ?m ?m'' |- _ ] =>
+      learn H; exploit Mem.free_parallel_extends; eauto; intros
+    | [ H: Events.eval_builtin_args _ _ _ _ _ _, H2: regs_lessdef ?rs ?rs' |- _ ] =>
+      let H3 := fresh "H" in
+      learn H; exploit Events.eval_builtin_args_lessdef; [apply H2 | | |];
+      eauto with rtlgp; intro H3; learn H3
+    | [ H: Events.external_call _ _ _ _ _ _ _ |- _ ] =>
+      let H2 := fresh "H" in
+      learn H; exploit Events.external_call_mem_extends;
+      eauto; intro H2; learn H2
     | [ H: exists _, _ |- _ ] => inv H
     | _ => progress simplify
     end.
@@ -220,19 +256,8 @@ Section CORRECTNESS.
         match_states s r ->
         exists r', step_cf_instr tge r cfi t r' /\ match_states s' r'.
   Proof using TRANSL.
-    induction 1; repeat semantics_simpl.
+    induction 1; repeat semantics_simpl;
     repeat (econstructor; eauto with rtlgp).
-    exploit Mem.free_parallel_extends; eauto; intros. inv H4. inv H8.
-    repeat (econstructor; eauto with rtlgp).
-    exploit Events.eval_builtin_args_lessdef. apply REG. apply MEM. apply H. intros. inv H2. inv H3.
-    exploit Events.external_call_mem_extends. eauto. eauto. eauto. intros. inv H3.  inv H5. simplify.
-    repeat (econstructor; eauto with rtlgp).
-    repeat (econstructor; eauto with rtlgp).
-    repeat (econstructor; eauto with rtlgp).
-    unfold regs_lessdef in REG; specialize (REG arg); inv REG; crush.
-    exploit Mem.free_parallel_extends; eauto; intros. inv H1. simplify.
-    repeat (econstructor; eauto with rtlgp).
-    unfold regmap_optget. destruct or; crush.
   Qed.
 
   Theorem transl_step_correct :
@@ -244,18 +269,20 @@ Section CORRECTNESS.
   Proof.
 
     induction 1; repeat semantics_simpl.
+    Abort.
 
-    { destruct bb as [bbc bbe]; destruct x as [bbc' bbe'].
+(*    { destruct bb as [bbc bbe]; destruct x as [bbc' bbe'].
       assert (bbe = bbe') by admit.
       rewrite H3 in H5.
       eapply abstract_execution_correct in H5; eauto with rtlgp.
       repeat econstructor; eauto with rtlgp. simplify.
       exploit step_cf_instr_correct. eauto.
-    } step_instr_block ?tge@{bbe:=bbe'; bbe':=bbe'} sp (InstrState rs m) bbc' (InstrState x m')
-  H5 : reg_lessdef rs' x
-                   RTLBlock.step_instr_list ge sp (InstrState rs m) bbc (InstrState rs' m')
+      econstructor; eauto with rtlgp.
+    }
     { unfold bind in *. destruct_match; try discriminate. repeat semantics_simpl. inv TRANSL0.
       repeat econstructor; eauto. }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
     { inv STACKS. inv H2. repeat econstructor; eauto. }
-  Qed.
+  Qed.*)
+
+End CORRECTNESS.

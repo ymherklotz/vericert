@@ -21,6 +21,8 @@ From vericert Require
      Compiler
      RTLBlockgen
      RTLBlock
+     RTLPar
+     RTLBlockInstr
      HTLgen
      Pipeline.
 
@@ -180,7 +182,7 @@ Cd "src/extraction".
 Separate Extraction
          Verilog.module vericert.Compiler.transf_hls
          vericert.Compiler.transf_hls_temp
-         RTLBlockgen.transl_program RTLBlock.successors_instr
+         RTLBlockgen.transl_program RTLBlockInstr.successors_instr
          HTLgen.tbl_to_case_expr
          Pipeline.pipeline
 
