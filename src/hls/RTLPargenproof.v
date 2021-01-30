@@ -21,6 +21,8 @@ Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Linking.
 Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Values.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
@@ -36,29 +38,34 @@ Inductive match_stackframes: RTLBlock.stackframe -> RTLPar.stackframe -> Prop :=
 | match_stackframe:
     forall f tf res sp pc rs rs',
       transl_function f = OK tf ->
-      reg_lessdef rs rs' ->
+      regs_lessdef rs rs' ->
       match_stackframes (Stackframe res f sp pc rs)
                         (Stackframe res tf sp pc rs').
 
 Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
 | match_state:
-    forall sf f sp pc rs rs' mem sf' tf
+    forall sf f sp pc rs rs' m m' sf' tf
       (TRANSL: transl_function f = OK tf)
       (STACKS: list_forall2 match_stackframes sf sf')
-      (REG: reg_lessdef rs rs'),
-      match_states (State sf f sp pc rs mem)
-                   (State sf' tf sp pc rs' mem)
+      (REG: regs_lessdef rs rs')
+      (MEM: Mem.extends m m'),
+      match_states (State sf f sp pc rs m)
+                   (State sf' tf sp pc rs' m')
 | match_returnstate:
-    forall stack stack' v mem
-      (STACKS: list_forall2 match_stackframes stack stack'),
-      match_states (Returnstate stack v mem)
-                   (Returnstate stack' v mem)
+    forall stack stack' v v' m m'
+      (STACKS: list_forall2 match_stackframes stack stack')
+      (MEM: Mem.extends m m')
+      (LD: Val.lessdef v v'),
+      match_states (Returnstate stack v m)
+                   (Returnstate stack' v' m')
 | match_callstate:
-    forall stack stack' f tf args m
+    forall stack stack' f tf args args' m m'
       (TRANSL: transl_fundef f = OK tf)
-      (STACKS: list_forall2 match_stackframes stack stack'),
+      (STACKS: list_forall2 match_stackframes stack stack')
+      (LD: Val.lessdef_list args args')
+      (MEM: Mem.extends m m'),
       match_states (Callstate stack f args m)
-                   (Callstate stack' tf args m).
+                   (Callstate stack' tf args' m').
 
 Section CORRECTNESS.
 
@@ -109,17 +116,29 @@ Section CORRECTNESS.
   Qed.
   Hint Resolve sig_transl_function : rtlgp.
 
+  Hint Resolve Val.lessdef_same : rtlgp.
+  Hint Resolve regs_lessdef_regs : rtlgp.
+
   Lemma find_function_translated:
     forall ros rs rs' f,
-      reg_lessdef rs rs' ->
+      regs_lessdef rs rs' ->
       find_function ge ros rs = Some f ->
       exists tf, find_function tge ros rs' = Some tf
                  /\ transl_fundef f = OK tf.
   Proof using TRANSL.
-    unfold reg_lessdef; destruct ros; simplify; try rewrite <- H;
-    [ exploit functions_translated; eauto
-    | rewrite symbols_preserved; destruct_match;
-      try (apply function_ptr_translated); crush ].
+    Ltac ffts := match goal with
+                 | [ H: forall _, Val.lessdef _ _, r: Registers.reg |- _ ] =>
+                   specialize (H r); inv H
+                 | [ H: Vundef = ?r, H1: Genv.find_funct _ ?r = Some _ |- _ ] =>
+                   rewrite <- H in H1
+                 | [ H: Genv.find_funct _ Vundef = Some _ |- _] => solve [inv H]
+                 | _ => solve [exploit functions_translated; eauto]
+                 end.
+    unfold regs_lessdef; destruct ros; simplify; try rewrite <- H;
+    [| rewrite symbols_preserved; destruct_match;
+      try (apply function_ptr_translated); crush ];
+    intros;
+    repeat ffts.
   Qed.
 
   Lemma schedule_oracle_nil:
@@ -190,6 +209,9 @@ Section CORRECTNESS.
 
   Hint Resolve Events.eval_builtin_args_preserved : rtlgp.
   Hint Resolve Events.external_call_symbols_preserved : rtlgp.
+  Hint Resolve set_res_lessdef : rtlgp.
+  Hint Resolve set_reg_lessdef : rtlgp.
+  Hint Resolve Op.eval_condition_lessdef : rtlgp.
 
   Lemma step_cf_instr_correct:
     forall cfi t s s',
@@ -199,9 +221,18 @@ Section CORRECTNESS.
         exists r', step_cf_instr tge r cfi t r' /\ match_states s' r'.
   Proof using TRANSL.
     induction 1; repeat semantics_simpl.
-
-    { repeat econstructor. eauto with rtlgp. }
-    repeat econstructor; eauto with rtlgp.
+    repeat (econstructor; eauto with rtlgp).
+    exploit Mem.free_parallel_extends; eauto; intros. inv H4. inv H8.
+    repeat (econstructor; eauto with rtlgp).
+    exploit Events.eval_builtin_args_lessdef. apply REG. apply MEM. apply H. intros. inv H2. inv H3.
+    exploit Events.external_call_mem_extends. eauto. eauto. eauto. intros. inv H3.  inv H5. simplify.
+    repeat (econstructor; eauto with rtlgp).
+    repeat (econstructor; eauto with rtlgp).
+    repeat (econstructor; eauto with rtlgp).
+    unfold regs_lessdef in REG; specialize (REG arg); inv REG; crush.
+    exploit Mem.free_parallel_extends; eauto; intros. inv H1. simplify.
+    repeat (econstructor; eauto with rtlgp).
+    unfold regmap_optget. destruct or; crush.
   Qed.
 
   Theorem transl_step_correct :

@@ -460,17 +460,10 @@ Lemma ge_preserved_same:
 Proof. unfold ge_preserved; auto. Qed.
 Hint Resolve ge_preserved_same : rtlpar.
 
-Definition reg_lessdef (rs rs': regset) := forall x, rs !! x = rs' !! x.
-
-Lemma regs_lessdef_regs:
-  forall rs1 rs2, reg_lessdef rs1 rs2 ->
-  forall rl, rs1##rl = rs2##rl.
-Proof. induction rl; crush. Qed.
-
 Inductive sem_state_ld : sem_state -> sem_state -> Prop :=
 | sem_state_ld_intro:
   forall rs rs' m m',
-    reg_lessdef rs rs' ->
+    regs_lessdef rs rs' ->
     m = m' ->
     sem_state_ld (mk_sem_state rs m) (mk_sem_state rs' m').
 
@@ -527,14 +520,16 @@ Proof.
   simplify; eauto with rtlpar.
 Qed.
 
+Hint Resolve Val.lessdef_same : rtlpar.
+
 Lemma sem_regset_det:
   forall FF ge tge sp st f v v',
     ge_preserved ge tge ->
     sem_regset FF ge sp st f v ->
     sem_regset FF tge sp st f v' ->
-    reg_lessdef v v'.
+    regs_lessdef v v'.
 Proof.
-  intros; unfold reg_lessdef;
+  intros; unfold regs_lessdef.
   inv H0; inv H1;
   eauto with rtlpar.
 Qed.
@@ -666,7 +661,7 @@ Lemma abstract_execution_correct:
     schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
     RTLBlock.step_instr_list ge sp (InstrState rs m) bb (InstrState rs' m') ->
     exists rs'', RTLPar.step_instr_block tge sp (InstrState rs m) bb' (InstrState rs'' m')
-                 /\ reg_lessdef rs' rs''.
+                 /\ regs_lessdef rs' rs''.
 Proof. Admitted.
 
 (*|
