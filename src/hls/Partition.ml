@@ -25,6 +25,7 @@ open Maps
 open AST
 open Kildall
 open Op
+open RTLBlockInstr
 open RTLBlock
 
 (* Assuming that the nodes of the CFG [code] are numbered in reverse postorder (cf. pass
@@ -64,14 +65,14 @@ let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
   match trans_inst, succ with
   | (None, Some i'), _ ->
     if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = []; bb_exit = Some (RBgoto s) }
+      Errors.OK { bb_body = []; bb_exit = RBgoto s }
     else
-      Errors.OK { bb_body = []; bb_exit = Some i' }
+      Errors.OK { bb_body = []; bb_exit = i' }
   | (Some i', None), (s', Some i_n)::[] ->
     if List.exists (fun x -> x = s) (fst e) then
-      Errors.OK { bb_body = [i']; bb_exit = Some (RBgoto s') }
+      Errors.OK { bb_body = [i']; bb_exit = RBgoto s' }
     else if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = []; bb_exit = Some (RBgoto s) }
+      Errors.OK { bb_body = []; bb_exit = RBgoto s }
     else begin
       match next_bblock_from_RTL false e c s' i_n with
       | Errors.OK bb ->
@@ -100,14 +101,12 @@ let rec translate_all edge c s res =
      | Some i ->
        match next_bblock_from_RTL true edge c s i with
        | Errors.Error msg -> Errors.Error msg
-       | Errors.OK {bb_exit = None; _} ->
-         Errors.Error (Errors.msg (coqstring_of_camlstring "Error in translate all"))
-       | Errors.OK {bb_body = bb; bb_exit = Some e} ->
+       | Errors.OK {bb_body = bb; bb_exit = e} ->
          let succ = List.filter (fun x -> P.lt x s) (successors_instr e) in
          (match traverseacc (translate_all edge c) succ (c_bb, s :: translated) with
           | Errors.Error msg -> Errors.Error msg
           | Errors.OK (c', t') ->
-            Errors.OK (PTree.set s {bb_body = bb; bb_exit = Some e} c', t')))
+            Errors.OK (PTree.set s {bb_body = bb; bb_exit = e} c', t')))
 
 (* Partition a function and transform it into RTLBlock. *)
 let function_from_RTL f =

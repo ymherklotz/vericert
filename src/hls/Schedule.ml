@@ -25,6 +25,7 @@ open Maps
 open AST
 open Kildall
 open Op
+open RTLBlockInstr
 open RTLBlock
 open HTL
 open Verilog
@@ -38,7 +39,7 @@ module IMap = Map.Make (struct
   let compare = compare
 end)
 
-type dfg = { nodes : instruction list; edges : (int * int) list }
+type dfg = { nodes : instr list; edges : (int * int) list }
 (** The DFG type defines a list of instructions with their data dependencies as [edges], which are
    the pairs of integers that represent the index of the instruction in the [nodes].  The edges
    always point from left to right. *)
@@ -54,7 +55,7 @@ let print_tuple out_chan a =
 
 let print_dfg out_chan dfg =
   fprintf out_chan "{ nodes = %a, edges = %a }"
-    (print_list PrintRTLBlock.print_bblock_body)
+    (print_list PrintRTLBlockInstr.print_bblock_body)
     dfg.nodes (print_list print_tuple) dfg.edges
 
 let read_process command =
@@ -246,9 +247,7 @@ let gather_bb_constraints debug bb =
     List.fold_left accumulate_WAW_mem_deps (0, dfg'''') bb.bb_body
   in
   if debug then printf "DFG''''': %a\n" print_dfg dfg''''' else ();
-  match bb.bb_exit with
-  | None -> assert false
-  | Some e -> (List.length bb.bb_body, dfg''''', successors_instr e)
+  (List.length bb.bb_body, dfg''''', successors_instr bb.bb_exit)
 
 let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
 
@@ -368,21 +367,6 @@ let find_max = function
       in
       find_max' (snd l) ls
 
-let translate_instruction = function
-  | RBnop -> RTLPar.RPnop
-  | RBop (op, lr, r) -> RTLPar.RPop (op, lr, r)
-  | RBload (chunk, addr, args, dst) -> RTLPar.RPload (chunk, addr, args, dst)
-  | RBstore (chunk, addr, args, src) -> RTLPar.RPstore (chunk, addr, args, src)
-
-let translate_control_flow = function
-  | RBcall (s, i, lr, dst, n) -> RTLPar.RPcall (s, i, lr, dst, n)
-  | RBtailcall (s, i, lr) -> RTLPar.RPtailcall (s, i, lr)
-  | RBbuiltin (e, lr, dst, n) -> RTLPar.RPbuiltin (e, lr, dst, n)
-  | RBcond (c, lr, n1, n2) -> RTLPar.RPcond (c, lr, n1, n2)
-  | RBjumptable (r, ln) -> RTLPar.RPjumptable (r, ln)
-  | RBreturn r -> RTLPar.RPreturn r
-  | RBgoto n -> RTLPar.RPgoto n
-
 let ( >>= ) = bind
 
 let combine_bb_schedule schedule s =
@@ -393,13 +377,13 @@ let compare_tuple (a, _) (b, _) = compare a b
 
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c (schedule : (int * int) list IMap.t) =
-  let f i bb =
+  let f i bb : RTLPar.bblock =
     match bb with
-    | { bb_body = []; bb_exit = Some c } ->
-      { RTLPar.bb_body = [];
-        RTLPar.bb_exit = Some (translate_control_flow c)
+    | { bb_body = []; bb_exit = c } ->
+      { bb_body = [];
+        bb_exit = c
       }
-    | { bb_body = bb_body'; bb_exit = Some ctrl_flow } ->
+    | { bb_body = bb_body'; bb_exit = ctrl_flow } ->
         let i_sched =
           try IMap.find (P.to_int i) schedule
           with Not_found -> (
@@ -417,17 +401,16 @@ let transf_rtlpar c (schedule : (int * int) list IMap.t) =
         in
         printf "--------------- curr: %d, max: %d, min: %d, next: %d\n" (P.to_int i) max_state min_state (P.to_int i - max_state + min_state - 1);
         printf "HIIIII: %d orig: %d\n" (P.to_int i - max_state + min_state - 1) (P.to_int i);
-        { RTLPar.bb_body = (IMap.to_seq i_sched_tree |> List.of_seq |> List.sort compare_tuple |> List.map snd
-                           |> List.map (List.map (fun x -> List.nth bb_body' x |> translate_instruction)));
-          RTLPar.bb_exit = Some (translate_control_flow ctrl_flow)
+        { bb_body = (IMap.to_seq i_sched_tree |> List.of_seq |> List.sort compare_tuple |> List.map snd
+                           |> List.map (List.map (fun x -> List.nth bb_body' x)));
+          bb_exit = ctrl_flow
         }
-    | _ -> assert false
   in
   PTree.map f c
 
 let second = function (_, a, _) -> a
 
-let schedule entry (c : code) =
+let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let debug = true in
   let c' = PTree.map1 (gather_bb_constraints false) c in
   let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in
@@ -440,9 +423,9 @@ let schedule entry (c : code) =
   transf_rtlpar c schedule'
 
 let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
-  { RTLPar.fn_sig = f.fn_sig;
-    RTLPar.fn_params = f.fn_params;
-    RTLPar.fn_stacksize = f.fn_stacksize;
-    RTLPar.fn_code = schedule f.fn_entrypoint f.fn_code;
-    RTLPar.fn_entrypoint = f.fn_entrypoint
+  { fn_sig = f.fn_sig;
+    fn_params = f.fn_params;
+    fn_stacksize = f.fn_stacksize;
+    fn_code = schedule f.fn_entrypoint f.fn_code;
+    fn_entrypoint = f.fn_entrypoint
   }

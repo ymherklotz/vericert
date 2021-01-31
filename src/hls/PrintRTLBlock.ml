@@ -17,8 +17,10 @@ open Camlcoq
 open Datatypes
 open Maps
 open AST
+open RTLBlockInstr
 open RTLBlock
 open PrintAST
+open PrintRTLBlockInstr
 
 (* Printing of RTL code *)
 
@@ -33,55 +35,6 @@ let rec regs pp = function
 let ros pp = function
   | Coq_inl r -> reg pp r
   | Coq_inr s -> fprintf pp "\"%s\"" (extern_atom s)
-
-let print_bblock_body pp i =
-  fprintf pp "\t\t";
-  match i with
-  | RBnop -> fprintf pp "nop\n"
-  | RBop(op, ls, dst) ->
-     fprintf pp "%a = %a\n"
-       reg dst (PrintOp.print_operation reg) (op, ls)
-  | RBload(chunk, addr, args, dst) ->
-     fprintf pp "%a = %s[%a]\n"
-       reg dst (name_of_chunk chunk)
-       (PrintOp.print_addressing reg) (addr, args)
-  | RBstore(chunk, addr, args, src) ->
-     fprintf pp "%s[%a] = %a\n"
-       (name_of_chunk chunk)
-       (PrintOp.print_addressing reg) (addr, args)
-       reg src
-
-let print_bblock_exit pp i =
-  fprintf pp "\t\t";
-  match i with
-  | Some(RBcall(_, fn, args, res, _)) ->
-      fprintf pp "%a = %a(%a)\n"
-        reg res ros fn regs args;
-  | Some(RBtailcall(_, fn, args)) ->
-      fprintf pp "tailcall %a(%a)\n"
-        ros fn regs args
-  | Some(RBbuiltin(ef, args, res, _)) ->
-      fprintf pp "%a = %s(%a)\n"
-        (print_builtin_res reg) res
-        (name_of_external ef)
-        (print_builtin_args reg) args
-  | Some(RBcond(cond, args, s1, s2)) ->
-      fprintf pp "if (%a) goto %d else goto %d\n"
-        (PrintOp.print_condition reg) (cond, args)
-        (P.to_int s1) (P.to_int s2)
-  | Some(RBjumptable(arg, tbl)) ->
-      let tbl = Array.of_list tbl in
-      fprintf pp "jumptable (%a)\n" reg arg;
-      for i = 0 to Array.length tbl - 1 do
-        fprintf pp "\tcase %d: goto %d\n" i (P.to_int tbl.(i))
-      done
-  | Some(RBreturn None) ->
-      fprintf pp "return\n"
-  | Some(RBreturn (Some arg)) ->
-      fprintf pp "return %a\n" reg arg
-  | Some(RBgoto n) ->
-     fprintf pp "goto %d\n" (P.to_int n)
-  | None -> fprintf pp "\n"
 
 let print_bblock pp (pc, i) =
   fprintf pp "%5d:{\n" pc;
