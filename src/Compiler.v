@@ -67,6 +67,7 @@ Require vericert.hls.RTLBlockgen.
 Require vericert.hls.RTLPargen.
 Require vericert.hls.HTLPargen.
 Require vericert.hls.Pipeline.
+Require vericert.hls.IfConversion.
 
 Require Import vericert.hls.HTLgenproof.
 
@@ -79,7 +80,7 @@ We then need to declare the external OCaml functions used to print out intermedi
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: HTL.program -> unit.
-Parameter print_RTLBlock: RTLBlock.program -> unit.
+Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -233,7 +234,9 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
   @@@ RTLBlockgen.transl_program
-   @@ print print_RTLBlock
+   @@ print (print_RTLBlock 1)
+   @@ IfConversion.transf_program
+   @@ print (print_RTLBlock 2)
   @@@ RTLPargen.transl_program
   @@@ HTLPargen.transl_program
    @@ print print_HTL

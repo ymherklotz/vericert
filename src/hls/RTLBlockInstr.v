@@ -33,11 +33,17 @@ Local Open Scope rtl.
 Definition node := positive.
 Definition predicate := positive.
 
+Inductive pred_op : Type :=
+| Pvar: predicate -> pred_op
+| Pnot: pred_op -> pred_op
+| Pand: pred_op -> pred_op -> pred_op
+| Por: pred_op -> pred_op -> pred_op.
+
 Inductive instr : Type :=
 | RBnop : instr
-| RBop : option predicate -> operation -> list reg -> reg -> instr
-| RBload : option predicate -> memory_chunk -> addressing -> list reg -> reg -> instr
-| RBstore : option predicate -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBop : option pred_op -> operation -> list reg -> reg -> instr
+| RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBsetpred : condition -> list reg -> predicate -> instr.
 
 Inductive cf_instr : Type :=
@@ -48,9 +54,10 @@ Inductive cf_instr : Type :=
 | RBcond : condition -> list reg -> node -> node -> cf_instr
 | RBjumptable : reg -> list node -> cf_instr
 | RBreturn : option reg -> cf_instr
-| RBgoto : node -> cf_instr.
+| RBgoto : node -> cf_instr
+| RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
 
-Definition successors_instr (i : cf_instr) : list node :=
+Fixpoint successors_instr (i : cf_instr) : list node :=
   match i with
   | RBcall sig ros args res s => s :: nil
   | RBtailcall sig ros args => nil
@@ -59,6 +66,7 @@ Definition successors_instr (i : cf_instr) : list node :=
   | RBjumptable arg tbl => tbl
   | RBreturn optarg => nil
   | RBgoto n => n :: nil
+  | RBpred_cf p c1 c2 => concat (successors_instr c1 :: successors_instr c2 :: nil)
   end.
 
 Definition max_reg_instr (m: positive) (i: instr) :=
@@ -74,7 +82,7 @@ Definition max_reg_instr (m: positive) (i: instr) :=
     fold_left Pos.max args 1%positive
   end.
 
-Definition max_reg_cfi (m : positive) (i : cf_instr) :=
+Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
   match i with
   | RBcall sig (inl r) args res s =>
     fold_left Pos.max args (Pos.max r (Pos.max res m))
@@ -92,6 +100,7 @@ Definition max_reg_cfi (m : positive) (i : cf_instr) :=
   | RBreturn None => m
   | RBreturn (Some arg) => Pos.max arg m
   | RBgoto n => m
+  | RBpred_cf p c1 c2 => Pos.max (max_reg_cfi m c1) (max_reg_cfi m c2)
   end.
 
 Definition regset := Regmap.t val.

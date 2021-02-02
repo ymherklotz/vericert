@@ -279,8 +279,8 @@ let print_src_type i c =
 let print_data_dep_order c (i, j) =
   print_lt0 (gen_var_name_e i c) (gen_var_name_b j c)
 
-let rec gather_cfg_constraints (completed, (bvars, constraints, types)) c curr =
-  if List.exists (fun x -> P.eq x curr) completed then
+let gather_cfg_constraints (completed, (bvars, constraints, types)) c curr =
+  if List.exists (P.eq curr) completed then
     (completed, (bvars, constraints, types))
   else
     match PTree.get curr c with
@@ -309,11 +309,7 @@ let rec gather_cfg_constraints (completed, (bvars, constraints, types)) c curr =
                (List.init num_iters (fun x -> x)))
             bvars
         in
-        let next' = List.filter (fun x -> P.lt x curr) next in
-        List.fold_left
-          (fun compl curr' -> gather_cfg_constraints compl c curr')
-          (curr :: completed, (bvars', constraints', types'))
-          next'
+        (curr :: completed, (bvars', constraints', types'))
 
 let rec intersperse s = function
   | [] -> []
@@ -415,7 +411,9 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let c' = PTree.map1 (gather_bb_constraints false) c in
   let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in
   let _, (vars, constraints, types) =
-    gather_cfg_constraints ([], ([], "", "")) c' entry
+    List.map fst (PTree.elements c') |>
+    List.fold_left (fun compl ->
+        gather_cfg_constraints compl c') ([], ([], "", ""))
   in
   let schedule' = solve_constraints vars constraints types in
   IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';

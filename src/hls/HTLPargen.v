@@ -621,10 +621,19 @@ Definition add_control_instr (n : node) (st : stmnt) : mon unit :=
       Error (Errors.msg "HTLPargen.add_control_instr: control logic is not empty")
     end.
 
-Definition pred_expr (preg: reg) (p: predicate) :=
-  Vrange preg (Vlit (posToValue p)) (Vlit (posToValue p)).
+Fixpoint pred_expr (preg: reg) (p: pred_op) :=
+  match p with
+  | Pvar pred =>
+    Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
+  | Pnot pred =>
+    Vunop Vnot (pred_expr preg pred)
+  | Pand p1 p2 =>
+    Vbinop Vand (pred_expr preg p1) (pred_expr preg p2)
+  | Por p1 p2 =>
+    Vbinop Vor (pred_expr preg p1) (pred_expr preg p2)
+  end.
 
-Definition translate_predicate (preg: reg) (p: option predicate) (dst e: expr) :=
+Definition translate_predicate (preg: reg) (p: option pred_op) (dst e: expr) :=
   match p with
   | None => ret (Vnonblock dst e)
   | Some pos =>
@@ -652,7 +661,7 @@ Definition translate_inst (fin rtrn stack preg : reg) (n : node) (i : instr)
     add_data_instr n pred
   | RBsetpred c args p =>
     do cond <- translate_condition c args;
-    add_data_instr n (Vnonblock (pred_expr preg p) cond)
+    add_data_instr n (Vnonblock (pred_expr preg (Pvar p)) cond)
   end.
 
 Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * list instr)
@@ -662,25 +671,29 @@ Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * list inst
   do st <- get;
   add_control_instr n (state_goto st.(st_st) (Pos.succ n)).
 
-Definition translate_cfi (fin rtrn stack: reg) (ni : node * cf_instr)
-  : mon unit :=
-  let (n, cfi) := ni in
+Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
+  : mon (stmnt * stmnt) :=
   match cfi with
   | RBgoto n' =>
     do st <- get;
-    add_node_skip n (state_goto st.(st_st) n')
+    ret (Vskip, state_goto st.(st_st) n')
   | RBcond c args n1 n2 =>
+    do st <- get;
     do e <- translate_condition c args;
-    add_branch_instr e n n1 n2
+    ret (Vskip, state_cond st.(st_st) e n1 n2)
   | RBreturn r =>
     match r with
     | Some r' =>
-      add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z)))
-                             (block rtrn (Vvar r')))
+      ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r'))),
+           Vskip)
     | None =>
-      add_instr_skip n (Vseq (block fin (Vlit (ZToValue 1%Z)))
-                             (block rtrn (Vlit (ZToValue 0%Z))))
+      ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z)))),
+           Vskip)
     end
+  | RBpred_cf p c1 c2 =>
+    do (tc1s, tc1c) <- translate_cfi' fin rtrn stack preg c1;
+    do (tc2s, tc2c) <- translate_cfi' fin rtrn stack preg c2;
+    ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
   | RBjumptable r ln =>
     error (Errors.msg "HTLPargen: RPjumptable not supported.")
   | RBcall sig ri rl r n =>
@@ -691,12 +704,19 @@ Definition translate_cfi (fin rtrn stack: reg) (ni : node * cf_instr)
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
+Definition translate_cfi (fin rtrn stack preg: reg) (ni: node * cf_instr)
+  : mon unit :=
+  let (n, cfi) := ni in
+  do (s, c) <- translate_cfi' fin rtrn stack preg cfi;
+  do _ <- add_control_instr n c;
+  add_data_instr n s.
+
 Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
   : mon unit :=
   let (n, bb) := ni in
   do _ <- collectlist (translate_inst_list fin rtrn stack preg)
                       (penumerate n bb.(bb_body));
-  translate_cfi fin rtrn stack
+  translate_cfi fin rtrn stack preg
                 ((n + poslength bb.(bb_body))%positive, bb.(bb_exit)).
 
 Definition transf_module (f: function) : mon HTL.module :=

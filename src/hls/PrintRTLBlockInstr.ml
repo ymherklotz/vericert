@@ -9,6 +9,9 @@ open PrintAST
 let reg pp r =
   fprintf pp "x%d" (P.to_int r)
 
+let pred pp r =
+  fprintf pp "p%d" (P.to_int r)
+
 let rec regs pp = function
   | [] -> ()
   | [r] -> reg pp r
@@ -18,24 +21,39 @@ let ros pp = function
   | Coq_inl r -> reg pp r
   | Coq_inr s -> fprintf pp "\"%s\"" (extern_atom s)
 
+let rec print_pred_op pp = function
+  | Pvar p -> pred pp p
+  | Pnot p -> fprintf pp "(~ %a)" print_pred_op p
+  | Pand (p1, p2) -> fprintf pp "(%a & %a)" print_pred_op p1 print_pred_op p2
+  | Por (p1, p2) -> fprintf pp "(%a | %a)" print_pred_op p1 print_pred_op p2
+
+let print_pred_option pp = function
+  | Some x -> fprintf pp "(%a)" print_pred_op x
+  | None -> ()
+
 let print_bblock_body pp i =
   fprintf pp "\t\t";
   match i with
   | RBnop -> fprintf pp "nop\n"
-  | RBop(_, op, ls, dst) ->
-     fprintf pp "%a = %a\n"
-       reg dst (PrintOp.print_operation reg) (op, ls)
-  | RBload(_, chunk, addr, args, dst) ->
-     fprintf pp "%a = %s[%a]\n"
-       reg dst (name_of_chunk chunk)
+  | RBop(p, op, ls, dst) ->
+     fprintf pp "%a %a = %a\n"
+       print_pred_option p reg dst (PrintOp.print_operation reg) (op, ls)
+  | RBload(p, chunk, addr, args, dst) ->
+     fprintf pp "%a %a = %s[%a]\n"
+       print_pred_option p reg dst (name_of_chunk chunk)
        (PrintOp.print_addressing reg) (addr, args)
-  | RBstore(_, chunk, addr, args, src) ->
-     fprintf pp "%s[%a] = %a\n"
+  | RBstore(p, chunk, addr, args, src) ->
+     fprintf pp "%a %s[%a] = %a\n"
+       print_pred_option p
        (name_of_chunk chunk)
        (PrintOp.print_addressing reg) (addr, args)
        reg src
+  | RBsetpred (c, args, p) ->
+    fprintf pp "%a = %a\n"
+      pred p
+      (PrintOp.print_condition reg) (c, args)
 
-let print_bblock_exit pp i =
+let rec print_bblock_exit pp i =
   fprintf pp "\t\t";
   match i with
   | RBcall(_, fn, args, res, _) ->
@@ -65,3 +83,5 @@ let print_bblock_exit pp i =
       fprintf pp "return %a\n" reg arg
   | RBgoto n ->
      fprintf pp "goto %d\n" (P.to_int n)
+  | RBpred_cf (p, c1, c2) ->
+    fprintf pp "if %a then (%a) else (%a)\n" print_pred_op p print_bblock_exit c1 print_bblock_exit c2
