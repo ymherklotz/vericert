@@ -40,7 +40,7 @@ Hint Resolve Ple_refl : htlh.
 Hint Resolve Ple_succ : htlh.
 
 Record state: Type := mkstate {
-  st_st : reg;
+  st_st: reg;
   st_freshreg: reg;
   st_freshstate: node;
   st_scldecls: AssocMap.t (option io * scl_decl);
@@ -621,32 +621,48 @@ Definition add_control_instr (n : node) (st : stmnt) : mon unit :=
       Error (Errors.msg "HTLPargen.add_control_instr: control logic is not empty")
     end.
 
-Definition translate_inst (fin rtrn stack : reg) (n : node) (i : instr)
+Definition pred_expr (preg: reg) (p: predicate) :=
+  Vrange preg (Vlit (posToValue p)) (Vlit (posToValue p)).
+
+Definition translate_predicate (preg: reg) (p: option predicate) (dst e: expr) :=
+  match p with
+  | None => ret (Vnonblock dst e)
+  | Some pos =>
+    ret (Vnonblock dst (Vternary (pred_expr preg pos) e dst))
+  end.
+
+Definition translate_inst (fin rtrn stack preg : reg) (n : node) (i : instr)
   : mon unit :=
   match i with
   | RBnop =>
     add_data_instr n Vskip
-  | RBop op args dst =>
+  | RBop p op args dst =>
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
-    add_data_instr n (nonblock dst instr)
-  | RBload chunk addr args dst =>
+    do pred <- translate_predicate preg p (Vvar dst) instr;
+    add_data_instr n pred
+  | RBload p chunk addr args dst =>
     do src <- translate_arr_access chunk addr args stack;
     do _ <- declare_reg None dst 32;
-    add_data_instr n (nonblock dst src)
-  | RBstore chunk addr args src =>
+    do pred <- translate_predicate preg p (Vvar dst) src;
+    add_data_instr n pred
+  | RBstore p chunk addr args src =>
     do dst <- translate_arr_access chunk addr args stack;
-    add_data_instr n (Vnonblock dst (Vvar src))
+    do pred <- translate_predicate preg p dst (Vvar src);
+    add_data_instr n pred
+  | RBsetpred c args p =>
+    do cond <- translate_condition c args;
+    add_data_instr n (Vnonblock (pred_expr preg p) cond)
   end.
 
-Definition translate_inst_list (fin rtrn stack : reg) (ni : node * list instr)
+Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * list instr)
   : mon unit :=
   let (n, li) := ni in
-  do _ <- collectlist (translate_inst fin rtrn stack n) li;
+  do _ <- collectlist (translate_inst fin rtrn stack preg n) li;
   do st <- get;
   add_control_instr n (state_goto st.(st_st) (Pos.succ n)).
 
-Definition translate_cfi (fin rtrn stack : reg) (ni : node * cf_instr)
+Definition translate_cfi (fin rtrn stack: reg) (ni : node * cf_instr)
   : mon unit :=
   let (n, cfi) := ni in
   match cfi with
@@ -675,10 +691,10 @@ Definition translate_cfi (fin rtrn stack : reg) (ni : node * cf_instr)
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
-Definition transf_bblock (fin rtrn stack : reg) (ni : node * bblock)
+Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
   : mon unit :=
   let (n, bb) := ni in
-  do _ <- collectlist (translate_inst_list fin rtrn stack)
+  do _ <- collectlist (translate_inst_list fin rtrn stack preg)
                       (penumerate n bb.(bb_body));
   translate_cfi fin rtrn stack
                 ((n + poslength bb.(bb_body))%positive, bb.(bb_exit)).
@@ -689,7 +705,8 @@ Definition transf_module (f: function) : mon HTL.module :=
     do rtrn <- create_reg (Some Voutput) 32;
     do (stack, stack_len) <- create_arr None 32
                                         (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_bblock fin rtrn stack)
+    do preg <- create_reg None 32;
+    do _ <- collectlist (transf_bblock fin rtrn stack preg)
                         (Maps.PTree.elements f.(fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
                         f.(fn_params);

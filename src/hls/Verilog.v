@@ -159,6 +159,7 @@ Inductive expr : Type :=
 | Vlit : value -> expr
 | Vvar : reg -> expr
 | Vvari : reg -> expr -> expr
+| Vrange : reg -> expr -> expr -> expr
 | Vinputvar : reg -> expr
 | Vbinop : binop -> expr -> expr -> expr
 | Vunop : unop -> expr -> expr
@@ -780,6 +781,7 @@ Proof.
               | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => invert H
               | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vrange _ _ _) _ |- _ ] => invert H
 
               | [ H1 : forall asr asa v, expr_runp _ asr asa ?e v -> _,
                   H2 : expr_runp _ _ _ ?e _ |- _ ] =>

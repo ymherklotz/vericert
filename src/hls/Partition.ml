@@ -45,9 +45,9 @@ let prepend_instr i = function
 
 let translate_inst = function
   | RTL.Inop _ -> Some RBnop
-  | RTL.Iop (op, ls, dst, _) -> Some (RBop (op, ls, dst))
-  | RTL.Iload (m, addr, ls, dst, _) -> Some (RBload (m, addr, ls, dst))
-  | RTL.Istore (m, addr, ls, src, _) -> Some (RBstore (m, addr, ls, src))
+  | RTL.Iop (op, ls, dst, _) -> Some (RBop (None, op, ls, dst))
+  | RTL.Iload (m, addr, ls, dst, _) -> Some (RBload (None, m, addr, ls, dst))
+  | RTL.Istore (m, addr, ls, src, _) -> Some (RBstore (None, m, addr, ls, src))
   | _ -> None
 
 let translate_cfi = function

@@ -148,7 +148,7 @@ Proof.
   generalize list_operation_eq; intro.
   generalize list_reg_eq; intro.
   generalize AST.ident_eq; intro.
-  decide equality.
+  repeat decide equality.
 Defined.
 
 Lemma cf_instr_eq: forall (x y : cf_instr), {x = y} + {x <> y}.
@@ -569,12 +569,13 @@ Fixpoint list_translation (l : list reg) (f : forest) {struct l} : expression_li
 Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
-  | RBop op rl r =>
+  | RBop p op rl r =>
     f # (Reg r) <- (Eop op (list_translation rl f))
-  | RBload chunk addr rl r =>
+  | RBload p chunk addr rl r =>
     f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
-  | RBstore chunk addr rl r =>
+  | RBstore p chunk addr rl r =>
     f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
+  | RBsetpred c addr p => f
   end.
 
 (*|

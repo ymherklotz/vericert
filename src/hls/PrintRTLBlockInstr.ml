@@ -22,14 +22,14 @@ let print_bblock_body pp i =
   fprintf pp "\t\t";
   match i with
   | RBnop -> fprintf pp "nop\n"
-  | RBop(op, ls, dst) ->
+  | RBop(_, op, ls, dst) ->
      fprintf pp "%a = %a\n"
        reg dst (PrintOp.print_operation reg) (op, ls)
-  | RBload(chunk, addr, args, dst) ->
+  | RBload(_, chunk, addr, args, dst) ->
      fprintf pp "%a = %s[%a]\n"
        reg dst (name_of_chunk chunk)
        (PrintOp.print_addressing reg) (addr, args)
-  | RBstore(chunk, addr, args, src) ->
+  | RBstore(_, chunk, addr, args, src) ->
      fprintf pp "%s[%a] = %a\n"
        (name_of_chunk chunk)
        (PrintOp.print_addressing reg) (addr, args)

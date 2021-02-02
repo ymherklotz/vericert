@@ -232,8 +232,6 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 6)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
-   @@ Pipeline.transf_program
-   @@ print (print_RTL 8)
   @@@ RTLBlockgen.transl_program
    @@ print print_RTLBlock
   @@@ RTLPargen.transl_program

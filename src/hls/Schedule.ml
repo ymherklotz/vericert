@@ -99,9 +99,9 @@ let accumulate_RAW_deps dfg curr =
       } )
   in
   match curr with
-  | RBop (_, rs, dst) -> acc_dep_instruction rs dst
-  | RBload (_mem, _addr, rs, dst) -> acc_dep_instruction rs dst
-  | RBstore (_mem, _addr, rs, src) -> acc_dep_instruction_nodst (src :: rs)
+  | RBop (op, _, rs, dst) -> acc_dep_instruction rs dst
+  | RBload (op, _mem, _addr, rs, dst) -> acc_dep_instruction rs dst
+  | RBstore (op, _mem, _addr, rs, src) -> acc_dep_instruction_nodst (src :: rs)
   | _ -> (i + 1, dst_map, { edges; nodes })
 
 (** Finds the next write to the [dst] register.  This is a small optimisation so that only one
@@ -113,8 +113,8 @@ let rec find_next_dst_write i dst i' curr =
   in
   match curr with
   | [] -> None
-  | RBop (_, _, dst') :: curr' -> check_dst dst' curr'
-  | RBload (_, _, _, dst') :: curr' -> check_dst dst' curr'
+  | RBop (_, _, _, dst') :: curr' -> check_dst dst' curr'
+  | RBload (_, _, _, _, dst') :: curr' -> check_dst dst' curr'
   | _ :: curr' -> find_next_dst_write i dst (i' + 1) curr'
 
 let rec find_all_next_dst_read i dst i' curr =
@@ -125,9 +125,9 @@ let rec find_all_next_dst_read i dst i' curr =
   in
   match curr with
   | [] -> []
-  | RBop (_, rs, _) :: curr' -> check_dst rs curr'
-  | RBload (_, _, rs, _) :: curr' -> check_dst rs curr'
-  | RBstore (_, _, rs, src) :: curr' -> check_dst (src :: rs) curr'
+  | RBop (_, _, rs, _) :: curr' -> check_dst rs curr'
+  | RBload (_, _, _, rs, _) :: curr' -> check_dst rs curr'
+  | RBstore (_, _, _, rs, src) :: curr' -> check_dst (src :: rs) curr'
   | RBnop :: curr' -> find_all_next_dst_read i dst (i' + 1) curr'
 
 let drop i lst =
@@ -148,18 +148,18 @@ let take i lst =
 
 let rec next_store i = function
   | [] -> None
-  | RBstore (_, _, _, _) :: _ -> Some i
+  | RBstore (_, _, _, _, _) :: _ -> Some i
   | _ :: rst -> next_store (i + 1) rst
 
 let rec next_load i = function
   | [] -> None
-  | RBload (_, _, _, _) :: _ -> Some i
+  | RBload (_, _, _, _, _) :: _ -> Some i
   | _ :: rst -> next_load (i + 1) rst
 
 let accumulate_RAW_mem_deps dfg curr =
   let i, { nodes; edges } = dfg in
   match curr with
-  | RBload (_, _, _, _) -> (
+  | RBload (_, _, _, _, _) -> (
       match next_store 0 (take i nodes |> List.rev) with
       | None -> (i + 1, { nodes; edges })
       | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
@@ -168,7 +168,7 @@ let accumulate_RAW_mem_deps dfg curr =
 let accumulate_WAR_mem_deps dfg curr =
   let i, { nodes; edges } = dfg in
   match curr with
-  | RBstore (_, _, _, _) -> (
+  | RBstore (_, _, _, _, _) -> (
       match next_load 0 (take i nodes |> List.rev) with
       | None -> (i + 1, { nodes; edges })
       | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
@@ -177,7 +177,7 @@ let accumulate_WAR_mem_deps dfg curr =
 let accumulate_WAW_mem_deps dfg curr =
   let i, { nodes; edges } = dfg in
   match curr with
-  | RBstore (_, _, _, _) -> (
+  | RBstore (_, _, _, _, _) -> (
       match next_store 0 (take i nodes |> List.rev) with
       | None -> (i + 1, { nodes; edges })
       | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
@@ -194,9 +194,9 @@ let accumulate_WAW_deps dfg curr =
     | _ -> (i + 1, { nodes; edges })
   in
   match curr with
-  | RBop (_, _, dst) -> dst_dep dst
-  | RBload (_, _, _, dst) -> dst_dep dst
-  | RBstore (_, _, _, _) -> (
+  | RBop (_, _, _, dst) -> dst_dep dst
+  | RBload (_, _, _, _, dst) -> dst_dep dst
+  | RBstore (_, _, _, _, _) -> (
       match next_store (i + 1) (drop (i + 1) nodes) with
       | None -> (i + 1, { nodes; edges })
       | Some i' -> (i + 1, { nodes; edges = (i, i') :: edges }) )
@@ -211,15 +211,15 @@ let accumulate_WAR_deps dfg curr =
     (i + 1, { nodes; edges = List.append dep_list edges })
   in
   match curr with
-  | RBop (_, _, dst) -> dst_dep dst
-  | RBload (_, _, _, dst) -> dst_dep dst
+  | RBop (_, _, _, dst) -> dst_dep dst
+  | RBload (_, _, _, _, dst) -> dst_dep dst
   | _ -> (i + 1, { nodes; edges })
 
 let assigned_vars vars = function
   | RBnop -> vars
-  | RBop (_, _, dst) -> dst :: vars
-  | RBload (_, _, _, dst) -> dst :: vars
-  | RBstore (_, _, _, _) -> vars
+  | RBop (_, _, _, dst) -> dst :: vars
+  | RBload (_, _, _, _, dst) -> dst :: vars
+  | RBstore (_, _, _, _, _) -> vars
 
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data

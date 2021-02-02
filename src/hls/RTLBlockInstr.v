@@ -31,12 +31,14 @@ Require Import vericert.common.Vericertlib.
 Local Open Scope rtl.
 
 Definition node := positive.
+Definition predicate := positive.
 
 Inductive instr : Type :=
 | RBnop : instr
-| RBop : operation -> list reg -> reg -> instr
-| RBload : memory_chunk -> addressing -> list reg -> reg -> instr
-| RBstore : memory_chunk -> addressing -> list reg -> reg -> instr.
+| RBop : option predicate -> operation -> list reg -> reg -> instr
+| RBload : option predicate -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBstore : option predicate -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBsetpred : condition -> list reg -> predicate -> instr.
 
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
@@ -62,17 +64,26 @@ Definition successors_instr (i : cf_instr) : list node :=
 Definition max_reg_instr (m: positive) (i: instr) :=
   match i with
   | RBnop => m
-  | RBop op args res => fold_left Pos.max args (Pos.max res m)
-  | RBload chunk addr args dst => fold_left Pos.max args (Pos.max dst m)
-  | RBstore chunk addr args src => fold_left Pos.max args (Pos.max src m)
+  | RBop p op args res =>
+    fold_left Pos.max args (Pos.max res m)
+  | RBload p chunk addr args dst =>
+    fold_left Pos.max args (Pos.max dst m)
+  | RBstore p chunk addr args src =>
+    fold_left Pos.max args (Pos.max src m)
+  | RBsetpred c args p =>
+    fold_left Pos.max args 1%positive
   end.
 
 Definition max_reg_cfi (m : positive) (i : cf_instr) :=
   match i with
-  | RBcall sig (inl r) args res s => fold_left Pos.max args (Pos.max r (Pos.max res m))
-  | RBcall sig (inr id) args res s => fold_left Pos.max args (Pos.max res m)
-  | RBtailcall sig (inl r) args => fold_left Pos.max args (Pos.max r m)
-  | RBtailcall sig (inr id) args => fold_left Pos.max args m
+  | RBcall sig (inl r) args res s =>
+    fold_left Pos.max args (Pos.max r (Pos.max res m))
+  | RBcall sig (inr id) args res s =>
+    fold_left Pos.max args (Pos.max res m)
+  | RBtailcall sig (inl r) args =>
+    fold_left Pos.max args (Pos.max r m)
+  | RBtailcall sig (inr id) args =>
+    fold_left Pos.max args m
   | RBbuiltin ef args res s =>
       fold_left Pos.max (params_of_builtin_args args)
         (fold_left Pos.max (params_of_builtin_res res) m)
@@ -102,9 +113,9 @@ Section DEFINITION.
   Context {bblock_body: Type}.
 
   Record bblock : Type := mk_bblock {
-                          bb_body: bblock_body;
-                          bb_exit: cf_instr
-                          }.
+    bb_body: bblock_body;
+    bb_exit: cf_instr
+  }.
 
   Definition code: Type := PTree.t bblock.
 
@@ -182,24 +193,24 @@ Section RELSEM.
       forall rs m sp,
       step_instr sp (InstrState rs m) RBnop (InstrState rs m)
   | exec_RBop:
-      forall op v res args rs m sp,
+      forall op v res args rs m sp p,
       eval_operation ge sp op rs##args m = Some v ->
       step_instr sp (InstrState rs m)
-                 (RBop op args res)
+                 (RBop p op args res)
                  (InstrState (rs#res <- v) m)
   | exec_RBload:
-      forall addr rs args a chunk m v dst sp,
+      forall addr rs args a chunk m v dst sp p,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.loadv chunk m a = Some v ->
       step_instr sp (InstrState rs m)
-                 (RBload chunk addr args dst)
+                 (RBload p chunk addr args dst)
                  (InstrState (rs#dst <- v) m)
   | exec_RBstore:
-      forall addr rs args a chunk m src m' sp,
+      forall addr rs args a chunk m src m' sp p,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.storev chunk m a rs#src = Some m' ->
       step_instr sp (InstrState rs m)
-                 (RBstore chunk addr args src)
+                 (RBstore p chunk addr args src)
                  (InstrState rs m').
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
