@@ -129,6 +129,7 @@ let rec find_all_next_dst_read i dst i' curr =
   | RBload (_, _, _, rs, _) :: curr' -> check_dst rs curr'
   | RBstore (_, _, _, rs, src) :: curr' -> check_dst (src :: rs) curr'
   | RBnop :: curr' -> find_all_next_dst_read i dst (i' + 1) curr'
+  | RBsetpred (_, rs, _) :: curr' -> check_dst rs curr'
 
 let drop i lst =
   let rec drop' i' lst' =
@@ -183,6 +184,71 @@ let accumulate_WAW_mem_deps dfg curr =
       | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
   | _ -> (i + 1, { nodes; edges })
 
+(** Predicate dependencies. *)
+
+let rec in_predicate p p' =
+  match p' with
+  | Pvar p'' -> P.eq p p''
+  | Pnot p'' -> in_predicate p p''
+  | Pand (p1, p2) -> in_predicate p p1 || in_predicate p p2
+  | Por (p1, p2) -> in_predicate p p1 || in_predicate p p2
+
+let rec get_predicate = function
+  | RBop (p, _, _, _) -> p
+  | RBload (p, _, _, _, _) -> p
+  | RBstore (p, _, _, _, _) -> p
+  | _ -> None
+
+let rec next_setpred p i = function
+  | [] -> None
+  | RBsetpred (_, _, p') :: rst ->
+    if in_predicate p' p then
+      Some i
+    else
+      next_setpred p (i + 1) rst
+  | _ :: rst -> next_setpred p (i + 1) rst
+
+let rec next_preduse p i instr=
+  let next p' rst =
+    if in_predicate p p' then
+      Some i
+    else
+      next_preduse p (i + 1) rst
+  in
+  match instr with
+  | [] -> None
+  | RBload (Some p', _, _, _, _) :: rst -> next p' rst
+  | RBstore (Some p', _, _, _, _) :: rst -> next p' rst
+  | RBop (Some p', _, _, _) :: rst -> next p' rst
+  | _ :: rst -> next_load (i + 1) rst
+
+let accumulate_RAW_pred_deps dfg curr =
+  let i, { nodes; edges } = dfg in
+  match get_predicate curr with
+  | Some p -> (
+      match next_setpred p 0 (take i nodes |> List.rev) with
+      | None -> (i + 1, { nodes; edges })
+      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
+  | _ -> (i + 1, { nodes; edges })
+
+let accumulate_WAR_pred_deps dfg curr =
+  let i, { nodes; edges } = dfg in
+  match curr with
+  | RBsetpred (_, _, p) -> (
+      match next_preduse p 0 (take i nodes |> List.rev) with
+      | None -> (i + 1, { nodes; edges })
+      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
+  | _ -> (i + 1, { nodes; edges })
+
+let accumulate_WAW_pred_deps dfg curr =
+  let i, { nodes; edges } = dfg in
+  match curr with
+  | RBsetpred (_, _, p) -> (
+      match next_setpred (Pvar p) 0 (take i nodes |> List.rev) with
+      | None -> (i + 1, { nodes; edges })
+      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
+  | _ -> (i + 1, { nodes; edges })
+
 (** This function calculates the WAW dependencies, which happen when two writes are ordered one
    after another and therefore have to be kept in that order.  This accumulation might be redundant
    if register renaming is done before hand, because then these dependencies can be avoided. *)
@@ -220,6 +286,7 @@ let assigned_vars vars = function
   | RBop (_, _, _, dst) -> dst :: vars
   | RBload (_, _, _, _, dst) -> dst :: vars
   | RBstore (_, _, _, _, _) -> vars
+  | RBsetpred (_, _, _) -> vars
 
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data
@@ -231,23 +298,32 @@ let gather_bb_constraints debug bb =
       bb.bb_body
   in
   if debug then printf "DFG : %a\n" print_dfg dfg else ();
-  let _, dfg' = List.fold_left accumulate_WAW_deps (0, dfg) bb.bb_body in
-  if debug then printf "DFG': %a\n" print_dfg dfg' else ();
-  let _, dfg'' = List.fold_left accumulate_WAR_deps (0, dfg') bb.bb_body in
-  if debug then printf "DFG'': %a\n" print_dfg dfg'' else ();
-  let _, dfg''' =
-    List.fold_left accumulate_RAW_mem_deps (0, dfg'') bb.bb_body
+  let _, dfg1 = List.fold_left accumulate_WAW_deps (0, dfg) bb.bb_body in
+  if debug then printf "DFG': %a\n" print_dfg dfg1 else ();
+  let _, dfg2 = List.fold_left accumulate_WAR_deps (0, dfg1) bb.bb_body in
+  if debug then printf "DFG'': %a\n" print_dfg dfg2 else ();
+  let _, dfg3 =
+    List.fold_left accumulate_RAW_mem_deps (0, dfg2) bb.bb_body
   in
-  if debug then printf "DFG''': %a\n" print_dfg dfg''' else ();
-  let _, dfg'''' =
-    List.fold_left accumulate_WAR_mem_deps (0, dfg''') bb.bb_body
+  if debug then printf "DFG''': %a\n" print_dfg dfg3 else ();
+  let _, dfg4 =
+    List.fold_left accumulate_WAR_mem_deps (0, dfg3) bb.bb_body
   in
-  if debug then printf "DFG'''': %a\n" print_dfg dfg'''' else ();
-  let _, dfg''''' =
-    List.fold_left accumulate_WAW_mem_deps (0, dfg'''') bb.bb_body
+  if debug then printf "DFG'''': %a\n" print_dfg dfg4 else ();
+  let _, dfg5 =
+    List.fold_left accumulate_WAW_mem_deps (0, dfg4) bb.bb_body
   in
-  if debug then printf "DFG''''': %a\n" print_dfg dfg''''' else ();
-  (List.length bb.bb_body, dfg''''', successors_instr bb.bb_exit)
+  let _, dfg6 =
+    List.fold_left accumulate_RAW_pred_deps (0, dfg5) bb.bb_body
+  in
+  let _, dfg7 =
+    List.fold_left accumulate_WAR_pred_deps (0, dfg6) bb.bb_body
+  in
+  let _, dfg8 =
+    List.fold_left accumulate_WAW_pred_deps (0, dfg7) bb.bb_body
+  in
+  if debug then printf "DFG''''': %a\n" print_dfg dfg8 else ();
+  (List.length bb.bb_body, dfg8, successors_instr bb.bb_exit)
 
 let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
 
