@@ -79,7 +79,7 @@ Definition max_reg_instr (m: positive) (i: instr) :=
   | RBstore p chunk addr args src =>
     fold_left Pos.max args (Pos.max src m)
   | RBsetpred c args p =>
-    fold_left Pos.max args 1%positive
+    fold_left Pos.max args m
   end.
 
 Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=

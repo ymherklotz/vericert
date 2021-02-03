@@ -79,6 +79,11 @@ let literal l =
   then sprintf "(- 32'd%ld)" (Int32.neg l')
   else sprintf "32'd%ld" l'
 
+let compare_expr es1 es2 =
+  match es1, es2 with
+  | (Vlit p1, _), (Vlit p2, _) -> compare (camlint_of_coqint p1) (camlint_of_coqint p2)
+  | _, _ -> -1
+
 let rec pprint_expr = function
   | Vlit l -> literal l
   | Vvar s -> register s
@@ -102,9 +107,10 @@ let rec pprint_stmnt i =
                                   indent i; "end\n"
                                 ]
   | Vcase (e, es, d) -> concat [ indent i; "case ("; pprint_expr e; ")\n";
-                              fold_map pprint_case es; indent (i+1); "default:;\n";
-                              indent i; "endcase\n"
-                            ]
+                                 fold_map pprint_case (List.sort compare_expr es |> List.rev);
+                                 indent (i+1); "default:;\n";
+                                 indent i; "endcase\n"
+                               ]
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
 

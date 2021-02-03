@@ -77,7 +77,8 @@ Module HTLState <: State.
   Definition st_prop := st_incr.
   Hint Unfold st_prop : htlh.
 
-  Lemma st_refl : forall s, st_prop s s. Proof. auto with htlh. Qed.
+  Lemma st_refl : forall s, st_prop s s.
+  Proof. auto with htlh. Qed.
 
   Lemma st_trans :
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
@@ -552,7 +553,7 @@ Definition poslength {A : Type} (l : list A) : positive :=
 Fixpoint penumerate {A : Type} (p : positive) (l : list A) {struct l}
   : list (positive * A) :=
   match l with
-  | x :: xs => (p, x) :: penumerate (Pos.succ p) xs
+  | x :: xs => (p, x) :: penumerate (Pos.pred p) xs
   | nil => nil
   end.
 
@@ -669,7 +670,7 @@ Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * list inst
   let (n, li) := ni in
   do _ <- collectlist (translate_inst fin rtrn stack preg n) li;
   do st <- get;
-  add_control_instr n (state_goto st.(st_st) (Pos.succ n)).
+  add_control_instr n (state_goto st.(st_st) (Pos.pred n)).
 
 Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
@@ -717,7 +718,7 @@ Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
   do _ <- collectlist (translate_inst_list fin rtrn stack preg)
                       (penumerate n bb.(bb_body));
   translate_cfi fin rtrn stack preg
-                ((n + poslength bb.(bb_body))%positive, bb.(bb_exit)).
+                ((n - poslength bb.(bb_body))%positive, bb.(bb_exit)).
 
 Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
