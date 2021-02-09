@@ -225,11 +225,11 @@ Section TRANSLATE.
 
   Definition called_functions (stmnts : list (Verilog.node * HTL.datapath_stmnt)) : list ident :=
     List.nodup Pos.eq_dec (flat_map (fun (a : (positive * HTL.datapath_stmnt)) =>
-                   let (n, stmt) := a in
-                   match stmt with
-                   | HTL.HTLfork fn _ => fn::nil
-                   | _ => nil
-                   end) stmnts).
+                                   let (n, stmt) := a in
+                                   match stmt with
+                                   | HTL.HTLfork fn _ => fn::nil
+                                   | _ => nil
+                                   end) stmnts).
 
   Definition find_module (program : HTL.program) (name : ident) : Errors.res HTL.module :=
     match option_map snd (find (fun named_module => Pos.eqb (fst named_module) name) program.(prog_defs)) with
