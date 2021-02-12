@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+Require Import Coq.micromega.Lia.
+
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.
@@ -27,17 +29,221 @@ Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.Sat.
 
 Local Open Scope rtl.
 
 Definition node := positive.
-Definition predicate := positive.
+Definition predicate := nat.
 
 Inductive pred_op : Type :=
 | Pvar: predicate -> pred_op
 | Pnot: pred_op -> pred_op
 | Pand: pred_op -> pred_op -> pred_op
 | Por: pred_op -> pred_op -> pred_op.
+
+Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
+  match p with
+  | Pvar p' => a p'
+  | Pnot p' => negb (sat_predicate p' a)
+  | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
+  | Por p1 p2 => sat_predicate p1 a || sat_predicate p2 a
+  end.
+
+Fixpoint mult {A: Type} (a b: list (list A)) : list (list A) :=
+  match a with
+  | nil => nil
+  | l :: ls => mult ls b ++ (List.map (fun x => l ++ x) b)
+  end.
+
+Lemma satFormula_concat:
+  forall a b agn,
+  satFormula a agn ->
+  satFormula b agn ->
+  satFormula (a ++ b) agn.
+Proof. induction a; crush. Qed.
+
+Lemma satFormula_concat2:
+  forall a b agn,
+  satFormula (a ++ b) agn ->
+  satFormula a agn /\ satFormula b agn.
+Proof.
+  induction a; simplify;
+    try apply IHa in H1; crush.
+Qed.
+
+Lemma satClause_concat:
+  forall a a1 a0,
+  satClause a a1 ->
+  satClause (a0 ++ a) a1.
+Proof. induction a0; crush. Qed.
+
+Lemma satClause_concat2:
+  forall a a1 a0,
+  satClause a0 a1 ->
+  satClause (a0 ++ a) a1.
+Proof.
+  induction a0; crush.
+  inv H; crush.
+Qed.
+
+Lemma satClause_concat3:
+  forall a b c,
+  satClause (a ++ b) c ->
+  satClause a c \/ satClause b c.
+Proof.
+  induction a; crush.
+  inv H; crush.
+  apply IHa in H0; crush.
+  inv H0; crush.
+Qed.
+
+Lemma satFormula_mult':
+  forall p2 a a0,
+  satFormula p2 a0 \/ satClause a a0 ->
+  satFormula (map (fun x : list lit => a ++ x) p2) a0.
+Proof.
+  induction p2; crush.
+  - inv H. inv H0. apply satClause_concat. auto.
+    apply satClause_concat2; auto.
+  - apply IHp2.
+    inv H; crush; inv H0; crush.
+Qed.
+
+Lemma satFormula_mult2':
+  forall p2 a a0,
+  satFormula (map (fun x : list lit => a ++ x) p2) a0 ->
+  satClause a a0 \/ satFormula p2 a0.
+Proof.
+  induction p2; crush.
+  apply IHp2 in H1. inv H1; crush.
+  apply satClause_concat3 in H0.
+  inv H0; crush.
+Qed.
+
+Lemma satFormula_mult:
+  forall p1 p2 a,
+  satFormula p1 a \/ satFormula p2 a ->
+  satFormula (mult p1 p2) a.
+Proof.
+  induction p1; crush.
+  apply satFormula_concat; crush.
+  inv H. inv H0.
+  apply IHp1. auto.
+  apply IHp1. auto.
+  apply satFormula_mult';
+  inv H; crush.
+Qed.
+
+Lemma satFormula_mult2:
+  forall p1 p2 a,
+  satFormula (mult p1 p2) a ->
+  satFormula p1 a \/ satFormula p2 a.
+Proof.
+  induction p1; crush.
+  apply satFormula_concat2 in H; crush.
+  apply IHp1 in H0.
+  inv H0; crush.
+  apply satFormula_mult2' in H1. inv H1; crush.
+Qed.
+
+Fixpoint trans_pred_temp (bound: nat) (p: pred_op) : option formula :=
+  match bound with
+  | O => None
+  | S n =>
+    match p with
+    | Pvar p' => Some (((true, p') :: nil) :: nil)
+    | Pand p1 p2 =>
+      match trans_pred_temp n p1, trans_pred_temp n p2 with
+      | Some p1', Some p2' =>
+        Some (p1' ++ p2')
+      | _, _ => None
+      end
+    | Por p1 p2 =>
+      match trans_pred_temp n p1, trans_pred_temp n p2 with
+      | Some p1', Some p2' =>
+        Some (mult p1' p2')
+      | _, _ => None
+      end
+    | Pnot (Pvar p') => Some (((false, p') :: nil) :: nil)
+    | Pnot (Pnot p) => trans_pred_temp n p
+    | Pnot (Pand p1 p2) => trans_pred_temp n (Por (Pnot p1) (Pnot p2))
+    | Pnot (Por p1 p2) => trans_pred_temp n (Pand (Pnot p1) (Pnot p2))
+    end
+  end.
+
+Fixpoint trans_pred (bound: nat) (p: pred_op) :
+  option {fm: formula | forall a,
+           sat_predicate p a = true <-> satFormula fm a}.
+  refine
+  (match bound with
+   | O => None
+   | S n =>
+     match p with
+     | Pvar p' => Some (exist _ (((true, p') :: nil) :: nil) _)
+     | Pand p1 p2 =>
+      match trans_pred n p1, trans_pred n p2 with
+      | Some (exist p1' _), Some (exist p2' _) =>
+        Some (exist _ (p1' ++ p2') _)
+      | _, _ => None
+      end
+     | Por p1 p2 =>
+      match trans_pred n p1, trans_pred n p2 with
+      | Some (exist p1' _), Some (exist p2' _) =>
+        Some (exist _ (mult p1' p2') _)
+      | _, _ => None
+      end
+     | Pnot (Pvar p') => Some (exist _ (((false, p') :: nil) :: nil) _)
+     | _ => None
+     end
+   end); split; intros; simpl in *; auto.
+  - inv H. inv H0; auto.
+  - admit.
+  - admit.
+  - apply satFormula_concat.
+    apply andb_prop in H. inv H. apply i in H0. auto.
+    apply andb_prop in H. inv H. apply i0 in H1. auto.
+  - apply satFormula_concat2 in H. simplify. apply andb_true_intro.
+    split. apply i in H0. auto.
+    apply i0 in H1. auto.
+  - apply orb_prop in H. inv H; apply satFormula_mult. apply i in H0. auto.
+    apply i0 in H0. auto.
+  - apply orb_true_intro.
+    apply satFormula_mult2 in H. inv H. apply i in H0. auto.
+    apply i0 in H0. auto.
+Admitted.
+
+Definition sat_pred (bound: nat) (p: pred_op) :
+  option ({al : alist | sat_predicate p (interp_alist al) = true}
+          + {forall a : asgn, sat_predicate p a = false}).
+  refine
+  ( match trans_pred bound p with
+    | Some (exist fm _) =>
+      match boundedSat bound fm with
+      | Some (inleft (exist a _)) => Some (inleft (exist _ a _))
+      | Some (inright _) => Some (inright _)
+      | None => None
+      end
+    | None => None
+    end ).
+  - apply i in s2. auto.
+  - intros. specialize (n a). specialize (i a).
+    destruct (sat_predicate p a). exfalso.
+    apply n. apply i. auto. auto.
+Qed.
+
+Definition sat_pred_simple (bound: nat) (p: pred_op) :=
+  match sat_pred bound p with
+  | Some (inleft (exist al _)) => Some (Some al)
+  | Some (inright _) => Some None
+  | None => None
+  end.
+
+Definition sat_pred_temp (bound: nat) (p: pred_op) :=
+  match trans_pred_temp bound p with
+  | Some fm => boundedSatSimple bound fm
+  | None => None
+  end.
 
 Inductive instr : Type :=
 | RBnop : instr

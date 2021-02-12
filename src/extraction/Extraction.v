@@ -185,6 +185,7 @@ Separate Extraction
          RTLBlockgen.transl_program RTLBlockInstr.successors_instr
          HTLgen.tbl_to_case_expr
          Pipeline.pipeline
+         RTLBlockInstr.sat_pred_temp
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

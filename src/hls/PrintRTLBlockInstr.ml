@@ -10,7 +10,7 @@ let reg pp r =
   fprintf pp "x%d" (P.to_int r)
 
 let pred pp r =
-  fprintf pp "p%d" (P.to_int r)
+  fprintf pp "p%d" (Nat.to_int r)
 
 let rec regs pp = function
   | [] -> ()

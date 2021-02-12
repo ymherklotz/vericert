@@ -557,6 +557,12 @@ Fixpoint penumerate {A : Type} (p : positive) (l : list A) {struct l}
   | nil => nil
   end.
 
+Fixpoint prange {A: Type} (p1 p2: positive) (l: list A) {struct l} :=
+  match l with
+  | x :: xs => (p1, p2, x) :: prange p2 (Pos.pred p2) xs
+  | nil => nil
+  end.
+
 Lemma add_data_instr_state_incr :
   forall s n st,
     st_incr s
@@ -622,10 +628,36 @@ Definition add_control_instr (n : node) (st : stmnt) : mon unit :=
       Error (Errors.msg "HTLPargen.add_control_instr: control logic is not empty")
     end.
 
+Definition add_control_instr_force_state_incr :
+  forall s n st,
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (st_freshstate s)
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       s.(st_datapath)
+       (AssocMap.set n st s.(st_controllogic))).
+Admitted.
+
+Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    OK tt (mkstate
+      s.(st_st)
+      s.(st_freshreg)
+      (st_freshstate s)
+      s.(st_scldecls)
+      s.(st_arrdecls)
+      s.(st_datapath)
+      (AssocMap.set n st s.(st_controllogic)))
+   (add_control_instr_force_state_incr s n st).
+
+
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with
   | Pvar pred =>
-    Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
+    Vrange preg (Vlit (natToValue pred)) (Vlit (natToValue pred))
   | Pnot pred =>
     Vunop Vnot (pred_expr preg pred)
   | Pand p1 p2 =>
@@ -665,12 +697,38 @@ Definition translate_inst (fin rtrn stack preg : reg) (n : node) (i : instr)
     add_data_instr n (Vnonblock (pred_expr preg (Pvar p)) cond)
   end.
 
-Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * list instr)
-  : mon unit :=
-  let (n, li) := ni in
-  do _ <- collectlist (translate_inst fin rtrn stack preg n) li;
-  do st <- get;
-  add_control_instr n (state_goto st.(st_st) (Pos.pred n)).
+Lemma create_new_state_state_incr:
+  forall s p,
+  st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       (s.(st_freshstate) + p)%positive
+       s.(st_scldecls)
+       s.(st_arrdecls)
+       s.(st_datapath)
+       s.(st_controllogic)).
+Admitted.
+
+Definition create_new_state (p: node): mon node :=
+  fun s => OK s.(st_freshstate)
+              (mkstate
+                s.(st_st)
+                s.(st_freshreg)
+                (s.(st_freshstate) + p)%positive
+                s.(st_scldecls)
+                s.(st_arrdecls)
+                s.(st_datapath)
+                s.(st_controllogic))
+              (create_new_state_state_incr s p).
+
+Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * list instr) :=
+  match ni with
+  | (n, p, li) =>
+    do _ <- collectlist (translate_inst fin rtrn stack preg n) li;
+    do st <- get;
+    add_control_instr n (state_goto st.(st_st) p)
+  end.
 
 Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
@@ -695,8 +753,9 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
     do (tc1s, tc1c) <- translate_cfi' fin rtrn stack preg c1;
     do (tc2s, tc2c) <- translate_cfi' fin rtrn stack preg c2;
     ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
-  | RBjumptable r ln =>
-    error (Errors.msg "HTLPargen: RPjumptable not supported.")
+  | RBjumptable r tbl =>
+    do s <- get;
+    ret (Vskip, Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
   | RBcall sig ri rl r n =>
     error (Errors.msg "HTLPargen: RPcall not supported.")
   | RBtailcall sig ri lr =>
@@ -715,10 +774,14 @@ Definition translate_cfi (fin rtrn stack preg: reg) (ni: node * cf_instr)
 Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
   : mon unit :=
   let (n, bb) := ni in
+  do nstate <- create_new_state ((poslength bb.(bb_body)))%positive;
   do _ <- collectlist (translate_inst_list fin rtrn stack preg)
-                      (penumerate n bb.(bb_body));
-  translate_cfi fin rtrn stack preg
-                ((n - poslength bb.(bb_body))%positive, bb.(bb_exit)).
+                      (prange n (nstate + poslength bb.(bb_body) - 1)%positive
+                                  bb.(bb_body));
+  match bb.(bb_body) with
+  | nil => translate_cfi fin rtrn stack preg (n, bb.(bb_exit))
+  | _ => translate_cfi fin rtrn stack preg (nstate, bb.(bb_exit))
+  end.
 
 Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then

@@ -33,6 +33,8 @@ open HTLgen
 open HTLMonad
 open HTLMonadExtra
 
+module SS = Set.Make(P)
+
 module IMap = Map.Make (struct
   type t = int
 
@@ -76,7 +78,7 @@ let add_dep i tree deps curr =
   match PTree.get curr tree with None -> deps | Some ip -> (ip, i) :: deps
 
 (** This function calculates the dependencies of each instruction.  The nodes correspond to previous
-   register that were allocated and show which instruction caused it.
+   registers that were allocated and show which instruction caused it.
 
    This function only gathers the RAW constraints, and will therefore only be active for operations
    that modify registers, which is this case only affects loads and operations. *)
@@ -188,7 +190,7 @@ let accumulate_WAW_mem_deps dfg curr =
 
 let rec in_predicate p p' =
   match p' with
-  | Pvar p'' -> P.eq p p''
+  | Pvar p'' -> Nat.to_int p = Nat.to_int p''
   | Pnot p'' -> in_predicate p p''
   | Pand (p1, p2) -> in_predicate p p1 || in_predicate p p2
   | Por (p1, p2) -> in_predicate p p1 || in_predicate p p2
@@ -288,6 +290,32 @@ let assigned_vars vars = function
   | RBstore (_, _, _, _, _) -> vars
   | RBsetpred (_, _, _) -> vars
 
+let get_pred = function
+  | RBnop -> None
+  | RBop (op, _, _, _) -> op
+  | RBload (op, _, _, _, _) -> op
+  | RBstore (op, _, _, _, _) -> op
+  | RBsetpred (_, _, _) -> None
+
+let independant_pred p p' =
+  match sat_pred_temp (Nat.of_int 100000) (Pand (p, p')) with
+  | Some None -> true
+  | _ -> false
+
+let check_dependent op1 op2 =
+  match op1, op2 with
+  | Some p, Some p' -> not (independant_pred p p')
+  | _, _ -> true
+
+let remove_unnecessary_deps dfg =
+  let { edges; nodes } = dfg in
+  let is_dependent = function (i1, i2) ->
+    let instr1 = List.nth nodes i1 in
+    let instr2 = List.nth nodes i2 in
+    check_dependent (get_pred instr1) (get_pred instr2)
+  in
+  { edges = List.filter is_dependent edges; nodes }
+
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data
    dependencies between nodes. *)
@@ -322,8 +350,9 @@ let gather_bb_constraints debug bb =
   let _, dfg8 =
     List.fold_left accumulate_WAW_pred_deps (0, dfg7) bb.bb_body
   in
-  if debug then printf "DFG''''': %a\n" print_dfg dfg8 else ();
-  (List.length bb.bb_body, dfg8, successors_instr bb.bb_exit)
+  let dfg9 = remove_unnecessary_deps dfg8 in
+  if debug then printf "DFG''''': %a\n" print_dfg dfg9 else ();
+  (List.length bb.bb_body, dfg9, successors_instr bb.bb_exit)
 
 let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
 
@@ -471,8 +500,8 @@ let transf_rtlpar c (schedule : (int * int) list IMap.t) =
         let i_sched_tree =
           List.fold_left combine_bb_schedule IMap.empty i_sched
         in
-        printf "--------------- curr: %d, max: %d, min: %d, next: %d\n" (P.to_int i) max_state min_state (P.to_int i - max_state + min_state - 1);
-        printf "HIIIII: %d orig: %d\n" (P.to_int i - max_state + min_state - 1) (P.to_int i);
+        (*printf "--------------- curr: %d, max: %d, min: %d, next: %d\n" (P.to_int i) max_state min_state (P.to_int i - max_state + min_state - 1);
+        printf "HIIIII: %d orig: %d\n" (P.to_int i - max_state + min_state - 1) (P.to_int i);*)
         { bb_body = (IMap.to_seq i_sched_tree |> List.of_seq |> List.sort compare_tuple |> List.map snd
                            |> List.map (List.map (fun x -> List.nth bb_body' x)));
           bb_exit = ctrl_flow
@@ -483,23 +512,38 @@ let transf_rtlpar c (schedule : (int * int) list IMap.t) =
 let second = function (_, a, _) -> a
 
 let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
-  let debug = true in
+  let debug = false in
   let c' = PTree.map1 (gather_bb_constraints false) c in
-  let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in
+  (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in*)
   let _, (vars, constraints, types) =
     List.map fst (PTree.elements c') |>
     List.fold_left (fun compl ->
         gather_cfg_constraints compl c') ([], ([], "", ""))
   in
   let schedule' = solve_constraints vars constraints types in
-  IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';
+  (*IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
   (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
   transf_rtlpar c schedule'
 
+let rec find_reachable_states c e =
+  match PTree.get e c with
+  | Some { bb_exit = ex; _ } ->
+    e :: List.fold_left (fun x a -> List.concat [x; find_reachable_states c a]) []
+      (successors_instr ex |> List.filter (fun x -> P.lt x e))
+  | None -> assert false
+
+let add_to_tree c nt i =
+  match PTree.get i c with
+  | Some p -> PTree.set i p nt
+  | None -> assert false
+
 let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
+  let scheduled = schedule f.fn_entrypoint f.fn_code in
+  let reachable = find_reachable_states scheduled f.fn_entrypoint
+                  |> List.to_seq |> SS.of_seq |> SS.to_seq |> List.of_seq in
   { fn_sig = f.fn_sig;
     fn_params = f.fn_params;
     fn_stacksize = f.fn_stacksize;
-    fn_code = schedule f.fn_entrypoint f.fn_code;
+    fn_code = List.fold_left (add_to_tree scheduled) PTree.empty reachable;
     fn_entrypoint = f.fn_entrypoint
   }

@@ -72,20 +72,48 @@ Definition is_cond_cfi (cfi: cf_instr) :=
   | _ => false
   end.
 
-Definition find_block_with_cond (c: code) : option (node * bblock) :=
-  match List.filter (fun x => is_cond_cfi (snd x).(bb_exit)) (PTree.elements c) with
-  | (a :: b)%list => Some a
-  | nil => None
+Fixpoint any {A: Type} (f: A -> bool) (a: list A) :=
+  match a with
+  | x :: xs => f x || any f xs
+  | nil => false
   end.
 
-Definition transf_function (f: function) : function :=
-  match find_block_with_cond f.(fn_code) with
-  | Some (n, bb) =>
-    let nbb := if_convert_block f.(fn_code) 1%positive bb in
-    mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
-               (PTree.set n nbb f.(fn_code)) f.(fn_entrypoint)
-  | None => f
+Fixpoint all {A: Type} (f: A -> bool) (a: list A) :=
+  match a with
+  | x :: xs => f x && all f xs
+  | nil => true
   end.
+
+Definition find_backedge (nb: node * bblock) :=
+  let (n, b) := nb in
+  let succs := successors_instr b.(bb_exit) in
+  filter (fun x => Pos.ltb n x) succs.
+
+Definition find_all_backedges (c: code) : list node :=
+  List.concat (List.map find_backedge (PTree.elements c)).
+
+Definition has_backedge (entry: node) (be: list node) :=
+  any (fun x => Pos.eqb entry x) be.
+
+Definition find_blocks_with_cond (c: code) : list (node * bblock) :=
+  let backedges := find_all_backedges c in
+  List.filter (fun x => is_cond_cfi (snd x).(bb_exit) &&
+                        negb (has_backedge (fst x) backedges) &&
+                        all (fun x' => negb (has_backedge x' backedges))
+                            (successors_instr (snd x).(bb_exit))
+              ) (PTree.elements c).
+
+Definition if_convert_code (p: nat * code) (nb: node * bblock) :=
+  let (n, bb) := nb in
+  let (p', c) := p in
+  let nbb := if_convert_block c p' bb in
+  (S p', PTree.set n nbb c).
+
+Definition transf_function (f: function) : function :=
+  let (_, c) := List.fold_left if_convert_code
+                               (find_blocks_with_cond f.(fn_code))
+                               (1%nat, f.(fn_code)) in
+  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize) c f.(fn_entrypoint).
 
 Definition transf_fundef (fd: fundef) : fundef :=
   transf_fundef transf_function fd.
