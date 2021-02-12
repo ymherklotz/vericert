@@ -29,6 +29,14 @@ open Printf
 
 open VericertClflags
 
+module PMap = Map.Make (struct
+  type t = P.t
+
+  let compare = P.compare
+end)
+
+let name_map = ref PMap.empty
+
 let concat = String.concat ""
 
 let indent i = String.make (2 * i) ' '
@@ -69,7 +77,10 @@ let unop = function
   | Vneg -> " - "
   | Vnot -> " ! "
 
-let register a = sprintf "reg_%d" (P.to_int a)
+let register a =
+  match PMap.find_opt a !name_map with
+  | Some s -> s
+  | None -> sprintf "reg_%d" (P.to_int a)
 
 (*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
 
@@ -214,6 +225,11 @@ let pprint_module debug i n m =
   if (extern_atom n) = "main" then
     let inputs = m.mod_start :: m.mod_reset :: m.mod_clk :: m.mod_args in
     let outputs = [m.mod_finish; m.mod_return] in
+    name_map := List.fold_left (fun a -> (function (n, s) -> PMap.add n s a)) PMap.empty
+        [ (m.mod_finish, "finish"); (m.mod_return, "return_val");
+          (m.mod_start, "start"); (m.mod_reset, "reset");
+          (m.mod_clk, "clk"); (m.mod_st, "state"); (m.mod_stk, "stack")
+        ];
     concat [ indent i; "module "; (extern_atom n);
              "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
              fold_map (pprint_module_item (i+1)) m.mod_body;
