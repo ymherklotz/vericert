@@ -23,10 +23,56 @@ From vericert Require Import Vericertlib AssocMap ValueInt Statemonad.
 From vericert Require Import HTL Verilog.
 Import ListNotations.
 
-Record state: Type := mkstate {
-                  st_freshreg : reg;
-                  st_regmap : PTree.t reg;
-                    }.
+Local Open Scope error_monad_scope.
+
+Record state: Type :=
+  mkstate {
+    st_freshreg : reg;
+    st_regmap : PTree.t reg;
+  }.
+
+Definition transl_datapath_fun (modmap : PTree.t HTL.module) (a : Verilog.node * HTL.datapath_stmnt) :=
+  let (n, s) := a in
+  let node := Verilog.Vlit (posToValue n) in
+  match s with
+  | HTL.HTLfork mod_name args =>
+    do mod_body <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
+    let reset_mod := Vnonblock (Vvar (HTL.mod_reset mod_body)) (posToLit 1) in
+    let zipped_args := List.combine (HTL.mod_params mod_body) args in
+    let assign_args :=
+        List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (from, to) := a in
+                                             Vseq acc (Vnonblock (Vvar to) (Vvar from)))
+                 zipped_args Vskip in
+    OK (node, Vseq reset_mod assign_args)
+  | HTL.HTLjoin mod_name dst => OK (node, Verilog.Vskip) (* inline_call m args *)
+  | HTL.HTLDataVstmnt s => OK (node, s)
+  end.
+
+Definition transl_datapath modmap st := Errors.mmap (transl_datapath_fun modmap) st.
+
+Definition transl_ctrl_fun (modmap : PTree.t HTL.module) (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
+  let (n, s) := a in
+  let node := Verilog.Vlit (posToValue n) in
+  match s with
+  | HTL.HTLwait mod_name status expr =>
+    do mod_body <- handle_opt (Errors.msg "module does not exist") (PTree.get mod_name modmap);
+    let is_done := Vbinop Veq (Vvar (HTL.mod_finish mod_body)) (Vlit (posToValue 1)) in
+    let continue := Vnonblock (Vvar status) expr in
+    Errors.OK (node, Verilog.Vcond is_done continue Vskip)
+  | HTL.HTLCtrlVstmnt s => Errors.OK (node, s)
+  end.
+
+Definition transl_ctrl modmap st := Errors.mmap (transl_ctrl_fun modmap) st.
+
+Definition scl_to_Vdecl_fun (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
+  match a with (r, (io, Verilog.VScalar sz)) => (Verilog.Vdecl io r sz) end.
+
+Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
+
+Definition arr_to_Vdeclarr_fun (a : reg * (option Verilog.io * Verilog.arr_decl)) :=
+  match a with (r, (io, Verilog.VArray sz l)) => (Verilog.Vdeclarr io r sz l) end.
+
+Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
 Module VerilogState <: State.
   Definition st := state.
@@ -39,47 +85,17 @@ Module VerilogState <: State.
   Lemma st_trans : forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof. constructor. Qed.
 End VerilogState.
-Export VerilogState.
 
 Module VerilogMonad := Statemonad(VerilogState).
-Export VerilogMonad.
 
 Module VerilogMonadExtra := Monad.MonadExtra(VerilogMonad).
-Import VerilogMonadExtra.
-Export MonadNotation.
-
-Definition transl_datapath_fun (a : Verilog.node * HTL.datapath_stmnt) :=
-  let (n, s) := a in
-  (Verilog.Vlit (posToValue n),
-   match s with
-   | HTL.HTLfork m args => Verilog.Vskip (* inline_call m args *)
-   | HTL.HTLjoin m dst => Verilog.Vskip (* inline_call m args *)
-   | HTL.HTLDataVstmnt s => s
-   end).
-
-Definition transl_datapath st := map transl_datapath_fun st.
-
-Definition transl_ctrl_fun (a : Verilog.node * HTL.control_stmnt) :=
-  let (n, s) := a in
-  (Verilog.Vlit (posToValue n),
-   match s with
-   | HTL.HTLwait _ _ _ => Vskip
-   | HTL.HTLCtrlVstmnt s => s
-   end).
-
-Definition transl_ctrl st := map transl_ctrl_fun st.
-
-Definition scl_to_Vdecl_fun (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
-  match a with (r, (io, Verilog.VScalar sz)) => (Verilog.Vdecl io r sz) end.
-
-Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
-
-Definition arr_to_Vdeclarr_fun (a : reg * (option Verilog.io * Verilog.arr_decl)) :=
-  match a with (r, (io, Verilog.VArray sz l)) => (Verilog.Vdeclarr io r sz l) end.
-
-Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
 Section RENUMBER.
+  Export VerilogState.
+  Export VerilogMonad.
+  Import VerilogMonadExtra.
+  Export MonadNotation.
+
   Definition renumber_reg (r : reg) : mon reg :=
     do st <- get;
     match PTree.get r st.(st_regmap) with
@@ -248,30 +264,35 @@ Section TRANSLATE.
     ; HTL.mod_clk m
     ] ++ HTL.mod_params m ++ map fst (PTree.elements (mod_scldecls m)) ++ map fst (PTree.elements (mod_arrdecls m))) 1%positive.
 
+  Definition prog_modmap (p : HTL.program) :=
+    PTree_Properties.of_list (Option.map_option
+                            (fun a => match a with
+                                   | (ident, (Gfun (Internal f))) => Some (ident, f)
+                                   | _ => None
+                                   end)
+                            p.(prog_defs)).
+
   (* FIXME Remove the fuel parameter (recursion limit)*)
   Fixpoint transf_module (fuel : nat) (program : HTL.program) (m : HTL.module) : Errors.res Verilog.module :=
     match fuel with
     | O => Errors.Error (Errors.msg "Veriloggen: transl_module ran out of fuel")
     | S fuel' =>
-      let case_el_ctrl := transl_ctrl (PTree.elements (HTL.mod_controllogic m)) in
-      let case_el_data := transl_datapath (PTree.elements (HTL.mod_datapath m)) in
-
       let inline_start_reg := max_reg_module m in
 
       (* Inlining *)
       let inline_names := called_functions (PTree.elements (HTL.mod_datapath m)) in
       do htl_modules <- Errors.mmap (find_module program) inline_names;
       do translated_modules <- Errors.mmap (transf_module fuel' program) htl_modules;
-      let (renumbered_modules, _) :=
+      let (renumbered_modules, transl_st) :=
           fold_left (fun (acc : list Verilog.module * positive) module =>
                    let (acc_lst, freshreg) := acc in
-                   let init_state :=
+                   let init_state : state :=
                        mkstate freshreg
                                (PTree.set (mod_clk module) (HTL.mod_clk m)
                                           (PTree.empty reg)) in
                    match renumber_module module init_state with
-                   | Error _ => (acc_lst, freshreg)
-                   | OK vmodule (mkstate freshreg' _) _  => (vmodule :: acc_lst, freshreg)
+                   | VerilogMonad.Error _ => (acc_lst, freshreg)
+                   | VerilogMonad.OK vmodule (mkstate freshreg' _) _  => (vmodule :: acc_lst, freshreg)
                    end)
                     translated_modules (nil, inline_start_reg) in
       let cleaned_modules :=
@@ -285,6 +306,9 @@ Section TRANSLATE.
                                          Some (Vdeclaration (Vdeclarr None reg sz len))
                                        | _ => Some a
                                        end))) renumbered_modules in
+
+      do case_el_ctrl <- transl_ctrl (prog_modmap program) (PTree.elements (HTL.mod_controllogic m));
+      do case_el_data <- transl_datapath (prog_modmap program) (PTree.elements (HTL.mod_datapath m));
 
       let body : list Verilog.module_item:=
           Valways (Vposedge (HTL.mod_clk m)) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
