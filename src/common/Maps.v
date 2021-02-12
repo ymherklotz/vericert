@@ -40,4 +40,31 @@ Definition traverse (A B : Type) (f : positive -> A -> res B) m := xtraverse f m
 
 Definition traverse1 (A B : Type) (f : A -> res B) := traverse (fun _ => f).
 
+Definition filter (A: Type) (pred: PTree.elt -> A -> bool) (m: t A) : t A :=
+  PTree.map (fun _ a => snd a) (PTree.filter1 (fun a => pred (fst a) (snd a)) (PTree.map (fun i x => (i, x)) m)).
+
+Theorem filter_spec: forall (A: Type) (pred: PTree.elt -> A -> bool) (m: PTree.t A) (i: PTree.elt) (x : A),
+    (filter pred m) ! i =
+    match m ! i with
+    | None => None
+    | Some x => if pred i x then Some x else None
+    end.
+Proof.
+  intros.
+  unfold filter.
+
+  rewrite gmap.
+  unfold option_map.
+
+  rewrite gfilter1.
+
+  rewrite gmap.
+  unfold option_map.
+
+  destruct (m ! i).
+  - simpl.
+    destruct (pred i a); simpl; reflexivity.
+  - reflexivity.
+Qed.
+
 End PTree.
