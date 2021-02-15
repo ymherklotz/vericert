@@ -19,28 +19,22 @@
 From compcert Require Import Maps.
 From compcert Require Import Errors.
 From compcert Require Import AST.
-From vericert Require Import Vericertlib AssocMap ValueInt Statemonad.
+From vericert Require Import Vericertlib AssocMap ValueInt Statemonad Maps.
 From vericert Require Import HTL Verilog.
 Import ListNotations.
 
 Local Open Scope error_monad_scope.
 
-Record state: Type :=
-  mkstate {
-    st_freshreg : reg;
-    st_regmap : PTree.t reg;
-  }.
-
-Definition transl_datapath_fun (modmap : PTree.t HTL.module) (a : Verilog.node * HTL.datapath_stmnt) :=
+Definition transl_datapath_fun (modmap : PTree.t Verilog.module) (a : Verilog.node * HTL.datapath_stmnt) :=
   let (n, s) := a in
   let node := Verilog.Vlit (posToValue n) in
   match s with
   | HTL.HTLfork mod_name args =>
     do mod_body <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
-    let reset_mod := Vnonblock (Vvar (HTL.mod_reset mod_body)) (posToLit 1) in
-    let zipped_args := List.combine (HTL.mod_params mod_body) args in
+    let reset_mod := Vnonblock (Vvar (Verilog.mod_reset mod_body)) (posToLit 1) in
+    let zipped_args := List.combine (Verilog.mod_args mod_body) args in
     let assign_args :=
-        List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (from, to) := a in
+        List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (to, from) := a in
                                              Vseq acc (Vnonblock (Vvar to) (Vvar from)))
                  zipped_args Vskip in
     OK (node, Vseq reset_mod assign_args)
@@ -50,13 +44,13 @@ Definition transl_datapath_fun (modmap : PTree.t HTL.module) (a : Verilog.node *
 
 Definition transl_datapath modmap st := Errors.mmap (transl_datapath_fun modmap) st.
 
-Definition transl_ctrl_fun (modmap : PTree.t HTL.module) (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
+Definition transl_ctrl_fun (modmap : PTree.t Verilog.module) (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
   let (n, s) := a in
   let node := Verilog.Vlit (posToValue n) in
   match s with
   | HTL.HTLwait mod_name status expr =>
     do mod_body <- handle_opt (Errors.msg "module does not exist") (PTree.get mod_name modmap);
-    let is_done := Vbinop Veq (Vvar (HTL.mod_finish mod_body)) (Vlit (posToValue 1)) in
+    let is_done := Vbinop Veq (Vvar (Verilog.mod_finish mod_body)) (Vlit (posToValue 1)) in
     let continue := Vnonblock (Vvar status) expr in
     Errors.OK (node, Verilog.Vcond is_done continue Vskip)
   | HTL.HTLCtrlVstmnt s => Errors.OK (node, s)
@@ -74,24 +68,30 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option Verilog.io * Verilog.arr_decl)
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
-Module VerilogState <: State.
-  Definition st := state.
+Record renumber_state: Type :=
+  mk_renumber_state {
+    st_freshreg : reg;
+    st_regmap : PTree.t reg;
+  }.
 
-  Definition st_prop (st1 st2 : state) := True.
+Module RenumberState <: State.
+  Definition st := renumber_state.
 
-  Lemma st_refl : forall (s : state), st_prop s s.
+  Definition st_prop (st1 st2 : st) := True.
+
+  Lemma st_refl : forall (s : st), st_prop s s.
   Proof. constructor. Qed.
 
   Lemma st_trans : forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof. constructor. Qed.
-End VerilogState.
+End RenumberState.
 
-Module VerilogMonad := Statemonad(VerilogState).
+Module VerilogMonad := Statemonad(RenumberState).
 
 Module VerilogMonadExtra := Monad.MonadExtra(VerilogMonad).
 
 Section RENUMBER.
-  Export VerilogState.
+  Export RenumberState.
   Export VerilogMonad.
   Import VerilogMonadExtra.
   Export MonadNotation.
@@ -101,7 +101,7 @@ Section RENUMBER.
     match PTree.get r st.(st_regmap) with
     | Some reg' => ret reg'
     | None =>
-      do tt <- set (mkstate (Pos.succ st.(st_freshreg)) (PTree.set r st.(st_freshreg) st.(st_regmap))) (fun _ => I);
+      do tt <- set (mk_renumber_state (Pos.succ st.(st_freshreg)) (PTree.set r st.(st_freshreg) st.(st_regmap))) (fun _ => I);
       ret st.(st_freshreg)
     end.
 
@@ -234,23 +234,39 @@ Section RENUMBER.
        mod_args'
        mod_body'
        (Verilog.mod_entrypoint m)).
+
+  Definition renumber_all_modules
+             (modules : PTree.t Verilog.module)
+             (start_reg : reg)
+             (clk : reg) : Errors.res (PTree.t Verilog.module) :=
+
+    run_mon (mk_renumber_state start_reg (PTree.empty reg))
+            (VerilogMonadExtra.traverse_ptree1 (fun m =>
+                  do st <- VerilogMonad.get;
+                  do _ <- VerilogMonad.set
+                       (mk_renumber_state (st_freshreg st)
+                                          (PTree.set (mod_clk m) clk
+                                                     (PTree.empty reg)))
+                       (fun _ => I);
+                  renumber_module m)
+           modules).
 End RENUMBER.
 
 Section TRANSLATE.
   Local Open Scope error_monad_scope.
 
   Definition called_functions (stmnts : list (Verilog.node * HTL.datapath_stmnt)) : list ident :=
-    List.nodup Pos.eq_dec (flat_map (fun (a : (positive * HTL.datapath_stmnt)) =>
+    List.nodup Pos.eq_dec (Option.map_option (fun (a : (positive * HTL.datapath_stmnt)) =>
                                    let (n, stmt) := a in
                                    match stmt with
-                                   | HTL.HTLfork fn _ => fn::nil
-                                   | _ => nil
+                                   | HTL.HTLfork fn _ => Some fn
+                                   | _ => None
                                    end) stmnts).
 
   Definition find_module (program : HTL.program) (name : ident) : Errors.res HTL.module :=
     match option_map snd (find (fun named_module => Pos.eqb (fst named_module) name) program.(prog_defs)) with
-    | Some (Gfun (Internal f)) => Errors.OK f
-    | _ => Errors.Error (Errors.msg "Veriloggen: Could not find definition for called module")
+    | Some (Gfun (Internal f)) => OK f
+    | _ => Error (msg "Veriloggen: Could not find definition for called module")
     end.
 
   Definition max_reg_module (m : HTL.module) : positive :=
@@ -272,43 +288,36 @@ Section TRANSLATE.
                                    end)
                             p.(prog_defs)).
 
+  (** Clean up declarations for an inlined module. Make IO decls into reg, and remove the clk declaration *)
+  Definition clean_up_decl (clk : reg) (it : Verilog.module_item) :=
+    match it with
+    | Vdeclaration (Vdecl (Some _) reg sz) =>
+      if Pos.eqb reg clk
+      then None
+      else Some (Vdeclaration (Vdecl None reg sz))
+    | Vdeclaration (Vdeclarr (Some _) reg sz len) =>
+      Some (Vdeclaration (Vdeclarr None reg sz len))
+    | _ => Some it
+    end.
+
   (* FIXME Remove the fuel parameter (recursion limit)*)
-  Fixpoint transf_module (fuel : nat) (program : HTL.program) (m : HTL.module) : Errors.res Verilog.module :=
+  Fixpoint transf_module (fuel : nat) (program : HTL.program) (m : HTL.module) : res Verilog.module :=
     match fuel with
-    | O => Errors.Error (Errors.msg "Veriloggen: transl_module ran out of fuel")
+    | O => Error (msg "Veriloggen: transf_module recursion too deep")
     | S fuel' =>
+
       let inline_start_reg := max_reg_module m in
-
-      (* Inlining *)
       let inline_names := called_functions (PTree.elements (HTL.mod_datapath m)) in
-      do htl_modules <- Errors.mmap (find_module program) inline_names;
-      do translated_modules <- Errors.mmap (transf_module fuel' program) htl_modules;
-      let (renumbered_modules, transl_st) :=
-          fold_left (fun (acc : list Verilog.module * positive) module =>
-                   let (acc_lst, freshreg) := acc in
-                   let init_state : state :=
-                       mkstate freshreg
-                               (PTree.set (mod_clk module) (HTL.mod_clk m)
-                                          (PTree.empty reg)) in
-                   match renumber_module module init_state with
-                   | VerilogMonad.Error _ => (acc_lst, freshreg)
-                   | VerilogMonad.OK vmodule (mkstate freshreg' _) _  => (vmodule :: acc_lst, freshreg)
-                   end)
-                    translated_modules (nil, inline_start_reg) in
-      let cleaned_modules :=
-          map (map_body
-             (Option.map_option (fun a => match a with
-                                       | Vdeclaration (Vdecl (Some _) reg sz) =>
-                                         if Pos.eqb reg (HTL.mod_clk m)
-                                         then None
-                                         else Some (Vdeclaration (Vdecl None reg sz))
-                                       | Vdeclaration (Vdeclarr (Some _) reg sz len) =>
-                                         Some (Vdeclaration (Vdeclarr None reg sz len))
-                                       | _ => Some a
-                                       end))) renumbered_modules in
+      let htl_modules := PTree.filter
+                       (fun m _ => List.existsb (Pos.eqb m) inline_names)
+                       (prog_modmap program) in
+      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' program) htl_modules;
+      do renumbered_modules <- renumber_all_modules translated_modules (max_reg_module m) (HTL.mod_clk m);
+      let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl (HTL.mod_clk m))))
+                                        renumbered_modules in
 
-      do case_el_ctrl <- transl_ctrl (prog_modmap program) (PTree.elements (HTL.mod_controllogic m));
-      do case_el_data <- transl_datapath (prog_modmap program) (PTree.elements (HTL.mod_datapath m));
+      do case_el_ctrl <- transl_ctrl renumbered_modules (PTree.elements (HTL.mod_controllogic m));
+      do case_el_data <- transl_datapath renumbered_modules (PTree.elements (HTL.mod_datapath m));
 
       let body : list Verilog.module_item:=
           Valways (Vposedge (HTL.mod_clk m)) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
@@ -317,9 +326,9 @@ Section TRANSLATE.
                   :: Valways (Vposedge (HTL.mod_clk m)) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
                   :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements (HTL.mod_arrdecls m))
                                                            ++ scl_to_Vdecl (AssocMap.elements (HTL.mod_scldecls m)))
-                  ++ List.flat_map Verilog.mod_body cleaned_modules in
+                  ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules)) in
 
-      Errors.OK (Verilog.mkmodule
+      OK (Verilog.mkmodule
                (HTL.mod_start m)
                (HTL.mod_reset m)
                (HTL.mod_clk m)
@@ -333,9 +342,6 @@ Section TRANSLATE.
                (HTL.mod_entrypoint m)
                 )
     end.
-
-  (* Definition transl_module (prog : HTL.program) (m : HTL.module) := *)
-  (*   run_mon (mkstate xH (PTree.empty reg)) (transf_module 10 prog m). *)
 
   Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transf_module 10 prog).
   Definition transl_program (prog : HTL.program) := transform_partial_program (transl_fundef prog) prog.
