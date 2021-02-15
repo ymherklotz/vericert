@@ -1,4 +1,5 @@
-From Coq Require Import Lists.List.
+From Coq Require Import BinNums Lists.List.
+From compcert Require Import Maps.
 
 Module Type Monad.
 
@@ -55,5 +56,23 @@ Module MonadExtra(M : Monad).
     | nil => ret tt
     | x::xs => do _ <- f x; collectlist f xs
     end.
+
+Fixpoint xtraverse_ptree {A B : Type} (f : positive -> A -> mon B) (m : PTree.t A) (i : positive)
+         {struct m} : mon (PTree.t B) :=
+  match m with
+  | PTree.Leaf => ret PTree.Leaf
+  | PTree.Node l o r =>
+    do no <- match o with
+        | None => ret None
+        | Some x => do no <- f (PTree.prev i) x; ret (Some no)
+        end;
+    do nl <- xtraverse_ptree f l (xO i);
+    do nr <- xtraverse_ptree f r (xI i);
+    ret (PTree.Node nl no nr)
+  end.
+
+Definition traverse_ptree {A B : Type} (f : positive -> A -> mon B) m := xtraverse_ptree f m xH.
+
+Definition traverse_ptree1 {A B : Type} (f : A -> mon B) := traverse_ptree (fun _ => f).
 
 End MonadExtra.
