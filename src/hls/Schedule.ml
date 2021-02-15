@@ -35,13 +35,50 @@ open HTLMonadExtra
 
 module SS = Set.Make(P)
 
+module G = Graph.Imperative.Digraph.ConcreteLabeled(struct
+  type t = int * int
+  let compare = compare
+  let equal = (=)
+  let hash = Hashtbl.hash
+end)(struct
+  type t = int
+  let compare = compare
+  let hash = Hashtbl.hash
+  let equal = (=)
+  let default = 0
+end)
+
+module DFG = Graph.Persistent.Digraph.ConcreteLabeled(struct
+  type t = int
+  let compare = compare
+  let equal = (=)
+  let hash = Hashtbl.hash
+end)(struct
+  type t = int
+  let compare = compare
+  let hash = Hashtbl.hash
+  let equal = (=)
+  let default = 0
+end)
+
+module DFGDot = Graph.Graphviz.Dot(struct
+    let graph_attributes _ = []
+    let default_vertex_attributes _ = []
+    let vertex_name = string_of_int
+    let vertex_attributes _ = []
+    let get_subgraph _ = None
+    let default_edge_attributes _ = []
+    let edge_attributes _ = []
+
+    include DFG
+  end)
+
 module IMap = Map.Make (struct
   type t = int
 
   let compare = compare
 end)
 
-type dfg = { nodes : instr list; edges : (int * int) list }
 (** The DFG type defines a list of instructions with their data dependencies as [edges], which are
    the pairs of integers that represent the index of the instruction in the [nodes].  The edges
    always point from left to right. *)
@@ -55,10 +92,12 @@ let print_tuple out_chan a =
   let l, r = a in
   fprintf out_chan "(%d,%d)" l r
 
-let print_dfg out_chan dfg =
+(*let print_dfg out_chan dfg =
   fprintf out_chan "{ nodes = %a, edges = %a }"
     (print_list PrintRTLBlockInstr.print_bblock_body)
-    dfg.nodes (print_list print_tuple) dfg.edges
+    dfg.nodes (print_list print_tuple) dfg.edges*)
+
+let print_dfg = DFGDot.output_graph
 
 let read_process command =
   let buffer_size = 2048 in
@@ -75,7 +114,7 @@ let read_process command =
 
 (** Add a dependency if it uses a register that was written to previously. *)
 let add_dep i tree deps curr =
-  match PTree.get curr tree with None -> deps | Some ip -> (ip, i) :: deps
+  match PTree.get curr tree with None -> deps | Some ip -> DFG.add_edge deps ip i
 
 (** This function calculates the dependencies of each instruction.  The nodes correspond to previous
    registers that were allocated and show which instruction caused it.
@@ -83,28 +122,23 @@ let add_dep i tree deps curr =
    This function only gathers the RAW constraints, and will therefore only be active for operations
    that modify registers, which is this case only affects loads and operations. *)
 let accumulate_RAW_deps dfg curr =
-  let i, dst_map, { edges; nodes } = dfg in
+  let i, dst_map, graph = dfg in
   let acc_dep_instruction rs dst =
     ( i + 1,
       PTree.set dst i dst_map,
-      {
-        nodes;
-        edges = List.append (List.fold_left (add_dep i dst_map) [] rs) edges;
-      } )
+      List.fold_left (add_dep i dst_map) graph rs
+    )
   in
   let acc_dep_instruction_nodst rs =
     ( i + 1,
       dst_map,
-      {
-        nodes;
-        edges = List.append (List.fold_left (add_dep i dst_map) [] rs) edges;
-      } )
+    List.fold_left (add_dep i dst_map) graph rs)
   in
   match curr with
   | RBop (op, _, rs, dst) -> acc_dep_instruction rs dst
   | RBload (op, _mem, _addr, rs, dst) -> acc_dep_instruction rs dst
   | RBstore (op, _mem, _addr, rs, src) -> acc_dep_instruction_nodst (src :: rs)
-  | _ -> (i + 1, dst_map, { edges; nodes })
+  | _ -> (i + 1, dst_map, graph)
 
 (** Finds the next write to the [dst] register.  This is a small optimisation so that only one
    dependency is generated for a data dependency. *)
@@ -160,31 +194,31 @@ let rec next_load i = function
   | _ :: rst -> next_load (i + 1) rst
 
 let accumulate_RAW_mem_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+  let i, graph, nodes = dfg in
   match curr with
   | RBload (_, _, _, _, _) -> (
       match next_store 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      | None -> (i + 1, graph, nodes)
+      | Some d -> (i + 1, DFG.add_edge graph (i - d - 1) i, nodes) )
+  | _ -> (i + 1, graph, nodes)
 
 let accumulate_WAR_mem_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+  let i, graph, nodes = dfg in
   match curr with
   | RBstore (_, _, _, _, _) -> (
       match next_load 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      | None -> (i + 1, graph, nodes)
+      | Some d -> (i + 1, DFG.add_edge graph (i - d - 1) i, nodes) )
+  | _ -> (i + 1, graph, nodes)
 
 let accumulate_WAW_mem_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+  let i, graph, nodes = dfg in
   match curr with
   | RBstore (_, _, _, _, _) -> (
       match next_store 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      | None -> (i + 1, graph, nodes)
+      | Some d -> (i + 1, DFG.add_edge graph (i - d - 1) i, nodes) )
+  | _ -> (i + 1, graph, nodes)
 
 (** Predicate dependencies. *)
 
@@ -225,63 +259,64 @@ let rec next_preduse p i instr=
   | _ :: rst -> next_load (i + 1) rst
 
 let accumulate_RAW_pred_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+  let i, graph, instrs = dfg in
   match get_predicate curr with
   | Some p -> (
-      match next_setpred p 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_setpred p 0 (take i instrs |> List.rev) with
+      | None -> (i + 1, graph, instrs)
+      | Some d -> (i + 1, DFG.add_edge graph (i - d - 1) i, instrs) )
+  | _ -> (i + 1, graph, instrs)
 
 let accumulate_WAR_pred_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+  let i, graph, instrs = dfg in
   match curr with
   | RBsetpred (_, _, p) -> (
-      match next_preduse p 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_preduse p 0 (take i instrs |> List.rev) with
+      | None -> (i + 1, graph, instrs)
+      | Some d -> (i + 1, DFG.add_edge graph (i - d - 1) i, instrs) )
+  | _ -> (i + 1, graph, instrs)
 
 let accumulate_WAW_pred_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+  let i, graph, instrs = dfg in
   match curr with
   | RBsetpred (_, _, p) -> (
-      match next_setpred (Pvar p) 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_setpred (Pvar p) 0 (take i instrs |> List.rev) with
+      | None -> (i + 1, graph, instrs)
+      | Some d -> (i + 1, DFG.add_edge graph (i - d - 1) i, instrs) )
+  | _ -> (i + 1, graph, instrs)
 
 (** This function calculates the WAW dependencies, which happen when two writes are ordered one
    after another and therefore have to be kept in that order.  This accumulation might be redundant
    if register renaming is done before hand, because then these dependencies can be avoided. *)
 let accumulate_WAW_deps dfg curr =
-  let i, { edges; nodes } = dfg in
+  let i, graph, instrs = dfg in
   let dst_dep dst =
-    match find_next_dst_write i dst (i + 1) (drop (i + 1) nodes) with
-    | Some d -> (i + 1, { nodes; edges = d :: edges })
-    | _ -> (i + 1, { nodes; edges })
+    match find_next_dst_write i dst (i + 1) (drop (i + 1) instrs) with
+    | Some (a, b) -> (i + 1, DFG.add_edge graph a b, instrs)
+    | _ -> (i + 1, graph, instrs)
   in
   match curr with
   | RBop (_, _, _, dst) -> dst_dep dst
   | RBload (_, _, _, _, dst) -> dst_dep dst
   | RBstore (_, _, _, _, _) -> (
-      match next_store (i + 1) (drop (i + 1) nodes) with
-      | None -> (i + 1, { nodes; edges })
-      | Some i' -> (i + 1, { nodes; edges = (i, i') :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_store (i + 1) (drop (i + 1) instrs) with
+      | None -> (i + 1, graph, instrs)
+      | Some i' -> (i + 1, DFG.add_edge graph i i', instrs) )
+  | _ -> (i + 1, graph, instrs)
 
 let accumulate_WAR_deps dfg curr =
-  let i, { edges; nodes } = dfg in
+  let i, graph, instrs = dfg in
   let dst_dep dst =
-    let dep_list = find_all_next_dst_read i dst 0 (take i nodes |> List.rev)
+    let dep_list = find_all_next_dst_read i dst 0 (take i instrs |> List.rev)
         |> List.map (function (d, d') -> (i - d' - 1, d))
     in
-    (i + 1, { nodes; edges = List.append dep_list edges })
+    (i + 1, List.fold_left (fun g ->
+         function (d, d') -> DFG.add_edge g d d') graph dep_list, instrs)
   in
   match curr with
   | RBop (_, _, _, dst) -> dst_dep dst
   | RBload (_, _, _, _, dst) -> dst_dep dst
-  | _ -> (i + 1, { nodes; edges })
+  | _ -> (i + 1, graph, instrs)
 
 let assigned_vars vars = function
   | RBnop -> vars
@@ -307,14 +342,15 @@ let check_dependent op1 op2 =
   | Some p, Some p' -> not (independant_pred p p')
   | _, _ -> true
 
-let remove_unnecessary_deps dfg =
-  let { edges; nodes } = dfg in
-  let is_dependent = function (i1, i2) ->
-    let instr1 = List.nth nodes i1 in
-    let instr2 = List.nth nodes i2 in
-    check_dependent (get_pred instr1) (get_pred instr2)
+let remove_unnecessary_deps graph instrs =
+  let is_dependent i1 i2 g =
+    let instr1 = List.nth instrs i1 in
+    let instr2 = List.nth instrs i2 in
+    if check_dependent (get_pred instr1) (get_pred instr2)
+    then DFG.remove_edge g i1 i2
+    else g
   in
-  { edges = List.filter is_dependent edges; nodes }
+  DFG.fold_edges is_dependent graph graph
 
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data
@@ -322,35 +358,35 @@ let remove_unnecessary_deps dfg =
 let gather_bb_constraints debug bb =
   let _, _, dfg =
     List.fold_left accumulate_RAW_deps
-      (0, PTree.empty, { nodes = bb.bb_body; edges = [] })
+      (0, PTree.empty, DFG.empty)
       bb.bb_body
   in
   if debug then printf "DFG : %a\n" print_dfg dfg else ();
-  let _, dfg1 = List.fold_left accumulate_WAW_deps (0, dfg) bb.bb_body in
+  let _, dfg1, _ = List.fold_left accumulate_WAW_deps (0, dfg, bb.bb_body) bb.bb_body in
   if debug then printf "DFG': %a\n" print_dfg dfg1 else ();
-  let _, dfg2 = List.fold_left accumulate_WAR_deps (0, dfg1) bb.bb_body in
+  let _, dfg2, _ = List.fold_left accumulate_WAR_deps (0, dfg1, bb.bb_body) bb.bb_body in
   if debug then printf "DFG'': %a\n" print_dfg dfg2 else ();
-  let _, dfg3 =
-    List.fold_left accumulate_RAW_mem_deps (0, dfg2) bb.bb_body
+  let _, dfg3, _ =
+    List.fold_left accumulate_RAW_mem_deps (0, dfg2, bb.bb_body) bb.bb_body
   in
   if debug then printf "DFG''': %a\n" print_dfg dfg3 else ();
-  let _, dfg4 =
-    List.fold_left accumulate_WAR_mem_deps (0, dfg3) bb.bb_body
+  let _, dfg4, _ =
+    List.fold_left accumulate_WAR_mem_deps (0, dfg3, bb.bb_body) bb.bb_body
   in
   if debug then printf "DFG'''': %a\n" print_dfg dfg4 else ();
-  let _, dfg5 =
-    List.fold_left accumulate_WAW_mem_deps (0, dfg4) bb.bb_body
+  let _, dfg5, _ =
+    List.fold_left accumulate_WAW_mem_deps (0, dfg4, bb.bb_body) bb.bb_body
   in
-  let _, dfg6 =
-    List.fold_left accumulate_RAW_pred_deps (0, dfg5) bb.bb_body
+  let _, dfg6, _ =
+    List.fold_left accumulate_RAW_pred_deps (0, dfg5, bb.bb_body) bb.bb_body
   in
-  let _, dfg7 =
-    List.fold_left accumulate_WAR_pred_deps (0, dfg6) bb.bb_body
+  let _, dfg7, _ =
+    List.fold_left accumulate_WAR_pred_deps (0, dfg6, bb.bb_body) bb.bb_body
   in
-  let _, dfg8 =
-    List.fold_left accumulate_WAW_pred_deps (0, dfg7) bb.bb_body
+  let _, dfg8, _ =
+    List.fold_left accumulate_WAW_pred_deps (0, dfg7, bb.bb_body) bb.bb_body
   in
-  let dfg9 = remove_unnecessary_deps dfg8 in
+  let dfg9 = remove_unnecessary_deps dfg8 bb.bb_body in
   if debug then printf "DFG''''': %a\n" print_dfg dfg9 else ();
   (List.length bb.bb_body, dfg9, successors_instr bb.bb_exit)
 
@@ -397,7 +433,7 @@ let gather_cfg_constraints (completed, (bvars, constraints, types)) c curr =
           ^ String.concat ""
               (List.map (print_src_order curr)
                  (List.init num_iters (fun x -> x)))
-          ^ String.concat "" (List.map (print_data_dep_order curr) dfg.edges)
+          ^ DFG.fold_edges (fun e1 e2 s -> s ^ print_data_dep_order curr (e1, e2)) dfg ""
         in
         let types' =
           types
