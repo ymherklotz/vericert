@@ -275,7 +275,7 @@ let add_dep map i tree dfg curr =
   | None -> dfg
   | Some ip ->
     let ipv = (List.nth map ip) in
-    DFG.add_edge_e dfg (ipv, (comb_delay (snd ipv)), (List.nth map i))
+    DFG.add_edge_e dfg (ipv, comb_delay (snd ipv), List.nth map i)
 
 (** This function calculates the dependencies of each instruction.  The nodes correspond to previous
    registers that were allocated and show which instruction caused it.
@@ -390,7 +390,7 @@ let rec in_predicate p p' =
   | Pand (p1, p2) -> in_predicate p p1 || in_predicate p p2
   | Por (p1, p2) -> in_predicate p p1 || in_predicate p p2
 
-let rec get_predicate = function
+let get_predicate = function
   | RBop (p, _, _, _) -> p
   | RBload (p, _, _, _, _) -> p
   | RBstore (p, _, _, _, _) -> p
@@ -623,11 +623,75 @@ let add_ctrl_deps n succs constr =
       G.add_edge_e g (encode_bb n 1, -1, encode_bb n' 0)
     ) constr succs
 
-(**let calc_worst_comb_path dfg v1 v2 =
+module BFDFG = Graph.Path.BellmanFord(DFG)(struct
+    include DFG
+    type t = int
+    let weight = DFG.E.label
+    let compare = compare
+    let add = (+)
+    let zero = 0
+  end)
 
+module TopoDFG = Graph.Topological.Make(DFG)
 
-let add_cycle_constr n dfg constr =*)
+let negate_graph constr =
+  DFG.fold_edges_e (function (v1, e, v2) -> fun g ->
+      DFG.add_edge_e g (v1, -e, v2)
+    ) constr DFG.empty
 
+let add_cycle_constr max n dfg constr =
+  let negated_dfg = negate_graph dfg in
+  let longest_path v = BFDFG.all_shortest_paths negated_dfg v
+                       |> BFDFG.H.to_seq |> List.of_seq in
+  let constrained_paths = List.filter (function (v, m) -> - m > max) in
+  List.fold_left (fun g -> function (v, v', w) ->
+      G.add_edge_e g (encode_var n (fst v) 0,
+                      - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int max))) - 1),
+                      encode_var n (fst v') 0)
+    ) constr (DFG.fold_vertex (fun v l ->
+      List.append l (longest_path v |> constrained_paths
+                     |> List.map (function (v', w) -> (v, v', - w)))
+    ) dfg [])
+
+type resource =
+  | Mem
+  | Div
+
+type resources = {
+  res_mem: DFG.V.t list;
+  res_div: DFG.V.t list;
+}
+
+let find_resource = function
+  | RBload _ -> Some Mem
+  | RBstore _ -> Some Mem
+  | RBop (_, op, _, _) ->
+    ( match op with
+      | Odiv -> Some Div
+      | Odivu -> Some Div
+      | Omod -> Some Div
+      | Omodu -> Some Div
+      | _ -> None )
+  | _ -> None
+
+let add_resource_constr n dfg constr =
+  let res = TopoDFG.fold (function (i, instr) ->
+    function {res_mem = ml; res_div = dl} ->
+    match find_resource instr with
+    | Some Div -> {res_mem = ml; res_div = (i, instr) :: dl}
+    | Some Mem -> {res_mem = (i, instr) :: ml; res_div = dl}
+    | None -> {res_mem = ml; res_div = dl}
+    ) dfg {res_mem = []; res_div = []}
+  in
+  let get_constraints l g = List.fold_left (fun gv v' ->
+      match gv with
+      | (g, None) -> (g, Some v')
+      | (g, Some v) ->
+        (G.add_edge_e g (encode_var n (fst v) 0, -1, encode_var n (fst v') 0), Some v')
+    ) (g, None) l |> fst
+  in
+  get_constraints (List.rev res.res_mem) constr
+  |> get_constraints (List.rev res.res_div)
 
 let gather_cfg_constraints_g c constr curr =
   let (n, dfg) = curr in
@@ -639,7 +703,8 @@ let gather_cfg_constraints_g c constr curr =
     |> add_ctrl_deps n (successors_instr ctrl
                         |> List.map P.to_int
                         |> List.filter (fun n' -> n' < n))
-    (*|> add_cycle_constr n dfg constr*)
+    |> add_cycle_constr 8 n dfg
+    |> add_resource_constr n dfg
 
 let rec intersperse s = function
   | [] -> []
@@ -755,7 +820,7 @@ let second = function (_, a, _) -> a
 let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let debug = true in
   let c' = PTree.map1 (gather_bb_constraints false) c in
-  let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in
+  (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in*)
   let _, (vars, constraints, types) =
     List.map fst (PTree.elements c') |>
     List.fold_left (fun compl ->
