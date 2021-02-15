@@ -218,15 +218,19 @@ Section TRANSLATE.
     let node := Verilog.Vlit (posToValue n) in
     match s with
     | HTL.HTLfork mod_name args =>
-      do mod_body <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
-      let reset_mod := Vnonblock (Vvar (Verilog.mod_reset mod_body)) (posToLit 1) in
-      let zipped_args := List.combine (Verilog.mod_args mod_body) args in
+      do m <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
+      let reset_mod := Vnonblock (Vvar (Verilog.mod_reset m)) (posToLit 1) in
+      let zipped_args := List.combine (Verilog.mod_args m) args in
       let assign_args :=
           List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (to, from) := a in
                                                             Vseq acc (Vnonblock (Vvar to) (Vvar from)))
                          zipped_args Vskip in
       OK (node, Vseq reset_mod assign_args)
-    | HTL.HTLjoin mod_name dst => OK (node, Verilog.Vskip) (* inline_call m args *)
+    | HTL.HTLjoin mod_name dst =>
+      do m <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
+      let set_result := Vnonblock (Vvar dst) (Vvar (Verilog.mod_return m)) in
+      let stop_reset := Vnonblock (Vvar (Verilog.mod_reset m)) (Vlit (ZToValue 0)) in
+      OK (node, Vseq stop_reset set_result)
     | HTL.HTLDataVstmnt s => OK (node, s)
     end.
 
