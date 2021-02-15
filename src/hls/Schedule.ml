@@ -568,7 +568,7 @@ let print_src_type i c =
 let print_data_dep_order c (i, j) =
   print_lt0 (gen_var_name_e i c) (gen_var_name_b j c)
 
-let gather_cfg_constraints (completed, (bvars, constraints, types)) c curr =
+let gather_cfg_constraints_g (completed, (bvars, constraints, types)) c curr =
   if List.exists (P.eq curr) completed then
     (completed, (bvars, constraints, types))
   else
@@ -693,7 +693,7 @@ let add_resource_constr n dfg constr =
   get_constraints (List.rev res.res_mem) constr
   |> get_constraints (List.rev res.res_div)
 
-let gather_cfg_constraints_g c constr curr =
+let gather_cfg_constraints c constr curr =
   let (n, dfg) = curr in
   match PTree.get (P.of_int n) c with
   | None -> assert false
@@ -732,7 +732,7 @@ let print_lp constr =
 let update_schedule v = function Some l -> Some (v :: l) | None -> Some [ v ]
 
 let parse_soln tree s =
-  let r = Str.regexp "v\\([0-9]+\\)b_\\([0-9]+\\)[ ]+\\([0-9]+\\)" in
+  let r = Str.regexp "var\\([0-9]+\\)n\\([0-9]+\\)_0[ ]+\\([0-9]+\\)" in
   if Str.string_match r s 0 then
     IMap.update
       (Str.matched_group 1 s |> int_of_string)
@@ -742,7 +742,7 @@ let parse_soln tree s =
       tree
   else tree
 
-let solve_constraints vars constraints types =
+let solve_constraints_ vars constraints types =
   let oc = open_out "lpsolve.txt" in
   fprintf oc "min: ";
   List.iter (fprintf oc "%s") (intersperse " + " vars);
@@ -750,6 +750,15 @@ let solve_constraints vars constraints types =
   fprintf oc "%s" constraints;
   fprintf oc "%s" types;
   close_out oc;
+  Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
+  |> drop 3
+  |> List.fold_left parse_soln IMap.empty
+
+let solve_constraints constr =
+  let oc = open_out "lpsolve.txt" in
+  fprintf oc "%s\n" (print_lp constr);
+  close_out oc;
+
   Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
   |> drop 3
   |> List.fold_left parse_soln IMap.empty
@@ -821,23 +830,15 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let debug = true in
   let c' = PTree.map1 (gather_bb_constraints false) c in
   (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in*)
-  let _, (vars, constraints, types) =
-    List.map fst (PTree.elements c') |>
-    List.fold_left (fun compl ->
-        gather_cfg_constraints compl c') ([], ([], "", ""))
-  in
   let transf_graph (p, (_, dfg, _)) = (P.to_int p, dfg) in
   let cgraph = List.map transf_graph (PTree.elements c') |>
-               List.fold_left (gather_cfg_constraints_g c) G.empty
+               List.fold_left (gather_cfg_constraints c) G.empty
   in
   let graph = open_out "constr_graph.dot" in
   fprintf graph "%a\n" GDot.output_graph cgraph;
   close_out graph;
-  let lp_file = open_out "lp_solve2.txt" in
-  fprintf lp_file "%s\n" (print_lp cgraph);
-  close_out lp_file;
-  let schedule' = solve_constraints vars constraints types in
-  (*IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
+  let schedule' = solve_constraints cgraph in
+  IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';
   (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
   transf_rtlpar c schedule'
 
