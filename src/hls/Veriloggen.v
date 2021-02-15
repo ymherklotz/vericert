@@ -61,6 +61,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                    m.(HTL.mod_stk)
                    m.(HTL.mod_stk_len)
                    m.(HTL.mod_params)
+                   m.(HTL.mod_funct_units)
                    body
                    m.(HTL.mod_entrypoint).
 

@@ -183,7 +183,7 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk scldecls arrdecls wf) ->
+                        st stk stk_len fin rtrn start rst clk nil scldecls arrdecls wf) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->

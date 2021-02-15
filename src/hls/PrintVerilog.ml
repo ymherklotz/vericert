@@ -28,6 +28,7 @@ open Clflags
 open Printf
 
 open VericertClflags
+open FunctionalUnits
 
 module PMap = Map.Make (struct
   type t = P.t
@@ -149,10 +150,10 @@ let declarearr t =
              " ["; sprintf "%d" (Nat.to_int ln - 1); ":0];\n" ]
 
 let print_io = function
-  | Some Vinput -> "input"
-  | Some Voutput -> "output reg"
-  | Some Vinout -> "inout"
-  | None -> "reg"
+  | Some Vinput -> "input logic"
+  | Some Voutput -> "output logic"
+  | Some Vinout -> "inout logic"
+  | None -> "logic"
 
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
@@ -174,6 +175,16 @@ let rec intersperse c = function
   | x :: xs -> x :: c :: intersperse c xs
 
 let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
+
+let print_funct_units clk = function
+  | SignedDiv (stages, numer, denom, quot, rem) ->
+    sprintf "div_signed #(.stages(%d)) divs(.clk(%s), .clken(1'b1), .numer(%s), .denom(%s), .quotient(%s), .remain(%s))\n"
+      (P.to_int stages)
+      (register clk) (register numer) (register denom) (register quot) (register rem)
+  | UnsignedDiv (stages, numer, denom, quot, rem) ->
+    sprintf "div_unsigned #(.stages(%d)) divs(.clk(%s), .clken(1'b1), .numer(%s), .denom(%s), .quotient(%s), .remain(%s))\n"
+      (P.to_int stages)
+      (register clk) (register numer) (register denom) (register quot) (register rem)
 
 let compose f g x = g x |> f
 
@@ -233,6 +244,7 @@ let pprint_module debug i n m =
     concat [ indent i; "module "; (extern_atom n);
              "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
              fold_map (pprint_module_item (i+1)) m.mod_body;
+             concat (List.map (print_funct_units m.mod_clk) m.mod_funct_units);
              if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
              if debug then debug_always i m.mod_clk m.mod_st else "";
              indent i; "endmodule\n\n"

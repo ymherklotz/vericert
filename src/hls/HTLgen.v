@@ -610,6 +610,7 @@ Definition transf_module (f: function) : mon HTL.module :=
            start
            rst
            clk
+           nil
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))

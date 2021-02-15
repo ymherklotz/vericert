@@ -27,16 +27,19 @@ Require compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.ValueInt.
-Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Array.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.FunctionalUnits.
+Require Import vericert.hls.ValueInt.
 Require vericert.hls.Verilog.
 
-(** The purpose of the hardware transfer language (HTL) is to create a more
+(*|
+The purpose of the hardware transfer language (HTL) is to create a more
 hardware-like layout that is still similar to the register transfer language
 (RTL) that it came from. The main change is that function calls become module
 instantiations and that we now describe a state machine instead of a
-control-flow graph. *)
+control-flow graph.
+|*)
 
 Local Open Scope assocmap.
 
@@ -65,6 +68,7 @@ Record module: Type :=
     mod_start : reg;
     mod_reset : reg;
     mod_clk : reg;
+    mod_funct_units: funct_units;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);

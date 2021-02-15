@@ -17,26 +17,31 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import
-  Structures.OrderedTypeEx
-  FSets.FMapPositive
-  Program.Basics
-  PeanoNat
-  ZArith
-  Lists.List
-  Program.
+Set Implicit Arguments.
 
-Require Import Lia.
+Require Import Coq.Structures.OrderedTypeEx.
+Require Import Coq.FSets.FMapPositive.
+Require Import Coq.Arith.PeanoNat.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.Lists.List.
+Require Import Coq.micromega.Lia.
+
+Require Import compcert.common.Errors.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Smallstep.
+Require Import compcert.lib.Integers.
+Require compcert.common.Events.
+
+Require Import vericert.common.Show.
+Require Import vericert.common.Vericertlib.
+Require Import vericert.hls.Array.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.FunctionalUnits.
+Require Import vericert.hls.ValueInt.
 
 Import ListNotations.
 
-From vericert Require Import Vericertlib Show ValueInt AssocMap Array.
-From compcert Require Events.
-From compcert Require Import Integers Errors Smallstep Globalenvs.
-
 Local Open Scope assocmap.
-
-Set Implicit Arguments.
 
 Definition reg : Type := positive.
 Definition node : Type := positive.
@@ -103,23 +108,30 @@ Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
 Inductive scl_decl : Type := VScalar (sz : nat).
 Inductive arr_decl : Type := VArray (sz : nat) (ln : nat).
 
-(** * Verilog AST
+(*|
+Verilog AST
+===========
 
 The Verilog AST is defined here, which is the target language of the
 compilation.
 
-** Value
+Value
+-----
 
 The Verilog [value] is a bitvector containg a size and the actual bitvector. In
 this case, the [Word.word] type is used as many theorems about that bitvector
-have already been proven. *)
+have already been proven.
+|*)
 
-(** ** Binary Operators
+(*|
+Binary Operators
+----------------
 
 These are the binary operations that can be represented in Verilog. Ideally,
 multiplication and division would be done by custom modules which could al so be
 scheduled properly. However, for now every Verilog operator is assumed to take
-one clock cycle. *)
+one clock cycle.
+|*)
 
 Inductive binop : Type :=
 | Vadd : binop  (** addition (binary [+]) *)
@@ -147,13 +159,19 @@ Inductive binop : Type :=
 | Vshru : binop. (** shift right unsigned ([>>]) *)
 (*| Vror : binop (** shift right unsigned ([>>]) *)*)
 
-(** ** Unary Operators *)
+(*|
+Unary Operators
+---------------
+|*)
 
 Inductive unop : Type :=
 | Vneg  (** negation ([-]) *)
 | Vnot. (** not operation [!] *)
 
-(** ** Expressions *)
+(*|
+Expressions
+-----------
+|*)
 
 Inductive expr : Type :=
 | Vlit : value -> expr
@@ -168,7 +186,10 @@ Inductive expr : Type :=
 Definition posToExpr (p : positive) : expr :=
   Vlit (posToValue p).
 
-(** ** Statements *)
+(*|
+Statements
+----------
+|*)
 
 Inductive stmnt : Type :=
 | Vskip : stmnt
@@ -178,14 +199,17 @@ Inductive stmnt : Type :=
 | Vblock : expr -> expr -> stmnt
 | Vnonblock : expr -> expr -> stmnt.
 
-(** ** Edges
+(*|
+Edges
+-----
 
 These define when an always block should be triggered, for example if the always
 block should be triggered synchronously at the clock edge, or asynchronously for
 combinational logic.
 
 [edge] is not part of [stmnt] in this formalisation because is closer to the
-semantics that are used. *)
+semantics that are used.
+|*)
 
 Inductive edge : Type :=
 | Vposedge : reg -> edge
@@ -193,11 +217,14 @@ Inductive edge : Type :=
 | Valledge : edge
 | Voredge : edge -> edge -> edge.
 
-(** ** Module Items
+(*|
+Module Items
+------------
 
 Module items can either be declarations ([Vdecl]) or always blocks ([Valways]).
 The declarations are always register declarations as combinational logic can be
-done using combinational always block instead of continuous assignments. *)
+done using combinational always block instead of continuous assignments.
+|*)
 
 Inductive io : Type :=
 | Vinput : io
@@ -214,7 +241,8 @@ Inductive module_item : Type :=
 | Valways_ff : edge -> stmnt -> module_item
 | Valways_comb : edge -> stmnt -> module_item.
 
-(** The main module type containing all the important control signals
+(*|
+The main module type containing all the important control signals
 
 - [mod_start] If set, starts the computations in the module.
 - [mod_reset] If set, reset the state in the module.
@@ -223,7 +251,7 @@ Inductive module_item : Type :=
 - [mod_finish] Bit that is set if the result is ready.
 - [mod_return] The return value that was computed.
 - [mod_body] The body of the module, including the state machine.
-*)
+|*)
 
 Record module : Type := mkmodule {
   mod_start : reg;
@@ -235,6 +263,7 @@ Record module : Type := mkmodule {
   mod_stk : reg;
   mod_stk_len : nat;
   mod_args : list reg;
+  mod_funct_units: funct_units;
   mod_body : list module_item;
   mod_entrypoint : node;
 }.
@@ -243,15 +272,18 @@ Definition fundef := AST.fundef module.
 
 Definition program := AST.program fundef unit.
 
-(** Convert a [positive] to an expression directly, setting it to the right
-    size. *)
+(*|
+Convert a [positive] to an expression directly, setting it to the right size.
+|*)
 Definition posToLit (p : positive) : expr :=
   Vlit (posToValue p).
 
 Definition fext := unit.
 Definition fextclk := nat -> fext.
 
-(** ** State
+(*|
+State
+-----
 
 The [state] contains the following items:
 n
@@ -270,7 +302,8 @@ retrieved and set appropriately.
   Verilog, as the Verilog was generated by the RTL, which means that we have to
   make an assumption about how it looks.  In this case, that it contains state
   which determines which part of the Verilog is executed.  This is then the part
-  of the Verilog that should match with the RTL. *)
+  of the Verilog that should match with the RTL.
+|*)
 
 Inductive stackframe : Type :=
   Stackframe :
@@ -390,41 +423,9 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
-(*Definition access_fext (f : fext) (r : reg) : res value :=
-  match AssocMap.get r f with
-  | Some v => OK v
-  | _ => OK (ZToValue 0)
-  end.*)
-
-(* TODO FIX Vvar case without default *)
-(*Fixpoint expr_run (assoc : assocmap) (e : expr)
-         {struct e} : res value :=
-  match e with
-  | Vlit v => OK v
-  | Vvar r => match s with
-              | State _ assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
-              | _ => Error (msg "Verilog: Wrong state")
-              end
-  | Vvari _ _ => Error (msg "Verilog: variable indexing not modelled")
-  | Vinputvar r => access_fext s r
-  | Vbinop op l r =>
-    let lv := expr_run s l in
-    let rv := expr_run s r in
-    let oper := binop_run op in
-    do lv' <- lv;
-    do rv' <- rv;
-    handle_opt (msg "Verilog: sizes are not equal")
-               (eq_to_opt lv' rv' (oper lv' rv'))
-  | Vunop op e =>
-    let oper := unop_run op in
-    do ev <- expr_run s e;
-    OK (oper ev)
-  | Vternary c te fe =>
-    do cv <- expr_run s c;
-    if valueToBool cv then expr_run s te else expr_run s fe
-  end.*)
-
-(** Return the location of the lhs of an assignment. *)
+(*|
+Return the location of the lhs of an assignment.
+|*)
 
 Inductive location : Type :=
 | LocReg (_ : reg)
@@ -435,80 +436,6 @@ Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> 
 | Indexed : forall f asr asa r iexp iv,
   expr_runp f asr asa iexp iv ->
   location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).
-
-(* Definition assign_name (f : fext) (asr: assocmap) (asa : assocmap_l)  (e : expr) : res reg := *)
-(*   match e with *)
-(*   | Vvar r => OK r *)
-(*   | _ => Error (msg "Verilog: expression not supported on lhs of assignment") *)
-(*   end. *)
-
-(*Fixpoint stmnt_height (st : stmnt) {struct st} : nat :=
-  match st with
-  | Vseq s1 s2 => S (stmnt_height s1 + stmnt_height s2)
-  | Vcond _ s1 s2 => S (Nat.max (stmnt_height s1) (stmnt_height s2))
-  | Vcase _ ls (Some st) =>
-    S (fold_right (fun t acc => Nat.max acc (stmnt_height (snd t))) 0%nat ls)
-  | _ => 1
-  end.
-
-Fixpoint find_case_stmnt (s : state) (v : value) (cl : list (expr * stmnt))
-         {struct cl} : option (res stmnt) :=
-  match cl with
-  | (e, st)::xs =>
-    match expr_run s e with
-    | OK v' =>
-      match eq_to_opt v v' (veq v v') with
-      | Some eq => if valueToBool eq then Some (OK st) else find_case_stmnt s v xs
-      | None => Some (Error (msg "Verilog: equality check sizes not equal"))
-      end
-    | Error msg => Some (Error msg)
-    end
-  | _ => None
-  end.
-
-Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
-  match n with
-  | S n' =>
-    match st with
-    | Vskip => OK s
-    | Vseq s1 s2 =>
-      do s' <- stmnt_run' n' s s1;
-      stmnt_run' n' s' s2
-    | Vcond c st sf =>
-      do cv <- expr_run s c;
-      if valueToBool cv
-      then stmnt_run' n' s st
-      else stmnt_run' n' s sf
-    | Vcase e cl defst =>
-      do v <- expr_run s e;
-      match find_case_stmnt s v cl with
-      | Some (OK st') => stmnt_run' n' s st'
-      | Some (Error msg) => Error msg
-      | None => do s' <- handle_opt (msg "Verilog: no case was matched")
-                                    (option_map (stmnt_run' n' s) defst); s'
-      end
-    | Vblock lhs rhs =>
-      match s with
-      | State m assoc nbassoc f c =>
-        do name <- assign_name lhs;
-        do rhse <- expr_run s rhs;
-        OK (State m (PositiveMap.add name rhse assoc) nbassoc f c)
-      | _ => Error (msg "Verilog: Wrong state")
-      end
-    | Vnonblock lhs rhs =>
-      match s with
-      | State m assoc nbassoc f c =>
-        do name <- assign_name lhs;
-        do rhse <- expr_run s rhs;
-        OK (State m assoc (PositiveMap.add name rhse nbassoc) f c)
-      | _ => Error (msg "Verilog: Wrong state")
-      end
-    end
-  | _ => OK s
-  end.
-
-Definition stmnt_run (s : state) (st : stmnt) : res state :=
-  stmnt_run' (stmnt_height st) s st. *)
 
 Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
                       stmnt -> reg_associations -> arr_associations -> Prop :=
@@ -580,20 +507,6 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
                  asr (nonblock_arr r i asa rhsval).
 Hint Constructors stmnt_runp : verilog.
 
-(*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
-  let run := fun st ls =>
-              do s' <- stmnt_run s st;
-              mi_step s' ls
-  in
-  match m with
-  | (Valways _ st)::ls => run st ls
-  | (Valways_ff _ st)::ls => run st ls
-  | (Valways_comb _ st)::ls => run st ls
-  | (Vdecl _ _)::ls => mi_step s ls
-  | (Vdeclarr _ _ _)::ls => mi_step s ls
-  | nil => OK s
-  end.*)
-
 Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
                      module_item -> reg_associations -> arr_associations -> Prop :=
 | mi_stepp_Valways :
@@ -625,79 +538,7 @@ Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
     mis_stepp f sr sa nil sr sa.
 Hint Constructors mis_stepp : verilog.
 
-(*Definition mi_step_commit (s : state) (m : list module_item) : res state :=
-  match mi_step s m with
-  | OK (State m assoc nbassoc f c) =>
-    OK (State m (merge_assocmap nbassoc assoc) empty_assocmap f c)
-  | Error msg => Error msg
-  | _ => Error (msg "Verilog: Wrong state")
-  end.
-
-Fixpoint mi_run (f : fextclk) (assoc : assocmap) (m : list module_item) (n : nat)
-         {struct n} : res assocmap :=
-  match n with
-  | S n' =>
-    do assoc' <- mi_run f assoc m n';
-    match mi_step_commit (State assoc' empty_assocmap f (Pos.of_nat n')) m with
-    | OK (State assoc _ _ _) => OK assoc
-    | Error m => Error m
-    end
-  | O => OK assoc
-  end.*)
-
-(** Resets the module into a known state, so that it can be executed.  This is
-assumed to be the starting state of the module, and may have to be changed if
-other arguments to the module are also to be supported. *)
-
-(*Definition initial_fextclk (m : module) : fextclk :=
-  fun x => match x with
-           | S O => (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)
-           | _ => (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)
-           end.*)
-
-(*Definition module_run (n : nat) (m : module) : res assocmap :=
-  mi_run (initial_fextclk m) empty_assocmap (mod_body m) n.*)
-
 Local Close Scope error_monad_scope.
-
-(*Theorem value_eq_size_if_eq:
-  forall lv rv EQ,
-  vsize lv = vsize rv -> value_eq_size lv rv = left EQ.
-Proof. intros. unfold value_eq_size.
-
-Theorem expr_run_same:
-  forall assoc e v, expr_run assoc e = OK v <-> expr_runp assoc e v.
-Proof.
-  split; generalize dependent v; generalize dependent assoc.
-  - induction e.
-    + intros. inversion H. constructor.
-    + intros. inversion H. constructor. assumption.
-    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (expr_run assoc e2) eqn:?.
-      unfold eq_to_opt in H1. destruct (value_eq_size v0 v1) eqn:?. inversion H1.
-      constructor. apply IHe1. assumption. apply IHe2. assumption. reflexivity. discriminate. discriminate.
-      discriminate.
-    + intros. inversion H. destruct (expr_run assoc e) eqn:?. unfold option_map in H1.
-      inversion H1. constructor. apply IHe. assumption. reflexivity. discriminate.
-    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (valueToBool v0) eqn:?.
-      eapply erun_Vternary_true. apply IHe1. eassumption. apply IHe2. eassumption. assumption.
-      eapply erun_Vternary_false. apply IHe1. eassumption. apply IHe3. eassumption. assumption.
-      discriminate.
-  - induction e.
-    + intros. inversion H. reflexivity.
-    + intros. inversion H. subst. simpl. assumption.
-    + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4.
-      apply IHe2 in H6. rewrite H6. unfold eq_to_opt. assert (vsize lv = vsize rv).
-      apply EQ. apply (value_eq_size_if_eq lv rv EQ) in H0. rewrite H0. reflexivity.
-    + intros. inversion H. subst. simpl. destruct (expr_run assoc e) eqn:?. simpl.
-      apply IHe in H3. rewrite Heqo in H3.
-      inversion H3. subst. reflexivity. apply IHe in H3. rewrite Heqo in H3. discriminate.
-    + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4. rewrite H7.
-      apply IHe2 in H6. rewrite H6. reflexivity.
-      subst. simpl. apply IHe1 in H4. rewrite H4. rewrite H7. apply IHe3.
-      assumption.
-Qed.
-
- *)
 
 Fixpoint init_params (vl : list value) (rl : list reg) {struct rl} :=
   match rl, vl with
@@ -886,7 +727,8 @@ Lemma semantics_determinate :
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
-  - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
+  - invert H; invert H0; crush.
+    assert (f = f0) by (destruct f; destruct f0; auto); subst.
     pose proof (mis_stepp_determinate H5 H15).
     crush.
   - constructor. invert H; crush.
