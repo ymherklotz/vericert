@@ -46,7 +46,7 @@ type sv = {
 
 let print_sv v =
   match v with
-  | { sv_type = BBType bbi; sv_num = n } -> sprintf "bb%dn%d" bbi n
+  | { sv_type = BBType bbi; sv_num = n } -> sprintf "bb%d_%d" bbi n
   | { sv_type = VarType (bbi, i); sv_num = n } -> sprintf "var%dn%d_%d" bbi i n
 
 module G = Graph.Persistent.Digraph.ConcreteLabeled(struct
@@ -244,12 +244,38 @@ let read_process command =
   ignore (Unix.close_process_in in_channel);
   Buffer.contents buffer
 
+let comb_delay = function
+  | RBnop -> 0
+  | RBop (_, op, _, _) ->
+    (match op with
+     | Omul -> 8
+     | Omulimm _ -> 8
+     | Omulhs -> 8
+     | Omulhu -> 8
+     | Odiv -> 72
+     | Odivu -> 72
+     | Omod -> 72
+     | Omodu -> 72
+     | _ -> 1)
+  | _ -> 1
+
+let pipeline_stages = function
+  | RBop (_, op, _, _) ->
+    (match op with
+     | Odiv -> 32
+     | Odivu -> 32
+     | Omod -> 32
+     | Omodu -> 32
+     | _ -> 0)
+  | _ -> 0
+
 (** Add a dependency if it uses a register that was written to previously. *)
 let add_dep map i tree dfg curr =
   match PTree.get curr tree with
   | None -> dfg
   | Some ip ->
-    DFG.add_edge dfg (List.nth map ip) (List.nth map i)
+    let ipv = (List.nth map ip) in
+    DFG.add_edge_e dfg (ipv, (comb_delay (snd ipv)), (List.nth map i))
 
 (** This function calculates the dependencies of each instruction.  The nodes correspond to previous
    registers that were allocated and show which instruction caused it.
@@ -587,7 +613,7 @@ let add_super_nodes n dfg =
          then G.add_edge_e g' (encode_var n (fst v1) 0, 0, encode_bb n 1)
          else g')) dfg
 
-let add_data_dependencies n =
+let add_data_deps n =
   DFG.fold_edges_e (function ((i1, _), l, (i2, _)) -> fun g ->
       G.add_edge_e g (encode_var n i1 0, 0, encode_var n i2 0)
     )
@@ -597,16 +623,23 @@ let add_ctrl_deps n succs constr =
       G.add_edge_e g (encode_bb n 1, -1, encode_bb n' 0)
     ) constr succs
 
+(**let calc_worst_comb_path dfg v1 v2 =
+
+
+let add_cycle_constr n dfg constr =*)
+
+
 let gather_cfg_constraints_g c constr curr =
   let (n, dfg) = curr in
   match PTree.get (P.of_int n) c with
   | None -> assert false
   | Some { bb_body = body; bb_exit = ctrl } ->
-    add_super_nodes n dfg constr |>
-    add_data_dependencies n dfg |>
-    add_ctrl_deps n (successors_instr ctrl
-                     |> List.map P.to_int
-                     |> List.filter (fun n' -> n' < n))
+    add_super_nodes n dfg constr
+    |> add_data_deps n dfg
+    |> add_ctrl_deps n (successors_instr ctrl
+                        |> List.map P.to_int
+                        |> List.filter (fun n' -> n' < n))
+    (*|> add_cycle_constr n dfg constr*)
 
 let rec intersperse s = function
   | [] -> []
