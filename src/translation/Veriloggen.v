@@ -25,49 +25,6 @@ Import ListNotations.
 
 Local Open Scope error_monad_scope.
 
-Definition transl_datapath_fun (modmap : PTree.t Verilog.module) (a : Verilog.node * HTL.datapath_stmnt) :=
-  let (n, s) := a in
-  let node := Verilog.Vlit (posToValue n) in
-  match s with
-  | HTL.HTLfork mod_name args =>
-    do mod_body <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
-    let reset_mod := Vnonblock (Vvar (Verilog.mod_reset mod_body)) (posToLit 1) in
-    let zipped_args := List.combine (Verilog.mod_args mod_body) args in
-    let assign_args :=
-        List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (to, from) := a in
-                                             Vseq acc (Vnonblock (Vvar to) (Vvar from)))
-                 zipped_args Vskip in
-    OK (node, Vseq reset_mod assign_args)
-  | HTL.HTLjoin mod_name dst => OK (node, Verilog.Vskip) (* inline_call m args *)
-  | HTL.HTLDataVstmnt s => OK (node, s)
-  end.
-
-Definition transl_datapath modmap st := Errors.mmap (transl_datapath_fun modmap) st.
-
-Definition transl_ctrl_fun (modmap : PTree.t Verilog.module) (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
-  let (n, s) := a in
-  let node := Verilog.Vlit (posToValue n) in
-  match s with
-  | HTL.HTLwait mod_name status expr =>
-    do mod_body <- handle_opt (Errors.msg "module does not exist") (PTree.get mod_name modmap);
-    let is_done := Vbinop Veq (Vvar (Verilog.mod_finish mod_body)) (Vlit (posToValue 1)) in
-    let continue := Vnonblock (Vvar status) expr in
-    Errors.OK (node, Verilog.Vcond is_done continue Vskip)
-  | HTL.HTLCtrlVstmnt s => Errors.OK (node, s)
-  end.
-
-Definition transl_ctrl modmap st := Errors.mmap (transl_ctrl_fun modmap) st.
-
-Definition scl_to_Vdecl_fun (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
-  match a with (r, (io, Verilog.VScalar sz)) => (Verilog.Vdecl io r sz) end.
-
-Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
-
-Definition arr_to_Vdeclarr_fun (a : reg * (option Verilog.io * Verilog.arr_decl)) :=
-  match a with (r, (io, Verilog.VArray sz l)) => (Verilog.Vdeclarr io r sz l) end.
-
-Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
-
 Record renumber_state: Type :=
   mk_renumber_state {
     st_freshreg : reg;
@@ -252,8 +209,52 @@ Section RENUMBER.
            modules).
 End RENUMBER.
 
+
 Section TRANSLATE.
   Local Open Scope error_monad_scope.
+
+  Definition transl_datapath_fun (modmap : PTree.t Verilog.module) (a : Verilog.node * HTL.datapath_stmnt) :=
+    let (n, s) := a in
+    let node := Verilog.Vlit (posToValue n) in
+    match s with
+    | HTL.HTLfork mod_name args =>
+      do mod_body <- handle_opt (Errors.msg "module does not exist") (modmap ! mod_name);
+      let reset_mod := Vnonblock (Vvar (Verilog.mod_reset mod_body)) (posToLit 1) in
+      let zipped_args := List.combine (Verilog.mod_args mod_body) args in
+      let assign_args :=
+          List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (to, from) := a in
+                                                            Vseq acc (Vnonblock (Vvar to) (Vvar from)))
+                         zipped_args Vskip in
+      OK (node, Vseq reset_mod assign_args)
+    | HTL.HTLjoin mod_name dst => OK (node, Verilog.Vskip) (* inline_call m args *)
+    | HTL.HTLDataVstmnt s => OK (node, s)
+    end.
+
+  Definition transl_datapath modmap st := Errors.mmap (transl_datapath_fun modmap) st.
+
+  Definition transl_ctrl_fun (modmap : PTree.t Verilog.module) (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
+    let (n, s) := a in
+    let node := Verilog.Vlit (posToValue n) in
+    match s with
+    | HTL.HTLwait mod_name status expr =>
+      do mod_body <- handle_opt (Errors.msg "module does not exist") (PTree.get mod_name modmap);
+      let is_done := Vbinop Veq (Vvar (Verilog.mod_finish mod_body)) (Vlit (posToValue 1)) in
+      let continue := Vnonblock (Vvar status) expr in
+      Errors.OK (node, Verilog.Vcond is_done continue Vskip)
+    | HTL.HTLCtrlVstmnt s => Errors.OK (node, s)
+    end.
+
+  Definition transl_ctrl modmap st := Errors.mmap (transl_ctrl_fun modmap) st.
+
+  Definition scl_to_Vdecl_fun (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
+    match a with (r, (io, Verilog.VScalar sz)) => (Verilog.Vdecl io r sz) end.
+
+  Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
+
+  Definition arr_to_Vdeclarr_fun (a : reg * (option Verilog.io * Verilog.arr_decl)) :=
+    match a with (r, (io, Verilog.VArray sz l)) => (Verilog.Vdeclarr io r sz l) end.
+
+  Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
   Definition called_functions (stmnts : list (Verilog.node * HTL.datapath_stmnt)) : list ident :=
     List.nodup Pos.eq_dec (Option.map_option (fun (a : (positive * HTL.datapath_stmnt)) =>
