@@ -804,15 +804,15 @@ let subgraph dfg l =
         ) g l
     ) dfg' l
 
-let rec all_successors dfg v : DFG.V.t list =
+let rec all_successors dfg v =
   List.concat (List.fold_left (fun l v ->
       all_successors dfg v :: l
     ) [] (DFG.succ dfg v))
 
-let order_instr dfg : instr list list =
+let order_instr dfg =
   DFG.fold_vertex (fun v li ->
       if DFG.in_degree dfg v = 0
-      then (snd v :: List.map snd (all_successors dfg v)) :: li
+      then (printf "v: %s\n" (print_instr (snd v)); (List.map snd (v :: all_successors dfg v)) :: li)
       else li
     ) dfg []
 
@@ -830,7 +830,12 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
       let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
       in
-      { bb_body = List.map (fun x -> subgraph dfg x |> order_instr) body;
+      let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in
+      let final_body2 = List.map (fun x -> subgraph dfg x
+                                           |> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
+                                           |> List.rev) body
+      in
+      { bb_body = [final_body2];
         bb_exit = ctrl_flow
       }
   in
