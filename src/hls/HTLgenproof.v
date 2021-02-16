@@ -405,7 +405,7 @@ Section CORRECTNESS.
   Lemma op_stack_based :
     forall F V sp v m args rs op ge pc' res0 pc f e fin rtrn st stk,
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
-               (Verilog.Vnonblock (Verilog.Vvar res0) e)
+               (data_vstmnt (Verilog.Vnonblock (Verilog.Vvar res0) e))
                (state_goto st pc') ->
       reg_stack_based_pointers sp rs ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
@@ -1091,11 +1091,13 @@ Section CORRECTNESS.
     inv CONST; assumption.
     inv CONST; assumption. 
     (* processing of state *)
-    econstructor.
+    constructor.
     crush.
-    econstructor.
-    econstructor.
-    econstructor.
+    constructor.
+    constructor.
+    constructor.
+    constructor.
+    constructor.
 
     all: invert MARR; big_tac.
 
@@ -1128,7 +1130,7 @@ Section CORRECTNESS.
     econstructor; simpl; trivial.
     constructor; trivial.
     econstructor; simpl; eauto.
-    simpl. econstructor. econstructor.
+    simpl. econstructor. econstructor. econstructor. constructor.
     apply H5. simplify.
 
     all: big_tac.
@@ -1262,7 +1264,9 @@ Section CORRECTNESS.
           match_states (RTL.State s f sp pc' (Registers.Regmap.set dst v rs) m) R2.
   Proof.
     intros s f sp pc rs m chunk addr args dst pc' a v H H0 H1 R1 MSTATE.
-    inv_state. inv_arr_access.
+    inv_state.
+
+    inv_arr_access.
 
     + (** Preamble *)
       invert MARR. inv CONST. crush.
@@ -1335,15 +1339,16 @@ Section CORRECTNESS.
       inversion NORMALISE_BOUND as [ NORMALISE_BOUND_LOW NORMALISE_BOUND_HIGH ];
       clear NORMALISE_BOUND.
 
+
       (** Start of proof proper *)
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
-      econstructor. econstructor.
+      econstructor. econstructor. econstructor.
 
       all: big_tac.
 
@@ -1473,7 +1478,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
@@ -1577,8 +1582,8 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor. crush.
       econstructor. econstructor. econstructor. econstructor. crush.
+      econstructor. econstructor. econstructor. econstructor. econstructor. crush.
 
       all: big_tac.
 
@@ -1693,7 +1698,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor.
+      econstructor. econstructor. econstructor. econstructor. econstructor.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor.
       econstructor.
@@ -1972,7 +1977,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor.
+      econstructor. econstructor. econstructor. econstructor. constructor.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor.
       econstructor. econstructor. econstructor. econstructor.
@@ -2225,7 +2230,7 @@ Section CORRECTNESS.
       eexists. split.
       eapply Smallstep.plus_one.
       eapply HTL.step_module; eauto.
-      econstructor. econstructor. econstructor.
+      econstructor. econstructor. econstructor. econstructor. econstructor.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor. econstructor. econstructor. econstructor.
 
@@ -2457,13 +2462,13 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      econstructor; simpl; trivial.
+      econstructor; econstructor; simpl; trivial.
       constructor; trivial.
       eapply Verilog.erun_Vternary_true; simpl; eauto.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. apply H22. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl. econstructor. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -2474,13 +2479,13 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      econstructor; simpl; trivial.
+      econstructor; econstructor; simpl; trivial.
       constructor; trivial.
       eapply Verilog.erun_Vternary_false; simpl; eauto.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. apply H22. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl. econstructor. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -2528,12 +2533,12 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      constructor.
+      constructor. econstructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
       constructor.
       econstructor; simpl; trivial.
-      constructor.
+      constructor. constructor.
 
       constructor. constructor.
 
@@ -2559,7 +2564,7 @@ Section CORRECTNESS.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
-      constructor.
+      constructor. constructor. econstructor.
       econstructor; simpl; trivial.
       econstructor; simpl; trivial.
       constructor. constructor. constructor.
@@ -2795,7 +2800,7 @@ Section CORRECTNESS.
         exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1; eauto with htlproof; (intros; inv_state).
-  Qed.
+  Admitted.
   Hint Resolve transl_step_correct : htlproof.
 
   Theorem transf_program_correct:

@@ -55,8 +55,8 @@ Definition init_state (st : reg) : state :=
           1%positive
           (AssocMap.empty (option io * scl_decl))
           (AssocMap.empty (option io * arr_decl))
-          (AssocMap.empty stmnt)
-          (AssocMap.empty stmnt).
+          (AssocMap.empty datapath_stmnt)
+          (AssocMap.empty control_stmnt).
 
 Module HTLState <: State.
 

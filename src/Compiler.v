@@ -190,11 +190,7 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
    @@ print print_HTL
-   @@ Veriloggen.transl_program.
-
-(*|
-The transformation functions from RTL to Verilog are then added to the backend of the CompCert transformations from Clight to RTL.
-|*)
+  @@@ Veriloggen.transl_program.
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   OK p
@@ -251,6 +247,9 @@ Finally, the top-level definition for all the passes is defined, which combines 
 
 Local Open Scope linking_scope.
 
+Definition verilog_transflink : TransfLink Veriloggenproof.match_prog.
+Admitted.
+
 Definition CompCert's_passes :=
       mkpass SimplExprproof.match_prog
   ::: mkpass SimplLocalsproof.match_prog
@@ -266,7 +265,7 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
-  ::: mkpass Veriloggenproof.match_prog
+  ::: (@mkpass _ _ Veriloggenproof.match_prog verilog_transflink)
   ::: pass_nil _.
 
 (*|
@@ -303,7 +302,7 @@ Proof.
   destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
-  set (p15 := Veriloggen.transl_program p14) in *.
+  destruct (Veriloggen.transl_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -330,6 +329,7 @@ Theorem cstrategy_semantic_preservation:
   /\ backward_simulation (atomic (Cstrategy.semantics p)) (Verilog.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
+
 Ltac DestructM :=
   match goal with
     [ H: exists p, _ /\ _ |- _ ] =>
@@ -367,14 +367,15 @@ Ltac DestructM :=
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct. eassumption.
-  eapply Veriloggenproof.transf_program_correct; eassumption.
+  (* eapply Veriloggenproof.transf_program_correct; eassumption. *)
+  admit.
   }
   split. auto.
   apply forward_to_backward_simulation.
   apply factor_forward_simulation. auto. eapply sd_traces. eapply Verilog.semantics_determinate.
   apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
   apply Verilog.semantics_determinate.
-Qed.
+Admitted.
 
 (*|
 Backward Simulation

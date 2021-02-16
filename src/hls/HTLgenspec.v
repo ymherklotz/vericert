@@ -125,39 +125,43 @@ Ltac monadInv H :=
 statemachine that is created by the translation contains the correct
 translations for each of the elements *)
 
-Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -> Prop :=
+Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -> control_stmnt -> Prop :=
 | tr_instr_Inop :
     forall n,
       Z.pos n <= Int.max_unsigned ->
-      tr_instr fin rtrn st stk (RTL.Inop n) Vskip (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Inop n) (data_vstmnt Vskip) (state_goto st n)
 | tr_instr_Iop :
     forall n op args dst s s' e i,
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (data_vstmnt (Vnonblock (Vvar dst) e)) (state_goto st n)
+| tr_instr_Icall :
+    forall n sig fn args dst,
+      Z.pos n <= Int.max_unsigned ->
+      tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLfork fn args) (state_goto st n)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       Z.pos n1 <= Int.max_unsigned ->
       Z.pos n2 <= Int.max_unsigned ->
       translate_condition cond args s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
+      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) (data_vstmnt Vskip) (state_cond st c n1 n2)
 | tr_instr_Ireturn_None :
-    tr_instr fin rtrn st stk (RTL.Ireturn None) (Vseq (block fin (Vlit (ZToValue 1%Z)))
-                                                  (block rtrn (Vlit (ZToValue 0%Z)))) Vskip
+    tr_instr fin rtrn st stk (RTL.Ireturn None) (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z)))
+                                                  (block rtrn (Vlit (ZToValue 0%Z))))) (ctrl_vstmnt Vskip)
 | tr_instr_Ireturn_Some :
     forall r,
       tr_instr fin rtrn st stk (RTL.Ireturn (Some r))
-               (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r))) Vskip
+               (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r)))) (ctrl_vstmnt Vskip)
 | tr_instr_Iload :
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (nonblock dst c) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (data_vstmnt (nonblock dst c)) (state_goto st n)
 | tr_instr_Istore :
     forall mem addr args s s' i c src n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (data_vstmnt (Vnonblock c (Vvar src)))
                (state_goto st n).
 (*| tr_instr_Ijumptable :
     forall cexpr tbl r,
@@ -165,7 +169,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
-Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
+Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
           (fin rtrn st stk : reg) : Prop :=
   tr_code_intro :
     forall s t,
@@ -422,12 +426,26 @@ Lemma add_instr_freshreg_trans :
 Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Qed.
 Hint Resolve add_instr_freshreg_trans : htlspec.
 
+Lemma add_instr_wait_freshreg_trans :
+  forall m n n' st s r s' i,
+  add_instr_wait m n n' st s = OK r s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold add_instr_wait in H. repeat (unfold_match H). inv H. auto. Qed.
+Hint Resolve add_instr_freshreg_trans : htlspec.
+
 Lemma add_branch_instr_freshreg_trans :
   forall n n0 n1 e s r s' i,
   add_branch_instr e n n0 n1 s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
 Proof. intros. unfold add_branch_instr in H. repeat (unfold_match H). inv H. auto. Qed.
 Hint Resolve add_branch_instr_freshreg_trans : htlspec.
+
+Lemma create_state_freshreg_trans :
+  forall n s s' i,
+  create_state s = OK n s' i ->
+  s.(st_freshreg) = s'.(st_freshreg).
+Proof. intros. unfold create_state in H. inv H. auto. Qed.
+Hint Resolve create_state_freshreg_trans : htlspec.
 
 Lemma add_node_skip_freshreg_trans :
   forall n1 n2 s r s' i,
@@ -449,12 +467,18 @@ Lemma transf_instr_freshreg_trans :
     s.(st_freshreg) = s'.(st_freshreg).
 Proof.
   intros. destruct instr eqn:?. subst. unfold transf_instr in H.
-  destruct i0; try (monadInv H); try (unfold_match H); eauto with htlspec.
+  destruct i0 eqn:EQ__i; try (monadInv H); try (unfold_match H); eauto with htlspec.
   - monadInv H. apply add_instr_freshreg_trans in EQ2. apply translate_instr_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
   - monadInv H. apply add_instr_freshreg_trans in EQ2. apply translate_arr_access_freshreg_trans in EQ.
     apply declare_reg_freshreg_trans in EQ1. congruence.
   - monadInv H. apply add_instr_freshreg_trans in EQ0. apply translate_arr_access_freshreg_trans in EQ. congruence.
+  - unfold_match H. monadInv H.
+    apply declare_reg_freshreg_trans in EQ.
+    apply add_instr_freshreg_trans in EQ0.
+    apply create_state_freshreg_trans in EQ1.
+    apply add_instr_wait_freshreg_trans in EQ3.
+    congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.
   (*- inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.*)
@@ -490,6 +514,7 @@ Ltac inv_add_instr' H :=
 Ltac inv_add_instr :=
   match goal with
   | H: (if ?c then _ else _) _ = OK _ _ _ |- _ => destruct c eqn:EQN; try discriminate; inv_add_instr
+  | H: (match ?e with | inr _ => _ | inl _ => _ end) _ = OK _ _ _ |- _ => destruct e eqn:EQI; try discriminate; inv_add_instr
   | H: context[add_instr_skip _ _ _] |- _ =>
     inv_add_instr' H
   | H: context[add_instr_skip _ _] |- _ =>
@@ -525,7 +550,7 @@ Proof.
   destruct (peq pc pc1).
   - subst.
     destruct instr1 eqn:?; try discriminate;
-      try destruct_optional; inv_add_instr; econstructor; try assumption.
+      try destruct_optional; try inv_add_instr; econstructor; try assumption.
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
@@ -552,6 +577,17 @@ Proof.
         econstructor. apply Z.leb_le; assumption.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
+
+    + admit. (* destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate. *)
+    + admit. (* destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate. *)
+    + admit.
+      (* destruct H2. *)
+      (* * inversion H2. *)
+      (*   replace (st_st s2) with (st_st s0) by congruence. *)
+      (*   replace (st_st s1) with (st_st s0) by congruence. *)
+      (*   econstructor. *)
+      (*   apply Z.leb_le. assumption. *)
+      (* * apply in_map with (f := fst) in H2. contradiction. *)
 
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
@@ -588,7 +624,7 @@ Proof.
     destruct H2. inversion H2. subst. contradiction.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
-Qed.
+Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma create_arr_inv : forall w x y z a b c d,

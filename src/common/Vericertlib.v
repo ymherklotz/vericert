@@ -230,6 +230,15 @@ Definition join {A : Type} (a : option (option A)) : option A :=
   | Some a' => a'
   end.
 
+Fixpoint map_option {A B : Type} (f : A -> option B) (l : list A) : list B :=
+  match l with
+  | nil => nil
+  | x::xs => match f x with
+           | None => map_option f xs
+           | Some x' => x'::map_option f xs
+           end
+  end.
+
 Module Notation.
 Notation "'do' X <- A ; B" := (bind A (fun X => B))
    (at level 200, X ident, A at level 100, B at level 200).
