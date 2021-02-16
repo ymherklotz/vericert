@@ -752,7 +752,7 @@ Section CORRECTNESS.
     (*repeat (simplify; eval_correct_tac; unfold valueToInt in * ).
             destruct (Z_lt_ge_dec (Int.signed i0) 0).
             econstructor.*)
-    unfold Values.Val.shrx in *.
+    (*unfold Values.Val.shrx in *.
     destruct v0; try discriminate.
     destruct (Int.ltu n (Int.repr 31)) eqn:?; try discriminate.
     inversion H1. clear H1.
@@ -797,7 +797,7 @@ Section CORRECTNESS.
       simplify. inv_lessdef. unfold valueToInt in *.
       rewrite H3 in H1. auto. inv H1. auto.
       rewrite H3 in H1. discriminate.
-      rewrite H3 in H2. discriminate.
+      rewrite H3 in H2. discriminate.*)
   Qed.
 
   Lemma eval_correct :
@@ -838,7 +838,7 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     (*- unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
       repeat (rewrite Int.unsigned_repr). auto.*)
-    - assert (Int.unsigned n <= 30).
+    - admit. (* assert (Int.unsigned n <= 30).
       { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate.
         rewrite Int.unsigned_repr in l by (simplify; lia).
         replace 31 with (Z.succ 30) in l by auto.
@@ -1000,8 +1000,10 @@ Section CORRECTNESS.
         unfold uvalueToZ. unfold Int.eq in n. unfold zeq in *.
         destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
         rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
-        constructor.
-  Qed.
+        constructor.*)
+      - admit.
+      - admit.
+  Admitted.
 
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:
