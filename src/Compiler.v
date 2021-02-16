@@ -68,6 +68,7 @@ Require vericert.hls.RTLPargen.
 Require vericert.hls.HTLPargen.
 Require vericert.hls.Pipeline.
 Require vericert.hls.IfConversion.
+Require vericert.HLSOpts.
 
 Require Import vericert.hls.HTLgenproof.
 
@@ -235,7 +236,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 7)
   @@@ RTLBlockgen.transl_program
    @@ print (print_RTLBlock 1)
-   @@ IfConversion.transf_program
+   @@ total_if HLSOpts.optim_if_conversion IfConversion.transf_program
    @@ print (print_RTLBlock 2)
   @@@ RTLPargen.transl_program
   @@@ HTLPargen.transl_program

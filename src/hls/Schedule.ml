@@ -812,7 +812,7 @@ let rec all_successors dfg v =
 let order_instr dfg =
   DFG.fold_vertex (fun v li ->
       if DFG.in_degree dfg v = 0
-      then (printf "v: %s\n" (print_instr (snd v)); (List.map snd (v :: all_successors dfg v)) :: li)
+      then (List.map snd (v :: all_successors dfg v)) :: li
       else li
     ) dfg []
 
@@ -856,7 +856,7 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   fprintf graph "%a\n" GDot.output_graph cgraph;
   close_out graph;
   let schedule' = solve_constraints cgraph in
-  IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';
+  (**IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
   (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
   transf_rtlpar c c' schedule'
 
