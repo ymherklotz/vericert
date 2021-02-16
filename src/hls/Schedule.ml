@@ -793,34 +793,46 @@ let combine_bb_schedule schedule s =
 
 let compare_tuple (a, _) (b, _) = compare a b
 
+let subgraph dfg l =
+  let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
+  List.fold_left (fun g v ->
+      List.fold_left (fun g' v' ->
+          let edges = DFG.find_all_edges dfg v v' in
+          List.fold_left (fun g'' e ->
+              DFG.add_edge_e g'' e
+            ) g' edges
+        ) g l
+    ) dfg' l
+
+let rec all_successors dfg v : DFG.V.t list =
+  List.concat (List.fold_left (fun l v ->
+      all_successors dfg v :: l
+    ) [] (DFG.succ dfg v))
+
+let order_instr dfg : instr list list =
+  DFG.fold_vertex (fun v li ->
+      if DFG.in_degree dfg v = 0
+      then (snd v :: List.map snd (all_successors dfg v)) :: li
+      else li
+    ) dfg []
+
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
-let transf_rtlpar c (schedule : (int * int) list IMap.t) =
+let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
   let f i bb : RTLPar.bblock =
     match bb with
-    | { bb_body = []; bb_exit = c } ->
-      { bb_body = [];
-        bb_exit = c
-      }
+    | { bb_body = []; bb_exit = c } -> { bb_body = []; bb_exit = c }
     | { bb_body = bb_body'; bb_exit = ctrl_flow } ->
-        let i_sched =
-          try IMap.find (P.to_int i) schedule
-          with Not_found -> (
-            printf "Could not find %d\n" (P.to_int i);
-            IMap.iter
-              (fun d -> printf "%d: %a\n" d (print_list print_tuple))
-              schedule;
-            assert false
-          )
-        in
-        let i_sched_tree =
-          List.fold_left combine_bb_schedule IMap.empty i_sched
-        in
-        (*printf "--------------- curr: %d, max: %d, min: %d, next: %d\n" (P.to_int i) max_state min_state (P.to_int i - max_state + min_state - 1);
-        printf "HIIIII: %d orig: %d\n" (P.to_int i - max_state + min_state - 1) (P.to_int i);*)
-        { bb_body = (IMap.to_seq i_sched_tree |> List.of_seq |> List.sort compare_tuple |> List.map snd
-                           |> List.map (List.map (fun x -> List.nth bb_body' x)));
-          bb_exit = ctrl_flow
-        }
+      let dfg = match PTree.get i c' with None -> assert false | Some x -> x in
+      let i_sched = IMap.find (P.to_int i) schedule in
+      let i_sched_tree =
+        List.fold_left combine_bb_schedule IMap.empty i_sched
+      in
+      let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
+                 |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
+      in
+      { bb_body = List.map (fun x -> subgraph dfg x |> order_instr) body;
+        bb_exit = ctrl_flow
+      }
   in
   PTree.map f c
 
@@ -828,11 +840,12 @@ let second = function (_, a, _) -> a
 
 let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let debug = true in
-  let c' = PTree.map1 (gather_bb_constraints false) c in
+  let transf_graph (_, dfg, _) = dfg in
+  let c' = PTree.map1 (fun x -> gather_bb_constraints false x |> transf_graph) c in
   (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in*)
-  let transf_graph (p, (_, dfg, _)) = (P.to_int p, dfg) in
-  let cgraph = List.map transf_graph (PTree.elements c') |>
-               List.fold_left (gather_cfg_constraints c) G.empty
+  let cgraph = PTree.elements c'
+               |> List.map (function (x, y) -> (P.to_int x, y))
+               |> List.fold_left (gather_cfg_constraints c) G.empty
   in
   let graph = open_out "constr_graph.dot" in
   fprintf graph "%a\n" GDot.output_graph cgraph;
@@ -840,7 +853,7 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let schedule' = solve_constraints cgraph in
   IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';
   (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
-  transf_rtlpar c schedule'
+  transf_rtlpar c c' schedule'
 
 let rec find_reachable_states c e =
   match PTree.get e c with
