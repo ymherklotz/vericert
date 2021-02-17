@@ -248,6 +248,21 @@ let comb_delay = function
   | RBnop -> 0
   | RBop (_, op, _, _) ->
     (match op with
+     | Omove -> 0
+     | Ointconst _ -> 0
+     | Olongconst _ -> 0
+     | Ocast8signed -> 0
+     | Ocast8unsigned -> 0
+     | Ocast16signed -> 0
+     | Ocast16unsigned -> 0
+     | Oneg -> 0
+     | Onot -> 0
+     | Oor -> 0
+     | Oorimm _ -> 0
+     | Oand -> 0
+     | Oandimm _ -> 0
+     | Oxor -> 0
+     | Oxorimm _ -> 0
      | Omul -> 8
      | Omulimm _ -> 8
      | Omulhs -> 8
@@ -538,68 +553,6 @@ let gather_bb_constraints debug bb =
   let dfg''' = remove_unnecessary_deps dfg'' in
   (List.length bb.bb_body, dfg''', successors_instr bb.bb_exit)
 
-let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
-
-let gen_bb_name_ssrc = gen_bb_name "ssrc"
-
-let gen_bb_name_ssnk = gen_bb_name "ssnk"
-
-let gen_var_name s c i = sprintf "v%d%s_%d" (P.to_int i) s c
-
-let gen_var_name_b = gen_var_name "b"
-
-let gen_var_name_e = gen_var_name "e"
-
-let print_lt0 = sprintf "%s - %s <= 0;\n"
-
-let print_bb_order i c = if P.to_int c < P.to_int i then
-    print_lt0 (gen_bb_name_ssnk i) (gen_bb_name_ssrc c) else
-    ""
-
-let print_src_order i c =
-  print_lt0 (gen_bb_name_ssrc i) (gen_var_name_b c i)
-  ^ print_lt0 (gen_var_name_e c i) (gen_bb_name_ssnk i)
-  ^ sprintf "%s - %s = 1;\n" (gen_var_name_e c i) (gen_var_name_b c i)
-
-let print_src_type i c =
-  sprintf "int %s;\n" (gen_var_name_e c i)
-  ^ sprintf "int %s;\n" (gen_var_name_b c i)
-
-let print_data_dep_order c (i, j) =
-  print_lt0 (gen_var_name_e i c) (gen_var_name_b j c)
-
-let gather_cfg_constraints_g (completed, (bvars, constraints, types)) c curr =
-  if List.exists (P.eq curr) completed then
-    (completed, (bvars, constraints, types))
-  else
-    match PTree.get curr c with
-    | None -> assert false
-    | Some (num_iters, dfg, next) ->
-        let constraints' =
-          constraints
-          ^ String.concat "" (List.map (print_bb_order curr) next)
-          ^ String.concat ""
-              (List.map (print_src_order curr)
-                 (List.init num_iters (fun x -> x)))
-          ^ DFG.fold_edges (fun e1 e2 s -> s ^ print_data_dep_order curr (fst e1, fst e2)) dfg ""
-        in
-        let types' =
-          types
-          ^ String.concat ""
-              (List.map (print_src_type curr)
-                 (List.init num_iters (fun x -> x)))
-          ^ sprintf "int %s;\n" (gen_bb_name_ssrc curr)
-          ^ sprintf "int %s;\n" (gen_bb_name_ssnk curr)
-        in
-        let bvars' =
-          List.append
-            (List.map
-               (fun x -> gen_var_name_b x curr)
-               (List.init num_iters (fun x -> x)))
-            bvars
-        in
-        (curr :: completed, (bvars', constraints', types'))
-
 let encode_var bbn n i = { sv_type = VarType (bbn, n); sv_num = i }
 let encode_bb bbn i = { sv_type = BBType bbn; sv_num = i }
 
@@ -697,7 +650,7 @@ let gather_cfg_constraints c constr curr =
   let (n, dfg) = curr in
   match PTree.get (P.of_int n) c with
   | None -> assert false
-  | Some { bb_body = body; bb_exit = ctrl } ->
+  | Some { bb_exit = ctrl; _ } ->
     add_super_nodes n dfg constr
     |> add_data_deps n dfg
     |> add_ctrl_deps n (successors_instr ctrl
@@ -742,18 +695,6 @@ let parse_soln tree s =
       tree
   else tree
 
-let solve_constraints_ vars constraints types =
-  let oc = open_out "lpsolve.txt" in
-  fprintf oc "min: ";
-  List.iter (fprintf oc "%s") (intersperse " + " vars);
-  fprintf oc ";\n";
-  fprintf oc "%s" constraints;
-  fprintf oc "%s" types;
-  close_out oc;
-  Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
-  |> drop 3
-  |> List.fold_left parse_soln IMap.empty
-
 let solve_constraints constr =
   let oc = open_out "lpsolve.txt" in
   fprintf oc "%s\n" (print_lp constr);
@@ -762,36 +703,6 @@ let solve_constraints constr =
   Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
   |> drop 3
   |> List.fold_left parse_soln IMap.empty
-
-let find_min = function
-  | [] -> assert false
-  | l :: ls ->
-      let rec find_min' current = function
-        | [] -> current
-        | l' :: ls' ->
-            if snd l' < current then find_min' (snd l') ls'
-            else find_min' current ls'
-      in
-      find_min' (snd l) ls
-
-let find_max = function
-  | [] -> assert false
-  | l :: ls ->
-      let rec find_max' current = function
-        | [] -> current
-        | l' :: ls' ->
-            if snd l' > current then find_max' (snd l') ls'
-            else find_max' current ls'
-      in
-      find_max' (snd l) ls
-
-let ( >>= ) = bind
-
-let combine_bb_schedule schedule s =
-  let i, st = s in
-  IMap.update st (update_schedule i) schedule
-
-let compare_tuple (a, _) (b, _) = compare a b
 
 let subgraph dfg l =
   let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
@@ -840,8 +751,6 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
       }
   in
   PTree.map f c
-
-let second = function (_, a, _) -> a
 
 let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let debug = true in
