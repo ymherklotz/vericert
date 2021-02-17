@@ -608,11 +608,13 @@ let add_cycle_constr max n dfg constr =
 
 type resource =
   | Mem
-  | Div
+  | SDiv
+  | UDiv
 
 type resources = {
   res_mem: DFG.V.t list;
-  res_div: DFG.V.t list;
+  res_udiv: DFG.V.t list;
+  res_sdiv: DFG.V.t list;
 }
 
 let find_resource = function
@@ -620,21 +622,22 @@ let find_resource = function
   | RBstore _ -> Some Mem
   | RBop (_, op, _, _) ->
     ( match op with
-      | Odiv -> Some Div
-      | Odivu -> Some Div
-      | Omod -> Some Div
-      | Omodu -> Some Div
+      | Odiv -> Some SDiv
+      | Odivu -> Some UDiv
+      | Omod -> Some SDiv
+      | Omodu -> Some UDiv
       | _ -> None )
   | _ -> None
 
 let add_resource_constr n dfg constr =
   let res = TopoDFG.fold (function (i, instr) ->
-    function {res_mem = ml; res_div = dl} ->
+    function {res_mem = ml; res_sdiv = sdl; res_udiv = udl} as r ->
     match find_resource instr with
-    | Some Div -> {res_mem = ml; res_div = (i, instr) :: dl}
-    | Some Mem -> {res_mem = (i, instr) :: ml; res_div = dl}
-    | None -> {res_mem = ml; res_div = dl}
-    ) dfg {res_mem = []; res_div = []}
+    | Some SDiv -> {r with res_sdiv = (i, instr) :: sdl}
+    | Some UDiv -> {r with res_udiv = (i, instr) :: udl}
+    | Some Mem -> {r with res_mem = (i, instr) :: ml}
+    | None -> r
+    ) dfg {res_mem = []; res_sdiv = []; res_udiv = []}
   in
   let get_constraints l g = List.fold_left (fun gv v' ->
       match gv with
@@ -644,7 +647,8 @@ let add_resource_constr n dfg constr =
     ) (g, None) l |> fst
   in
   get_constraints (List.rev res.res_mem) constr
-  |> get_constraints (List.rev res.res_div)
+  |> get_constraints (List.rev res.res_udiv)
+  |> get_constraints (List.rev res.res_sdiv)
 
 let gather_cfg_constraints c constr curr =
   let (n, dfg) = curr in
@@ -726,6 +730,10 @@ let order_instr dfg =
       then (List.map snd (v :: all_successors dfg v)) :: li
       else li
     ) dfg []
+
+let combine_bb_schedule schedule s =
+  let i, st = s in
+  IMap.update st (update_schedule i) schedule
 
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
