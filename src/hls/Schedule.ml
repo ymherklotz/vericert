@@ -749,8 +749,7 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
       let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
       in
-      List.iter (fun y -> (List.iter (fun x -> printf "%d: %s\n" (fst x) (print_instr (snd x))) y; printf "\n\n")) body;
-      let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in
+      (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
                                            |> List.rev) body
