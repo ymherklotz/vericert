@@ -329,7 +329,8 @@ Section DEFINITION.
 
   Record bblock : Type := mk_bblock {
     bb_body: bblock_body;
-    bb_exit: cf_instr
+    bb_exit: cf_instr;
+    bb_parallel: bool;
   }.
 
   Definition code: Type := PTree.t bblock.
