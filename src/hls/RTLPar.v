@@ -30,7 +30,7 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.hls.RTLBlockInstr.
 
-Definition bb := list (list instr).
+Definition bb := list (list (list instr)).
 
 Definition bblock := @bblock bb.
 Definition code := @code bb.
@@ -56,11 +56,22 @@ Section RELSEM.
         forall state sp,
         step_instr_list sp state nil state.
 
+  Inductive step_instr_seq (sp : val)
+    : instr_state -> list (list instr) -> instr_state -> Prop :=
+  | exec_instr_seq_cons:
+    forall state i state' state'' instrs,
+      step_instr_list sp state i state' ->
+      step_instr_seq sp state' instrs state'' ->
+      step_instr_seq sp state (i :: instrs) state''
+  | exec_instr_seq_nil:
+    forall state,
+      step_instr_seq sp state nil state.
+
   Inductive step_instr_block (sp : val)
     : instr_state -> bb -> instr_state -> Prop :=
   | exec_instr_block_cons:
     forall state i state' state'' instrs,
-      step_instr_list sp state i state' ->
+      step_instr_seq sp state i state' ->
       step_instr_block sp state' instrs state'' ->
       step_instr_block sp state (i :: instrs) state''
   | exec_instr_block_nil:
@@ -113,7 +124,7 @@ Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
 
 Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
-  let max_body := fold_left (fun x l => fold_left max_reg_instr l x) bb.(bb_body) m in
+  let max_body := fold_left (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x) bb.(bb_body) m in
   max_reg_cfi max_body bb.(bb_exit).
 
 Definition max_reg_function (f: function) :=

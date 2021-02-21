@@ -29,7 +29,6 @@ Require Import Coq.micromega.Lia.
 Require Export compcert.lib.Coqlib.
 Require Import compcert.lib.Integers.
 
-Require Export vericert.common.VericertTactics.
 Require Import vericert.common.Show.
 
 (* Depend on CompCert for the basic library, as they declare and prove some

@@ -249,7 +249,8 @@ Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -fcommon       Put uninitialized globals in the common section [on].
 
 HLS Optimisations:
-  -fschedule     Schedule the resulting hardware [off].
+  -fschedule      Schedule the resulting hardware [off].
+  -fif-conversion If-conversion optimisation [off].
 |} ^
  target_help ^
  toolchain_help ^
@@ -434,6 +435,7 @@ let cmdline_actions =
   @ f_opt "fpu" option_ffpu
   @ f_opt "sse" option_ffpu (* backward compatibility *)
   @ f_opt "schedule" option_hls_schedule
+  @ f_opt "if-conv" option_fif_conv
   @ [
 (* Catch options that are not handled *)
   Prefix "-", Self (fun s ->

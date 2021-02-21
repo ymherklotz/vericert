@@ -591,12 +591,6 @@ Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   | i :: l => update (abstract_sequence f l) i
   end.
 
-Fixpoint abstract_sequence_par (f : forest) (b : list (list instr)) : forest :=
-  match b with
-  | nil => f
-  | i :: l => abstract_sequence (abstract_sequence_par f l) i
-  end.
-
 (*|
 Check equivalence of control flow instructions.  As none of the basic blocks should have been moved,
 none of the labels should be different, meaning the control-flow instructions should match exactly.
@@ -622,7 +616,7 @@ Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
 
 Definition schedule_oracle (bb: RTLBlock.bblock) (bbt: RTLPar.bblock) : bool :=
   check (abstract_sequence empty (bb_body bb))
-        (abstract_sequence_par empty (bb_body bbt)) &&
+        (abstract_sequence empty (concat (concat (bb_body bbt)))) &&
   check_control_flow_instr (bb_exit bb) (bb_exit bbt) &&
   empty_trees (bb_body bb) (bb_body bbt).
 

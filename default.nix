@@ -1,5 +1,4 @@
-with import <nixpkgs> {};
-
+with import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/269fc4ddb896c1c5994eb4bb8c750ec18cb3db82.tar.gz") {};
 let
   ncoq = coq_8_12;
   ncoqPackages = coqPackages_8_12;
@@ -28,7 +27,7 @@ stdenv.mkDerivation {
   name = "vericert";
   src = ./.;
 
-  buildInputs = [ ncoq dune gcc
+  buildInputs = [ ncoq dune_2 gcc
                   ocaml ocamlPackages.findlib ocamlPackages.menhir
                   ocamlPackages.ocamlgraph
                 ];

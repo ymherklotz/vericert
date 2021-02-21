@@ -192,6 +192,7 @@ let testbench = "module testbench;
    reg start, reset, clk;
    wire finish;
    wire [31:0] return_val;
+   reg [31:0] cycles;
 
    main m(start, reset, clk, finish, return_val);
 
@@ -201,20 +202,23 @@ let testbench = "module testbench;
       reset = 0;
       @(posedge clk) reset = 1;
       @(posedge clk) reset = 0;
+      cycles = 0;
    end
 
    always #5 clk = ~clk;
 
    always @(posedge clk) begin
       if (finish == 1) begin
+         $display(\"cycles: %0d\", cycles);
          $display(\"finished: %0d\", return_val);
          $finish;
       end
+      cycles <= cycles + 1;
    end
 endmodule
 "
 
-let debug_always i clk state = concat [
+let debug_always_verbose i clk state = concat [
     indent i; "reg [31:0] count;\n";
     indent i; "initial count = 0;\n";
     indent i; "always @(posedge " ^ register clk ^ ") begin\n";
@@ -222,6 +226,15 @@ let debug_always i clk state = concat [
     indent (i+2); "$display(\"Cycle count %d\", count);\n";
     indent (i+2); "$display(\"State %d\\n\", " ^ register state ^ ");\n";
     indent (i+1); "end\n";
+    indent (i+1); "count <= count + 1;\n";
+    indent i; "end\n"
+  ]
+
+let debug_always i clk finish = concat [
+    indent i; "reg [31:0] count;\n";
+    indent i; "initial count = 0;\n";
+    indent i; "always @(posedge " ^ register clk ^ ") begin\n";
+    indent (i+2); "if(" ^ register finish ^ ") $display(\"Cycles: %0d\", count);\n";
     indent (i+1); "count <= count + 1;\n";
     indent i; "end\n"
   ]
@@ -246,7 +259,7 @@ let pprint_module debug i n m =
              fold_map (pprint_module_item (i+1)) m.mod_body;
              concat (List.map (print_funct_units m.mod_clk) m.mod_funct_units);
              if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
-             if debug then debug_always i m.mod_clk m.mod_st else "";
+             if debug then debug_always_verbose i m.mod_clk m.mod_st else "";
              indent i; "endmodule\n\n"
            ]
   else ""

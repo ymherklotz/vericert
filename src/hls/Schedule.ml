@@ -35,13 +35,182 @@ open HTLMonadExtra
 
 module SS = Set.Make(P)
 
+type svtype =
+  | BBType of int
+  | VarType of int * int
+
+type sv = {
+  sv_type: svtype;
+  sv_num: int;
+}
+
+let print_sv v =
+  match v with
+  | { sv_type = BBType bbi; sv_num = n } -> sprintf "bb%d_%d" bbi n
+  | { sv_type = VarType (bbi, i); sv_num = n } -> sprintf "var%dn%d_%d" bbi i n
+
+module G = Graph.Persistent.Digraph.ConcreteLabeled(struct
+  type t = sv
+  let compare = compare
+  let equal = (=)
+  let hash = Hashtbl.hash
+end)(struct
+  type t = int
+  let compare = compare
+  let hash = Hashtbl.hash
+  let equal = (=)
+  let default = 0
+end)
+
+module GDot = Graph.Graphviz.Dot(struct
+    let graph_attributes _ = []
+    let default_vertex_attributes _ = []
+    let vertex_name = print_sv
+    let vertex_attributes _ = []
+    let get_subgraph _ = None
+    let default_edge_attributes _ = []
+    let edge_attributes _ = []
+
+    include G
+  end)
+
+module DFG = Graph.Persistent.Digraph.ConcreteLabeled(struct
+  type t = int * instr
+  let compare = compare
+  let equal = (=)
+  let hash = Hashtbl.hash
+end)(struct
+  type t = int
+  let compare = compare
+  let hash = Hashtbl.hash
+  let equal = (=)
+  let default = 0
+end)
+
+let reg r = sprintf "r%d" (P.to_int r)
+let print_pred r = sprintf "p%d" (Nat.to_int r)
+
+let print_instr = function
+  | RBnop -> ""
+  | RBload (_, _, _, _, r) -> sprintf "load(%s)" (reg r)
+  | RBstore (_, _, _, _, r) -> sprintf "store(%s)" (reg r)
+  | RBsetpred (_, _, p) -> sprintf "setpred(%s)" (print_pred p)
+  | RBop (_, op, args, d) ->
+    (match op, args with
+    | Omove, _ -> "mov"
+    | Ointconst n, _ -> sprintf "%s=%ld" (reg d) (camlint_of_coqint n)
+    | Olongconst n, _ -> sprintf "%s=%LdL" (reg d) (camlint64_of_coqint n)
+    | Ofloatconst n, _ -> sprintf "%s=%.15F" (reg d) (camlfloat_of_coqfloat n)
+    | Osingleconst n, _ -> sprintf "%s=%.15Ff" (reg d) (camlfloat_of_coqfloat32 n)
+    | Oindirectsymbol id, _ -> sprintf "%s=&%s" (reg d) (extern_atom id)
+    | Ocast8signed, [r1] -> sprintf "%s=int8signed(%s)" (reg d) (reg r1)
+    | Ocast8unsigned, [r1] -> sprintf "%s=int8unsigned(%s)" (reg d) (reg r1)
+    | Ocast16signed, [r1] -> sprintf "%s=int16signed(%s)" (reg d) (reg r1)
+    | Ocast16unsigned, [r1] -> sprintf "%s=int16unsigned(%s)" (reg d) (reg r1)
+    | Oneg, [r1] -> sprintf "%s=-%s" (reg d) (reg r1)
+    | Osub, [r1;r2] -> sprintf "%s=%s-%s" (reg d) (reg r1) (reg r2)
+    | Omul, [r1;r2] -> sprintf "%s=%s*%s" (reg d) (reg r1) (reg r2)
+    | Omulimm n, [r1] -> sprintf "%s=%s*%ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Omulhs, [r1;r2] -> sprintf "%s=mulhs(%s,%s)" (reg d) (reg r1) (reg r2)
+    | Omulhu, [r1;r2] -> sprintf "%s=mulhu(%s,%s)" (reg d) (reg r1) (reg r2)
+    | Odiv, [r1;r2] -> sprintf "%s=%s /s %s" (reg d) (reg r1) (reg r2)
+    | Odivu, [r1;r2] -> sprintf "%s=%s /u %s" (reg d) (reg r1) (reg r2)
+    | Omod, [r1;r2] -> sprintf "%s=%s %%s %s" (reg d) (reg r1) (reg r2)
+    | Omodu, [r1;r2] -> sprintf "%s=%s %%u %s" (reg d) (reg r1) (reg r2)
+    | Oand, [r1;r2] -> sprintf "%s=%s & %s" (reg d) (reg r1) (reg r2)
+    | Oandimm n, [r1] -> sprintf "%s=%s & %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oor, [r1;r2] -> sprintf "%s=%s | %s" (reg d) (reg r1) (reg r2)
+    | Oorimm n, [r1] ->  sprintf "%s=%s | %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oxor, [r1;r2] -> sprintf "%s=%s ^ %s" (reg d) (reg r1) (reg r2)
+    | Oxorimm n, [r1] -> sprintf "%s=%s ^ %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Onot, [r1] -> sprintf "%s=not(%s)" (reg d) (reg r1)
+    | Oshl, [r1;r2] -> sprintf "%s=%s << %s" (reg d) (reg r1) (reg r2)
+    | Oshlimm n, [r1] -> sprintf "%s=%s << %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshr, [r1;r2] -> sprintf "%s=%s >>s %s" (reg d) (reg r1) (reg r2)
+    | Oshrimm n, [r1] -> sprintf "%s=%s >>s %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshrximm n, [r1] -> sprintf "%s=%s >>x %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshru, [r1;r2] -> sprintf "%s=%s >>u %s" (reg d) (reg r1) (reg r2)
+    | Oshruimm n, [r1] -> sprintf "%s=%s >>u %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Ororimm n, [r1] -> sprintf "%s=%s ror %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshldimm n, [r1;r2] -> sprintf "%s=(%s, %s) << %ld" (reg d) (reg r1) (reg r2) (camlint_of_coqint n)
+    | Olea addr, args -> sprintf "%s=addr" (reg d)
+    | Omakelong, [r1;r2] -> sprintf "%s=makelong(%s,%s)" (reg d) (reg r1) (reg r2)
+    | Olowlong, [r1] -> sprintf "%s=lowlong(%s)" (reg d) (reg r1)
+    | Ohighlong, [r1] -> sprintf "%s=highlong(%s)" (reg d) (reg r1)
+    | Ocast32signed, [r1] -> sprintf "%s=long32signed(%s)" (reg d) (reg r1)
+    | Ocast32unsigned, [r1] -> sprintf "%s=long32unsigned(%s)" (reg d) (reg r1)
+    | Onegl, [r1] -> sprintf "%s=-l %s" (reg d) (reg r1)
+    | Osubl, [r1;r2] -> sprintf "%s=%s -l %s" (reg d) (reg r1) (reg r2)
+    | Omull, [r1;r2] -> sprintf "%s=%s *l %s" (reg d) (reg r1) (reg r2)
+    | Omullimm n, [r1] -> sprintf "%s=%s *l %Ld" (reg d) (reg r1) (camlint64_of_coqint n)
+    | Omullhs, [r1;r2] -> sprintf "%s=mullhs(%s,%s)" (reg d) (reg r1) (reg r2)
+    | Omullhu, [r1;r2] -> sprintf "%s=mullhu(%s,%s)" (reg d) (reg r1) (reg r2)
+    | Odivl, [r1;r2] -> sprintf "%s=%s /ls %s" (reg d) (reg r1) (reg r2)
+    | Odivlu, [r1;r2] -> sprintf "%s=%s /lu %s" (reg d) (reg r1) (reg r2)
+    | Omodl, [r1;r2] -> sprintf "%s=%s %%ls %s" (reg d) (reg r1) (reg r2)
+    | Omodlu, [r1;r2] -> sprintf "%s=%s %%lu %s" (reg d) (reg r1) (reg r2)
+    | Oandl, [r1;r2] -> sprintf "%s=%s &l %s" (reg d) (reg r1) (reg r2)
+    | Oandlimm n, [r1] -> sprintf "%s=%s &l %Ld" (reg d) (reg r1) (camlint64_of_coqint n)
+    | Oorl, [r1;r2] -> sprintf "%s=%s |l %s" (reg d) (reg r1) (reg r2)
+    | Oorlimm n, [r1] ->  sprintf "%s=%s |l %Ld" (reg d) (reg r1) (camlint64_of_coqint n)
+    | Oxorl, [r1;r2] -> sprintf "%s=%s ^l %s" (reg d) (reg r1) (reg r2)
+    | Oxorlimm n, [r1] -> sprintf "%s=%s ^l %Ld" (reg d) (reg r1) (camlint64_of_coqint n)
+    | Onotl, [r1] -> sprintf "%s=notl(%s)" (reg d) (reg r1)
+    | Oshll, [r1;r2] -> sprintf "%s=%s <<l %s" (reg d) (reg r1) (reg r2)
+    | Oshllimm n, [r1] -> sprintf "%s=%s <<l %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshrl, [r1;r2] -> sprintf "%s=%s >>ls %s" (reg d) (reg r1) (reg r2)
+    | Oshrlimm n, [r1] -> sprintf "%s=%s >>ls %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshrxlimm n, [r1] -> sprintf "%s=%s >>lx %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oshrlu, [r1;r2] -> sprintf "%s=%s >>lu %s" (reg d) (reg r1) (reg r2)
+    | Oshrluimm n, [r1] -> sprintf "%s=%s >>lu %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Ororlimm n, [r1] -> sprintf "%s=%s rorl %ld" (reg d) (reg r1) (camlint_of_coqint n)
+    | Oleal addr, args -> sprintf "%s=addr" (reg d)
+    | Onegf, [r1] -> sprintf "%s=negf(%s)" (reg d) (reg r1)
+    | Oabsf, [r1] -> sprintf "%s=absf(%s)" (reg d) (reg r1)
+    | Oaddf, [r1;r2] -> sprintf "%s=%s +f %s" (reg d) (reg r1) (reg r2)
+    | Osubf, [r1;r2] -> sprintf "%s=%s -f %s" (reg d) (reg r1) (reg r2)
+    | Omulf, [r1;r2] -> sprintf "%s=%s *f %s" (reg d) (reg r1) (reg r2)
+    | Odivf, [r1;r2] -> sprintf "%s=%s /f %s" (reg d) (reg r1) (reg r2)
+    | Onegfs, [r1] -> sprintf "%s=negfs(%s)" (reg d) (reg r1)
+    | Oabsfs, [r1] -> sprintf "%s=absfs(%s)" (reg d) (reg r1)
+    | Oaddfs, [r1;r2] -> sprintf "%s=%s +fs %s" (reg d) (reg r1) (reg r2)
+    | Osubfs, [r1;r2] -> sprintf "%s=%s -fs %s" (reg d) (reg r1) (reg r2)
+    | Omulfs, [r1;r2] -> sprintf "%s=%s *fs %s" (reg d) (reg r1) (reg r2)
+    | Odivfs, [r1;r2] -> sprintf "%s=%s /fs %s" (reg d) (reg r1) (reg r2)
+    | Osingleoffloat, [r1] -> sprintf "%s=singleoffloat(%s)" (reg d) (reg r1)
+    | Ofloatofsingle, [r1] -> sprintf "%s=floatofsingle(%s)" (reg d) (reg r1)
+    | Ointoffloat, [r1] -> sprintf "%s=intoffloat(%s)" (reg d) (reg r1)
+    | Ofloatofint, [r1] -> sprintf "%s=floatofint(%s)" (reg d) (reg r1)
+    | Ointofsingle, [r1] -> sprintf "%s=intofsingle(%s)" (reg d) (reg r1)
+    | Osingleofint, [r1] -> sprintf "%s=singleofint(%s)" (reg d) (reg r1)
+    | Olongoffloat, [r1] -> sprintf "%s=longoffloat(%s)" (reg d) (reg r1)
+    | Ofloatoflong, [r1] -> sprintf "%s=floatoflong(%s)" (reg d) (reg r1)
+    | Olongofsingle, [r1] -> sprintf "%s=longofsingle(%s)" (reg d) (reg r1)
+    | Osingleoflong, [r1] -> sprintf "%s=singleoflong(%s)" (reg d) (reg r1)
+    | Ocmp c, args -> sprintf "%s=cmp" (reg d)
+    | Osel (c, ty), r1::r2::args -> sprintf "%s=sel" (reg d)
+    | _, _ -> sprintf "N/a")
+
+module DFGDot = Graph.Graphviz.Dot(struct
+    let graph_attributes _ = []
+    let default_vertex_attributes _ = []
+    let vertex_name = function (i, instr) -> sprintf "\"%d:%s\"" i (print_instr instr)
+    let vertex_attributes _ = []
+    let get_subgraph _ = None
+    let default_edge_attributes _ = []
+    let edge_attributes _ = []
+
+    include DFG
+  end)
+
 module IMap = Map.Make (struct
   type t = int
 
   let compare = compare
 end)
 
-type dfg = { nodes : instr list; edges : (int * int) list }
+let gen_vertex instrs i = (i, List.nth instrs i)
+
 (** The DFG type defines a list of instructions with their data dependencies as [edges], which are
    the pairs of integers that represent the index of the instruction in the [nodes].  The edges
    always point from left to right. *)
@@ -55,10 +224,12 @@ let print_tuple out_chan a =
   let l, r = a in
   fprintf out_chan "(%d,%d)" l r
 
-let print_dfg out_chan dfg =
+(*let print_dfg out_chan dfg =
   fprintf out_chan "{ nodes = %a, edges = %a }"
     (print_list PrintRTLBlockInstr.print_bblock_body)
-    dfg.nodes (print_list print_tuple) dfg.edges
+    dfg.nodes (print_list print_tuple) dfg.edges*)
+
+let print_dfg = DFGDot.output_graph
 
 let read_process command =
   let buffer_size = 2048 in
@@ -73,38 +244,77 @@ let read_process command =
   ignore (Unix.close_process_in in_channel);
   Buffer.contents buffer
 
+let comb_delay = function
+  | RBnop -> 0
+  | RBop (_, op, _, _) ->
+    (match op with
+     | Omove -> 0
+     | Ointconst _ -> 0
+     | Olongconst _ -> 0
+     | Ocast8signed -> 0
+     | Ocast8unsigned -> 0
+     | Ocast16signed -> 0
+     | Ocast16unsigned -> 0
+     | Oneg -> 0
+     | Onot -> 0
+     | Oor -> 0
+     | Oorimm _ -> 0
+     | Oand -> 0
+     | Oandimm _ -> 0
+     | Oxor -> 0
+     | Oxorimm _ -> 0
+     | Omul -> 8
+     | Omulimm _ -> 8
+     | Omulhs -> 8
+     | Omulhu -> 8
+     | Odiv -> 72
+     | Odivu -> 72
+     | Omod -> 72
+     | Omodu -> 72
+     | _ -> 1)
+  | _ -> 1
+
+let pipeline_stages = function
+  | RBop (_, op, _, _) ->
+    (match op with
+     | Odiv -> 32
+     | Odivu -> 32
+     | Omod -> 32
+     | Omodu -> 32
+     | _ -> 0)
+  | _ -> 0
+
 (** Add a dependency if it uses a register that was written to previously. *)
-let add_dep i tree deps curr =
-  match PTree.get curr tree with None -> deps | Some ip -> (ip, i) :: deps
+let add_dep map i tree dfg curr =
+  match PTree.get curr tree with
+  | None -> dfg
+  | Some ip ->
+    let ipv = (List.nth map ip) in
+    DFG.add_edge_e dfg (ipv, comb_delay (snd ipv), List.nth map i)
 
 (** This function calculates the dependencies of each instruction.  The nodes correspond to previous
    registers that were allocated and show which instruction caused it.
 
    This function only gathers the RAW constraints, and will therefore only be active for operations
    that modify registers, which is this case only affects loads and operations. *)
-let accumulate_RAW_deps dfg curr =
-  let i, dst_map, { edges; nodes } = dfg in
+let accumulate_RAW_deps map dfg curr =
+  let i, dst_map, graph = dfg in
   let acc_dep_instruction rs dst =
     ( i + 1,
       PTree.set dst i dst_map,
-      {
-        nodes;
-        edges = List.append (List.fold_left (add_dep i dst_map) [] rs) edges;
-      } )
+      List.fold_left (add_dep map i dst_map) graph rs
+    )
   in
   let acc_dep_instruction_nodst rs =
     ( i + 1,
       dst_map,
-      {
-        nodes;
-        edges = List.append (List.fold_left (add_dep i dst_map) [] rs) edges;
-      } )
+    List.fold_left (add_dep map i dst_map) graph rs)
   in
   match curr with
   | RBop (op, _, rs, dst) -> acc_dep_instruction rs dst
   | RBload (op, _mem, _addr, rs, dst) -> acc_dep_instruction rs dst
   | RBstore (op, _mem, _addr, rs, src) -> acc_dep_instruction_nodst (src :: rs)
-  | _ -> (i + 1, dst_map, { edges; nodes })
+  | _ -> (i + 1, dst_map, graph)
 
 (** Finds the next write to the [dst] register.  This is a small optimisation so that only one
    dependency is generated for a data dependency. *)
@@ -159,32 +369,32 @@ let rec next_load i = function
   | RBload (_, _, _, _, _) :: _ -> Some i
   | _ :: rst -> next_load (i + 1) rst
 
-let accumulate_RAW_mem_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+let accumulate_RAW_mem_deps instrs dfg curri =
+  let i, curr = curri in
   match curr with
   | RBload (_, _, _, _, _) -> (
-      match next_store 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_store 0 (take i instrs |> List.rev) with
+      | None -> dfg
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+  | _ -> dfg
 
-let accumulate_WAR_mem_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+let accumulate_WAR_mem_deps instrs dfg curri =
+  let i, curr = curri in
   match curr with
   | RBstore (_, _, _, _, _) -> (
-      match next_load 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_load 0 (take i instrs |> List.rev) with
+      | None -> dfg
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+  | _ -> dfg
 
-let accumulate_WAW_mem_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+let accumulate_WAW_mem_deps instrs dfg curri =
+  let i, curr = curri in
   match curr with
   | RBstore (_, _, _, _, _) -> (
-      match next_store 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_store 0 (take i instrs |> List.rev) with
+      | None -> dfg
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+  | _ -> dfg
 
 (** Predicate dependencies. *)
 
@@ -195,7 +405,7 @@ let rec in_predicate p p' =
   | Pand (p1, p2) -> in_predicate p p1 || in_predicate p p2
   | Por (p1, p2) -> in_predicate p p1 || in_predicate p p2
 
-let rec get_predicate = function
+let get_predicate = function
   | RBop (p, _, _, _) -> p
   | RBload (p, _, _, _, _) -> p
   | RBstore (p, _, _, _, _) -> p
@@ -224,64 +434,65 @@ let rec next_preduse p i instr=
   | RBop (Some p', _, _, _) :: rst -> next p' rst
   | _ :: rst -> next_load (i + 1) rst
 
-let accumulate_RAW_pred_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+let accumulate_RAW_pred_deps instrs dfg curri =
+  let i, curr = curri in
   match get_predicate curr with
   | Some p -> (
-      match next_setpred p 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_setpred p 0 (take i instrs |> List.rev) with
+      | None -> dfg
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+  | _ -> dfg
 
-let accumulate_WAR_pred_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+let accumulate_WAR_pred_deps instrs dfg curri =
+  let i, curr = curri in
   match curr with
   | RBsetpred (_, _, p) -> (
-      match next_preduse p 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_preduse p 0 (take i instrs |> List.rev) with
+      | None -> dfg
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+  | _ -> dfg
 
-let accumulate_WAW_pred_deps dfg curr =
-  let i, { nodes; edges } = dfg in
+let accumulate_WAW_pred_deps instrs dfg curri =
+  let i, curr = curri in
   match curr with
   | RBsetpred (_, _, p) -> (
-      match next_setpred (Pvar p) 0 (take i nodes |> List.rev) with
-      | None -> (i + 1, { nodes; edges })
-      | Some d -> (i + 1, { nodes; edges = (i - d - 1, i) :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_setpred (Pvar p) 0 (take i instrs |> List.rev) with
+      | None -> dfg
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+  | _ -> dfg
 
 (** This function calculates the WAW dependencies, which happen when two writes are ordered one
    after another and therefore have to be kept in that order.  This accumulation might be redundant
    if register renaming is done before hand, because then these dependencies can be avoided. *)
-let accumulate_WAW_deps dfg curr =
-  let i, { edges; nodes } = dfg in
+let accumulate_WAW_deps instrs dfg curri =
+  let i, curr = curri in
   let dst_dep dst =
-    match find_next_dst_write i dst (i + 1) (drop (i + 1) nodes) with
-    | Some d -> (i + 1, { nodes; edges = d :: edges })
-    | _ -> (i + 1, { nodes; edges })
+    match find_next_dst_write i dst (i + 1) (drop (i + 1) instrs) with
+    | Some (a, b) -> DFG.add_edge dfg (gen_vertex instrs a) (gen_vertex instrs b)
+    | _ -> dfg
   in
   match curr with
   | RBop (_, _, _, dst) -> dst_dep dst
   | RBload (_, _, _, _, dst) -> dst_dep dst
   | RBstore (_, _, _, _, _) -> (
-      match next_store (i + 1) (drop (i + 1) nodes) with
-      | None -> (i + 1, { nodes; edges })
-      | Some i' -> (i + 1, { nodes; edges = (i, i') :: edges }) )
-  | _ -> (i + 1, { nodes; edges })
+      match next_store (i + 1) (drop (i + 1) instrs) with
+      | None -> dfg
+      | Some i' -> DFG.add_edge dfg (gen_vertex instrs i) (gen_vertex instrs i') )
+  | _ -> dfg
 
-let accumulate_WAR_deps dfg curr =
-  let i, { edges; nodes } = dfg in
+let accumulate_WAR_deps instrs dfg curri =
+  let i, curr = curri in
   let dst_dep dst =
-    let dep_list = find_all_next_dst_read i dst 0 (take i nodes |> List.rev)
+    let dep_list = find_all_next_dst_read i dst 0 (take i instrs |> List.rev)
         |> List.map (function (d, d') -> (i - d' - 1, d))
     in
-    (i + 1, { nodes; edges = List.append dep_list edges })
+    List.fold_left (fun g ->
+        function (d, d') -> DFG.add_edge g (gen_vertex instrs d) (gen_vertex instrs d')) dfg dep_list
   in
   match curr with
   | RBop (_, _, _, dst) -> dst_dep dst
   | RBload (_, _, _, _, dst) -> dst_dep dst
-  | _ -> (i + 1, { nodes; edges })
+  | _ -> dfg
 
 let assigned_vars vars = function
   | RBnop -> vars
@@ -307,124 +518,178 @@ let check_dependent op1 op2 =
   | Some p, Some p' -> not (independant_pred p p')
   | _, _ -> true
 
-let remove_unnecessary_deps dfg =
-  let { edges; nodes } = dfg in
-  let is_dependent = function (i1, i2) ->
-    let instr1 = List.nth nodes i1 in
-    let instr2 = List.nth nodes i2 in
-    check_dependent (get_pred instr1) (get_pred instr2)
+let remove_unnecessary_deps graph =
+  let is_dependent v1 v2 g =
+    let (_, instr1) = v1 in
+    let (_, instr2) = v2 in
+    if check_dependent (get_pred instr1) (get_pred instr2)
+    then g
+    else DFG.remove_edge g v1 v2
   in
-  { edges = List.filter is_dependent edges; nodes }
+  DFG.fold_edges is_dependent graph graph
 
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data
    dependencies between nodes. *)
 let gather_bb_constraints debug bb =
-  let _, _, dfg =
-    List.fold_left accumulate_RAW_deps
-      (0, PTree.empty, { nodes = bb.bb_body; edges = [] })
+  let ibody = List.mapi (fun i a -> (i, a)) bb.bb_body in
+  let dfg = List.fold_left (fun dfg v -> DFG.add_vertex dfg v) DFG.empty ibody in
+  let _, _, dfg' =
+    List.fold_left (accumulate_RAW_deps ibody)
+      (0, PTree.empty, dfg)
       bb.bb_body
   in
-  if debug then printf "DFG : %a\n" print_dfg dfg else ();
-  let _, dfg1 = List.fold_left accumulate_WAW_deps (0, dfg) bb.bb_body in
-  if debug then printf "DFG': %a\n" print_dfg dfg1 else ();
-  let _, dfg2 = List.fold_left accumulate_WAR_deps (0, dfg1) bb.bb_body in
-  if debug then printf "DFG'': %a\n" print_dfg dfg2 else ();
-  let _, dfg3 =
-    List.fold_left accumulate_RAW_mem_deps (0, dfg2) bb.bb_body
+  let dfg'' = List.fold_left (fun dfg f -> List.fold_left (f bb.bb_body) dfg ibody) dfg'
+      [ accumulate_WAW_deps;
+        accumulate_WAR_deps;
+        accumulate_RAW_mem_deps;
+        accumulate_WAR_mem_deps;
+        accumulate_WAW_mem_deps;
+        accumulate_RAW_pred_deps;
+        accumulate_WAR_pred_deps;
+        accumulate_WAW_pred_deps
+      ]
   in
-  if debug then printf "DFG''': %a\n" print_dfg dfg3 else ();
-  let _, dfg4 =
-    List.fold_left accumulate_WAR_mem_deps (0, dfg3) bb.bb_body
+  let dfg''' = remove_unnecessary_deps dfg'' in
+  (List.length bb.bb_body, dfg''', successors_instr bb.bb_exit)
+
+let encode_var bbn n i = { sv_type = VarType (bbn, n); sv_num = i }
+let encode_bb bbn i = { sv_type = BBType bbn; sv_num = i }
+
+let add_super_nodes n dfg =
+  DFG.fold_vertex (function v1 -> fun g ->
+      (if DFG.in_degree dfg v1 = 0
+       then G.add_edge_e g (encode_bb n 0, 0, encode_var n (fst v1) 0)
+       else g) |>
+      (fun g' ->
+         if DFG.out_degree dfg v1 = 0
+         then G.add_edge_e g' (encode_var n (fst v1) 0, 0, encode_bb n 1)
+         else g')) dfg
+
+let add_data_deps n =
+  DFG.fold_edges_e (function ((i1, _), l, (i2, _)) -> fun g ->
+      G.add_edge_e g (encode_var n i1 0, 0, encode_var n i2 0)
+    )
+
+let add_ctrl_deps n succs constr =
+  List.fold_left (fun g n' ->
+      G.add_edge_e g (encode_bb n 1, -1, encode_bb n' 0)
+    ) constr succs
+
+module BFDFG = Graph.Path.BellmanFord(DFG)(struct
+    include DFG
+    type t = int
+    let weight = DFG.E.label
+    let compare = compare
+    let add = (+)
+    let zero = 0
+  end)
+
+module TopoDFG = Graph.Topological.Make(DFG)
+
+let negate_graph constr =
+  DFG.fold_edges_e (function (v1, e, v2) -> fun g ->
+      DFG.add_edge_e g (v1, -e, v2)
+    ) constr DFG.empty
+
+let add_cycle_constr max n dfg constr =
+  let negated_dfg = negate_graph dfg in
+  let longest_path v = BFDFG.all_shortest_paths negated_dfg v
+                       |> BFDFG.H.to_seq |> List.of_seq in
+  let constrained_paths = List.filter (function (v, m) -> - m > max) in
+  List.fold_left (fun g -> function (v, v', w) ->
+      G.add_edge_e g (encode_var n (fst v) 0,
+                      - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int max))) - 1),
+                      encode_var n (fst v') 0)
+    ) constr (DFG.fold_vertex (fun v l ->
+      List.append l (longest_path v |> constrained_paths
+                     |> List.map (function (v', w) -> (v, v', - w)))
+    ) dfg [])
+
+type resource =
+  | Mem
+  | SDiv
+  | UDiv
+
+type resources = {
+  res_mem: DFG.V.t list;
+  res_udiv: DFG.V.t list;
+  res_sdiv: DFG.V.t list;
+}
+
+let find_resource = function
+  | RBload _ -> Some Mem
+  | RBstore _ -> Some Mem
+  | RBop (_, op, _, _) ->
+    ( match op with
+      | Odiv -> Some SDiv
+      | Odivu -> Some UDiv
+      | Omod -> Some SDiv
+      | Omodu -> Some UDiv
+      | _ -> None )
+  | _ -> None
+
+let add_resource_constr n dfg constr =
+  let res = TopoDFG.fold (function (i, instr) ->
+    function {res_mem = ml; res_sdiv = sdl; res_udiv = udl} as r ->
+    match find_resource instr with
+    | Some SDiv -> {r with res_sdiv = (i, instr) :: sdl}
+    | Some UDiv -> {r with res_udiv = (i, instr) :: udl}
+    | Some Mem -> {r with res_mem = (i, instr) :: ml}
+    | None -> r
+    ) dfg {res_mem = []; res_sdiv = []; res_udiv = []}
   in
-  if debug then printf "DFG'''': %a\n" print_dfg dfg4 else ();
-  let _, dfg5 =
-    List.fold_left accumulate_WAW_mem_deps (0, dfg4) bb.bb_body
+  let get_constraints l g = List.fold_left (fun gv v' ->
+      match gv with
+      | (g, None) -> (g, Some v')
+      | (g, Some v) ->
+        (G.add_edge_e g (encode_var n (fst v) 0, -1, encode_var n (fst v') 0), Some v')
+    ) (g, None) l |> fst
   in
-  let _, dfg6 =
-    List.fold_left accumulate_RAW_pred_deps (0, dfg5) bb.bb_body
-  in
-  let _, dfg7 =
-    List.fold_left accumulate_WAR_pred_deps (0, dfg6) bb.bb_body
-  in
-  let _, dfg8 =
-    List.fold_left accumulate_WAW_pred_deps (0, dfg7) bb.bb_body
-  in
-  let dfg9 = remove_unnecessary_deps dfg8 in
-  if debug then printf "DFG''''': %a\n" print_dfg dfg9 else ();
-  (List.length bb.bb_body, dfg9, successors_instr bb.bb_exit)
+  get_constraints (List.rev res.res_mem) constr
+  |> get_constraints (List.rev res.res_udiv)
+  |> get_constraints (List.rev res.res_sdiv)
 
-let gen_bb_name s i = sprintf "bb%d%s" (P.to_int i) s
-
-let gen_bb_name_ssrc = gen_bb_name "ssrc"
-
-let gen_bb_name_ssnk = gen_bb_name "ssnk"
-
-let gen_var_name s c i = sprintf "v%d%s_%d" (P.to_int i) s c
-
-let gen_var_name_b = gen_var_name "b"
-
-let gen_var_name_e = gen_var_name "e"
-
-let print_lt0 = sprintf "%s - %s <= 0;\n"
-
-let print_bb_order i c = if P.to_int c < P.to_int i then
-    print_lt0 (gen_bb_name_ssnk i) (gen_bb_name_ssrc c) else
-    ""
-
-let print_src_order i c =
-  print_lt0 (gen_bb_name_ssrc i) (gen_var_name_b c i)
-  ^ print_lt0 (gen_var_name_e c i) (gen_bb_name_ssnk i)
-  ^ sprintf "%s - %s = 1;\n" (gen_var_name_e c i) (gen_var_name_b c i)
-
-let print_src_type i c =
-  sprintf "int %s;\n" (gen_var_name_e c i)
-  ^ sprintf "int %s;\n" (gen_var_name_b c i)
-
-let print_data_dep_order c (i, j) =
-  print_lt0 (gen_var_name_e i c) (gen_var_name_b j c)
-
-let gather_cfg_constraints (completed, (bvars, constraints, types)) c curr =
-  if List.exists (P.eq curr) completed then
-    (completed, (bvars, constraints, types))
-  else
-    match PTree.get curr c with
-    | None -> assert false
-    | Some (num_iters, dfg, next) ->
-        let constraints' =
-          constraints
-          ^ String.concat "" (List.map (print_bb_order curr) next)
-          ^ String.concat ""
-              (List.map (print_src_order curr)
-                 (List.init num_iters (fun x -> x)))
-          ^ String.concat "" (List.map (print_data_dep_order curr) dfg.edges)
-        in
-        let types' =
-          types
-          ^ String.concat ""
-              (List.map (print_src_type curr)
-                 (List.init num_iters (fun x -> x)))
-          ^ sprintf "int %s;\n" (gen_bb_name_ssrc curr)
-          ^ sprintf "int %s;\n" (gen_bb_name_ssnk curr)
-        in
-        let bvars' =
-          List.append
-            (List.map
-               (fun x -> gen_var_name_b x curr)
-               (List.init num_iters (fun x -> x)))
-            bvars
-        in
-        (curr :: completed, (bvars', constraints', types'))
+let gather_cfg_constraints c constr curr =
+  let (n, dfg) = curr in
+  match PTree.get (P.of_int n) c with
+  | None -> assert false
+  | Some { bb_exit = ctrl; _ } ->
+    add_super_nodes n dfg constr
+    |> add_data_deps n dfg
+    |> add_ctrl_deps n (successors_instr ctrl
+                        |> List.map P.to_int
+                        |> List.filter (fun n' -> n' < n))
+    |> add_cycle_constr 8 n dfg
+    |> add_resource_constr n dfg
 
 let rec intersperse s = function
   | [] -> []
   | [ a ] -> [ a ]
   | x :: xs -> x :: s :: intersperse s xs
 
+let print_objective constr =
+  let vars = G.fold_vertex (fun v1 l ->
+      match v1 with
+      | { sv_type = VarType _; sv_num = 0 } -> print_sv v1 :: l
+      | _ -> l
+    ) constr []
+  in
+  "min: " ^ String.concat "" (intersperse " + " vars) ^ ";\n"
+
+let print_lp constr =
+  print_objective constr ^
+  (G.fold_edges_e (function (e1, w, e2) -> fun s ->
+       s ^ sprintf "%s - %s <= %d;\n" (print_sv e1) (print_sv e2) w
+     ) constr "" |>
+   G.fold_vertex (fun v1 s ->
+       s ^ sprintf "int %s;\n" (print_sv v1)
+     ) constr)
+
 let update_schedule v = function Some l -> Some (v :: l) | None -> Some [ v ]
 
 let parse_soln tree s =
-  let r = Str.regexp "v\\([0-9]+\\)b_\\([0-9]+\\)[ ]+\\([0-9]+\\)" in
+  let r = Str.regexp "var\\([0-9]+\\)n\\([0-9]+\\)_0[ ]+\\([0-9]+\\)" in
   if Str.string_match r s 0 then
     IMap.update
       (Str.matched_group 1 s |> int_of_string)
@@ -434,96 +699,83 @@ let parse_soln tree s =
       tree
   else tree
 
-let solve_constraints vars constraints types =
+let solve_constraints constr =
   let oc = open_out "lpsolve.txt" in
-  fprintf oc "min: ";
-  List.iter (fprintf oc "%s") (intersperse " + " vars);
-  fprintf oc ";\n";
-  fprintf oc "%s" constraints;
-  fprintf oc "%s" types;
+  fprintf oc "%s\n" (print_lp constr);
   close_out oc;
+
   Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
   |> drop 3
   |> List.fold_left parse_soln IMap.empty
 
-let find_min = function
-  | [] -> assert false
-  | l :: ls ->
-      let rec find_min' current = function
-        | [] -> current
-        | l' :: ls' ->
-            if snd l' < current then find_min' (snd l') ls'
-            else find_min' current ls'
-      in
-      find_min' (snd l) ls
+let subgraph dfg l =
+  let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
+  List.fold_left (fun g v ->
+      List.fold_left (fun g' v' ->
+          let edges = DFG.find_all_edges dfg v v' in
+          List.fold_left (fun g'' e ->
+              DFG.add_edge_e g'' e
+            ) g' edges
+        ) g l
+    ) dfg' l
 
-let find_max = function
-  | [] -> assert false
-  | l :: ls ->
-      let rec find_max' current = function
-        | [] -> current
-        | l' :: ls' ->
-            if snd l' > current then find_max' (snd l') ls'
-            else find_max' current ls'
-      in
-      find_max' (snd l) ls
+let rec all_successors dfg v =
+  List.concat (List.fold_left (fun l v ->
+      all_successors dfg v :: l
+    ) [] (DFG.succ dfg v))
 
-let ( >>= ) = bind
+let order_instr dfg =
+  DFG.fold_vertex (fun v li ->
+      if DFG.in_degree dfg v = 0
+      then (List.map snd (v :: all_successors dfg v)) :: li
+      else li
+    ) dfg []
 
 let combine_bb_schedule schedule s =
   let i, st = s in
   IMap.update st (update_schedule i) schedule
 
-let compare_tuple (a, _) (b, _) = compare a b
-
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
-let transf_rtlpar c (schedule : (int * int) list IMap.t) =
+let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
   let f i bb : RTLPar.bblock =
     match bb with
-    | { bb_body = []; bb_exit = c } ->
-      { bb_body = [];
-        bb_exit = c
-      }
+    | { bb_body = []; bb_exit = c } -> { bb_body = []; bb_exit = c }
     | { bb_body = bb_body'; bb_exit = ctrl_flow } ->
-        let i_sched =
-          try IMap.find (P.to_int i) schedule
-          with Not_found -> (
-            printf "Could not find %d\n" (P.to_int i);
-            IMap.iter
-              (fun d -> printf "%d: %a\n" d (print_list print_tuple))
-              schedule;
-            assert false
-          )
-        in
-        let min_state = find_min i_sched in
-        let max_state = find_max i_sched in
-        let i_sched_tree =
-          List.fold_left combine_bb_schedule IMap.empty i_sched
-        in
-        (*printf "--------------- curr: %d, max: %d, min: %d, next: %d\n" (P.to_int i) max_state min_state (P.to_int i - max_state + min_state - 1);
-        printf "HIIIII: %d orig: %d\n" (P.to_int i - max_state + min_state - 1) (P.to_int i);*)
-        { bb_body = (IMap.to_seq i_sched_tree |> List.of_seq |> List.sort compare_tuple |> List.map snd
-                           |> List.map (List.map (fun x -> List.nth bb_body' x)));
-          bb_exit = ctrl_flow
-        }
+      let dfg = match PTree.get i c' with None -> assert false | Some x -> x in
+      let i_sched = IMap.find (P.to_int i) schedule in
+      let i_sched_tree =
+        List.fold_left combine_bb_schedule IMap.empty i_sched
+      in
+      let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
+                 |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
+      in
+      (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
+      let final_body2 = List.map (fun x -> subgraph dfg x
+                                           |> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
+                                           |> List.rev) body
+      in
+      { bb_body = List.map (fun x -> [x]) final_body2;
+        bb_exit = ctrl_flow
+      }
   in
   PTree.map f c
 
-let second = function (_, a, _) -> a
-
 let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
-  let debug = false in
-  let c' = PTree.map1 (gather_bb_constraints false) c in
+  let debug = true in
+  let transf_graph (_, dfg, _) = dfg in
+  let c' = PTree.map1 (fun x -> gather_bb_constraints false x |> transf_graph) c in
   (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in*)
-  let _, (vars, constraints, types) =
-    List.map fst (PTree.elements c') |>
-    List.fold_left (fun compl ->
-        gather_cfg_constraints compl c') ([], ([], "", ""))
+  let cgraph = PTree.elements c'
+               |> List.map (function (x, y) -> (P.to_int x, y))
+               |> List.fold_left (gather_cfg_constraints c) G.empty
   in
-  let schedule' = solve_constraints vars constraints types in
-  (*IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
+  let graph = open_out "constr_graph.dot" in
+  fprintf graph "%a\n" GDot.output_graph cgraph;
+  close_out graph;
+  let schedule' = solve_constraints cgraph in
+  (**IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
   (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
-  transf_rtlpar c schedule'
+  transf_rtlpar c c' schedule'
 
 let rec find_reachable_states c e =
   match PTree.get e c with
