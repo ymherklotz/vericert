@@ -113,7 +113,7 @@ Definition transf_function (f: function) : function :=
   let (_, c) := List.fold_left if_convert_code
                                (find_blocks_with_cond f.(fn_code))
                                (1%nat, f.(fn_code)) in
-  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize) c f.(fn_entrypoint).
+  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize) c f.(fn_funct_units) f.(fn_entrypoint).
 
 Definition transf_fundef (fd: fundef) : fundef :=
   transf_fundef transf_function fd.

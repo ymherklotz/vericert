@@ -21,13 +21,15 @@ Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
 
+Definition funct_node := positive.
+
 Inductive funct_unit: Type :=
 | SignedDiv (size: positive) (numer denom quot rem: reg): funct_unit
 | UnsignedDiv (size: positive) (numer denom quot rem: reg): funct_unit.
 
 Record funct_units := mk_avail_funct_units {
-    avail_sdiv: option positive;
-    avail_udiv: option positive;
+    avail_sdiv: option funct_node;
+    avail_udiv: option funct_node;
     avail_units: PTree.t funct_unit;
   }.
 

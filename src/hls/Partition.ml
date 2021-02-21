@@ -118,6 +118,7 @@ let function_from_RTL f =
                 fn_stacksize = f.RTL.fn_stacksize;
                 fn_params = f.RTL.fn_params;
                 fn_entrypoint = f.RTL.fn_entrypoint;
+                fn_funct_units = FunctionalUnits.initial_funct_units;
                 fn_code = c
               }
 

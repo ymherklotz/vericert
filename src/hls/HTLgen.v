@@ -32,6 +32,7 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
+Require Import vericert.hls.FunctionalUnits.
 
 Hint Resolve AssocMap.gempty : htlh.
 Hint Resolve AssocMap.gso : htlh.
@@ -610,7 +611,7 @@ Definition transf_module (f: function) : mon HTL.module :=
            start
            rst
            clk
-           nil
+           initial_funct_units
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))

@@ -30,6 +30,7 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Sat.
+Require Import vericert.hls.FunctionalUnits.
 
 Local Open Scope rtl.
 
@@ -250,6 +251,8 @@ Inductive instr : Type :=
 | RBop : option pred_op -> operation -> list reg -> reg -> instr
 | RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBpiped : option pred_op -> funct_node -> list reg -> instr
+| RBassign : option pred_op -> funct_node -> reg -> instr
 | RBsetpred : condition -> list reg -> predicate -> instr.
 
 Inductive cf_instr : Type :=
@@ -284,6 +287,10 @@ Definition max_reg_instr (m: positive) (i: instr) :=
     fold_left Pos.max args (Pos.max dst m)
   | RBstore p chunk addr args src =>
     fold_left Pos.max args (Pos.max src m)
+  | RBpiped p f args =>
+    fold_left Pos.max args m
+  | RBassign p f dst =>
+    Pos.max dst m
   | RBsetpred c args p =>
     fold_left Pos.max args m
   end.
@@ -339,6 +346,7 @@ Section DEFINITION.
     fn_params: list reg;
     fn_stacksize: Z;
     fn_code: code;
+    fn_funct_units: funct_units;
     fn_entrypoint: node
   }.
 

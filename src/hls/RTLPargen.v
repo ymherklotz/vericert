@@ -576,6 +576,8 @@ Definition update (f : forest) (i : instr) : forest :=
   | RBstore p chunk addr rl r =>
     f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
   | RBsetpred c addr p => f
+  | RBpiped p fu args => f
+  | RBassign p fu dst => f
   end.
 
 (*|
@@ -673,6 +675,7 @@ Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :
                           f.(fn_params)
                           f.(fn_stacksize)
                           tfcode
+                          f.(fn_funct_units)
                           f.(fn_entrypoint))
   else
     Errors.Error (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
@@ -683,6 +686,7 @@ Definition transl_function_temp (f: RTLBlock.function) : Errors.res RTLPar.funct
                           f.(fn_params)
                           f.(fn_stacksize)
                           tfcode
+                          f.(fn_funct_units)
                           f.(fn_entrypoint)).
 
 Definition transl_fundef := transf_partial_fundef transl_function_temp.

@@ -392,7 +392,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg)
   end.
 
 (** Translate an instruction to a statement. FIX mulhs mulhu *)
-Definition translate_instr (op : Op.operation) (args : list reg) : mon stmnt :=
+Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   match op, args with
   | Op.Omove, r::nil => ret (Vvar r)
   | Op.Ointconst n, _ => ret (Vlit (intToValue n))
@@ -402,22 +402,10 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon stmnt :=
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
   | Op.Omulhs, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhs")
   | Op.Omulhu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhu")
-  | Op.Odiv, r1::r2::nil =>
-    do s <- get;
-    match sdiv_present s.(st_funct_units) 32%positive with
-    | SignedDiv s n d q r :: _ =>
-      ret (Vseq (Vnonblock (Vvar n) (Vvar r1)) (Vnonblock (Vvar d) (Vvar r2)))
-    | _ =>
-      do n <- create_reg None 32;
-      do d <- create_reg None 32;
-      do q <- create_reg None 32;
-      do r <- create_reg None 32;
-      do _ <- add_funct_unit (SignedDiv 32%positive n d q r);
-      ret (Vseq (Vnonblock (Vvar n) (Vvar r1)) (Vnonblock (Vvar d) (Vvar r2)))
-    end
-  | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
-  | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
-  | Op.Omodu, r1::r2::nil => ret (bop Vmodu r1 r2)
+  | Op.Odiv, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: div")
+  | Op.Odivu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: divu")
+  | Op.Omod, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mod")
+  | Op.Omodu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: modu")
   | Op.Oand, r1::r2::nil => ret (bop Vand r1 r2)
   | Op.Oandimm n, r::nil => ret (boplit Vand r n)
   | Op.Oor, r1::r2::nil => ret (bop Vor r1 r2)
@@ -702,6 +690,8 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
   | RBsetpred c args p =>
     do cond <- translate_condition c args;
     ret (a (pred_expr preg (Pvar p)) cond)
+  | RBpiped p f args => error (Errors.msg "HTLPargen.translate_inst: piped")
+  | RBassign p f dst => error (Errors.msg "HTLPargen.translate_inst: assign")
   end.
 
 Lemma create_new_state_state_incr:
@@ -828,7 +818,7 @@ Definition transf_module (f: function) : mon HTL.module :=
            start
            rst
            clk
-           nil
+           initial_funct_units
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
