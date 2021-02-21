@@ -556,6 +556,18 @@ let gather_bb_constraints debug bb =
 let encode_var bbn n i = { sv_type = VarType (bbn, n); sv_num = i }
 let encode_bb bbn i = { sv_type = BBType bbn; sv_num = i }
 
+let add_initial_sv n dfg constr =
+  let add_initial_sv' (i, instr) g =
+    let pipes = pipeline_stages instr in
+    if pipes > 0 then
+      List.init pipes (fun i' -> i')
+      |> List.fold_left (fun g i' ->
+          G.add_edge_e g (encode_var n i i', -1, encode_var n i (i'+1))
+        ) g
+    else g
+  in
+  DFG.fold_vertex add_initial_sv' dfg constr
+
 let add_super_nodes n dfg =
   DFG.fold_vertex (function v1 -> fun g ->
       (if DFG.in_degree dfg v1 = 0
@@ -563,12 +575,14 @@ let add_super_nodes n dfg =
        else g) |>
       (fun g' ->
          if DFG.out_degree dfg v1 = 0
-         then G.add_edge_e g' (encode_var n (fst v1) 0, 0, encode_bb n 1)
+         then G.add_edge_e g' (encode_var n (fst v1) (pipeline_stages (snd v1)),
+                               0, encode_bb n 1)
          else g')) dfg
 
 let add_data_deps n =
-  DFG.fold_edges_e (function ((i1, _), l, (i2, _)) -> fun g ->
-      G.add_edge_e g (encode_var n i1 0, 0, encode_var n i2 0)
+  DFG.fold_edges_e (function ((i1, instr1), _, (i2, _)) -> fun g ->
+      let end_sv = pipeline_stages instr1 in
+      G.add_edge_e g (encode_var n i1 end_sv, 0, encode_var n i2 0)
     )
 
 let add_ctrl_deps n succs constr =
@@ -596,7 +610,7 @@ let add_cycle_constr max n dfg constr =
   let negated_dfg = negate_graph dfg in
   let longest_path v = BFDFG.all_shortest_paths negated_dfg v
                        |> BFDFG.H.to_seq |> List.of_seq in
-  let constrained_paths = List.filter (function (v, m) -> - m > max) in
+  let constrained_paths = List.filter (function (_, m) -> - m > max) in
   List.fold_left (fun g -> function (v, v', w) ->
       G.add_edge_e g (encode_var n (fst v) 0,
                       - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int max))) - 1),
@@ -656,6 +670,7 @@ let gather_cfg_constraints c constr curr =
   | None -> assert false
   | Some { bb_exit = ctrl; _ } ->
     add_super_nodes n dfg constr
+    |> add_initial_sv n dfg
     |> add_data_deps n dfg
     |> add_ctrl_deps n (successors_instr ctrl
                         |> List.map P.to_int
@@ -797,5 +812,6 @@ let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
     fn_params = f.fn_params;
     fn_stacksize = f.fn_stacksize;
     fn_code = List.fold_left (add_to_tree scheduled) PTree.empty reachable;
+    fn_funct_units = f.fn_funct_units;
     fn_entrypoint = f.fn_entrypoint
   }
