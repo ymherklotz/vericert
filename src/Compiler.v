@@ -82,6 +82,7 @@ We then need to declare the external OCaml functions used to print out intermedi
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: HTL.program -> unit.
 Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
+Parameter print_RTLPar: Z -> RTLPar.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
