@@ -178,11 +178,15 @@ let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
 
 let print_funct_units clk = function
   | SignedDiv (stages, numer, denom, quot, rem) ->
-    sprintf "div_signed #(.stages(%d)) divs(.clk(%s), .clken(1'b1), .numer(%s), .denom(%s), .quotient(%s), .remain(%s))\n"
+    sprintf ("div_signed #(.stages(%d)) divs(.clk(%s), " ^^
+             ".clken(1'b1), .numer(%s), .denom(%s), " ^^
+             ".quotient(%s), .remain(%s))\n")
       (P.to_int stages)
       (register clk) (register numer) (register denom) (register quot) (register rem)
   | UnsignedDiv (stages, numer, denom, quot, rem) ->
-    sprintf "div_unsigned #(.stages(%d)) divs(.clk(%s), .clken(1'b1), .numer(%s), .denom(%s), .quotient(%s), .remain(%s))\n"
+    sprintf ("div_unsigned #(.stages(%d)) divs(.clk(%s), " ^^
+             ".clken(1'b1), .numer(%s), .denom(%s), " ^^
+             ".quotient(%s), .remain(%s))\n")
       (P.to_int stages)
       (register clk) (register numer) (register denom) (register quot) (register rem)
 

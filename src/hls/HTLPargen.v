@@ -671,7 +671,7 @@ Definition translate_predicate (a : assignment)
     ret (a dst (Vternary (pred_expr preg pos) e dst))
   end.
 
-Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
+Definition translate_inst a (fu : funct_units) (fin rtrn stack preg : reg) (n : node) (i : instr)
   : mon stmnt :=
   match i with
   | RBnop =>
@@ -690,8 +690,14 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
   | RBsetpred c args p =>
     do cond <- translate_condition c args;
     ret (a (pred_expr preg (Pvar p)) cond)
-  | RBpiped p f args => error (Errors.msg "HTLPargen.translate_inst: piped")
-  | RBassign p f src dst => error (Errors.msg "HTLPargen.translate_inst: assign")
+  | RBpiped p f args =>
+    match PTree.get f fu.(avail_units), args with
+    | Some (SignedDiv s n d q _), r1::r2::nil =>
+      ret (Vseq (a (Vvar n) (Vvar r1)) (a (Vvar d) (Vvar r2)))
+    | _, _ => error (Errors.msg "HTLPargen.translate_inst: not a signed divide.")
+    end
+  | RBassign p f src dst =>
+    ret (a (Vvar dst) (Vvar src))
   end.
 
 Lemma create_new_state_state_incr:
@@ -721,12 +727,13 @@ Definition create_new_state (p: node): mon node :=
                 s.(st_funct_units))
               (create_new_state_state_incr s p).
 
-Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * list (list instr)) :=
+Definition translate_inst_list (fu: funct_units)
+           (fin rtrn stack preg: reg) (ni : node * node * list (list instr)) :=
   match ni with
   | (n, p, li) =>
     do _ <- collectlist
           (fun l =>
-             do stmnt <- translate_inst Vblock fin rtrn stack preg n l;
+             do stmnt <- translate_inst Vblock fu fin rtrn stack preg n l;
              add_data_instr n stmnt) (concat li);
     do st <- get;
     add_control_instr n (state_goto st.(st_st) p)
@@ -773,11 +780,11 @@ Definition translate_cfi (fin rtrn stack preg: reg) (ni: node * cf_instr)
   do _ <- add_control_instr n c;
   add_data_instr n s.
 
-Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
+Definition transf_bblock (fu: funct_units) (fin rtrn stack preg: reg) (ni : node * bblock)
   : mon unit :=
   let (n, bb) := ni in
   do nstate <- create_new_state ((poslength bb.(bb_body)))%positive;
-  do _ <- collectlist (translate_inst_list fin rtrn stack preg)
+  do _ <- collectlist (translate_inst_list fu fin rtrn stack preg)
                       (prange n (nstate + poslength bb.(bb_body) - 1)%positive
                                   bb.(bb_body));
   match bb.(bb_body) with
@@ -792,7 +799,7 @@ Definition transf_module (f: function) : mon HTL.module :=
     do (stack, stack_len) <- create_arr None 32
                                         (Z.to_nat (f.(fn_stacksize) / 4));
     do preg <- create_reg None 32;
-    do _ <- collectlist (transf_bblock fin rtrn stack preg)
+    do _ <- collectlist (transf_bblock f.(fn_funct_units) fin rtrn stack preg)
                         (Maps.PTree.elements f.(fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
                         f.(fn_params);
@@ -818,7 +825,7 @@ Definition transf_module (f: function) : mon HTL.module :=
            start
            rst
            clk
-           initial_funct_units
+           f.(fn_funct_units)
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
