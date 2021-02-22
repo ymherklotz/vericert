@@ -703,16 +703,21 @@ let print_lp constr =
 
 let update_schedule v = function Some l -> Some (v :: l) | None -> Some [ v ]
 
-let parse_soln tree s =
+let parse_soln (tree, bbtree) s =
   let r = Str.regexp "var\\([0-9]+\\)n\\([0-9]+\\)_0[ ]+\\([0-9]+\\)" in
-  if Str.string_match r s 0 then
-    IMap.update
-      (Str.matched_group 1 s |> int_of_string)
-      (update_schedule
-         ( Str.matched_group 2 s |> int_of_string,
-           Str.matched_group 3 s |> int_of_string ))
-      tree
-  else tree
+  let bb = Str.regexp "bb\\([0-9]+\\)_\\([0-9]+\\)[ ]+\\([0-9]+\\)" in
+  let upd s = IMap.update
+            (Str.matched_group 1 s |> int_of_string)
+            (update_schedule
+               ( Str.matched_group 2 s |> int_of_string,
+                 Str.matched_group 3 s |> int_of_string ))
+  in
+  if Str.string_match r s 0
+  then (upd s tree, bbtree)
+  else
+    (if Str.string_match bb s 0
+     then (tree, upd s bbtree)
+     else (tree, bbtree))
 
 let solve_constraints constr =
   let oc = open_out "lpsolve.txt" in
@@ -721,7 +726,7 @@ let solve_constraints constr =
 
   Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
   |> drop 3
-  |> List.fold_left parse_soln IMap.empty
+  |> List.fold_left parse_soln (IMap.empty, IMap.empty)
 
 let subgraph dfg l =
   let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
@@ -750,24 +755,39 @@ let combine_bb_schedule schedule s =
   let i, st = s in
   IMap.update st (update_schedule i) schedule
 
+let range s e =
+  List.init (e - s) (fun i -> i)
+  |> List.map (fun x -> x + s)
+
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
-let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
+let transf_rtlpar c c' schedule =
   let f i bb : RTLPar.bblock =
     match bb with
     | { bb_body = []; bb_exit = c } -> { bb_body = []; bb_exit = c }
     | { bb_body = bb_body'; bb_exit = ctrl_flow } ->
       let dfg = match PTree.get i c' with None -> assert false | Some x -> x in
-      let i_sched = IMap.find (P.to_int i) schedule in
+      let bb_st_e =
+        let m = IMap.find (P.to_int i) (snd schedule) in
+        (List.assq 0 m, List.assq 1 m) in
+      let i_sched = IMap.find (P.to_int i) (fst schedule) in
       let i_sched_tree =
         List.fold_left combine_bb_schedule IMap.empty i_sched
       in
-      let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
+      (*let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
+      in*)
+      let body2 = List.fold_left (fun x b ->
+          match IMap.find_opt b i_sched_tree with
+          | Some i -> i :: x
+          | None -> [] :: x
+        ) [] (range (fst bb_st_e) (snd bb_st_e + 1))
+        |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
+        |> List.rev
       in
       (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
-                                           |> List.rev) body
+                                           |> List.rev) body2
       in
       { bb_body = List.map (fun x -> [x]) final_body2;
         bb_exit = ctrl_flow
