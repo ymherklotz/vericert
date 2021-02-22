@@ -252,7 +252,7 @@ Inductive instr : Type :=
 | RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBpiped : option pred_op -> funct_node -> list reg -> instr
-| RBassign : option pred_op -> funct_node -> reg -> instr
+| RBassign : option pred_op -> funct_node -> reg -> reg -> instr
 | RBsetpred : condition -> list reg -> predicate -> instr.
 
 Inductive cf_instr : Type :=
@@ -289,8 +289,8 @@ Definition max_reg_instr (m: positive) (i: instr) :=
     fold_left Pos.max args (Pos.max src m)
   | RBpiped p f args =>
     fold_left Pos.max args m
-  | RBassign p f dst =>
-    Pos.max dst m
+  | RBassign p f src dst =>
+    Pos.max src (Pos.max dst m)
   | RBsetpred c args p =>
     fold_left Pos.max args m
   end.

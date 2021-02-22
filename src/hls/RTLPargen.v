@@ -577,7 +577,7 @@ Definition update (f : forest) (i : instr) : forest :=
     f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
   | RBsetpred c addr p => f
   | RBpiped p fu args => f
-  | RBassign p fu dst => f
+  | RBassign p fu src dst => f
   end.
 
 (*|

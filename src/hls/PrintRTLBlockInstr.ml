@@ -52,6 +52,11 @@ let print_bblock_body pp i =
     fprintf pp "%a = %a\n"
       pred p
       (PrintOp.print_condition reg) (c, args)
+  | RBpiped (p, fu, args) ->
+    fprintf pp "%a piped\n" print_pred_option p
+  | RBassign (p, fu, src, dst) ->
+    fprintf pp "%a %a = %a" print_pred_option p
+      reg src reg dst
 
 let rec print_bblock_exit pp i =
   fprintf pp "\t\t";

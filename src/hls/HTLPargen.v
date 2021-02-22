@@ -691,7 +691,7 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
     do cond <- translate_condition c args;
     ret (a (pred_expr preg (Pvar p)) cond)
   | RBpiped p f args => error (Errors.msg "HTLPargen.translate_inst: piped")
-  | RBassign p f dst => error (Errors.msg "HTLPargen.translate_inst: assign")
+  | RBassign p f src dst => error (Errors.msg "HTLPargen.translate_inst: assign")
   end.
 
 Lemma create_new_state_state_incr:
