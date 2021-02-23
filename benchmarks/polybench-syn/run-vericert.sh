@@ -8,7 +8,7 @@ while read benchmark ; do
    ./$benchmark.o > $benchmark.clog
    cresult=$(cat $benchmark.clog | cut -d' ' -f2)
    echo "C output: "$cresult
-   { time ../../bin/vericert -DSYNTHESIS -finline --debug-hls $benchmark.c -o $benchmark.v ; } 2> $benchmark.comp
+   { time ../../bin/vericert -DSYNTHESIS $@ --debug-hls $benchmark.c -o $benchmark.v ; } 2> $benchmark.comp
    iverilog -o $benchmark.iver -- $benchmark.v
    ./$benchmark.iver > $benchmark.tmp
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
