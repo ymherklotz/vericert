@@ -15,28 +15,18 @@ while read benchmark ; do
    cycles=$(tail -4 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f3)
    ctime=$(cat $benchmark.comp | head -2 | tail -1 | xargs | cut -d' ' -f2 | cut -d'm' -f2 | sed 's/s//g')
    echo "Veri output: "$veriresult
-  
-   #Undefined checks
-   if test -z $veriresult 
-   then
-   echo "FAIL: Verilog returned nothing"
-   #exit 0
-   fi
-   
-   # Don't care checks
-   if [ $veriresult == "x" ] 
-   then
-   echo "FAIL: Verilog returned don't cares"
-   #exit 0
-   fi
-  
-  # unequal result check
-   if [ $cresult -ne $veriresult ] 
-   then 
-   echo "FAIL: Verilog and C output do not match!"
-   #exit 0 
-   else 
-   echo "PASS"
+
+   if [ -z $veriresult ]; then
+      #Undefined
+      echo "FAIL: Verilog returned nothing"
+   elif [ $veriresult == "x" ]; then
+      # Don't care
+      echo "FAIL: Verilog returned don't cares"
+   elif [ $cresult -ne $veriresult ]; then
+      # unequal result
+      echo "FAIL: Verilog and C output do not match!"
+   else
+      echo "PASS"
    fi
    name=$(echo $benchmark | awk -v FS="/" '{print $NF}')
    echo $name","$cycles","$ctime >> exec.csv 
