@@ -22,18 +22,23 @@ while read -r benchmark ; do
 
    if [ -n "$timeout" ]; then
       echo "FAIL: Verilog timed out"
+      result="timeout"
    elif [ -z "$veriresult" ]; then
       #Undefined
       echo "FAIL: Verilog returned nothing"
+      result="timeout"
    elif [ "$veriresult" == "x" ]; then
       # Don't care
       echo "FAIL: Verilog returned don't cares"
+      result="dontcare"
    elif [ "$cresult" -ne "$veriresult" ]; then
       # unequal result
       echo "FAIL: Verilog and C output do not match!"
+      result="incorrect result"
    else
       echo "PASS"
+      result="pass"
    fi
    name=$(echo "$benchmark" | awk -v FS="/" '{print $NF}')
-   echo "$name,$cycles,$ctime" >> exec.csv
+   echo "$name,$cycles,$ctime,$result,$cresult,$veriresult" >> exec.csv
 done < benchmark-list-master
