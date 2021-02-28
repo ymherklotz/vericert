@@ -10,19 +10,26 @@ while read benchmark ; do
    echo "C output: "$cresult
    { time ../../bin/vericert -DSYNTHESIS $@ --debug-hls $benchmark.c -o $benchmark.v ; } 2> $benchmark.comp
    iverilog -o $benchmark.iver -- $benchmark.v
-   ./$benchmark.iver > $benchmark.tmp
-   veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
+
+   timeout 10s ./$benchmark.iver > $benchmark.tmp
+   if [ $? -eq 124 ]; then
+      timeout=1
+   else
+      veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
+   fi
    cycles=$(tail -4 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f3)
    ctime=$(cat $benchmark.comp | head -2 | tail -1 | xargs | cut -d' ' -f2 | cut -d'm' -f2 | sed 's/s//g')
    echo "Veri output: "$veriresult
 
-   if [ -z $veriresult ]; then
+   if [ -n "$timeout" ]; then
+      echo "FAIL: Verilog timed out"
+   elif [ -z "$veriresult" ]; then
       #Undefined
       echo "FAIL: Verilog returned nothing"
-   elif [ $veriresult == "x" ]; then
+   elif [ "$veriresult" == "x" ]; then
       # Don't care
       echo "FAIL: Verilog returned don't cares"
-   elif [ $cresult -ne $veriresult ]; then
+   elif [ "$cresult" -ne "$veriresult" ]; then
       # unequal result
       echo "FAIL: Verilog and C output do not match!"
    else
