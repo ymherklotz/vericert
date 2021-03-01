@@ -178,7 +178,7 @@ Lemma transl_list_correct :
         stmnt_runp f
                    {| assoc_blocking := asr; assoc_nonblocking := asrn |}
                    {| assoc_blocking := asa; assoc_nonblocking := asan |}
-                   (Vcase (Vvar ev) (transl_list l) (Some Vskip))
+                   (Vcase (Vvar ev) (list_to_stmnt (transl_list l)) (Some Vskip))
                    {| assoc_blocking := asr'; assoc_nonblocking := asrn' |}
                    {| assoc_blocking := asa'; assoc_nonblocking := asan' |}).
 Proof.

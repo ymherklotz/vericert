@@ -118,7 +118,9 @@ let rec pprint_stmnt i =
                                   indent i; "end\n"
                                 ]
   | Vcase (e, es, d) -> concat [ indent i; "case ("; pprint_expr e; ")\n";
-                                 fold_map pprint_case (List.sort compare_expr es |> List.rev);
+                                 fold_map pprint_case (stmnt_to_list es
+                                                       |> List.sort compare_expr
+                                                       |> List.rev);
                                  indent (i+1); "default:;\n";
                                  indent i; "endcase\n"
                                ]

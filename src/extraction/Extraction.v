@@ -190,6 +190,7 @@ Separate Extraction
          HTLgen.tbl_to_case_expr
          Pipeline.pipeline
          RTLBlockInstr.sat_pred_temp
+         Verilog.stmnt_to_list
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

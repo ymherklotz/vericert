@@ -758,7 +758,7 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
     ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
   | RBjumptable r tbl =>
     do s <- get;
-    ret (Vskip, Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
+    ret (Vskip, Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr s.(st_st) tbl)) (Some Vskip))
   | RBcall sig ri rl r n =>
     error (Errors.msg "HTLPargen: RPcall not supported.")
   | RBtailcall sig ri lr =>

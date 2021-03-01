@@ -174,9 +174,12 @@ Inductive stmnt : Type :=
 | Vskip : stmnt
 | Vseq : stmnt -> stmnt -> stmnt
 | Vcond : expr -> stmnt -> stmnt -> stmnt
-| Vcase : expr -> list (expr * stmnt) -> option stmnt -> stmnt
+| Vcase : expr -> stmnt_expr_list -> option stmnt -> stmnt
 | Vblock : expr -> expr -> stmnt
-| Vnonblock : expr -> expr -> stmnt.
+| Vnonblock : expr -> expr -> stmnt
+with stmnt_expr_list : Type :=
+| Stmntnil : stmnt_expr_list
+| Stmntcons : expr -> stmnt -> stmnt_expr_list -> stmnt_expr_list.
 
 (** ** Edges
 
@@ -537,19 +540,19 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve ->
     mve <> ve ->
     stmnt_runp f asr0 asa0 (Vcase e cs def) asr1 asa1 ->
-    stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
+    stmnt_runp f asr0 asa0 (Vcase e (Stmntcons me sc cs) def) asr1 asa1
 | stmnt_runp_Vcase_match:
     forall e ve asr0 asa0 f asr1 asa1 me mve sc cs def,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve ->
     mve = ve ->
     stmnt_runp f asr0 asa0 sc asr1 asa1 ->
-    stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
+    stmnt_runp f asr0 asa0 (Vcase e (Stmntcons me sc cs) def) asr1 asa1
 | stmnt_runp_Vcase_default:
     forall asr0 asa0 asr1 asa1 f st e ve,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
     stmnt_runp f asr0 asa0 st asr1 asa1 ->
-    stmnt_runp f asr0 asa0 (Vcase e nil (Some st)) asr1 asa1
+    stmnt_runp f asr0 asa0 (Vcase e Stmntnil (Some st)) asr1 asa1
 | stmnt_runp_Vblock_reg:
     forall lhs r rhs rhsval asr asa f,
     location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocReg r) ->
@@ -764,6 +767,18 @@ Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
 
+Fixpoint list_to_stmnt st :=
+  match st with
+  | (e, s) :: r => Stmntcons e s (list_to_stmnt r)
+  | nil => Stmntnil
+  end.
+
+Fixpoint stmnt_to_list st :=
+  match st with
+  | Stmntcons e s r => (e, s) :: stmnt_to_list r
+  | Stmntnil => nil
+  end.
+
 Lemma expr_runp_determinate :
   forall f e asr asa v,
   expr_runp f asr asa e v ->
@@ -824,8 +839,8 @@ Lemma stmnt_runp_determinate :
              | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => invert H
              | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => invert H
              | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ (_ :: _) _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ []  _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ Stmntnil  _) _ _ |- _ ] => invert H
 
              | [ H1 : expr_runp _ ?asr ?asa ?e _,
                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>

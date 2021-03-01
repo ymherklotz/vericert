@@ -43,8 +43,8 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
 Definition transl_module (m : HTL.module) : Verilog.module :=
-  let case_el_ctrl := transl_list (PTree.elements m.(mod_controllogic)) in
-  let case_el_data := transl_list (PTree.elements m.(mod_datapath)) in
+  let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in
+  let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
   let body :=
       Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
                                                (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
