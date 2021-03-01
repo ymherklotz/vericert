@@ -8,11 +8,11 @@ while read benchmark ; do
    ./$benchmark.o > $benchmark.clog
    cresult=$(cat $benchmark.clog | cut -d' ' -f2)
    echo "C output: "$cresult
-   { time ../../bin/vericert -DSYNTHESIS -finline --debug-hls $benchmark.c -o $benchmark.v ; } 2> $benchmark.comp
+   { time ../../bin/vericert -DSYNTHESIS -finline -fschedule --debug-hls $benchmark.c -o $benchmark.v ; } 2> $benchmark.comp
    iverilog -o $benchmark.iver -- $benchmark.v
    ./$benchmark.iver > $benchmark.tmp
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
-   cycles=$(tail -4 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f3)
+   cycles=$(tail -2 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f2)
    ctime=$(cat $benchmark.comp | head -2 | tail -1 | xargs | cut -d' ' -f2 | cut -d'm' -f2 | sed 's/s//g')
    echo "Veri output: "$veriresult
   
