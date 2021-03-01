@@ -10,7 +10,7 @@ while read -r benchmark ; do
    { time ../../bin/vericert -DSYNTHESIS $@ --debug-hls "$benchmark".c -o "$benchmark".v ; } 2> "$benchmark".comp
    iverilog -o "$benchmark".iver -- "$benchmark".v
 
-   timeout 30s ./"$benchmark".iver > "$benchmark".tmp
+   timeout 1m ./"$benchmark".iver > "$benchmark".tmp
    if [ $? -eq 124 ]; then
       timeout=1
    else
