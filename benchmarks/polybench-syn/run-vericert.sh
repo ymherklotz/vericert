@@ -7,8 +7,9 @@ while read -r benchmark ; do
    ./"$benchmark".o > "$benchmark".clog
    cresult="$(cut -d' ' -f2 "$benchmark".clog)"
    echo "C output: $cresult"
-   { time ../../bin/vericert -DSYNTHESIS $@ --debug-hls "$benchmark".c -o "$benchmark".v ; } 2> "$benchmark".comp
+   { time ../../bin/vericert -DSYNTHESIS $@ --debug-hls "$benchmark".c -o "$benchmark".v ; vericert_result=$? ; } 2> "$benchmark".comp
    iverilog -o "$benchmark".iver -- "$benchmark".v
+   iverilog_result=$?
 
    timeout 1m ./"$benchmark".iver > "$benchmark".tmp
    if [ $? -eq 124 ]; then
@@ -23,6 +24,14 @@ while read -r benchmark ; do
    if [ -n "$timeout" ]; then
       echo "FAIL: Verilog timed out"
       result="timeout"
+   elif [ "$vericert_result" -ne 0 ]; then
+      #Undefined
+      echo "FAIL: Vericert failed"
+      result="compile error"
+   elif [ "$iverilog_result" -ne 0 ]; then
+      #Undefined
+      echo "FAIL: iverilog failed"
+      result="elaboration error"
    elif [ -z "$veriresult" ]; then
       #Undefined
       echo "FAIL: Verilog returned nothing"
