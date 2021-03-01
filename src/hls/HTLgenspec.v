@@ -481,7 +481,10 @@ Proof.
     congruence.
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.
-  (*- inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.*)
+  - apply create_state_freshreg_trans in EQ.
+    apply add_instr_freshreg_trans in EQ1.
+    apply add_instr_skip_freshreg_trans in EQ2.
+    congruence.
 Qed.
 Hint Resolve transf_instr_freshreg_trans : htlspec.
 
@@ -598,32 +601,32 @@ Proof.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
 
-    (*+ destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + inversion H2.
-      * inversion H14. constructor. congruence.
-      * apply in_map with (f := fst) in H14. contradiction.
-      *)
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + inversion H2.
-      * inversion H9.
-        replace (st_st s2) with (st_st s0) by congruence.
-        eauto with htlspec.
-      * apply in_map with (f := fst) in H9. contradiction.
+    (* + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
+    (* + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
+    (* + inversion H2. *)
+    (*   * inversion H14. constructor. congruence. *)
+    (*   * apply in_map with (f := fst) in H14. contradiction. *)
 
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + inversion H2.
-      * inversion H9.
-        replace (st_st s2) with (st_st s0) by congruence.
-        eauto with htlspec.
-      * apply in_map with (f := fst) in H9. contradiction.
+    (* + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+    (* + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+    (* + inversion H2. *)
+    (*   * inversion H9. *)
+    (*     replace (st_st s2) with (st_st s0) by congruence. *)
+    (*     eauto with htlspec. *)
+    (*   * apply in_map with (f := fst) in H9. contradiction. *)
 
-  - eapply IHl. apply EQ0. assumption.
-    destruct H2. inversion H2. subst. contradiction.
-    intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
-    destruct H2. inv H2. contradiction. assumption. assumption.
+    (* + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+    (* + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+    (* + inversion H2. *)
+    (*   * inversion H9. *)
+    (*     replace (st_st s2) with (st_st s0) by congruence. *)
+    (*     eauto with htlspec. *)
+    (*   * apply in_map with (f := fst) in H9. contradiction. *)
+
+  (* - eapply IHl. apply EQ0. assumption. *)
+  (*   destruct H2. inversion H2. subst. contradiction. *)
+  (*   intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial. *)
+  (*   destruct H2. inv H2. contradiction. assumption. assumption. *)
 Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 

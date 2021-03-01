@@ -563,12 +563,13 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       add_node_skip n (Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))*)
       error (Errors.msg "Ijumptable: Case statement not supported.")
     | Ireturn r =>
-      match r with
-      | Some r' =>
-        add_instr_skip n (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r'))))
-      | None =>
-        add_instr_skip n (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z)))))
-      end
+      do idle_state <- create_state;
+      let retval := match r with
+                    | Some r' => Vvar r'
+                    | None => Vlit (ZToValue 0%Z)
+                    end in
+      do _ <- add_instr n idle_state (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn retval)));
+      add_instr_skip idle_state (data_vstmnt (nonblock fin (Vlit (ZToValue 0%Z))))
     end
   end.
 
