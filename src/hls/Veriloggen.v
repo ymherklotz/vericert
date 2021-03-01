@@ -112,7 +112,7 @@ Section RENUMBER.
       ret (Vbinop op e1' e2')
     | Vunop op e =>
       do e' <- renumber_expr e;
-      ret (Vunop op e)
+      ret (Vunop op e')
     | Vternary e1 e2 e3 =>
       do e1' <- renumber_expr e1;
       do e2' <- renumber_expr e2;
@@ -122,7 +122,7 @@ Section RENUMBER.
       do e1' <- renumber_expr e1;
       do e2' <- renumber_expr e2;
       do r' <- renumber_reg r;
-      ret (Vrange r e1 e2)
+      ret (Vrange r e1' e2')
     end.
 
   Fixpoint renumber_stmnt (stmnt : Verilog.stmnt) :=
