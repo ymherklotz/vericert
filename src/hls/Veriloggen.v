@@ -42,27 +42,56 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
+Definition inst_ram clk stk addr d_in d_out wr_en :=
+  Valways (Vnegedge clk)
+          (Vcond (Vvar wr_en)
+                 (Vnonblock (Vvari stk (Vvar addr)) (Vvar d_in))
+                 (Vnonblock (Vvar d_out) (Vvari stk (Vvar addr)))).
+
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
-  let body :=
-      Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
-                                               (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
-                                               (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
-      :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
-      :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
-                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
-  Verilog.mkmodule m.(HTL.mod_start)
-                   m.(HTL.mod_reset)
-                   m.(HTL.mod_clk)
-                   m.(HTL.mod_finish)
-                   m.(HTL.mod_return)
-                   m.(HTL.mod_st)
-                   m.(HTL.mod_stk)
-                   m.(HTL.mod_stk_len)
-                   m.(HTL.mod_params)
-                   body
-                   m.(HTL.mod_entrypoint).
+  match m.(HTL.mod_ram) with
+  | Some (addr, d_in, d_out, wr_en) =>
+    let body :=
+        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
+                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
+                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
+                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
+                :: inst_ram m.(HTL.mod_clk) m.(HTL.mod_stk) addr d_in d_out wr_en
+                :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+                                                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
+    Verilog.mkmodule m.(HTL.mod_start)
+                     m.(HTL.mod_reset)
+                     m.(HTL.mod_clk)
+                     m.(HTL.mod_finish)
+                     m.(HTL.mod_return)
+                     m.(HTL.mod_st)
+                     m.(HTL.mod_stk)
+                     m.(HTL.mod_stk_len)
+                     m.(HTL.mod_params)
+                     body
+                     m.(HTL.mod_entrypoint)
+  | None =>
+    let body :=
+        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
+                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
+                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
+                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
+                :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+                                                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
+    Verilog.mkmodule m.(HTL.mod_start)
+                     m.(HTL.mod_reset)
+                     m.(HTL.mod_clk)
+                     m.(HTL.mod_finish)
+                     m.(HTL.mod_return)
+                     m.(HTL.mod_st)
+                     m.(HTL.mod_stk)
+                     m.(HTL.mod_stk_len)
+                     m.(HTL.mod_params)
+                     body
+                     m.(HTL.mod_entrypoint)
+  end.
 
 Definition transl_fundef := transf_fundef transl_module.
 
