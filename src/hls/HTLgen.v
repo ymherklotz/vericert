@@ -612,6 +612,7 @@ Definition transf_module (f: function) : mon HTL.module :=
            clk
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
+           None
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
     | _, _ => error (Errors.msg "More than 2^32 states.")
     end

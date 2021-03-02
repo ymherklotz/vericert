@@ -67,6 +67,7 @@ Record module: Type :=
     mod_clk : reg;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
+    mod_ram : option (reg * reg * reg * reg);
     mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
   }.
 
