@@ -30,6 +30,7 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 Require Import vericert.hls.HTL.
+Require Import vericert.hls.AssocMap.
 
 Local Open Scope positive.
 
@@ -47,26 +48,31 @@ Definition transf_stmnt_store (addr d_in d_out wr: reg) s :=
   | Vnonblock e1 (Vvari r e2) =>
     ((Vseq
         (Vnonblock (Vvar wr) (Vlit (ZToValue 0)))
-        (Vnonblock (Vvar addr) e1)), Some (LSload e1))
+        (Vnonblock (Vvar addr) e2)), Some (LSload e1))
   | s => (s, None)
   end.
 
+Definition max_pc_function (m: module) :=
+  List.fold_left Pos.max (List.map fst (PTree.elements m.(mod_controllogic))) 1.
+
 Definition transf_maps (st addr d_in d_out wr: reg)
-           (dc: PTree.t stmnt * PTree.t stmnt) i :=
-  let (d, c) := dc in
-  match PTree.get i d, PTree.get i c with
-  | Some d_s, Some c_s =>
-    match transf_stmnt_store addr d_in d_out wr d_s with
-    | (ns, Some LSstore) =>
-      (PTree.set i ns d, c)
-    | (ns, Some (LSload e)) =>
-      (PTree.set i ns
-                 (PTree.set 1000 (Vnonblock e (Vvar d_out)) d),
-       PTree.set i (Vnonblock (Vvar st) (Vlit (ZToValue 1000%Z)))
-                 (PTree.set 1000 c_s c))
-    | (_, _) => (d, c)
+           (dc: node * PTree.t stmnt * PTree.t stmnt) i :=
+  match dc with
+  | (n, d, c) =>
+    match PTree.get i d, PTree.get i c with
+    | Some d_s, Some c_s =>
+      match transf_stmnt_store addr d_in d_out wr d_s with
+      | (ns, Some LSstore) =>
+        (n, PTree.set i ns d, c)
+      | (ns, Some (LSload e)) =>
+        (n+1, PTree.set i ns
+                   (PTree.set n (Vnonblock e (Vvar d_out)) d),
+         PTree.set i (Vnonblock (Vvar st) (Vlit (posToValue n)))
+                   (PTree.set n c_s c))
+      | (_, _) => dc
+      end
+    | _, _ => dc
     end
-  | _, _ => (d, c)
   end.
 
 Lemma is_wf:
@@ -75,25 +81,35 @@ Lemma is_wf:
 Admitted.
 
 Definition transf_module (m: module): module :=
-  let (nd, nc) := fold_left (transf_maps m.(mod_st) 1 2 3 4)
-                            (map fst (PTree.elements m.(mod_datapath)))
-                            (m.(mod_datapath), m.(mod_controllogic))
-  in
-  mkmodule m.(mod_params)
-           nd
-           nc
-           m.(mod_entrypoint)
-           m.(mod_st)
-           m.(mod_stk)
-           m.(mod_stk_len)
-           m.(mod_finish)
-           m.(mod_return)
-           m.(mod_start)
-           m.(mod_reset)
-           m.(mod_clk)
-           m.(mod_scldecls)
-           m.(mod_arrdecls)
-           (is_wf _ nc nd).
+  let addr := m.(mod_clk)+1 in
+  let d_in := m.(mod_clk)+2 in
+  let d_out := m.(mod_clk)+3 in
+  let wr_en := m.(mod_clk)+4 in
+  match fold_left (transf_maps m.(mod_st) addr d_in d_out wr_en)
+                  (map fst (PTree.elements m.(mod_datapath)))
+                  (max_pc_function m + 1, m.(mod_datapath), m.(mod_controllogic))
+  with
+  | (_, nd, nc) =>
+    mkmodule m.(mod_params)
+             nd
+             nc
+             m.(mod_entrypoint)
+             m.(mod_st)
+             m.(mod_stk)
+             (2 ^ Nat.log2_up m.(mod_stk_len))%nat
+             m.(mod_finish)
+             m.(mod_return)
+             m.(mod_start)
+             m.(mod_reset)
+             m.(mod_clk)
+             (AssocMap.set wr_en (None, VScalar 32)
+              (AssocMap.set d_out (None, VScalar 32)
+               (AssocMap.set d_in (None, VScalar 32)
+                (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
+             (AssocMap.set m.(mod_stk) (None, VArray 32 (2 ^ Nat.log2_up m.(mod_stk_len)))%nat m.(mod_arrdecls))
+             (Some (addr, d_in, d_out, wr_en))
+             (is_wf _ nc nd)
+  end.
 
 Definition transf_fundef := transf_fundef transf_module.
 
