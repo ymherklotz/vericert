@@ -247,7 +247,7 @@ let pprint_module debug i n m =
         ];
     concat [ indent i; "module "; (extern_atom n);
              "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-             fold_map (pprint_module_item (i+1)) m.mod_body;
+             fold_map (pprint_module_item (i+1)) (List.rev m.mod_body);
              if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
              if debug then debug_always_verbose i m.mod_clk m.mod_st else "";
              indent i; "endmodule\n\n"
