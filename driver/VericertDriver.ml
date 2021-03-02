@@ -238,7 +238,8 @@ Processing options:
   -finline       Perform inlining of functions [on]
   -finline-functions-called-once Integrate functions only required by their
                  single caller [on]
-  -fif-conversion Perform if-conversion (generation of conditional moves) [on]
+  -fif-conversion Perform if-conversion (generation of conditional moves) [off]
+  -fram          Generate Verilog that is fit for ram inference [on]
 Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -ffpu          Use FP registers for some integer operations [on]
   -fsmall-data <n>  Set maximal size <n> for allocation in small data area
@@ -436,6 +437,7 @@ let cmdline_actions =
   @ f_opt "sse" option_ffpu (* backward compatibility *)
   @ f_opt "schedule" option_hls_schedule
   @ f_opt "if-conv" option_fif_conv
+  @ f_opt "ram" option_fram
   @ [
 (* Catch options that are not handled *)
   Prefix "-", Self (fun s ->

@@ -134,6 +134,8 @@ Extract Constant Compopts.debug =>
 
 Extract Constant HLSOpts.optim_if_conversion =>
   "fun _ -> !VericertClflags.option_fif_conv".
+Extract Constant HLSOpts.optim_ram =>
+  "fun _ -> !VericertClflags.option_fram".
 
 (* Compiler *)
 Extract Constant Compiler.print_Clight => "PrintClight.print_if".
