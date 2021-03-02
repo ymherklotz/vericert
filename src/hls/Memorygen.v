@@ -24,6 +24,7 @@ Require Import compcert.common.Values.
 Require Import compcert.lib.Floats.
 Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
+Require compcert.common.Smallstep.
 Require compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
@@ -34,24 +35,6 @@ Require Import vericert.hls.AssocMap.
 
 Local Open Scope positive.
 
-Inductive load_store :=
-| LSload : expr -> load_store
-| LSstore : load_store.
-
-Definition transf_stmnt_store (addr d_in d_out wr: reg) s :=
-  match s with
-  | Vnonblock (Vvari r e1) e2 =>
-    ((Vseq
-        (Vnonblock (Vvar wr) (Vlit (ZToValue 1)))
-        (Vseq (Vnonblock (Vvar d_in) e2)
-              (Vnonblock (Vvar addr) e1))), Some LSstore)
-  | Vnonblock e1 (Vvari r e2) =>
-    ((Vseq
-        (Vnonblock (Vvar wr) (Vlit (ZToValue 0)))
-        (Vnonblock (Vvar addr) e2)), Some (LSload e1))
-  | s => (s, None)
-  end.
-
 Definition max_pc_function (m: module) :=
   List.fold_left Pos.max (List.map fst (PTree.elements m.(mod_controllogic))) 1.
 
@@ -61,15 +44,23 @@ Definition transf_maps (st addr d_in d_out wr: reg)
   | (n, d, c) =>
     match PTree.get i d, PTree.get i c with
     | Some d_s, Some c_s =>
-      match transf_stmnt_store addr d_in d_out wr d_s with
-      | (ns, Some LSstore) =>
-        (n, PTree.set i ns d, c)
-      | (ns, Some (LSload e)) =>
-        (n+1, PTree.set i ns
-                   (PTree.set n (Vnonblock e (Vvar d_out)) d),
-         PTree.set i (Vnonblock (Vvar st) (Vlit (posToValue n)))
-                   (PTree.set n c_s c))
-      | (_, _) => dc
+      match d_s with
+      | Vnonblock (Vvari r e1) e2 =>
+        let nd := Vseq (Vnonblock (Vvar wr) (Vlit (ZToValue 1)))
+                       (Vseq (Vnonblock (Vvar d_in) e2)
+                             (Vnonblock (Vvar addr) e1))
+        in
+        (n, PTree.set i nd d, c)
+      | Vnonblock e1 (Vvari r e2) =>
+        let nd := Vseq (Vnonblock (Vvar wr) (Vlit (ZToValue 0)))
+                       (Vnonblock (Vvar addr) e2)
+        in
+        let aout := Vnonblock e1 (Vvar d_out) in
+        let redirect := Vnonblock (Vvar st) (Vlit (posToValue n)) in
+        (n+1, PTree.set i nd
+                        (PTree.set n aout d),
+         PTree.set i redirect (PTree.set n c_s c))
+      | _ => dc
       end
     | _, _ => dc
     end
@@ -77,7 +68,7 @@ Definition transf_maps (st addr d_in d_out wr: reg)
 
 Lemma is_wf:
   forall A nc nd,
-  @map_well_formed A nc /\ @map_well_formed A nd.
+@map_well_formed A nc /\ @map_well_formed A nd.
 Admitted.
 
 Definition transf_module (m: module): module :=
@@ -111,7 +102,67 @@ Definition transf_module (m: module): module :=
              (is_wf _ nc nd)
   end.
 
+Lemma fold_has_value:
+  forall st d c addr d_in d_out wr_en mst data ctrl l n dstm cstm,
+    data ! st = Some dstm ->
+    ctrl ! st = Some cstm ->
+    fold_left (transf_maps st addr d_in d_out wr_en) l
+              (mst, data, ctrl) = (n, d, c) ->
+    exists dstm' cstm', d ! st = Some dstm' /\ c ! st = Some cstm'.
+Admitted.
+
 Definition transf_fundef := transf_fundef transf_module.
 
 Definition transf_program (p : program) :=
   transform_program transf_fundef p.
+
+Inductive match_states : HTL.state -> HTL.state -> Prop :=
+| match_state :
+    forall res m st asr asa,
+      match_states (HTL.State res m st asr asa)
+                   (HTL.State res (transf_module m) st asr asa)
+| match_returnstate :
+    forall res v,
+      match_states (HTL.Returnstate res v) (HTL.Returnstate res v)
+| match_initial_call :
+    forall m,
+      match_states (HTL.Callstate nil m nil)
+      (HTL.Callstate nil (transf_module m) nil).
+Hint Constructors match_states : htlproof.
+
+Definition match_prog (p: program) (tp: program) :=
+  Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
+
+Lemma transf_program_match:
+  forall p, match_prog p (transf_program p).
+Proof.
+  intros. unfold transf_program, match_prog.
+  apply Linking.match_transform_program.
+Qed.
+
+Section CORRECTNESS.
+
+  Context (prog: program).
+
+  Let tprog := transf_program prog.
+
+  Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
+
+  Theorem transf_step_correct:
+    forall (S1 : state) t S2,
+      step ge S1 t S2 ->
+        forall R1,
+          match_states S1 R1 ->
+            exists R2, Smallstep.plus step ge R1 t R2 /\ match_states S2 R2.
+  Proof.
+    induction 1.
+    - intros. inv H11.
+      unfold transf_module.
+      econstructor.
+      econstructor.
+      eapply Smallstep.plus_one.
+      econstructor.
+      simplify.
+      all: repeat destruct_match; try assumption; simplify.
+
+End CORRECTNESS.
