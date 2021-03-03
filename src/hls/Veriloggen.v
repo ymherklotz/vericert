@@ -52,7 +52,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
   match m.(HTL.mod_ram) with
-  | Some (addr, d_in, d_out, wr_en) =>
+  | Some (mk_ram ram addr wr_en d_in d_out) =>
     let body :=
         Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
                                                   (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))

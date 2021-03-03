@@ -51,6 +51,14 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
     In p0 (map fst (Maps.PTree.elements m)) ->
     Z.pos p0 <= Integers.Int.max_unsigned.
 
+Record ram := mk_ram {
+  ram_mem: reg;
+  ram_addr: reg;
+  ram_wr_en: reg;
+  ram_d_in: reg;
+  ram_d_out: reg;
+}.
+
 Record module: Type :=
   mkmodule {
     mod_params : list reg;
@@ -67,7 +75,7 @@ Record module: Type :=
     mod_clk : reg;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
-    mod_ram : option (reg * reg * reg * reg);
+    mod_ram : option ram;
     mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
   }.
 
@@ -112,12 +120,35 @@ Inductive state : Type :=
            (m : module)
            (args : list value), state.
 
+Inductive exec_ram:
+  Verilog.reg_associations -> Verilog.arr_associations ->
+  option ram ->
+  Verilog.reg_associations -> Verilog.arr_associations ->
+  Prop :=
+| exec_ram_Some_write:
+    forall ra ar ram d_in addr,
+      (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some (ZToValue 1) ->
+      (Verilog.assoc_blocking ra)!(ram_d_in ram) = Some d_in ->
+      (Verilog.assoc_blocking ra)!(ram_addr ram) = Some addr ->
+      exec_ram ra ar (Some ram) ra
+               (Verilog.nonblock_arr (ram_mem ram) (valueToNat addr) ar d_in)
+| exec_ram_Some_load:
+    forall ra ar ram addr v_d_out,
+      (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some (ZToValue 0) ->
+      (Verilog.assoc_blocking ra)!(ram_addr ram) = Some addr ->
+      Verilog.arr_assocmap_lookup (Verilog.assoc_blocking ar) (ram_mem ram) (valueToNat addr) = Some v_d_out ->
+      exec_ram ra ar (Some ram) (Verilog.nonblock_reg (ram_d_out ram) ra v_d_out) ar
+| exec_ram_None:
+    forall r a,
+      exec_ram r a None r a.
+
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
     forall g m st sf ctrl data
       asr asa
       basr1 basa1 nasr1 nasa1
       basr2 basa2 nasr2 nasa2
+      basr3 basa3 nasr3 nasa3
       asr' asa'
       f pstval,
       asr!(mod_reset m) = Some (ZToValue 0) ->
@@ -138,8 +169,14 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         data
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
-      asr' = Verilog.merge_regs nasr2 basr2 ->
-      asa' = Verilog.merge_arrs nasa2 basa2 ->
+      exec_ram
+        (Verilog.mkassociations basr2 nasr2)
+        (Verilog.mkassociations basa2 nasa2)
+        (mod_ram m)
+        (Verilog.mkassociations basr3 nasr3)
+        (Verilog.mkassociations basa3 nasa3) ->
+      asr' = Verilog.merge_regs nasr3 basr3 ->
+      asa' = Verilog.merge_arrs nasa3 basa3 ->
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
       Z.pos pstval <= Integers.Int.max_unsigned ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')

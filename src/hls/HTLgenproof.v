@@ -1030,6 +1030,7 @@ Section CORRECTNESS.
 
   Ltac tac0 :=
     match goal with
+    | [ |- HTL.exec_ram _ _ _ _ _ ] => constructor
     | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs
     | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr
     | [ |- context[Verilog.merge_regs _ _] ] => unfold Verilog.merge_regs; crush; unfold_merge
@@ -1701,7 +1702,7 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: crush.
+      all: try constructor; crush.
 
       (** State Lookup *)
       unfold Verilog.merge_regs.
@@ -1981,7 +1982,7 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: crush.
+      all: try constructor; crush.
 
       (** State Lookup *)
       unfold Verilog.merge_regs.
@@ -2229,7 +2230,7 @@ Section CORRECTNESS.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: crush.
+      all: try constructor; crush.
 
       (** State Lookup *)
       unfold Verilog.merge_regs.
@@ -2463,7 +2464,7 @@ Section CORRECTNESS.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. apply H22. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl. econstructor. constructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -2480,7 +2481,7 @@ Section CORRECTNESS.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. apply H22. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl. econstructor. constructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -2535,7 +2536,7 @@ Section CORRECTNESS.
       econstructor; simpl; trivial.
       constructor.
 
-      constructor. constructor.
+      constructor. constructor. constructor.
 
       unfold state_st_wf in WF; big_tac; eauto.
       destruct wf as [HCTRL HDATA]. apply HCTRL.
@@ -2564,6 +2565,7 @@ Section CORRECTNESS.
       econstructor; simpl; trivial.
       constructor. constructor. constructor.
       constructor. constructor. constructor.
+      constructor.
 
       unfold state_st_wf in WF; big_tac; eauto.
 

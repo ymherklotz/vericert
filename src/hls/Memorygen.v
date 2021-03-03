@@ -32,6 +32,7 @@ Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.Array.
 
 Local Open Scope positive.
 
@@ -66,6 +67,43 @@ Definition transf_maps (st addr d_in d_out wr: reg)
     end
   end.
 
+Lemma transf_maps_wf :
+  forall st addr d_in d_out wr n d c n' d' c' i,
+  map_well_formed c /\ map_well_formed d ->
+  transf_maps st addr d_in d_out wr (n, d, c) i = (n', d', c') ->
+  map_well_formed c' /\ map_well_formed d'.
+Proof.
+  unfold map_well_formed; simplify;
+    repeat destruct_match;
+    match goal with | H: (_, _, _) = (_, _, _) |- _ => inv H end; eauto;
+      simplify.
+  apply H2.
+  exploit list_in_map_inv; eauto; intros.
+  inv H0. destruct x. inv H3. simplify.
+  replace p with (fst (p, s)) by auto.
+  apply in_map.
+  apply PTree.elements_correct.
+  apply PTree.elements_complete in H4.
+  Admitted.
+
+Definition set_mod_datapath d c wf m :=
+  mkmodule (mod_params m)
+           d
+           c
+           (mod_entrypoint m)
+           (mod_st m)
+           (mod_stk m)
+           (mod_stk_len m)
+           (mod_finish m)
+           (mod_return m)
+           (mod_start m)
+           (mod_reset m)
+           (mod_clk m)
+           (mod_scldecls m)
+           (mod_arrdecls m)
+           (mod_ram m)
+           wf.
+
 Lemma is_wf:
   forall A nc nd,
 @map_well_formed A nc /\ @map_well_formed A nd.
@@ -98,7 +136,7 @@ Definition transf_module (m: module): module :=
                (AssocMap.set d_in (None, VScalar 32)
                 (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
              (AssocMap.set m.(mod_stk) (None, VArray 32 (2 ^ Nat.log2_up m.(mod_stk_len)))%nat m.(mod_arrdecls))
-             (Some (addr, d_in, d_out, wr_en))
+             (Some (mk_ram (mod_stk m) addr wr_en d_in d_out))
              (is_wf _ nc nd)
   end.
 
@@ -116,11 +154,27 @@ Definition transf_fundef := transf_fundef transf_module.
 Definition transf_program (p : program) :=
   transform_program transf_fundef p.
 
+Inductive match_assocmaps : assocmap -> assocmap -> Prop :=
+  match_assocmap: forall rs rs',
+    (forall r v, rs!r = Some v -> rs'!r = Some v) ->
+    match_assocmaps rs rs'.
+
+Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
+  match_assocmap_arr: forall ar ar',
+    (forall s arr arr',
+      ar!s = Some arr ->
+      ar'!s = Some arr' ->
+      forall addr,
+        array_get_error addr arr = array_get_error addr arr') ->
+    match_arrs ar ar'.
+
 Inductive match_states : HTL.state -> HTL.state -> Prop :=
 | match_state :
-    forall res m st asr asa,
+    forall res m st asr asr' asa asa'
+           (ASSOC: match_assocmaps asr asr')
+           (ARRS: match_arrs asa asa'),
       match_states (HTL.State res m st asr asa)
-                   (HTL.State res (transf_module m) st asr asa)
+                   (HTL.State res (transf_module m) st asr' asa')
 | match_returnstate :
     forall res v,
       match_states (HTL.Returnstate res v) (HTL.Returnstate res v)
@@ -148,6 +202,27 @@ Section CORRECTNESS.
 
   Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
 
+  Lemma transf_maps_preserves_behaviour :
+    forall m m' s addr d_in d_out wr n n' t stk rs ar d' c' wf' i,
+      m' = set_mod_datapath d' c' wf' m ->
+      transf_maps m.(mod_st) addr d_in d_out wr (n, mod_datapath m, mod_controllogic m) i = (n', d', c') ->
+      step ge (State stk m s rs ar) t (State stk m s rs ar) ->
+      forall R1,
+        match_states (State stk m s rs ar) R1 ->
+        exists R2, step ge R1 t R2 /\ match_states (State stk m s rs ar) R2.
+  Proof.
+    Admitted.
+
+  Lemma fold_transf_maps_preserves_behaviour :
+    forall m m' s addr d_in d_out wr n' t stk rs ar d' c' wf' l rs' ar',
+      fold_left (transf_maps m.(mod_st) addr d_in d_out wr) l
+                  (max_pc_function m + 1, m.(mod_datapath), m.(mod_controllogic)) = (n', d', c') ->
+      m' = set_mod_datapath d' c' wf' m ->
+      step ge (State stk m s rs ar) t (State stk m s rs' ar') ->
+      exists R2, step ge (State stk m' s rs ar) t R2 /\ match_states (State stk m s rs' ar') R2.
+  Proof.
+    Admitted.
+
   Theorem transf_step_correct:
     forall (S1 : state) t S2,
       step ge S1 t S2 ->
@@ -155,14 +230,14 @@ Section CORRECTNESS.
           match_states S1 R1 ->
             exists R2, Smallstep.plus step ge R1 t R2 /\ match_states S2 R2.
   Proof.
+    pose proof fold_transf_maps_preserves_behaviour.
     induction 1.
-    - intros. inv H11.
-      unfold transf_module.
+    - exploit fold_transf_maps_preserves_behaviour. intros. inv H13. inv ASSOC. inv ARRS.
       econstructor.
       econstructor.
       eapply Smallstep.plus_one.
-      econstructor.
-      simplify.
-      all: repeat destruct_match; try assumption; simplify.
+      econstructor; unfold transf_module; repeat destruct_match; try solve [crush].
+      + simplify.
+
 
 End CORRECTNESS.
