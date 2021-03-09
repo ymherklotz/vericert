@@ -42,23 +42,27 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
-Definition inst_ram clk stk addr d_in d_out wr_en :=
+Definition inst_ram clk ram :=
   Valways (Vnegedge clk)
-          (Vcond (Vvar wr_en)
-                 (Vnonblock (Vvari stk (Vvar addr)) (Vvar d_in))
-                 (Vnonblock (Vvar d_out) (Vvari stk (Vvar addr)))).
+          (Vcond (Vvar (ram_en ram))
+                 (Vcond (Vvar (ram_wr_en ram))
+                        (Vnonblock (Vvari (ram_mem ram) (Vvar (ram_addr ram)))
+                                   (Vvar (ram_d_in ram)))
+                        (Vnonblock (Vvar (ram_d_out ram))
+                                   (Vvari (ram_mem ram) (Vvar (ram_addr ram)))))
+                 Vskip).
 
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
   match m.(HTL.mod_ram) with
-  | Some (mk_ram ram addr wr_en d_in d_out) =>
+  | Some ram =>
     let body :=
         Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
                                                   (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
                                                   (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
                 :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
-                :: inst_ram m.(HTL.mod_clk) m.(HTL.mod_stk) addr d_in d_out wr_en
+                :: inst_ram m.(HTL.mod_clk) ram
                 :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
     Verilog.mkmodule m.(HTL.mod_start)

@@ -53,6 +53,7 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
 
 Record ram := mk_ram {
   ram_mem: reg;
+  ram_en: reg;
   ram_addr: reg;
   ram_wr_en: reg;
   ram_d_in: reg;
@@ -125,9 +126,16 @@ Inductive exec_ram:
   option ram ->
   Verilog.reg_associations -> Verilog.arr_associations ->
   Prop :=
+| exec_ram_Some_idle:
+    forall ra ar ram,
+    (Verilog.assoc_blocking ra)!(ram_en ram) = Some (ZToValue 0) ->
+    exec_ram ra ar (Some ram) ra ar
 | exec_ram_Some_write:
-    forall ra ar ram d_in addr,
-      (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some (ZToValue 1) ->
+    forall ra ar ram d_in addr en wr_en,
+      en <> ZToValue 0 ->
+      wr_en <> ZToValue 0 ->
+      (Verilog.assoc_blocking ra)!(ram_en ram) = Some en ->
+      (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some wr_en ->
       (Verilog.assoc_blocking ra)!(ram_d_in ram) = Some d_in ->
       (Verilog.assoc_blocking ra)!(ram_addr ram) = Some addr ->
       exec_ram ra ar (Some ram) ra
@@ -170,8 +178,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
       exec_ram
-        (Verilog.mkassociations basr2 nasr2)
-        (Verilog.mkassociations basa2 nasa2)
+        (Verilog.mkassociations (Verilog.merge_regs nasr2 basr2) empty_assocmap)
+        (Verilog.mkassociations (Verilog.merge_arrs nasa2 basa2) (empty_stack m))
         (mod_ram m)
         (Verilog.mkassociations basr3 nasr3)
         (Verilog.mkassociations basa3 nasa3) ->
