@@ -76,6 +76,39 @@ Definition merge_arr (new : option arr) (old : option arr) : option arr :=
 Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :=
   AssocMap.combine merge_arr new old.
 
+Lemma merge_arr_empty':
+  forall l,
+  merge_arr (Some (arr_repeat None (length l))) (Some (make_array l)) = Some (make_array l).
+Proof.
+  induction l; auto.
+  unfold merge_arr.
+  unfold combine, make_array. simplify. rewrite H0.
+  rewrite list_repeat_cons. simplify.
+  rewrite H0; auto.
+Qed.
+
+Lemma merge_arr_empty:
+  forall v l,
+  v = Some (make_array l) ->
+  merge_arr (Some (arr_repeat None (length l))) v = v.
+Proof. intros. rewrite H. apply merge_arr_empty'. Qed.
+
+Lemma merge_arr_empty2:
+  forall v l v',
+  v = Some v' ->
+  l = arr_length v' ->
+  merge_arr (Some (arr_repeat None l)) v = v.
+Proof.
+  intros. subst. destruct v'. simplify.
+  generalize dependent arr_wf. generalize dependent arr_length.
+  induction arr_contents.
+  - simplify; subst; auto.
+  - unfold combine, make_array in *; simplify; subst.
+    rewrite list_repeat_cons; simplify.
+    specialize (IHarr_contents (Datatypes.length arr_contents) eq_refl).
+    inv IHarr_contents. rewrite H0. rewrite H0. auto.
+Qed.
+
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
   | None => None

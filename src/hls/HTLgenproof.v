@@ -1736,14 +1736,35 @@ Section CORRECTNESS.
       crush.
       unfold Verilog.merge_arrs.
 
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
+      erewrite Verilog.merge_arr_empty2.
       unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
+      setoid_rewrite H7.
+      reflexivity.
+
+      rewrite AssocMap.gcombine by reflexivity.
+      unfold Verilog.merge_arr.
+      unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       setoid_rewrite H7.
       reflexivity.
+
+      rewrite combine_length.
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      symmetry.
+      apply list_repeat_len.
+
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      rewrite H4.
+      apply list_repeat_len.
 
       rewrite combine_length.
       rewrite <- array_set_len.
@@ -1752,8 +1773,8 @@ Section CORRECTNESS.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
-      rewrite list_repeat_len.
-      rewrite H4. reflexivity.
+      rewrite H4.
+      apply list_repeat_len.
 
       remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
@@ -2015,14 +2036,35 @@ Section CORRECTNESS.
       crush.
       unfold Verilog.merge_arrs.
 
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
+      erewrite Verilog.merge_arr_empty2.
       unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
+      setoid_rewrite H7.
+      reflexivity.
+
+      rewrite AssocMap.gcombine by reflexivity.
+      unfold Verilog.merge_arr.
+      unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       setoid_rewrite H7.
       reflexivity.
+
+      rewrite combine_length.
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      symmetry.
+      apply list_repeat_len.
+
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      rewrite H4.
+      apply list_repeat_len.
 
       rewrite combine_length.
       rewrite <- array_set_len.
@@ -2031,8 +2073,8 @@ Section CORRECTNESS.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
-      rewrite list_repeat_len.
-      rewrite H4. reflexivity.
+      rewrite H4.
+      apply list_repeat_len.
 
       remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int
@@ -2264,14 +2306,35 @@ Section CORRECTNESS.
       crush.
       unfold Verilog.merge_arrs.
 
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
+      erewrite Verilog.merge_arr_empty2.
       unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
+      setoid_rewrite H7.
+      reflexivity.
+
+      rewrite AssocMap.gcombine by reflexivity.
+      unfold Verilog.merge_arr.
+      unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       setoid_rewrite H7.
       reflexivity.
+
+      rewrite combine_length.
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      symmetry.
+      apply list_repeat_len.
+
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      rewrite H4.
+      apply list_repeat_len.
 
       rewrite combine_length.
       rewrite <- array_set_len.
@@ -2280,8 +2343,8 @@ Section CORRECTNESS.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
-      rewrite list_repeat_len.
-      rewrite H4. reflexivity.
+      rewrite H4.
+      apply list_repeat_len.
 
       remember i0 as OFFSET.
       destruct (4 * ptr ==Z Integers.Ptrofs.unsigned OFFSET).
@@ -2575,6 +2638,7 @@ Section CORRECTNESS.
 
       apply HTL.step_finish.
       unfold Verilog.merge_regs.
+      unfold_merge.
       unfold_merge.
       rewrite AssocMap.gso.
       apply AssocMap.gss. simpl; lia.
