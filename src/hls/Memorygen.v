@@ -177,7 +177,8 @@ Definition transf_module (m: module): module :=
   let d_in := max_reg+3 in
   let d_out := max_reg+4 in
   let wr_en := max_reg+5 in
-  let ram := mk_ram (mod_stk m) en addr d_in d_out wr_en in
+  let new_size := (2 ^ Nat.log2_up m.(mod_stk_len))%nat in
+  let ram := mk_ram new_size (mod_stk m) en addr d_in d_out wr_en in
   match transf_code ram (mod_datapath m) (mod_controllogic m) with
   | (nd, nc) =>
     mkmodule m.(mod_params)
@@ -186,7 +187,7 @@ Definition transf_module (m: module): module :=
              m.(mod_entrypoint)
              m.(mod_st)
              m.(mod_stk)
-             (2 ^ Nat.log2_up m.(mod_stk_len))%nat
+             new_size
              m.(mod_finish)
              m.(mod_return)
              m.(mod_start)
@@ -236,6 +237,18 @@ Inductive match_states : HTL.state -> HTL.state -> Prop :=
       (HTL.Callstate nil (transf_module m) nil).
 Hint Constructors match_states : htlproof.
 
+Definition empty_stack_ram r :=
+  AssocMap.set (ram_mem r) (Array.arr_repeat None (ram_size r)) (AssocMap.empty arr).
+
+Definition empty_stack' len st :=
+  AssocMap.set st (Array.arr_repeat None len) (AssocMap.empty arr).
+
+Definition merge_reg_assocs r :=
+  Verilog.mkassociations (Verilog.merge_regs (assoc_nonblocking r) (assoc_blocking r)) empty_assocmap.
+
+Definition merge_arr_assocs st len r :=
+  Verilog.mkassociations (Verilog.merge_arrs (assoc_nonblocking r) (assoc_blocking r)) (empty_stack' len st).
+
 Inductive match_reg_assocs : reg_associations -> reg_associations -> Prop :=
   match_reg_association:
     forall rab rab' ran ran',
@@ -276,30 +289,79 @@ Definition forall_ram (P: reg -> Prop) ram :=
   /\ P (ram_d_in ram)
   /\ P (ram_d_out ram).
 
-Definition exec_all d_s c_s r rs1 ar1 rs4 ar4 :=
+Definition exec_all d_s c_s rs1 ar1 rs3 ar3 :=
+  exists f rs2 ar2,
+    stmnt_runp f rs1 ar1 d_s rs2 ar2
+    /\ stmnt_runp f rs2 ar2 c_s rs3 ar3.
+
+Definition exec_all_ram r d_s c_s rs1 ar1 rs4 ar4 :=
   exists f rs2 ar2 rs3 ar3,
     stmnt_runp f rs1 ar1 d_s rs2 ar2
     /\ stmnt_runp f rs2 ar2 c_s rs3 ar3
-    /\ exec_ram
-         (Verilog.mkassociations (Verilog.merge_regs nasr2 basr2) empty_assocmap)
-         (Verilog.mkassociations (Verilog.merge_arrs nasa2 basa2) (empty_stack m))
-         r rs4 ar4.
+    /\ exec_ram (merge_reg_assocs rs3) (merge_arr_assocs (ram_mem r) (ram_size r) ar3) (Some r) rs4 ar4.
 
-Definition behaviour_correct d c r d' c' r' :=
-  forall rs1 ar1 rs4 ar4 d_s c_s i,
+Lemma merge_reg_idempotent :
+  forall rs, merge_reg_assocs (merge_reg_assocs rs) = merge_reg_assocs rs.
+Proof. auto. Qed.
+Hint Rewrite merge_reg_idempotent : mgen.
+
+Lemma merge_arr_idempotent :
+  forall ar st len v v',
+    (assoc_nonblocking ar)!st = Some v ->
+    (assoc_blocking ar)!st = Some v' ->
+    arr_length v' = len ->
+    arr_length v = len ->
+    (assoc_blocking (merge_arr_assocs st len (merge_arr_assocs st len ar)))!st
+    = (assoc_blocking (merge_arr_assocs st len ar))!st
+    /\ (assoc_nonblocking (merge_arr_assocs st len (merge_arr_assocs st len ar)))!st
+    = (assoc_nonblocking (merge_arr_assocs st len ar))!st.
+Proof.
+  split; simplify; eauto.
+  unfold merge_arrs.
+  rewrite AssocMap.gcombine by reflexivity.
+  unfold empty_stack'.
+  rewrite AssocMap.gss.
+  setoid_rewrite merge_arr_empty2; auto.
+  rewrite AssocMap.gcombine by reflexivity.
+  unfold merge_arr, arr.
+  rewrite H. rewrite H0. auto.
+  unfold combine.
+  simplify.
+  rewrite list_combine_length.
+  rewrite (arr_wf v). rewrite (arr_wf v').
+  lia.
+Qed.
+
+Definition behaviour_correct d c d' c' r' :=
+  forall rs1 ar1 rs2 ar2 d_s c_s i,
     PTree.get i d = Some d_s ->
     PTree.get i c = Some c_s ->
-    exec_all d_s c_s r rs1 ar1 rs4 ar4 ->
-    exists d_s' c_s' trs4 tar4,
+    exec_all d_s c_s rs1 ar1 rs2 ar2 ->
+    exists d_s' c_s' trs2 tar2,
       PTree.get i d' = Some d_s'
       /\ PTree.get i c' = Some c_s'
-      /\ exec_all d_s' c_s' r' rs1 ar1 trs4 tar4
-      /\ match_reg_assocs rs4 trs4
-      /\ match_arr_assocs ar4 tar4.
+      /\ exec_all_ram r' d_s' c_s' rs1 ar1 trs2 tar2
+      /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+      /\ match_arr_assocs (merge_arr_assocs ar2 r') (merge_arr_assocs tar2 r').
 
 Lemma behaviour_correct_equiv :
-  forall d c r, behaviour_correct d c r d c r.
-Proof. intros; unfold behaviour_correct; repeat (eexists; mgen_crush). Qed.
+  forall d c r,
+    forall_ram (fun x => max_stmnt_tree d < x /\ max_stmnt_tree c < x) r ->
+    behaviour_correct d c d c r.
+Proof.
+  intros; unfold behaviour_correct.
+  intros. exists d_s. exists c_s.
+  unfold exec_all in *. inv H2. inv H3. inv H2. inv H3.
+  econstructor. econstructor.
+  simplify; auto.
+  unfold exec_all_ram.
+  exists x. exists x0. exists x1. econstructor. econstructor.
+  simplify; eauto.
+  econstructor.
+  unfold find_assocmap. unfold AssocMapExt.get_default.
+  assert ((assoc_blocking (merge_reg_assocs rs2)) ! (ram_en r) = None) by admit.
+  destruct_match; try discriminate; auto.
+Qed.
 Hint Resolve behaviour_correct_equiv : mgen.
 
 Lemma stmnt_runp_gtassoc :

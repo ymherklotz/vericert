@@ -52,6 +52,7 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
     Z.pos p0 <= Integers.Int.max_unsigned.
 
 Record ram := mk_ram {
+  ram_size: nat;
   ram_mem: reg;
   ram_en: reg;
   ram_addr: reg;
@@ -128,8 +129,8 @@ Inductive exec_ram:
   Prop :=
 | exec_ram_Some_idle:
     forall ra ar ram,
-    (Verilog.assoc_blocking ra)!(ram_en ram) = Some (ZToValue 0) ->
-    exec_ram ra ar (Some ram) ra ar
+      (Verilog.assoc_blocking ra)#(ram_en ram, 32) = ZToValue 0 ->
+      exec_ram ra ar (Some ram) ra ar
 | exec_ram_Some_write:
     forall ra ar ram d_in addr en wr_en,
       en <> ZToValue 0 ->
@@ -141,10 +142,13 @@ Inductive exec_ram:
       exec_ram ra ar (Some ram) ra
                (Verilog.nonblock_arr (ram_mem ram) (valueToNat addr) ar d_in)
 | exec_ram_Some_load:
-    forall ra ar ram addr v_d_out,
+    forall ra ar ram addr v_d_out en,
+      en <> ZToValue 0 ->
+      (Verilog.assoc_blocking ra)!(ram_en ram) = Some en ->
       (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some (ZToValue 0) ->
       (Verilog.assoc_blocking ra)!(ram_addr ram) = Some addr ->
-      Verilog.arr_assocmap_lookup (Verilog.assoc_blocking ar) (ram_mem ram) (valueToNat addr) = Some v_d_out ->
+      Verilog.arr_assocmap_lookup (Verilog.assoc_blocking ar)
+                                  (ram_mem ram) (valueToNat addr) = Some v_d_out ->
       exec_ram ra ar (Some ram) (Verilog.nonblock_reg (ram_d_out ram) ra v_d_out) ar
 | exec_ram_None:
     forall r a,
