@@ -342,7 +342,8 @@ Definition behaviour_correct d c d' c' r' :=
       /\ PTree.get i c' = Some c_s'
       /\ exec_all_ram r' d_s' c_s' rs1 ar1 trs2 tar2
       /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
-      /\ match_arr_assocs (merge_arr_assocs ar2 r') (merge_arr_assocs tar2 r').
+      /\ match_arr_assocs (merge_arr_assocs (ram_mem r') (ram_size r') ar2)
+                          (merge_arr_assocs (ram_mem r') (ram_size r') tar2).
 
 Lemma behaviour_correct_equiv :
   forall d c r,
@@ -361,6 +362,16 @@ Proof.
   unfold find_assocmap. unfold AssocMapExt.get_default.
   assert ((assoc_blocking (merge_reg_assocs rs2)) ! (ram_en r) = None) by admit.
   destruct_match; try discriminate; auto.
+  constructor; constructor; auto.
+  constructor; constructor; crush.
+  assert (Some arr = Some arr').
+  {
+    rewrite <- H3. rewrite <- H5.
+    symmetry.
+    assert (s = (ram_mem r)) by admit; subst.
+    eapply merge_arr_idempotent.
+  }
+  subst; auto.
 Qed.
 Hint Resolve behaviour_correct_equiv : mgen.
 
