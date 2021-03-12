@@ -97,6 +97,17 @@ Module AssocMapExt.
     Qed.
     Hint Resolve merge_correct_2 : assocmap.
 
+    Lemma merge_correct_3 :
+      forall am bm k,
+      get k am = None ->
+      get k bm = None ->
+      get k (merge am bm) = None.
+    Proof.
+      induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
+        try rewrite gempty in H; try discriminate; try assumption; auto.
+    Qed.
+    Hint Resolve merge_correct_3 : assocmap.
+
     Definition merge_fold (am bm : t A) : t A :=
       fold_right (fun p a => set (fst p) (snd p) a) bm (elements am).
 

@@ -84,13 +84,13 @@ Definition max_stmnt_tree t :=
 Definition max_reg_module m :=
   Pos.max (max_list (mod_params m))
    (Pos.max (max_stmnt_tree (mod_datapath m))
-     (Pos.max (max_stmnt_tree (mod_controllogic m))
-       (Pos.max (mod_st m)
-         (Pos.max (mod_stk m)
-           (Pos.max (mod_finish m)
-             (Pos.max (mod_return m)
-               (Pos.max (mod_start m)
-                 (Pos.max (mod_reset m) (mod_clk m))))))))).
+    (Pos.max (max_stmnt_tree (mod_controllogic m))
+     (Pos.max (mod_st m)
+      (Pos.max (mod_stk m)
+       (Pos.max (mod_finish m)
+        (Pos.max (mod_return m)
+         (Pos.max (mod_start m)
+          (Pos.max (mod_reset m) (mod_clk m))))))))).
 
 Definition transf_maps ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
   match dc with
@@ -120,9 +120,9 @@ Definition transf_maps ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
 
 Lemma transf_maps_wf :
   forall ram n d c n' d' c' i,
-  map_well_formed c /\ map_well_formed d ->
-  transf_maps ram i (n, d, c) = (n', d', c') ->
-  map_well_formed c' /\ map_well_formed d'.
+    map_well_formed c /\ map_well_formed d ->
+    transf_maps ram i (n, d, c) = (n', d', c') ->
+    map_well_formed c' /\ map_well_formed d'.
 Proof.
   unfold map_well_formed; simplify;
     repeat destruct_match;
@@ -135,7 +135,7 @@ Proof.
   apply in_map.
   apply PTree.elements_correct.
   apply PTree.elements_complete in H4.
-  Abort.
+Abort.
 
 Definition set_mod_datapath d c wf m :=
   mkmodule (mod_params m)
@@ -157,7 +157,7 @@ Definition set_mod_datapath d c wf m :=
 
 Lemma is_wf:
   forall A nc nd,
-@map_well_formed A nc /\ @map_well_formed A nd.
+    @map_well_formed A nc /\ @map_well_formed A nd.
 Admitted.
 
 Definition max_pc {A: Type} (m: PTree.t A) :=
@@ -182,24 +182,24 @@ Definition transf_module (m: module): module :=
   match transf_code ram (mod_datapath m) (mod_controllogic m) with
   | (nd, nc) =>
     mkmodule m.(mod_params)
-             nd
-             nc
-             m.(mod_entrypoint)
-             m.(mod_st)
-             m.(mod_stk)
-             new_size
-             m.(mod_finish)
-             m.(mod_return)
-             m.(mod_start)
-             m.(mod_reset)
-             m.(mod_clk)
-             (AssocMap.set wr_en (None, VScalar 32)
-              (AssocMap.set d_out (None, VScalar 32)
-               (AssocMap.set d_in (None, VScalar 32)
-                (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
-             (AssocMap.set m.(mod_stk) (None, VArray 32 (2 ^ Nat.log2_up m.(mod_stk_len)))%nat m.(mod_arrdecls))
-             (Some ram)
-             (is_wf _ nc nd)
+                 nd
+                 nc
+                 (mod_entrypoint m)
+                 (mod_st m)
+                 (mod_stk m)
+                 (mod_stk_len m)
+                 (mod_finish m)
+                 (mod_return m)
+                 (mod_start m)
+                 (mod_reset m)
+                 (mod_clk m)
+                 (AssocMap.set wr_en (None, VScalar 32)
+                  (AssocMap.set d_out (None, VScalar 32)
+                   (AssocMap.set d_in (None, VScalar 32)
+                    (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
+                     (AssocMap.set m.(mod_stk) (None, VArray 32 new_size)%nat m.(mod_arrdecls))
+                 (Some ram)
+                 (is_wf _ nc nd)
   end.
 
 Definition transf_fundef := transf_fundef transf_module.
@@ -215,26 +215,36 @@ Inductive match_assocmaps : assocmap -> assocmap -> Prop :=
 Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
   match_assocmap_arr: forall ar ar',
     (forall s arr arr',
-      ar!s = Some arr ->
-      ar'!s = Some arr' ->
-      forall addr,
-        array_get_error addr arr = array_get_error addr arr') ->
+        ar!s = Some arr ->
+        ar'!s = Some arr' ->
+        forall addr,
+          array_get_error addr arr = array_get_error addr arr') ->
     match_arrs ar ar'.
 
-Inductive match_states : HTL.state -> HTL.state -> Prop :=
+Inductive match_stackframes : stackframe -> stackframe -> Prop :=
+  match_stackframe_intro :
+    forall r m pc asr asa asr' asa',
+      match_assocmaps asr asr' ->
+      match_arrs asa asa' ->
+      match_stackframes (Stackframe r m pc asr asa)
+                        (Stackframe r (transf_module m) pc asr' asa').
+
+Inductive match_states : state -> state -> Prop :=
 | match_state :
-    forall res m st asr asr' asa asa'
+    forall res res' m st asr asr' asa asa'
            (ASSOC: match_assocmaps asr asr')
-           (ARRS: match_arrs asa asa'),
-      match_states (HTL.State res m st asr asa)
-                   (HTL.State res (transf_module m) st asr' asa')
+           (ARRS: match_arrs asa asa')
+           (STACKS: list_forall2 match_stackframes res res'),
+      match_states (State res m st asr asa)
+                   (State res' (transf_module m) st asr' asa')
 | match_returnstate :
-    forall res v,
-      match_states (HTL.Returnstate res v) (HTL.Returnstate res v)
+    forall res res' i
+           (STACKS: list_forall2 match_stackframes res res'),
+      match_states (Returnstate res i) (Returnstate res' i)
 | match_initial_call :
     forall m,
-      match_states (HTL.Callstate nil m nil)
-      (HTL.Callstate nil (transf_module m) nil).
+      match_states (Callstate nil m nil)
+                   (Callstate nil (transf_module m) nil).
 Hint Constructors match_states : htlproof.
 
 Definition empty_stack_ram r :=
@@ -314,7 +324,7 @@ Lemma merge_arr_idempotent :
     (assoc_blocking (merge_arr_assocs st len (merge_arr_assocs st len ar)))!st
     = (assoc_blocking (merge_arr_assocs st len ar))!st
     /\ (assoc_nonblocking (merge_arr_assocs st len (merge_arr_assocs st len ar)))!st
-    = (assoc_nonblocking (merge_arr_assocs st len ar))!st.
+       = (assoc_nonblocking (merge_arr_assocs st len ar))!st.
 Proof.
   split; simplify; eauto.
   unfold merge_arrs.
@@ -332,18 +342,26 @@ Proof.
   lia.
 Qed.
 
-Definition behaviour_correct d c d' c' r' :=
-  forall rs1 ar1 rs2 ar2 d_s c_s i,
+Definition ram_present {A: Type} ar r v v' :=
+  (assoc_nonblocking ar)!(ram_mem r) = Some v
+  /\ @arr_length A v = ram_size r
+  /\ (assoc_blocking ar)!(ram_mem r) = Some v'
+  /\ arr_length v' = ram_size r.
+
+Definition behaviour_correct d c d' c' r :=
+  forall rs1 ar1 rs2 ar2 d_s c_s i v v',
     PTree.get i d = Some d_s ->
     PTree.get i c = Some c_s ->
+    ram_present ar1 r v v' ->
+    ram_present ar2 r v v' ->
     exec_all d_s c_s rs1 ar1 rs2 ar2 ->
     exists d_s' c_s' trs2 tar2,
       PTree.get i d' = Some d_s'
       /\ PTree.get i c' = Some c_s'
-      /\ exec_all_ram r' d_s' c_s' rs1 ar1 trs2 tar2
+      /\ exec_all_ram r d_s' c_s' rs1 ar1 trs2 tar2
       /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
-      /\ match_arr_assocs (merge_arr_assocs (ram_mem r') (ram_size r') ar2)
-                          (merge_arr_assocs (ram_mem r') (ram_size r') tar2).
+      /\ match_arr_assocs (merge_arr_assocs (ram_mem r) (ram_size r) ar2)
+                          (merge_arr_assocs (ram_mem r) (ram_size r) tar2).
 
 Lemma behaviour_correct_equiv :
   forall d c r,
@@ -352,7 +370,7 @@ Lemma behaviour_correct_equiv :
 Proof.
   intros; unfold behaviour_correct.
   intros. exists d_s. exists c_s.
-  unfold exec_all in *. inv H2. inv H3. inv H2. inv H3.
+  unfold exec_all in *. inv H3. inv H4. inv H3. inv H4.
   econstructor. econstructor.
   simplify; auto.
   unfold exec_all_ram.
@@ -366,13 +384,16 @@ Proof.
   constructor; constructor; crush.
   assert (Some arr = Some arr').
   {
-    rewrite <- H3. rewrite <- H5.
+    rewrite <- H8. rewrite <- H10.
     symmetry.
     assert (s = (ram_mem r)) by admit; subst.
     eapply merge_arr_idempotent.
+    unfold ram_present in *.
+    simplify.
+    all: eauto.
   }
-  subst; auto.
-Qed.
+  inv H11; auto.
+Admitted.
 Hint Resolve behaviour_correct_equiv : mgen.
 
 Lemma stmnt_runp_gtassoc :
@@ -386,7 +407,7 @@ Lemma stmnt_runp_gtassoc :
         /\ match_reg_assocs rs2 rs2'
         /\ (assoc_nonblocking rs2')!p = Some v.
 Proof.
-  Admitted.
+Abort.
 (*  induction 1; simplify.
   - repeat econstructor. destruct (nonblock_reg p ar v) eqn:?; destruct ar. simplify.
     constructor. inv Heqa. mgen_crush.
@@ -411,72 +432,44 @@ Lemma transf_not_changed :
 Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Qed.
 
 Lemma transf_store :
-  forall ram n d c i c_s r e1 e2,
+  forall ram n d c i c_s r e1 e2 rs1 ar1 rs2 ar2,
     d!i = Some (Vnonblock (Vvari r e1) e2) ->
     c!i = Some c_s ->
-    exists n' d' c' d_s' c_s',
+    exec_all (Vnonblock (Vvari r e1) e2) c_s rs1 ar1 rs2 ar2 ->
+    exists n' d' c' d_s' c_s' trs2 tar2,
       transf_maps ram i (n, d, c) = (n', d', c')
-      /\ d'!i = d_s'
-      /\ c'!i = c_s'
-      /\ exec_all d_s' c_s'.
+      /\ d'!i = Some d_s'
+      /\ c'!i = Some c_s'
+      /\ exec_all_ram ram d_s' c_s' rs1 ar1 trs2 tar2
+      /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+      /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
+                          (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
 Proof.
-  unfold transf_maps; intros; do 3 econstructor; repeat destruct_match; mgen_crush.
-  unfold behaviour_correct. simplify.
-  destruct (Pos.eq_dec i i0). subst.
-    unfold exec_all in *.
-  inv H1. inv H2. inv H1. inv H2. inv H1. inv H2. inv H3. inv H4.
-  rewrite Heqo in H.
-  rewrite Heqo0 in H0. inv H. inv H0.
-  inv H1.
-  simplify.
-  do 4 econstructor.
-  econstructor.
-  apply PTree.gss.
-  econstructor.
-  eauto.
-  split.
-  do 5 econstructor.
-  split. repeat econstructor.
-  simplify. eauto. simplify.
-  inv H6.
-  split.
-Qed.
+Admitted.
 
 Lemma transf_load :
-  forall stk addr d_in d_out wr_en n d c d' c' i c_s r e1 e2 aout nd redirect,
+  forall n d c i c_s r e1 e2 ar1 rs1 ar2 rs2 ram,
     (forall e2 r, e1 <> Vvari r e2) ->
     d!i = Some (Vnonblock e1 (Vvari r e2)) ->
     c!i = Some c_s ->
     d!n = None ->
     c!n = None ->
-    nd = Vseq (Vnonblock (Vvar wr_en) (Vlit (ZToValue 0)))
-              (Vnonblock (Vvar addr) e2) ->
-    aout = Vnonblock e1 (Vvar d_out) ->
-    redirect = Vnonblock (Vvar stk) (Vlit (posToValue n)) ->
-    d' = PTree.set i nd (PTree.set n aout d) ->
-    c' = PTree.set i redirect (PTree.set n c_s c) ->
-    (transf_maps stk addr d_in d_out wr_en i (n, d, c) = (n+1, d', c')
-     ).
-Proof. unfold transf_maps; intros; repeat destruct_match; crush. Qed.
+    exists n' d' c' d_s' c_s' trs2 tar2,
+      transf_maps ram i (n, d, c) = (n', d', c')
+      /\ d'!i = Some d_s'
+      /\ c'!i = Some c_s'
+      /\ exec_all_ram ram d_s' c_s' rs1 ar1 trs2 tar2
+      /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+      /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
+                          (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
+Proof.
+Admitted.
 
 Lemma transf_all :
-  forall stk addr d_in d_out wr_en d c d' c',
-    transf_code stk addr d_in d_out wr_en d c = (d', c') ->
-    behaviour_correct d c d' c' (Some (mk_ram stk addr wr_en d_in d_out)).
-Proof.
-
-Lemma transf_code_correct:
-  forall stk addr d_in d_out wr_en d c d' c',
-    transf_code stk addr d_in d_out wr_en d c = (d', c') ->
-    (forall i d_s c_s,
-        d!i = Some d_s ->
-        c!i = Some c_s ->
-        tr_code stk addr d_in d_out wr_en d c d' c' i).
-Proof.
-  simplify.
-  unfold transf_code in H.
-  destruct_match. destruct_match. inv H.
-  econstructor; eauto.
+  forall d c d' c' ram,
+    transf_code ram d c = (d', c') ->
+    behaviour_correct d c d' c' ram.
+Proof. Abort.
 
 Definition match_prog (p: program) (tp: program) :=
   Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
@@ -490,10 +483,28 @@ Qed.
 
 Lemma exec_all_Vskip :
   forall rs ar,
-    exec_all Vskip Vskip None rs ar rs ar.
+    exec_all Vskip Vskip rs ar rs ar.
 Proof.
   unfold exec_all.
   intros. repeat econstructor.
+  Unshelve. unfold fext. exact tt.
+Qed.
+
+Lemma exec_all_ram_Vskip :
+  forall ram rs ar,
+    (assoc_blocking rs)!(ram_en ram) = None ->
+    (assoc_nonblocking rs)!(ram_en ram) = None ->
+    exec_all_ram ram Vskip Vskip rs ar (merge_reg_assocs rs)
+                 (merge_arr_assocs (ram_mem ram) (ram_size ram) ar).
+Proof.
+  unfold exec_all_ram.
+  intros. repeat econstructor.
+  unfold merge_reg_assocs.
+  unfold merge_regs.
+  unfold find_assocmap.
+  unfold AssocMapExt.get_default.
+  simplify.
+  rewrite AssocMapExt.merge_correct_3; auto.
   Unshelve. unfold fext. exact tt.
 Qed.
 
@@ -517,21 +528,17 @@ Proof.
 Qed.
 
 Lemma transf_maps_correct:
-  forall st addr d_in d_out wr_en n d c n' d' c' i,
-    transf_maps st addr d_in d_out wr_en i (n, d, c) = (n', d', c') ->
-    behaviour_correct d c d' c' (Some (mk_ram st addr wr_en d_in d_out)).
-Proof.
-  Admitted.
-
-
-
+  forall ram n d c n' d' c' i,
+    transf_maps ram i (n, d, c) = (n', d', c') ->
+    behaviour_correct d c d' c' ram.
+Proof. Abort.
 
 Lemma transf_maps_correct2:
-  forall l st addr d_in d_out wr_en n d c n' d' c',
-    fold_right (transf_maps st addr d_in d_out wr_en) (n, d, c) l = (n', d', c') ->
-    behaviour_correct d c d' c' (Some (mk_ram st addr wr_en d_in d_out)).
-Proof.
-  induction l.
+  forall l ram n d c n' d' c',
+    fold_right (transf_maps ram) (n, d, c) l = (n', d', c') ->
+    behaviour_correct d c d' c' ram.
+Proof. Abort.
+(*  induction l.
   - intros. simpl in *. inv H. mgen_crush.
   - intros. simpl in *.
     destruct (fold_right (transf_maps st addr d_in d_out wr_en) (n, d, c) l) eqn:?.
@@ -539,9 +546,9 @@ Proof.
     eapply behaviour_correct_trans.
     eapply transf_maps_correct.
     apply H. eapply IHl. apply Heqp.
-Qed.
+Qed.*)
 
-Lemma transf_maps_preserves_behaviour :
+(*Lemma transf_maps_preserves_behaviour :
   forall ge m m' s addr d_in d_out wr_en n n' t stk rs ar d' c' wf' i,
     m' = mkmodule (mod_params m)
                   d'
@@ -556,24 +563,23 @@ Lemma transf_maps_preserves_behaviour :
                   (mod_reset m)
                   (mod_clk m)
                   (AssocMap.set wr_en (None, VScalar 32)
-                   (AssocMap.set d_out (None, VScalar 32)
-                    (AssocMap.set d_in (None, VScalar 32)
-                     (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
+                                (AssocMap.set d_out (None, VScalar 32)
+                                              (AssocMap.set d_in (None, VScalar 32)
+                                                            (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
                   (AssocMap.set (mod_stk m) (None, VArray 32 (2 ^ Nat.log2_up m.(mod_stk_len)))%nat m.(mod_arrdecls))
-                  (Some (mk_ram (mod_stk m) addr wr_en d_in d_out))
+                  (Some (mk_ram (mod_stk_len m) (mod_stk m) addr wr_en d_in d_out))
                   wf' ->
     transf_maps m.(mod_st) addr d_in d_out wr_en i (n, mod_datapath m, mod_controllogic m) = (n', d', c') ->
     step ge (State stk m s rs ar) t (State stk m s rs ar) ->
-      forall R1,
-        match_states (State stk m s rs ar) R1 ->
-        exists R2, step ge R1 t R2 /\ match_states (State stk m s rs ar) R2.
-Proof.
-Admitted.
+    forall R1,
+      match_states (State stk m s rs ar) R1 ->
+      exists R2, step ge R1 t R2 /\ match_states (State stk m s rs ar) R2.
+Proof. Abort.*)
 
-Lemma fold_transf_maps_preserves_behaviour :
+(*Lemma fold_transf_maps_preserves_behaviour :
   forall ge m m' s addr d_in d_out wr_en n' t stk rs ar d' c' wf' l rs' ar' trs tar,
     fold_right (transf_maps m.(mod_st) addr d_in d_out wr_en)
-              (max_pc_function m + 1, m.(mod_datapath), m.(mod_controllogic)) l = (n', d', c') ->
+               (max_pc_function m + 1, m.(mod_datapath), m.(mod_controllogic)) l = (n', d', c') ->
     m' = mkmodule (mod_params m)
                   d'
                   c'
@@ -587,9 +593,9 @@ Lemma fold_transf_maps_preserves_behaviour :
                   (mod_reset m)
                   (mod_clk m)
                   (AssocMap.set wr_en (None, VScalar 32)
-                   (AssocMap.set d_out (None, VScalar 32)
-                    (AssocMap.set d_in (None, VScalar 32)
-                     (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
+                                (AssocMap.set d_out (None, VScalar 32)
+                                              (AssocMap.set d_in (None, VScalar 32)
+                                                            (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
                   (AssocMap.set (mod_stk m) (None, VArray 32 (2 ^ Nat.log2_up m.(mod_stk_len)))%nat m.(mod_arrdecls))
                   (Some (mk_ram (mod_stk m) addr wr_en d_in d_out))
                   wf' ->
@@ -600,9 +606,9 @@ Lemma fold_transf_maps_preserves_behaviour :
                       /\ match_arrs ar' tar'
                       /\ match_assocmaps rs' trs'.
 Proof.
-Admitted.
+Admitted.*)
 
-Lemma fold_transf_maps_preserves_behaviour2 :
+(*Lemma fold_transf_maps_preserves_behaviour2 :
   forall ge m m' s t stk rs ar rs' ar' trs tar s',
     transf_module m = m' ->
     match_arrs ar tar ->
@@ -614,9 +620,9 @@ Lemma fold_transf_maps_preserves_behaviour2 :
 Proof.
   intros.
   unfold transf_module in *. destruct_match. destruct_match. apply transf_maps_correct2 in Heqp. inv H2.
-  unfold behaviour_correct in *. eexists. eexists. econstructor. econstructor; simplify; eauto.
+  unfold behaviour_correct in *. eexists. eexists. econstructor. econstructor; simplify; eauto.*)
 
-Lemma add_stack_len_no_effect :
+(*Lemma add_stack_len_no_effect :
   forall ge m m' stk s rs ar t wr_en d_out d_in addr,
     m' = mkmodule (mod_params m)
                   (mod_datapath m)
@@ -631,15 +637,15 @@ Lemma add_stack_len_no_effect :
                   (mod_reset m)
                   (mod_clk m)
                   (AssocMap.set wr_en (None, VScalar 32)
-                   (AssocMap.set d_out (None, VScalar 32)
-                    (AssocMap.set d_in (None, VScalar 32)
-                     (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
+                                (AssocMap.set d_out (None, VScalar 32)
+                                              (AssocMap.set d_in (None, VScalar 32)
+                                                            (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
                   (AssocMap.set m.(mod_stk) (None, VArray 32 (2 ^ Nat.log2_up m.(mod_stk_len)))%nat m.(mod_arrdecls))
                   (mod_ram m)
                   (mod_wf m) ->
     step ge (State stk m s rs ar) t (State stk m s rs ar) ->
     step ge (State stk m' s rs ar) t (State stk m' s rs ar).
-  Admitted.
+Admitted.*)
 
 Section CORRECTNESS.
 
@@ -682,25 +688,42 @@ Section CORRECTNESS.
   Theorem transf_step_correct:
     forall (S1 : state) t S2,
       step ge S1 t S2 ->
-        forall R1,
-          match_states S1 R1 ->
-            exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
+      forall R1,
+        match_states S1 R1 ->
+        exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1.
     - intros. inv H12. inv ASSOC. inv ARRS.
       repeat destruct_match; try solve [crush].
       simplify.
-      exploit fold_transf_maps_preserves_behaviour2.
-      eauto. eauto. econstructor. eauto. econstructor. eauto. econstructor; eauto.
-      intros.
-      inv H12. inv H13.
-      simplify.
-      econstructor.
-      econstructor.
-      eapply Smallstep.plus_one.
-      eapply H13.
-      econstructor; eauto.
+      admit.
     - intros. inv H1. inv ASSOC. inv ARRS.
-      repeat econstructor; eauto.
+      econstructor. econstructor. apply Smallstep.plus_one.
+      apply step_finish; unfold transf_module; destruct_match; crush; eauto.
+      constructor. auto.
+    - intros. inv H.
+      econstructor. econstructor. apply Smallstep.plus_one. econstructor.
+      replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
+      replace (mod_reset (transf_module m)) with (mod_reset m).
+      replace (mod_finish (transf_module m)) with (mod_finish m).
+      replace (empty_stack (transf_module m)) with (empty_stack m).
+      replace (mod_params (transf_module m)) with (mod_params m).
+      replace (mod_st (transf_module m)) with (mod_st m).
+      econstructor; mgen_crush.
+      all: try solve [unfold transf_module; destruct_match; crush].
+      apply list_forall2_nil.
+    - simplify. inv H0. inv STACKS. destruct b1. inv H1.
+      econstructor. econstructor. apply Smallstep.plus_one.
+      econstructor. unfold transf_module. destruct_match. simplify. eauto.
+      econstructor; auto. econstructor. intros. inv H2.
+      destruct (Pos.eq_dec r res); subst.
+      rewrite AssocMap.gss.
+      rewrite AssocMap.gss in H. auto.
+      rewrite AssocMap.gso; auto. rewrite AssocMap.gso in H; auto.
+      destruct (Pos.eq_dec r (mod_st m)); subst.
+      rewrite AssocMap.gss.
+      rewrite AssocMap.gss in H. auto.
+      rewrite AssocMap.gso; auto. rewrite AssocMap.gso in H; auto.
+  Admitted.
 
 End CORRECTNESS.
