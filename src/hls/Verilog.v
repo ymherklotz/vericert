@@ -17,22 +17,28 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import
-  Structures.OrderedTypeEx
-  FSets.FMapPositive
-  Program.Basics
-  PeanoNat
-  ZArith
-  Lists.List
-  Program.
+Require Import Coq.Structures.OrderedTypeEx.
+Require Import Coq.FSets.FMapPositive.
+Require Import Coq.Program.Basics.
+Require Import Coq.Arith.PeanoNat.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.Lists.List.
+Require Import Coq.Program.Program.
+Require Import Coq.micromega.Lia.
 
-Require Import Lia.
+Require compcert.common.Events.
+Require Import compcert.lib.Integers.
+Require Import compcert.common.Errors.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Globalenvs.
+
+Require Import vericert.common.Vericertlib.
+Require Import vericert.common.Show.
+Require Import vericert.hls.ValueInt.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.Array.
 
 Import ListNotations.
-
-From vericert Require Import Vericertlib Show ValueInt AssocMap Array.
-From compcert Require Events.
-From compcert Require Import Integers Errors Smallstep Globalenvs.
 
 Local Open Scope assocmap.
 
