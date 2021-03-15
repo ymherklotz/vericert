@@ -92,24 +92,27 @@ Definition max_reg_module m :=
          (Pos.max (mod_start m)
           (Pos.max (mod_reset m) (mod_clk m))))))))).
 
-Definition transf_maps ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
+Definition transf_maps state ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
   match dc with
   | (n, d, c) =>
     match PTree.get i d, PTree.get i c with
     | Some d_s, Some c_s =>
       match d_s with
       | Vnonblock (Vvari r e1) e2 =>
-        let nd := Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+        let nd := Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                    (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
                        (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
-                             (Vnonblock (Vvar (ram_addr ram)) e1))
+                             (Vnonblock (Vvar (ram_addr ram)) e1)))
         in
         (n, PTree.set i nd d, c)
       | Vnonblock e1 (Vvari r e2) =>
-        let nd := Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
-                       (Vnonblock (Vvar (ram_addr ram)) e2)
+        let nd :=
+            Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                 (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                       (Vnonblock (Vvar (ram_addr ram)) e2))
         in
         let aout := Vnonblock e1 (Vvar (ram_d_out ram)) in
-        let redirect := Vnonblock (Vvar (ram_mem ram)) (Vlit (posToValue n)) in
+        let redirect := Vnonblock (Vvar state) (Vlit (posToValue n)) in
         (n+1, PTree.set i nd (PTree.set n aout d),
          PTree.set i redirect (PTree.set n c_s c))
       | _ => dc
@@ -119,9 +122,9 @@ Definition transf_maps ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
   end.
 
 Lemma transf_maps_wf :
-  forall ram n d c n' d' c' i,
+  forall state ram n d c n' d' c' i,
     map_well_formed c /\ map_well_formed d ->
-    transf_maps ram i (n, d, c) = (n', d', c') ->
+    transf_maps state ram i (n, d, c) = (n', d', c') ->
     map_well_formed c' /\ map_well_formed d'.
 Proof.
   unfold map_well_formed; simplify;
@@ -163,8 +166,8 @@ Admitted.
 Definition max_pc {A: Type} (m: PTree.t A) :=
   fold_right Pos.max 1%positive (map fst (PTree.elements m)).
 
-Definition transf_code ram d c :=
-  match fold_right (transf_maps ram)
+Definition transf_code state ram d c :=
+  match fold_right (transf_maps state ram)
                    (max_pc c + 1, d, c)
                    (map fst (PTree.elements d)) with
   | (_, d', c') => (d', c')
@@ -179,7 +182,7 @@ Definition transf_module (m: module): module :=
   let wr_en := max_reg+5 in
   let new_size := (2 ^ Nat.log2_up m.(mod_stk_len))%nat in
   let ram := mk_ram new_size (mod_stk m) en addr d_in d_out wr_en in
-  match transf_code ram (mod_datapath m) (mod_controllogic m) with
+  match transf_code (mod_st m) ram (mod_datapath m) (mod_controllogic m) with
   | (nd, nc) =>
     mkmodule m.(mod_params)
                  nd
@@ -193,11 +196,12 @@ Definition transf_module (m: module): module :=
                  (mod_start m)
                  (mod_reset m)
                  (mod_clk m)
-                 (AssocMap.set wr_en (None, VScalar 32)
-                  (AssocMap.set d_out (None, VScalar 32)
-                   (AssocMap.set d_in (None, VScalar 32)
-                    (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls)))))
-                     (AssocMap.set m.(mod_stk) (None, VArray 32 new_size)%nat m.(mod_arrdecls))
+                 (AssocMap.set en (None, VScalar 32)
+                  (AssocMap.set wr_en (None, VScalar 32)
+                   (AssocMap.set d_out (None, VScalar 32)
+                    (AssocMap.set d_in (None, VScalar 32)
+                     (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls))))))
+                      (AssocMap.set m.(mod_stk) (None, VArray 32 new_size)%nat m.(mod_arrdecls))
                  (Some ram)
                  (is_wf _ nc nd)
   end.
@@ -423,21 +427,21 @@ Abort.
   -*)
 
 Lemma transf_not_changed :
-  forall ram n d c i d_s c_s,
+  forall state ram n d c i d_s c_s,
     (forall e1 e2 r, d_s <> Vnonblock (Vvari r e1) e2) ->
     (forall e1 e2 r, d_s <> Vnonblock e1 (Vvari r e2)) ->
     d!i = Some d_s ->
     c!i = Some c_s ->
-    transf_maps ram i (n, d, c) = (n, d, c).
+    transf_maps state ram i (n, d, c) = (n, d, c).
 Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Qed.
 
 Lemma transf_store :
-  forall ram n d c i c_s r e1 e2 rs1 ar1 rs2 ar2,
+  forall state ram n d c i c_s r e1 e2 rs1 ar1 rs2 ar2,
     d!i = Some (Vnonblock (Vvari r e1) e2) ->
     c!i = Some c_s ->
     exec_all (Vnonblock (Vvari r e1) e2) c_s rs1 ar1 rs2 ar2 ->
     exists n' d' c' d_s' c_s' trs2 tar2,
-      transf_maps ram i (n, d, c) = (n', d', c')
+      transf_maps state ram i (n, d, c) = (n', d', c')
       /\ d'!i = Some d_s'
       /\ c'!i = Some c_s'
       /\ exec_all_ram ram d_s' c_s' rs1 ar1 trs2 tar2
@@ -448,14 +452,14 @@ Proof.
 Admitted.
 
 Lemma transf_load :
-  forall n d c i c_s r e1 e2 ar1 rs1 ar2 rs2 ram,
+  forall state n d c i c_s r e1 e2 ar1 rs1 ar2 rs2 ram,
     (forall e2 r, e1 <> Vvari r e2) ->
     d!i = Some (Vnonblock e1 (Vvari r e2)) ->
     c!i = Some c_s ->
     d!n = None ->
     c!n = None ->
     exists n' d' c' d_s' c_s' trs2 tar2,
-      transf_maps ram i (n, d, c) = (n', d', c')
+      transf_maps state ram i (n, d, c) = (n', d', c')
       /\ d'!i = Some d_s'
       /\ c'!i = Some c_s'
       /\ exec_all_ram ram d_s' c_s' rs1 ar1 trs2 tar2
@@ -466,8 +470,8 @@ Proof.
 Admitted.
 
 Lemma transf_all :
-  forall d c d' c' ram,
-    transf_code ram d c = (d', c') ->
+  forall state d c d' c' ram,
+    transf_code state ram d c = (d', c') ->
     behaviour_correct d c d' c' ram.
 Proof. Abort.
 
@@ -528,14 +532,14 @@ Proof.
 Qed.
 
 Lemma transf_maps_correct:
-  forall ram n d c n' d' c' i,
-    transf_maps ram i (n, d, c) = (n', d', c') ->
+  forall state ram n d c n' d' c' i,
+    transf_maps state ram i (n, d, c) = (n', d', c') ->
     behaviour_correct d c d' c' ram.
 Proof. Abort.
 
 Lemma transf_maps_correct2:
-  forall l ram n d c n' d' c',
-    fold_right (transf_maps ram) (n, d, c) l = (n', d', c') ->
+  forall state l ram n d c n' d' c',
+    fold_right (transf_maps state ram) (n, d, c) l = (n', d', c') ->
     behaviour_correct d c d' c' ram.
 Proof. Abort.
 (*  induction l.
