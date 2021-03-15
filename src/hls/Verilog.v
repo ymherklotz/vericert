@@ -17,6 +17,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+Set Implicit Arguments.
+
 Require Import Coq.Structures.OrderedTypeEx.
 Require Import Coq.FSets.FMapPositive.
 Require Import Coq.Program.Basics.
@@ -41,8 +43,6 @@ Require Import vericert.hls.Array.
 Import ListNotations.
 
 Local Open Scope assocmap.
-
-Set Implicit Arguments.
 
 Definition reg : Type := positive.
 Definition node : Type := positive.
