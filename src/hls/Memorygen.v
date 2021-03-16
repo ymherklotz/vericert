@@ -435,6 +435,96 @@ Lemma transf_not_changed :
     transf_maps state ram i (n, d, c) = (n, d, c).
 Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Qed.
 
+Lemma transf_not_changed_neq :
+  forall state ram n d c n' d' c' i a d_s c_s,
+    transf_maps state ram a (n, d, c) = (n', d', c') ->
+    d!i = Some d_s ->
+    c!i = Some c_s ->
+    a <> i -> n <> i ->
+    d'!i = Some d_s /\ c'!i = Some c_s.
+Proof.
+  unfold transf_maps; intros; repeat destruct_match; mgen_crush;
+  match goal with [ H: (_, _, _) = (_, _, _) |- _ ] => inv H end;
+  repeat (rewrite AssocMap.gso; auto).
+Qed.
+
+Lemma transf_gteq :
+  forall state ram n d c n' d' c' i,
+    transf_maps state ram i (n, d, c) = (n', d', c') -> n <= n'.
+Proof.
+  unfold transf_maps; intros; repeat destruct_match; mgen_crush;
+  match goal with [ H: (_, _, _) = (_, _, _) |- _ ] => inv H end; lia.
+Qed.
+
+Lemma transf_fold_gteq :
+  forall l state ram n d c n' d' c',
+    fold_right (transf_maps state ram) (n, d, c) l = (n', d', c') -> n <= n'.
+Proof.
+  induction l; simplify;
+    [match goal with [ H: (_, _, _) = (_, _, _) |- _ ] => inv H end; lia|].
+  remember (fold_right (transf_maps state ram) (n, d, c) l). repeat destruct p.
+  apply transf_gteq in H. symmetry in Heqp. eapply IHl in Heqp. lia.
+Qed.
+
+Lemma transf_fold_not_changed :
+  forall l state ram d c d' c' n n',
+    fold_right (transf_maps state ram) (n, d, c) l = (n', d', c') ->
+    Forall (fun x => n > x) l ->
+    list_norepet l ->
+    (forall i d_s c_s,
+        n > i ->
+        (forall e1 e2 r, d_s <> Vnonblock (Vvari r e1) e2) ->
+        (forall e1 e2 r, d_s <> Vnonblock e1 (Vvari r e2)) ->
+        d!i = Some d_s ->
+        c!i = Some c_s ->
+        d'!i = Some d_s /\ c'!i = Some c_s).
+Proof.
+  induction l as [| a l IHl]; crush.
+  - repeat match goal with H: context[a :: l] |- _ => inv H end.
+    destruct (Pos.eq_dec a i); subst;
+    remember (fold_right (transf_maps state ram) (n, d, c) l);
+    repeat destruct p; symmetry in Heqp.
+    match goal with
+    | H: forall e1 e2 r, _ <> Vnonblock (Vvari _ _) _ |- _ ! _ = Some _ =>
+      let H13 := fresh "H" in
+      pose proof H as H13; eapply IHl in H13; eauto; inv H13
+    end.
+    match goal with
+    | [ H: forall e1 e2 r, _ <> Vnonblock (Vvari _ _) _ |- _] =>
+      let H12 := fresh "H" in
+      pose proof H as H12; eapply transf_not_changed in H12; eauto
+    end.
+    match goal with
+    | [ H: transf_maps _ _ _ _ = _, H2: transf_maps _ _ _ _ = _ |- _ ] =>
+        rewrite H in H2; inv H2; auto
+    end.
+    match goal with
+    | H: transf_maps _ _ _ _ = _ |- _ =>
+      let H12 := fresh "H" in
+      pose proof H as H12; eapply transf_not_changed_neq in H12; eauto; inv H12; eauto
+    end;
+    match goal with
+    | H: fold_right _ _ _ = _ |- _ ! _ = Some _ =>
+      eapply IHl in H; auto; inv H; eauto
+    | H: fold_right _ _ _ = _ |- _ <> _ =>
+      apply transf_fold_gteq in H; lia
+    end.
+  - inv H0; inv H1;
+    destruct (Pos.eq_dec a i); subst;
+    remember (fold_right (transf_maps state ram) (n, d, c) l);
+    repeat destruct p; symmetry in Heqp.
+    pose proof H3 as H12.
+    pose proof H3 as H13.
+    eapply IHl in H13; eauto.
+    inv H13. eapply transf_not_changed in H12; eauto.
+    rewrite H12 in H. inv H. auto.
+    pose proof H as H12.
+    eapply transf_not_changed_neq in H12; eauto. inv H12.
+    eauto. eapply IHl in Heqp; auto. inv Heqp. eauto. auto. auto. eauto.
+    eapply IHl in Heqp; auto. inv Heqp. eauto. auto. auto. eauto.
+    apply transf_fold_gteq in Heqp. lia.
+Qed.
+
 Lemma transf_store :
   forall state ram n d c i c_s r e1 e2 rs1 ar1 rs2 ar2,
     d!i = Some (Vnonblock (Vvari r e1) e2) ->
