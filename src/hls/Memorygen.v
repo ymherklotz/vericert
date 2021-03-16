@@ -479,50 +479,29 @@ Lemma transf_fold_not_changed :
         c!i = Some c_s ->
         d'!i = Some d_s /\ c'!i = Some c_s).
 Proof.
-  induction l as [| a l IHl]; crush.
-  - repeat match goal with H: context[a :: l] |- _ => inv H end.
-    destruct (Pos.eq_dec a i); subst;
-    remember (fold_right (transf_maps state ram) (n, d, c) l);
-    repeat destruct p; symmetry in Heqp.
-    match goal with
-    | H: forall e1 e2 r, _ <> Vnonblock (Vvari _ _) _ |- _ ! _ = Some _ =>
-      let H13 := fresh "H" in
-      pose proof H as H13; eapply IHl in H13; eauto; inv H13
-    end.
-    match goal with
-    | [ H: forall e1 e2 r, _ <> Vnonblock (Vvari _ _) _ |- _] =>
-      let H12 := fresh "H" in
-      pose proof H as H12; eapply transf_not_changed in H12; eauto
-    end.
-    match goal with
-    | [ H: transf_maps _ _ _ _ = _, H2: transf_maps _ _ _ _ = _ |- _ ] =>
-        rewrite H in H2; inv H2; auto
-    end.
-    match goal with
-    | H: transf_maps _ _ _ _ = _ |- _ =>
-      let H12 := fresh "H" in
-      pose proof H as H12; eapply transf_not_changed_neq in H12; eauto; inv H12; eauto
-    end;
-    match goal with
-    | H: fold_right _ _ _ = _ |- _ ! _ = Some _ =>
-      eapply IHl in H; auto; inv H; eauto
-    | H: fold_right _ _ _ = _ |- _ <> _ =>
-      apply transf_fold_gteq in H; lia
-    end.
-  - inv H0; inv H1;
-    destruct (Pos.eq_dec a i); subst;
-    remember (fold_right (transf_maps state ram) (n, d, c) l);
-    repeat destruct p; symmetry in Heqp.
-    pose proof H3 as H12.
-    pose proof H3 as H13.
-    eapply IHl in H13; eauto.
-    inv H13. eapply transf_not_changed in H12; eauto.
-    rewrite H12 in H. inv H. auto.
-    pose proof H as H12.
-    eapply transf_not_changed_neq in H12; eauto. inv H12.
-    eauto. eapply IHl in Heqp; auto. inv Heqp. eauto. auto. auto. eauto.
-    eapply IHl in Heqp; auto. inv Heqp. eauto. auto. auto. eauto.
-    apply transf_fold_gteq in Heqp. lia.
+  induction l as [| a l IHl]; crush;
+  repeat match goal with H: context[a :: l] |- _ => inv H end;
+  destruct (Pos.eq_dec a i); subst;
+  remember (fold_right (transf_maps state ram) (n, d, c) l);
+  repeat destruct p; symmetry in Heqp;
+  repeat match goal with
+         | H: forall e1 e2 r, _ <> Vnonblock (Vvari _ _) _ |- _ =>
+           let H12 := fresh "H" in
+           let H13 := fresh "H" in
+           pose proof H as H12;
+           learn H as H13;
+           eapply IHl in H13; eauto; inv H13;
+           eapply transf_not_changed in H12; eauto
+         | [ H: transf_maps _ _ _ _ = _, H2: transf_maps _ _ _ _ = _ |- _ ] =>
+           rewrite H in H2; inv H2; solve [auto]
+         | Hneq: a <> ?i, H: transf_maps _ _ _ _ = _ |- _ =>
+           let H12 := fresh "H" in
+           learn H as H12; eapply transf_not_changed_neq in H12; inv H12; eauto
+         | Hneq: a <> ?i, H: fold_right _ _ _ = _ |- _ ! _ = Some _ =>
+           eapply IHl in H; inv H; solve [eauto]
+         | Hneq: a <> ?i, H: fold_right _ _ _ = _ |- _ <> _ =>
+           apply transf_fold_gteq in H; lia
+         end.
 Qed.
 
 Lemma transf_store :
