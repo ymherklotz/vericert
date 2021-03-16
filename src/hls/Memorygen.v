@@ -168,7 +168,7 @@ Definition max_pc {A: Type} (m: PTree.t A) :=
 
 Definition transf_code state ram d c :=
   match fold_right (transf_maps state ram)
-                   (max_pc c + 1, d, c)
+                   (max_pc d + 1, d, c)
                    (map fst (PTree.elements d)) with
   | (_, d', c') => (d', c')
   end.
@@ -502,6 +502,59 @@ Proof.
          | Hneq: a <> ?i, H: fold_right _ _ _ = _ |- _ <> _ =>
            apply transf_fold_gteq in H; lia
          end.
+Qed.
+
+Lemma forall_gt :
+  forall l, Forall (fun x : positive => fold_right Pos.max 1 l + 1 > x) l.
+Proof.
+  induction l; auto.
+  constructor. inv IHl; simplify; lia.
+  simplify. destruct (Pos.max_dec a (fold_right Pos.max 1 l)).
+  rewrite e. apply Pos.max_l_iff in e. apply Pos.le_ge in e.
+  apply Forall_forall. rewrite Forall_forall in IHl.
+  intros.
+  assert (forall a b c, a >= c -> c > b -> a > b) by lia.
+  assert (forall a b, a >= b -> a + 1 >= b + 1) by lia.
+  apply H1 in e.
+  apply H0 with (b := x) in e; auto.
+  rewrite e; auto.
+Qed.
+
+Lemma max_index_list :
+  forall A (l : list (positive * A)) i d_s,
+    In (i, d_s) l ->
+    list_norepet (map fst l) ->
+    fold_right Pos.max 1 (map fst l) + 1 > i.
+Proof.
+  induction l; crush.
+  inv H. inv H0. simplify. lia.
+  inv H0.
+  let H := fresh "H" in
+  assert (H: forall a b c, b + 1 > c -> Pos.max a b + 1 > c) by lia;
+  apply H; eapply IHl; eauto.
+Qed.
+
+Lemma max_index :
+  forall A d i d_s,
+    d ! i = Some d_s -> @max_pc A d + 1 > i.
+Proof.
+  unfold max_pc; eauto using max_index_list, PTree.elements_correct, PTree.elements_keys_norepet.
+Qed.
+
+Lemma transf_code_not_changed :
+  forall state ram d c d' c',
+    transf_code state ram d c = (d', c') ->
+    (forall i d_s c_s,
+        (forall e1 e2 r, d_s <> Vnonblock (Vvari r e1) e2) ->
+        (forall e1 e2 r, d_s <> Vnonblock e1 (Vvari r e2)) ->
+        d!i = Some d_s ->
+        c!i = Some c_s ->
+        d'!i = Some d_s /\ c'!i = Some c_s).
+Proof.
+  unfold transf_code;
+  intros; repeat destruct_match; inv H;
+  eapply transf_fold_not_changed;
+    eauto using forall_gt, PTree.elements_keys_norepet, max_index.
 Qed.
 
 Lemma transf_store :
