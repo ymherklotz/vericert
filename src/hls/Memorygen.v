@@ -409,49 +409,49 @@ Lemma expr_runp_matches :
   forall f rs ar e v,
     expr_runp f rs ar e v ->
     forall trs tar,
+      (forall r v v', ar ! r = Some v -> tar ! r = Some v') ->
       match_assocmaps (max_reg_expr e + 1) rs trs ->
       match_arrs ar tar ->
       expr_runp f trs tar e v.
 Proof.
   induction 1.
   - intros. econstructor.
-  - intros. econstructor. inv H0. symmetry.
-    apply H2. crush.
+  - intros. econstructor. inv H1. symmetry.
+    apply H3. crush.
   - intros. econstructor. apply IHexpr_runp; eauto.
-    inv H1. constructor. simplify.
+    inv H2. constructor. simplify.
     assert (forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
-    eapply H4 in H1. eapply H3 in H1. auto.
-    inv H2.
+    eapply H5 in H2. eapply H4 in H2. auto.
+    inv H3.
     unfold arr_assocmap_lookup in *.
     destruct (stack ! r) eqn:?; [|discriminate].
+    inv H2.
     inv H0.
-    admit.
-    (*eapply H3 in Heqo. unfold arr. rewrite Heqo.
-    erewrite H3; eauto.*)
+    eapply H1 in Heqo. rewrite Heqo. auto.
   - intros. econstructor; eauto. eapply IHexpr_runp1; eauto.
-    econstructor. inv H2. intros.
+    econstructor. inv H3. intros.
     assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
     simplify.
-    eapply H5 in H2. apply H4 in H2. auto.
+    eapply H6 in H3. apply H5 in H3. auto.
     apply IHexpr_runp2; eauto.
-    econstructor. inv H2. intros.
+    econstructor. inv H3. intros.
     assert (forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
-    simplify. eapply H5 in H2. apply H4 in H2. auto.
+    simplify. eapply H6 in H3. apply H5 in H3. auto.
   - intros. econstructor; eauto.
   - intros. econstructor; eauto. apply IHexpr_runp1; eauto.
-    constructor. inv H2. intros. simplify.
+    constructor. inv H3. intros. simplify.
     assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
-    eapply H5 in H2. apply H4 in H2. auto.
+    eapply H6 in H3. apply H5 in H3. auto.
     apply IHexpr_runp2; eauto. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max b d) + 1) by lia.
-    constructor. intros. eapply H4 in H5. inv H2. apply H6 in H5. auto.
-  - intros. eapply erun_Vternary_false. apply IHexpr_runp1; eauto. constructor. inv H2.
+    constructor. intros. eapply H5 in H6. inv H3. apply H7 in H6. auto.
+  - intros. eapply erun_Vternary_false. apply IHexpr_runp1; eauto. constructor. inv H3.
     intros. simplify. assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
-    eapply H5 in H2. apply H4 in H2. auto.
-    apply IHexpr_runp2; eauto. econstructor. inv H2. simplify.
+    eapply H6 in H3. apply H5 in H3. auto.
+    apply IHexpr_runp2; eauto. econstructor. inv H3. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max d b) + 1) by lia.
-    eapply H5 in H2. apply H4 in H2. auto. auto.
-Admitted.
+    eapply H6 in H3. apply H5 in H3. auto. auto.
+Qed.
 Hint Resolve expr_runp_matches : mgen.
 
 Lemma expr_runp_matches2 :
@@ -459,6 +459,7 @@ Lemma expr_runp_matches2 :
     expr_runp f rs ar e v ->
     max_reg_expr e < p ->
     forall trs tar,
+      (forall r v v', ar ! r = Some v -> tar ! r = Some v') ->
       match_assocmaps p rs trs ->
       match_arrs ar tar ->
       expr_runp f trs tar e v.
@@ -499,11 +500,36 @@ Lemma match_reg_assocs_nonblock :
 Proof. inversion 1; econstructor; eauto with mgen. Qed.
 Hint Resolve match_reg_assocs_nonblock : mgen.
 
+Lemma some_inj :
+  forall A (x: A) y,
+    Some x = Some y ->
+    x = y.
+Proof. inversion 1; auto. Qed.
+
+Lemma arrs_present :
+  forall r i v ar arr,
+  (arr_assocmap_set r i v ar) ! r = Some arr ->
+  exists b, ar ! r = Some b.
+Proof.
+  intros. unfold arr_assocmap_set in *.
+  destruct ar!r eqn:?.
+  rewrite AssocMap.gss in H.
+  inv H. eexists. auto. rewrite Heqo in H. discriminate.
+Qed.
+
 Lemma match_arrs_gss :
   forall ar ar' r v i,
     match_arrs ar ar' ->
     match_arrs (arr_assocmap_set r i v ar) (arr_assocmap_set r i v ar').
 Proof. Admitted.
+(*  econstructor. intros.
+  destruct (Pos.eq_dec r s); subst.
+  unfold arr_assocmap_set in *.
+  destruct ar'!s eqn:?. destruct ar!s eqn:?.
+  rewrite AssocMap.gss in *. inv H2. inv H0.
+  destruct (Nat.eq_dec addr i); subst.
+  rewrite array_get_error_set_bound. rewrite array_get_error_set_bound. auto.*)
+
 Hint Resolve match_arrs_gss : mgen.
 
 Lemma match_arr_assocs_block :
@@ -525,6 +551,7 @@ Lemma match_states_same :
     stmnt_runp f rs1 ar1 c rs2 ar2 ->
     max_reg_stmnt c < p ->
     forall trs1 tar1,
+      (forall r v v', (assoc_blocking rs1) ! r = Some v -> (assoc_blocking tar1) ! r = Some v') ->
       match_reg_assocs p rs1 trs1 ->
       match_arr_assocs ar1 tar1 ->
       exists trs2 tar2,
