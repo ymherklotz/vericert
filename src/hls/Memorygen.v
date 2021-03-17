@@ -219,11 +219,10 @@ Inductive match_assocmaps : positive -> assocmap -> assocmap -> Prop :=
 
 Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
   match_assocmap_arr: forall ar ar',
-    (forall s arr,
+    (forall s arr arr',
         ar!s = Some arr ->
-        exists arr',
-          ar'!s = Some arr'
-          /\ (forall addr, array_get_error addr arr = array_get_error addr arr')) ->
+        ar'!s = Some arr' ->
+        (forall addr, array_get_error addr arr = array_get_error addr arr')) ->
     match_arrs ar ar'.
 
 Inductive match_stackframes : stackframe -> stackframe -> Prop :=
@@ -426,8 +425,9 @@ Proof.
     unfold arr_assocmap_lookup in *.
     destruct (stack ! r) eqn:?; [|discriminate].
     inv H0.
-    eapply H3 in Heqo. inv Heqo. inv H0. unfold arr. rewrite H2.
-    rewrite H4. auto.
+    admit.
+    (*eapply H3 in Heqo. unfold arr. rewrite Heqo.
+    erewrite H3; eauto.*)
   - intros. econstructor; eauto. eapply IHexpr_runp1; eauto.
     econstructor. inv H2. intros.
     assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
@@ -451,7 +451,7 @@ Proof.
     apply IHexpr_runp2; eauto. econstructor. inv H2. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max d b) + 1) by lia.
     eapply H5 in H2. apply H4 in H2. auto. auto.
-Qed.
+Admitted.
 Hint Resolve expr_runp_matches : mgen.
 
 Lemma expr_runp_matches2 :
@@ -499,6 +499,27 @@ Lemma match_reg_assocs_nonblock :
 Proof. inversion 1; econstructor; eauto with mgen. Qed.
 Hint Resolve match_reg_assocs_nonblock : mgen.
 
+Lemma match_arrs_gss :
+  forall ar ar' r v i,
+    match_arrs ar ar' ->
+    match_arrs (arr_assocmap_set r i v ar) (arr_assocmap_set r i v ar').
+Proof. Admitted.
+Hint Resolve match_arrs_gss : mgen.
+
+Lemma match_arr_assocs_block :
+  forall rab rab' r i rhsval,
+    match_arr_assocs rab rab' ->
+    match_arr_assocs (block_arr r i rab rhsval) (block_arr r i rab' rhsval).
+Proof. inversion 1; econstructor; eauto with mgen. Qed.
+Hint Resolve match_arr_assocs_block : mgen.
+
+Lemma match_arr_assocs_nonblock :
+  forall rab rab' r i rhsval,
+    match_arr_assocs rab rab' ->
+    match_arr_assocs (nonblock_arr r i rab rhsval) (nonblock_arr r i rab' rhsval).
+Proof. inversion 1; econstructor; eauto with mgen. Qed.
+Hint Resolve match_arr_assocs_nonblock : mgen.
+
 Lemma match_states_same :
   forall f rs1 ar1 c rs2 ar2 p,
     stmnt_runp f rs1 ar1 c rs2 ar2 ->
@@ -511,7 +532,7 @@ Lemma match_states_same :
         /\ match_reg_assocs p rs2 trs2
         /\ match_arr_assocs ar2 tar2.
 Proof.
-  Ltac match_states_same_tac :=
+  Ltac match_states_same_facts :=
     match goal with
     | H: match_reg_assocs _ _ _ |- _ =>
       let H2 := fresh "H" in
@@ -521,32 +542,36 @@ Proof.
       learn H as H2; inv H2
     | H1: context[exists _, _], H2: context[exists _, _] |- _ =>
       learn H1; learn H2;
-      exploit H1; mgen_crush; exploit H2
+      exploit H1; mgen_crush; exploit H2; mgen_crush
     | H1: context[exists _, _] |- _ =>
-      learn H1; exploit H1
+      learn H1; exploit H1; mgen_crush
+    end.
+  Ltac match_states_same_tac :=
+    match goal with
     | |- exists _, _ => econstructor
     | |- _ < _ => lia
+    | H: context[_ <> _] |- stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ =>
+      eapply stmnt_runp_Vcase_nomatch
+    | |- stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ =>
+      eapply stmnt_runp_Vcase_match
     | H: valueToBool _ = false |- stmnt_runp _ _ _ _ _ _ =>
       eapply stmnt_runp_Vcond_false
     | |- stmnt_runp _ _ _ _ _ _ => econstructor
     | |- expr_runp _ _ _ _ _ => eapply expr_runp_matches2
     end; mgen_crush; try lia.
-  induction 1; simplify.
-  - repeat match_states_same_tac.
-  - repeat match_states_same_tac.
-  - repeat match_states_same_tac.
-  - repeat match_states_same_tac.
-  - destruct def; repeat match_states_same_tac.
-  - admit.
-  - repeat match_states_same_tac.
-  - exists (block_reg r trs1 rhsval); repeat match_states_same_tac; inv H; econstructor.
-  - exists (nonblock_reg r trs1 rhsval); repeat match_states_same_tac; inv H; econstructor.
-  - econstructor. exists (block_arr r i tar1 rhsval).
+  induction 1; simplify; repeat match_states_same_facts;
+    try destruct_match; try solve [repeat match_states_same_tac].
+  - inv H. exists (block_reg r {| assoc_blocking := rab'; assoc_nonblocking := ran' |} rhsval);
+      repeat match_states_same_tac; econstructor.
+  - exists (nonblock_reg r {| assoc_blocking := rab'; assoc_nonblocking := ran' |} rhsval);
+      repeat match_states_same_tac; inv H; econstructor.
+  - econstructor. exists (block_arr r i {| assoc_blocking := rab'0; assoc_nonblocking := ran'0 |} rhsval).
     simplify; repeat match_states_same_tac. inv H. econstructor.
-    repeat match_states_same_tac.
-    admit.
-  - admit.
-Admitted.
+    repeat match_states_same_tac. eauto. mgen_crush.
+  - econstructor. exists (nonblock_arr r i {| assoc_blocking := rab'0; assoc_nonblocking := ran'0 |} rhsval).
+    simplify; repeat match_states_same_tac. inv H. econstructor.
+    repeat match_states_same_tac. eauto. mgen_crush.
+Qed.
 
 Definition behaviour_correct d c d' c' r :=
   forall rs1 ar1 rs2 ar2 trs1 tar1 d_s c_s i v v',
