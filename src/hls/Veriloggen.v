@@ -42,9 +42,9 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
-Definition inst_ram clk ram :=
+Definition inst_ram clk stk_len ram :=
   Valways (Vnegedge clk)
-          (Vcond (Vvar (ram_en ram))
+          (Vcond (Vbinop Vand (Vvar (ram_en ram)) (Vbinop Vlt (Vvar (ram_addr ram)) (Vlit (natToValue stk_len))))
                  (Vcond (Vvar (ram_wr_en ram))
                         (Vnonblock (Vvari (ram_mem ram) (Vvar (ram_addr ram)))
                                    (Vvar (ram_d_in ram)))
@@ -62,7 +62,7 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                                                   (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
                                                   (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
                 :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
-                :: inst_ram m.(HTL.mod_clk) ram
+                :: inst_ram m.(HTL.mod_clk) (HTL.mod_stk_len m) ram
                 :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
     Verilog.mkmodule m.(HTL.mod_start)

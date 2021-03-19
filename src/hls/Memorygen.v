@@ -214,21 +214,24 @@ Definition transf_program (p : program) :=
 
 Inductive match_assocmaps : positive -> assocmap -> assocmap -> Prop :=
   match_assocmap: forall p rs rs',
-    (forall r, r < p -> rs#r = rs'#r) ->
+    (forall r, r < p -> rs!r = rs'!r) ->
     match_assocmaps p rs rs'.
 
 Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
   match_assocmap_arr: forall ar ar',
-    (forall s arr arr',
-        ar!s = Some arr ->
-        ar'!s = Some arr' ->
-        (forall addr, array_get_error addr arr = array_get_error addr arr')) ->
+    (forall s arr,
+        ar ! s = Some arr ->
+        exists arr',
+          ar' ! s = Some arr'
+          /\ (forall addr,
+                 array_get_error addr arr = array_get_error addr arr')
+          /\ arr_length arr = arr_length arr')%nat ->
     match_arrs ar ar'.
 
 Inductive match_stackframes : stackframe -> stackframe -> Prop :=
   match_stackframe_intro :
     forall r m pc asr asa asr' asa',
-      match_assocmaps (max_reg_module m) asr asr' ->
+      match_assocmaps (max_reg_module m + 1) asr asr' ->
       match_arrs asa asa' ->
       match_stackframes (Stackframe r m pc asr asa)
                         (Stackframe r (transf_module m) pc asr' asa').
@@ -236,7 +239,7 @@ Inductive match_stackframes : stackframe -> stackframe -> Prop :=
 Inductive match_states : state -> state -> Prop :=
 | match_state :
     forall res res' m st asr asr' asa asa'
-           (ASSOC: match_assocmaps (max_reg_module m) asr asr')
+           (ASSOC: match_assocmaps (max_reg_module m + 1) asr asr')
            (ARRS: match_arrs asa asa')
            (STACKS: list_forall2 match_stackframes res res'),
       match_states (State res m st asr asa)
@@ -405,52 +408,64 @@ Definition ram_present {A: Type} ar r v v' :=
   /\ (assoc_blocking ar)!(ram_mem r) = Some v'
   /\ arr_length v' = ram_size r.
 
+Lemma find_assoc_get :
+  forall rs r trs,
+    rs ! r = trs ! r ->
+    rs # r = trs # r.
+Proof.
+  intros. unfold find_assocmap. unfold AssocMapExt.get_default.
+  rewrite H. auto.
+Qed.
+Hint Resolve find_assoc_get : mgen.
+
 Lemma expr_runp_matches :
   forall f rs ar e v,
     expr_runp f rs ar e v ->
     forall trs tar,
-      (forall r v v', ar ! r = Some v -> tar ! r = Some v') ->
       match_assocmaps (max_reg_expr e + 1) rs trs ->
       match_arrs ar tar ->
       expr_runp f trs tar e v.
 Proof.
   induction 1.
   - intros. econstructor.
-  - intros. econstructor. inv H1. symmetry.
-    apply H3. crush.
+  - intros. econstructor. inv H0. symmetry.
+    apply find_assoc_get.
+    apply H2. crush.
   - intros. econstructor. apply IHexpr_runp; eauto.
-    inv H2. constructor. simplify.
+    inv H1. constructor. simplify.
     assert (forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
-    eapply H5 in H2. eapply H4 in H2. auto.
-    inv H3.
+    eapply H4 in H1. eapply H3 in H1. auto.
+    inv H2.
     unfold arr_assocmap_lookup in *.
     destruct (stack ! r) eqn:?; [|discriminate].
-    inv H2.
+    inv H1.
     inv H0.
-    eapply H1 in Heqo. rewrite Heqo. auto.
+    eapply H3 in Heqo. inv Heqo. inv H0.
+    unfold arr in *. rewrite H1. inv H4.
+    rewrite H0. auto.
   - intros. econstructor; eauto. eapply IHexpr_runp1; eauto.
-    econstructor. inv H3. intros.
+    econstructor. inv H2. intros.
     assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
     simplify.
-    eapply H6 in H3. apply H5 in H3. auto.
+    eapply H5 in H2. apply H4 in H2. auto.
     apply IHexpr_runp2; eauto.
-    econstructor. inv H3. intros.
+    econstructor. inv H2. intros.
     assert (forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
-    simplify. eapply H6 in H3. apply H5 in H3. auto.
+    simplify. eapply H5 in H2. apply H4 in H2. auto.
   - intros. econstructor; eauto.
   - intros. econstructor; eauto. apply IHexpr_runp1; eauto.
-    constructor. inv H3. intros. simplify.
+    constructor. inv H2. intros. simplify.
     assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
-    eapply H6 in H3. apply H5 in H3. auto.
+    eapply H5 in H2. apply H4 in H2. auto.
     apply IHexpr_runp2; eauto. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max b d) + 1) by lia.
-    constructor. intros. eapply H5 in H6. inv H3. apply H7 in H6. auto.
-  - intros. eapply erun_Vternary_false. apply IHexpr_runp1; eauto. constructor. inv H3.
+    constructor. intros. eapply H4 in H5. inv H2. apply H6 in H5. auto.
+  - intros. eapply erun_Vternary_false. apply IHexpr_runp1; eauto. constructor. inv H2.
     intros. simplify. assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
-    eapply H6 in H3. apply H5 in H3. auto.
-    apply IHexpr_runp2; eauto. econstructor. inv H3. simplify.
+    eapply H5 in H2. apply H4 in H2. auto.
+    apply IHexpr_runp2; eauto. econstructor. inv H2. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max d b) + 1) by lia.
-    eapply H6 in H3. apply H5 in H3. auto. auto.
+    eapply H5 in H2. apply H4 in H2. auto. auto.
 Qed.
 Hint Resolve expr_runp_matches : mgen.
 
@@ -459,7 +474,6 @@ Lemma expr_runp_matches2 :
     expr_runp f rs ar e v ->
     max_reg_expr e < p ->
     forall trs tar,
-      (forall r v v', ar ! r = Some v -> tar ! r = Some v') ->
       match_assocmaps p rs trs ->
       match_arrs ar tar ->
       expr_runp f trs tar e v.
@@ -481,8 +495,6 @@ Proof.
   destruct (Pos.eq_dec r r0); subst.
   repeat rewrite PTree.gss; auto.
   repeat rewrite PTree.gso; auto.
-  unfold find_assocmap, AssocMapExt.get_default in *.
-  rewrite H0; auto.
 Qed.
 Hint Resolve match_assocmaps_gss : mgen.
 
@@ -521,14 +533,17 @@ Lemma match_arrs_gss :
   forall ar ar' r v i,
     match_arrs ar ar' ->
     match_arrs (arr_assocmap_set r i v ar) (arr_assocmap_set r i v ar').
-Proof. Admitted.
-(*  econstructor. intros.
-  destruct (Pos.eq_dec r s); subst.
+Proof.
+  intros. inv H. constructor. intros.
   unfold arr_assocmap_set in *.
-  destruct ar'!s eqn:?. destruct ar!s eqn:?.
-  rewrite AssocMap.gss in *. inv H2. inv H0.
-  destruct (Nat.eq_dec addr i); subst.
-  rewrite array_get_error_set_bound. rewrite array_get_error_set_bound. auto.*)
+  destruct (Pos.eq_dec s r); subst.
+  destruct ar ! r eqn:?. rewrite AssocMap.gss in H. inv H.
+  apply H0 in Heqo. inv Heqo. inv H.
+  eexists. simplify.
+  unfold arr in *.
+  rewrite H1. rewrite AssocMap.gss. simplify.
+  intros.
+  Admitted.
 
 Hint Resolve match_arrs_gss : mgen.
 
@@ -551,7 +566,6 @@ Lemma match_states_same :
     stmnt_runp f rs1 ar1 c rs2 ar2 ->
     max_reg_stmnt c < p ->
     forall trs1 tar1,
-      (forall r v v', (assoc_blocking rs1) ! r = Some v -> (assoc_blocking tar1) ! r = Some v') ->
       match_reg_assocs p rs1 trs1 ->
       match_arr_assocs ar1 tar1 ->
       exists trs2 tar2,
@@ -601,21 +615,29 @@ Proof.
 Qed.
 
 Definition behaviour_correct d c d' c' r :=
-  forall rs1 ar1 rs2 ar2 trs1 tar1 d_s c_s i v v',
+  forall p rs1 ar1 rs2 ar2 trs1 tar1 d_s c_s i v v',
     PTree.get i d = Some d_s ->
     PTree.get i c = Some c_s ->
     ram_present ar1 r v v' ->
     ram_present ar2 r v v' ->
     exec_all d_s c_s rs1 ar1 rs2 ar2 ->
-    match_reg_assocs rs1 trs1 ->
+    match_reg_assocs p rs1 trs1 ->
     match_arr_assocs ar1 tar1 ->
+    Pos.max (max_stmnt_tree d) (max_stmnt_tree c) < p ->
     exists d_s' c_s' trs2 tar2,
       PTree.get i d' = Some d_s'
       /\ PTree.get i c' = Some c_s'
       /\ exec_all_ram r d_s' c_s' trs1 tar1 trs2 tar2
-      /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+      /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
       /\ match_arr_assocs (merge_arr_assocs (ram_mem r) (ram_size r) ar2)
                           (merge_arr_assocs (ram_mem r) (ram_size r) tar2).
+
+Lemma match_reg_assocs_merge :
+  forall p rs rs',
+    match_reg_assocs p rs rs' ->
+    match_reg_assocs p (merge_reg_assocs rs) (merge_reg_assocs rs').
+Proof. Admitted.
+Hint Resolve match_reg_assocs_merge : mgen.
 
 Lemma behaviour_correct_equiv :
   forall d c r,
@@ -624,14 +646,26 @@ Lemma behaviour_correct_equiv :
 Proof.
   intros; unfold behaviour_correct.
   intros. exists d_s. exists c_s.
-  unfold exec_all in *. inv H3. inv H4. inv H3. inv H4.
+  unfold exec_all in *. inv H3. inv H4. inv H3. inv H4. inv H3.
+  exploit match_states_same.
+  apply H4. instantiate (1 := p). admit.
+  eassumption. eassumption. intros.
+  inv H3. inv H11. inv H3. inv H12.
+  exploit match_states_same.
+  apply H10. instantiate (1 := p). admit.
+  eassumption. eassumption. intros.
+  inv H12. inv H14. inv H12. inv H15.
   econstructor. econstructor.
   simplify; auto.
   unfold exec_all_ram.
-  exists x. exists x0. exists x1. econstructor. econstructor.
+  do 5 econstructor.
   simplify.
-  econstructor.
-  unfold find_assocmap. unfold AssocMapExt.get_default.
+  eassumption. eassumption.
+  eapply exec_ram_Some_idle. admit.
+  rewrite merge_reg_idempotent.
+  eauto with mgen.
+  admit.
+(*  unfold find_assocmap. unfold AssocMapExt.get_default.
   assert ((assoc_blocking (merge_reg_assocs rs2)) ! (ram_en r) = None) by admit.
   destruct_match; try discriminate; auto.
   constructor; constructor; auto.
@@ -646,7 +680,7 @@ Proof.
     simplify.
     all: eauto.
   }
-  inv H11; auto.
+  inv H11; auto.*)
 Admitted.
 Hint Resolve behaviour_correct_equiv : mgen.
 
@@ -658,7 +692,7 @@ Lemma stmnt_runp_gtassoc :
       (assoc_nonblocking rs1)!p = None ->
       exists rs2',
         stmnt_runp f (nonblock_reg p rs1 v) ar1 st rs2' ar2
-        /\ match_reg_assocs rs2 rs2'
+        /\ match_reg_assocs p rs2 rs2'
         /\ (assoc_nonblocking rs2')!p = Some v.
 Proof.
 Abort.
@@ -807,7 +841,7 @@ Proof.
 Qed.
 
 Lemma transf_code_store :
-  forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2,
+  forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2 p trs1 tar1,
     transf_code state ram d c = (d', c') ->
     (forall r e1 e2,
         (forall e2 r, e1 <> Vvari r e2) ->
@@ -815,25 +849,31 @@ Lemma transf_code_store :
     d!i = Some d_s ->
     c!i = Some c_s ->
     exec_all d_s c_s rs1 ar1 rs2 ar2 ->
+    match_reg_assocs p rs1 trs1 ->
+    match_arr_assocs ar1 tar1 ->
+    Pos.max (max_stmnt_tree c) (max_stmnt_tree d) < p ->
     exists d_s' c_s' trs2 tar2,
       d'!i = Some d_s' /\ c'!i = Some c_s'
-      /\ exec_all_ram ram d_s' c_s' rs1 ar1 trs2 tar2
-      /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+      /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
+      /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
       /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
                           (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
 Proof.
   Admitted.
 
 Lemma transf_code_all :
-  forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2,
+  forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2 tar1 trs1 p,
     transf_code state ram d c = (d', c') ->
     d!i = Some d_s ->
     c!i = Some c_s ->
     exec_all d_s c_s rs1 ar1 rs2 ar2 ->
+    match_reg_assocs p rs1 trs1 ->
+    match_arr_assocs ar1 tar1 ->
+    Pos.max (max_stmnt_tree c) (max_stmnt_tree d) < p ->
     exists d_s' c_s' trs2 tar2,
       d'!i = Some d_s' /\ c'!i = Some c_s'
-      /\ exec_all_ram ram d_s' c_s' rs1 ar1 trs2 tar2
-      /\ match_reg_assocs (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+      /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
+      /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
       /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
                           (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
 Proof.
@@ -883,19 +923,20 @@ Proof.
 Qed.
 
 Lemma match_assocmaps_trans:
-  forall rs1 rs2 rs3,
-    match_assocmaps rs1 rs2 ->
-    match_assocmaps rs2 rs3 ->
-    match_assocmaps rs1 rs3.
+  forall p rs1 rs2 rs3,
+    match_assocmaps p rs1 rs2 ->
+    match_assocmaps p rs2 rs3 ->
+    match_assocmaps p rs1 rs3.
 Proof.
   intros. inv H. inv H0. econstructor; eauto.
+  intros. rewrite H1 by auto. auto.
 Qed.
 
 Lemma match_reg_assocs_trans:
-  forall rs1 rs2 rs3,
-    match_reg_assocs rs1 rs2 ->
-    match_reg_assocs rs2 rs3 ->
-    match_reg_assocs rs1 rs3.
+  forall p rs1 rs2 rs3,
+    match_reg_assocs p rs1 rs2 ->
+    match_reg_assocs p rs2 rs3 ->
+    match_reg_assocs p rs1 rs3.
 Proof.
   intros. inv H. inv H0.
   econstructor; eapply match_assocmaps_trans; eauto.
@@ -927,13 +968,13 @@ Section CORRECTNESS.
   Context (prog tprog: program).
   Context (TRANSL: match_prog prog tprog).
 
-  Let ge : HTL.genv := Genv.globalenv prog.
-  Let tge : HTL.genv := Genv.globalenv tprog.
+  Let ge : genv := Genv.globalenv prog.
+  Let tge : genv := Genv.globalenv tprog.
 
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
   Proof using TRANSL. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
-  Hint Resolve symbols_preserved : rtlgp.
+  Hint Resolve symbols_preserved : mgen.
 
   Lemma function_ptr_translated:
     forall (b: Values.block) (f: fundef),
@@ -944,6 +985,7 @@ Section CORRECTNESS.
     intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
+  Hint Resolve function_ptr_translated : mgen.
 
   Lemma functions_translated:
     forall (v: Values.val) (f: fundef),
@@ -954,11 +996,12 @@ Section CORRECTNESS.
     intros. exploit (Genv.find_funct_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
+  Hint Resolve functions_translated : mgen.
 
   Lemma senv_preserved:
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
   Proof (Genv.senv_transf TRANSL).
-  Hint Resolve senv_preserved : rtlgp.
+  Hint Resolve senv_preserved : mgen.
 
   Theorem transf_step_correct:
     forall (S1 : state) t S2,
@@ -968,25 +1011,33 @@ Section CORRECTNESS.
         exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1.
-    - intros. inv H12. inv ASSOC. inv ARRS. simplify.
+    - intros. inv H12. learn ASSOC as ASSOC1. inv ASSOC1. learn ARRS as ARRS1. inv ARRS1. simplify.
       unfold transf_module. destruct_match.
       exploit transf_code_all. apply Heqp. apply H3.
       eassumption.
       unfold exec_all.
-      exists f. exists {| assoc_blocking := basr1; assoc_nonblocking := nasr1 |}.
-      exists {| assoc_blocking := basa1; assoc_nonblocking := nasa1 |}.
-      eauto.
-      intros. simplify. unfold exec_all_ram in *. simplify. destruct x4. destruct x5.
-      destruct x6. destruct x7.
-      eexists. econstructor. apply Smallstep.plus_one.
-      econstructor. auto. auto. auto. simplify. eauto.
-      eauto. unfold empty_stack. simplify. unfold empty_stack in *.
-      simplify.
+      do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC.
+      instantiate (1 := empty_assocmap). econstructor. eauto. econstructor. eassumption.
+      instantiate (1 := empty_stack (transf_module m)). admit.
+      admit. intros. simplify.
+      unfold exec_all_ram in *. inv H14. inv H16. inv H14. inv H16. inv H14. simplify.
+      destruct x4. destruct x5. destruct x6. destruct x7. destruct x1. destruct x2.
+      econstructor. econstructor. apply Smallstep.plus_one. econstructor. simplify.
+      admit. admit. admit. simplify. apply H12. simplify. apply H13.
+      unfold empty_stack in *. simplify. unfold transf_module in *. simplify. destruct_match. simplify. apply H14. simplify. admit. eassumption. simplify. unfold empty_stack in *. simplify.
+      unfold merge_reg_assocs in *. unfold merge_arr_assocs in *. simplify.
+      unfold empty_stack' in *. assert (2 ^ Nat.log2_up (mod_stk_len m) = (mod_stk_len m))%nat by admit.
+      rewrite H18 in H19. rewrite H18. eassumption. auto. auto. simplify. admit.
+      admit.
       admit.
     - intros. inv H1. inv ASSOC. inv ARRS.
       econstructor. econstructor. apply Smallstep.plus_one.
       apply step_finish; unfold transf_module; destruct_match; crush; eauto.
-      constructor. auto.
+      unfold find_assocmap in *. unfold AssocMapExt.get_default in *.
+      assert (mod_finish m < max_reg_module m + 1) by admit.
+      apply H1 in H3. rewrite <- H3. auto.
+      assert (mod_return m < max_reg_module m + 1) by admit.
+      rewrite <- H1. eauto. auto. constructor. auto.
     - intros. inv H.
       econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
@@ -1004,12 +1055,54 @@ Section CORRECTNESS.
       econstructor; auto. econstructor. intros. inv H2.
       destruct (Pos.eq_dec r res); subst.
       rewrite AssocMap.gss.
-      rewrite AssocMap.gss in H. auto.
-      rewrite AssocMap.gso; auto. rewrite AssocMap.gso in H; auto.
-      destruct (Pos.eq_dec r (mod_st m)); subst.
+      rewrite AssocMap.gss. auto.
+      rewrite AssocMap.gso; auto.
+      symmetry. rewrite AssocMap.gso; auto.
+      destruct (Pos.eq_dec (mod_st m) r); subst.
       rewrite AssocMap.gss.
-      rewrite AssocMap.gss in H. auto.
-      rewrite AssocMap.gso; auto. rewrite AssocMap.gso in H; auto.
+      rewrite AssocMap.gss. auto.
+      rewrite AssocMap.gso; auto.
+      symmetry. rewrite AssocMap.gso; auto.
+      Unshelve. exact 1%positive.
   Admitted.
+  Hint Resolve transf_step_correct : mgen.
+
+  Lemma transf_initial_states :
+    forall s1 : state,
+      initial_state prog s1 ->
+      exists s2 : state,
+        initial_state tprog s2 /\ match_states s1 s2.
+  Proof using TRANSL.
+    simplify. inv H.
+    exploit function_ptr_translated. eauto. intros.
+    inv H. inv H3.
+    econstructor. econstructor. econstructor.
+    eapply (Genv.init_mem_match TRANSL); eauto.
+    setoid_rewrite (Linking.match_program_main TRANSL).
+    rewrite symbols_preserved. eauto.
+    eauto.
+    econstructor.
+  Qed.
+  Hint Resolve transf_initial_states : mgen.
+
+  Lemma transf_final_states :
+    forall (s1 : state)
+           (s2 : state)
+           (r : Int.int),
+      match_states s1 s2 ->
+      final_state s1 r ->
+      final_state s2 r.
+  Proof using TRANSL.
+    intros. inv H0. inv H. inv STACKS. unfold valueToInt. constructor. auto.
+  Qed.
+  Hint Resolve transf_final_states : mgen.
+
+  Theorem transf_program_correct:
+    Smallstep.forward_simulation (semantics prog) (semantics tprog).
+  Proof using TRANSL.
+    eapply Smallstep.forward_simulation_plus; eauto with mgen.
+    apply senv_preserved.
+    eapply transf_final_states.
+  Qed.
 
 End CORRECTNESS.
