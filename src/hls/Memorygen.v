@@ -183,8 +183,8 @@ Definition transf_module (m: module): module :=
   let wr_en := max_reg+5 in
   let new_size := (2 ^ Nat.log2_up m.(mod_stk_len))%nat in
   let ram := mk_ram new_size (mod_stk m) en addr d_in d_out wr_en in
-  match transf_code (mod_st m) ram (mod_datapath m) (mod_controllogic m) with
-  | (nd, nc) =>
+  match transf_code (mod_st m) ram (mod_datapath m) (mod_controllogic m), (mod_ram m) with
+  | (nd, nc), None =>
     mkmodule m.(mod_params)
                  nd
                  nc
@@ -205,6 +205,7 @@ Definition transf_module (m: module): module :=
                       (AssocMap.set m.(mod_stk) (None, VArray 32 new_size)%nat m.(mod_arrdecls))
                  (Some ram)
                  (is_wf _ nc nd)
+  | _, _ => m
   end.
 
 Definition transf_fundef := transf_fundef transf_module.
@@ -963,6 +964,128 @@ Proof. Abort.
     apply H. eapply IHl. apply Heqp.
 Qed.*)
 
+Lemma empty_arrs_match :
+  forall m,
+    match_arrs (empty_stack m) (empty_stack (transf_module m)).
+Proof.
+  unfold empty_stack. unfold transf_module.
+  intros. destruct_match. econstructor. simplify. eexists.
+  simplify. destruct_match; eauto. eauto. eauto.
+Qed.
+Hint Resolve empty_arrs_match : mgen.
+
+Lemma max_module_stmnts :
+  forall m,
+    Pos.max (max_stmnt_tree (mod_controllogic m))
+            (max_stmnt_tree (mod_datapath m)) < max_reg_module m + 1.
+Proof. intros. unfold max_reg_module. lia. Qed.
+Hint Resolve max_module_stmnts : mgen.
+
+Lemma transf_module_code :
+  forall m,
+    mod_ram m = None ->
+    transf_code (mod_st m)
+                {| ram_size := 2 ^ Nat.log2_up (mod_stk_len m);
+                   ram_mem := mod_stk m;
+                   ram_en := max_reg_module m + 2;
+                   ram_addr := max_reg_module m + 1;
+                   ram_wr_en := max_reg_module m + 3;
+                   ram_d_in := max_reg_module m + 4;
+                   ram_d_out := max_reg_module m + 5 |}
+                (mod_datapath m) (mod_controllogic m)
+    = ((mod_datapath (transf_module m)), mod_controllogic (transf_module m)).
+Proof. unfold transf_module; intros; repeat destruct_match; crush. Qed.
+Hint Resolve transf_module_code : mgen.
+
+Lemma transf_module_code_ram :
+  forall m r, mod_ram m = Some r -> transf_module m = m.
+Proof. unfold transf_module; intros; repeat destruct_match; crush. Qed.
+Hint Resolve transf_module_code_ram : mgen.
+
+Lemma mod_reset_lt : forall m, mod_reset m < max_reg_module m + 1.
+Proof. intros; unfold max_reg_module; lia. Qed.
+Hint Resolve mod_reset_lt : mgen.
+
+Lemma mod_finish_lt : forall m, mod_finish m < max_reg_module m + 1.
+Proof. intros; unfold max_reg_module; lia. Qed.
+Hint Resolve mod_finish_lt : mgen.
+
+Lemma mod_return_lt : forall m, mod_return m < max_reg_module m + 1.
+Proof. intros; unfold max_reg_module; lia. Qed.
+Hint Resolve mod_return_lt : mgen.
+
+Lemma mod_start_lt : forall m, mod_start m < max_reg_module m + 1.
+Proof. intros; unfold max_reg_module; lia. Qed.
+Hint Resolve mod_start_lt : mgen.
+
+Lemma mod_stk_lt : forall m, mod_stk m < max_reg_module m + 1.
+Proof. intros; unfold max_reg_module; lia. Qed.
+Hint Resolve mod_stk_lt : mgen.
+
+Lemma mod_st_lt : forall m, mod_st m < max_reg_module m + 1.
+Proof. intros; unfold max_reg_module; lia. Qed.
+Hint Resolve mod_st_lt : mgen.
+
+Lemma mod_reset_modify :
+  forall m ar ar' v,
+    match_assocmaps (max_reg_module m + 1) ar ar' ->
+    ar ! (mod_reset m) = Some v ->
+    ar' ! (mod_reset (transf_module m)) = Some v.
+Proof.
+  inversion 1. intros.
+  unfold transf_module; repeat destruct_match; simplify;
+  rewrite <- H0; eauto with mgen.
+Qed.
+Hint Resolve mod_reset_modify : mgen.
+
+Lemma mod_finish_modify :
+  forall m ar ar' v,
+    match_assocmaps (max_reg_module m + 1) ar ar' ->
+    ar ! (mod_finish m) = Some v ->
+    ar' ! (mod_finish (transf_module m)) = Some v.
+Proof.
+  inversion 1. intros.
+  unfold transf_module; repeat destruct_match; simplify;
+  rewrite <- H0; eauto with mgen.
+Qed.
+Hint Resolve mod_finish_modify : mgen.
+
+Lemma mod_return_modify :
+  forall m ar ar' v,
+    match_assocmaps (max_reg_module m + 1) ar ar' ->
+    ar ! (mod_return m) = Some v ->
+    ar' ! (mod_return (transf_module m)) = Some v.
+Proof.
+  inversion 1. intros.
+  unfold transf_module; repeat destruct_match; simplify;
+  rewrite <- H0; eauto with mgen.
+Qed.
+Hint Resolve mod_return_modify : mgen.
+
+Lemma mod_start_modify :
+  forall m ar ar' v,
+    match_assocmaps (max_reg_module m + 1) ar ar' ->
+    ar ! (mod_start m) = Some v ->
+    ar' ! (mod_start (transf_module m)) = Some v.
+Proof.
+  inversion 1. intros.
+  unfold transf_module; repeat destruct_match; simplify;
+  rewrite <- H0; eauto with mgen.
+Qed.
+Hint Resolve mod_start_modify : mgen.
+
+Lemma mod_st_modify :
+  forall m ar ar' v,
+    match_assocmaps (max_reg_module m + 1) ar ar' ->
+    ar ! (mod_st m) = Some v ->
+    ar' ! (mod_st (transf_module m)) = Some v.
+Proof.
+  inversion 1. intros.
+  unfold transf_module; repeat destruct_match; simplify;
+  rewrite <- H0; eauto with mgen.
+Qed.
+Hint Resolve mod_st_modify : mgen.
+
 Section CORRECTNESS.
 
   Context (prog tprog: program).
@@ -1003,6 +1126,11 @@ Section CORRECTNESS.
   Proof (Genv.senv_transf TRANSL).
   Hint Resolve senv_preserved : mgen.
 
+  Ltac inv_exists :=
+    match goal with
+    | H: exists _, _ |- _ => inv H
+    end.
+
   Theorem transf_step_correct:
     forall (S1 : state) t S2,
       step ge S1 t S2 ->
@@ -1010,25 +1138,43 @@ Section CORRECTNESS.
         match_states S1 R1 ->
         exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1.
-    - intros. inv H12. learn ASSOC as ASSOC1. inv ASSOC1. learn ARRS as ARRS1. inv ARRS1. simplify.
-      unfold transf_module. destruct_match.
-      exploit transf_code_all. apply Heqp. apply H3.
-      eassumption.
-      unfold exec_all.
+    Ltac transf_step_correct_assum :=
+      match goal with
+      | H: match_states _ _ |- _ => let H2 := fresh "MATCH" in learn H as H2; inv H2
+      | H: mod_ram ?m = Some ?r |- _ =>
+        let H2 := fresh "RAM" in learn H;
+          pose proof (transf_module_code_ram m r H) as H2
+      | H: mod_ram ?m = None |- _ =>
+        let H2 := fresh "RAM" in learn H;
+          pose proof (transf_module_code m H) as H2
+      end.
+    Ltac transf_step_correct_tac :=
+      match goal with
+      | |- Smallstep.plus _ _ _ _ _ => apply Smallstep.plus_one
+      end.
+    induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
+      repeat transf_step_correct_tac.
+    - econstructor. econstructor. apply Smallstep.plus_one. econstructor; eauto with mgen.
+      rewrite RAM0; eassumption. rewrite RAM0; eassumption. rewrite RAM0. admit. admit. admit. admit.
+    - exploit transf_code_all; eauto. unfold exec_all.
       do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC.
       instantiate (1 := empty_assocmap). econstructor. eauto. econstructor. eassumption.
-      instantiate (1 := empty_stack (transf_module m)). admit.
-      admit. intros. simplify.
-      unfold exec_all_ram in *. inv H14. inv H16. inv H14. inv H16. inv H14. simplify.
+      eauto with mgen.
+      eauto with mgen.
+      intros. simplify.
+      unfold exec_all_ram in *. repeat inv_exists.
       destruct x4. destruct x5. destruct x6. destruct x7. destruct x1. destruct x2.
       econstructor. econstructor. apply Smallstep.plus_one. econstructor. simplify.
-      admit. admit. admit. simplify. apply H12. simplify. apply H13.
-      unfold empty_stack in *. simplify. unfold transf_module in *. simplify. destruct_match. simplify. apply H14. simplify. admit. eassumption. simplify. unfold empty_stack in *. simplify.
+      eauto with mgen. eauto with mgen. eauto with mgen. eauto with mgen. eauto with mgen.
+      unfold empty_stack in *. simplify. unfold transf_module in *.
+      simplify. destruct_match. simplify. eassumption. simplify.
+      admit.
+      simplify. eassumption. simplify. unfold empty_stack in *. simplify.
       unfold merge_reg_assocs in *. unfold merge_arr_assocs in *. simplify.
       unfold empty_stack' in *. assert (2 ^ Nat.log2_up (mod_stk_len m) = (mod_stk_len m))%nat by admit.
-      rewrite H18 in H19. rewrite H18. eassumption. auto. auto. simplify. admit.
-      admit.
+      rewrite H18 in H19. unfold transf_module; repeat destruct_match; crush. rewrite H18. eassumption. auto. auto. simplify.
+      instantiate (1 := pstval).
+      admit. eassumption.
       admit.
     - intros. inv H1. inv ASSOC. inv ARRS.
       econstructor. econstructor. apply Smallstep.plus_one.
@@ -1063,7 +1209,6 @@ Section CORRECTNESS.
       rewrite AssocMap.gss. auto.
       rewrite AssocMap.gso; auto.
       symmetry. rewrite AssocMap.gso; auto.
-      Unshelve. exact 1%positive.
   Admitted.
   Hint Resolve transf_step_correct : mgen.
 
