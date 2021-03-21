@@ -1207,7 +1207,7 @@ Proof. induction l; destruct l'; destruct addr; crush. Qed.
 Lemma list_combine_nth_error5 :
   forall l l' addr,
     length l = length l' ->
-    nth_error l addr = None ->
+    nth_error l' addr = None ->
     nth_error (list_combine merge_cell l l') addr = None.
 Proof. induction l; destruct l'; destruct addr; crush. Qed.
 
@@ -1217,7 +1217,7 @@ Lemma array_get_error_merge1 :
     array_get_error addr a = Some (Some v) ->
     array_get_error addr (combine merge_cell a a0) = Some (Some v).
 Proof.
-  intros; unfold array_get_error, combine in *;
+  unfold array_get_error, combine in *; intros;
   apply list_combine_nth_error1; destruct a; destruct a0; crush.
 Qed.
 
@@ -1228,7 +1228,7 @@ Lemma array_get_error_merge2 :
     array_get_error addr a = Some None ->
     array_get_error addr (combine merge_cell a a0) = Some (Some v).
 Proof.
-  intros. unfold array_get_error, combine in *. simplify.
+  unfold array_get_error, combine in *; intros;
   apply list_combine_nth_error2; destruct a; destruct a0; crush.
 Qed.
 
@@ -1239,7 +1239,7 @@ Lemma array_get_error_merge3 :
     array_get_error addr a = Some None ->
     array_get_error addr (combine merge_cell a a0) = Some None.
 Proof.
-  intros. unfold array_get_error, combine in *. simplify.
+  unfold array_get_error, combine in *; intros;
   apply list_combine_nth_error3; destruct a; destruct a0; crush.
 Qed.
 
@@ -1249,36 +1249,54 @@ Lemma array_get_error_merge4 :
     array_get_error addr a = None ->
     array_get_error addr (combine merge_cell a a0) = None.
 Proof.
-  intros. unfold array_get_error, combine in *. simplify.
+  unfold array_get_error, combine in *; intros;
   apply list_combine_nth_error4; destruct a; destruct a0; crush.
 Qed.
 
 Lemma array_get_error_merge5 :
   forall a a0 addr,
     arr_length a = arr_length a0 ->
-    array_get_error addr a = None ->
+    array_get_error addr a0 = None ->
     array_get_error addr (combine merge_cell a a0) = None.
 Proof.
-  intros. unfold array_get_error, combine in *. simplify.
+  unfold array_get_error, combine in *; intros;
   apply list_combine_nth_error5; destruct a; destruct a0; crush.
 Qed.
 
 Lemma match_arrs_merge' :
-  forall nasa basa arr s x x0 a a0 nasa' basa',
+  forall addr nasa basa arr s x x0 a a0 nasa' basa',
     (AssocMap.combine merge_arr nasa basa) ! s = Some arr ->
     nasa ! s = Some a ->
     basa ! s = Some a0 ->
     nasa' ! s = Some x0 ->
-    (forall addr : nat, array_get_error addr a = array_get_error addr x0) ->
-    arr_length a = arr_length x0 ->
     basa' ! s = Some x ->
-    (forall addr : nat, array_get_error addr a0 = array_get_error addr x) ->
+    arr_length x = arr_length x0 ->
+    array_get_error addr a0 = array_get_error addr x ->
     arr_length a0 = arr_length x ->
-    (forall addr, array_get_error addr arr = array_get_error addr (combine merge_cell x0 x)).
+    array_get_error addr a = array_get_error addr x0 ->
+    arr_length a = arr_length x0 ->
+    array_get_error addr arr = array_get_error addr (combine merge_cell x0 x).
 Proof.
   intros. rewrite AssocMap.gcombine in H by auto.
   unfold merge_arr in H.
   rewrite H0 in H. rewrite H1 in H. inv H.
+  destruct (array_get_error addr a0) eqn:?; destruct (array_get_error addr a) eqn:?.
+  destruct o; destruct o0.
+  erewrite array_get_error_merge1; eauto. erewrite array_get_error_merge1; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+  erewrite array_get_error_merge2; eauto. erewrite array_get_error_merge2; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+  erewrite array_get_error_merge1; eauto. erewrite array_get_error_merge1; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+  erewrite array_get_error_merge3; eauto. erewrite array_get_error_merge3; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+  erewrite array_get_error_merge4; eauto. erewrite array_get_error_merge4; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+  erewrite array_get_error_merge5; eauto. erewrite array_get_error_merge5; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+  erewrite array_get_error_merge5; eauto. erewrite array_get_error_merge5; eauto.
+  rewrite <- H6 in H4. rewrite <- H8 in H4. auto.
+Qed.
 
 Lemma match_arrs_merge :
   forall nasa nasa' basa basa',
