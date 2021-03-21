@@ -128,28 +128,28 @@ Inductive exec_ram:
   Verilog.reg_associations -> Verilog.arr_associations ->
   Prop :=
 | exec_ram_Some_idle:
-    forall ra ar ram,
-      (Verilog.assoc_blocking ra)#(ram_en ram, 32) = ZToValue 0 ->
-      exec_ram ra ar (Some ram) ra ar
+    forall ra ar r,
+      (Verilog.assoc_blocking ra)#(ram_en r, 32) = ZToValue 0 ->
+      exec_ram ra ar (Some r) ra ar
 | exec_ram_Some_write:
-    forall ra ar ram d_in addr en wr_en,
+    forall ra ar r d_in addr en wr_en,
       en <> ZToValue 0 ->
       wr_en <> ZToValue 0 ->
-      (Verilog.assoc_blocking ra)!(ram_en ram) = Some en ->
-      (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some wr_en ->
-      (Verilog.assoc_blocking ra)!(ram_d_in ram) = Some d_in ->
-      (Verilog.assoc_blocking ra)!(ram_addr ram) = Some addr ->
-      exec_ram ra ar (Some ram) ra
-               (Verilog.nonblock_arr (ram_mem ram) (valueToNat addr) ar d_in)
-| exec_ram_Some_load:
-    forall ra ar ram addr v_d_out en,
+      (Verilog.assoc_blocking ra)!(ram_en r) = Some en ->
+      (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some wr_en ->
+      (Verilog.assoc_blocking ra)!(ram_d_in r) = Some d_in ->
+      (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
+      exec_ram ra ar (Some r) ra
+               (Verilog.nonblock_arr (ram_mem r) (valueToNat addr) ar d_in)
+| exec_ram_Some_read:
+    forall ra ar r addr v_d_out en,
       en <> ZToValue 0 ->
-      (Verilog.assoc_blocking ra)!(ram_en ram) = Some en ->
-      (Verilog.assoc_blocking ra)!(ram_wr_en ram) = Some (ZToValue 0) ->
-      (Verilog.assoc_blocking ra)!(ram_addr ram) = Some addr ->
+      (Verilog.assoc_blocking ra)!(ram_en r) = Some en ->
+      (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some (ZToValue 0) ->
+      (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
       Verilog.arr_assocmap_lookup (Verilog.assoc_blocking ar)
-                                  (ram_mem ram) (valueToNat addr) = Some v_d_out ->
-      exec_ram ra ar (Some ram) (Verilog.nonblock_reg (ram_d_out ram) ra v_d_out) ar
+                                  (ram_mem r) (valueToNat addr) = Some v_d_out ->
+      exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_d_out r) ra v_d_out) ar
 | exec_ram_None:
     forall r a,
       exec_ram r a None r a.

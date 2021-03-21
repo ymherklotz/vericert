@@ -414,10 +414,29 @@ Lemma find_assoc_get :
     rs ! r = trs ! r ->
     rs # r = trs # r.
 Proof.
-  intros. unfold find_assocmap. unfold AssocMapExt.get_default.
-  rewrite H. auto.
+  intros; unfold find_assocmap, AssocMapExt.get_default; rewrite H; auto.
 Qed.
 Hint Resolve find_assoc_get : mgen.
+
+Lemma find_assoc_get2 :
+  forall rs p r v trs,
+    (forall r, r < p -> rs ! r = trs ! r) ->
+    r < p ->
+    rs # r = v ->
+    trs # r = v.
+Proof.
+  intros; unfold find_assocmap, AssocMapExt.get_default; rewrite <- H; auto.
+Qed.
+Hint Resolve find_assoc_get2 : mgen.
+
+Lemma get_assoc_gt :
+  forall A (rs : AssocMap.t A) p r v trs,
+    (forall r, r < p -> rs ! r = trs ! r) ->
+    r < p ->
+    rs ! r = v ->
+    trs ! r = v.
+Proof. intros. rewrite <- H; auto. Qed.
+Hint Resolve get_assoc_gt : mgen.
 
 Lemma expr_runp_matches :
   forall f rs ar e v,
@@ -1086,6 +1105,196 @@ Proof.
 Qed.
 Hint Resolve mod_st_modify : mgen.
 
+Lemma match_arrs_read :
+  forall ra ra' addr v mem,
+    arr_assocmap_lookup ra mem addr = Some v ->
+    match_arrs ra ra' ->
+    arr_assocmap_lookup ra' mem addr = Some v.
+Proof.
+  unfold arr_assocmap_lookup. intros. destruct_match; destruct_match; try discriminate.
+  inv H0. eapply H1 in Heqo0. inv Heqo0. simplify. unfold arr in *.
+  rewrite H in Heqo. inv Heqo.
+  rewrite H0. auto.
+  inv H0. eapply H1 in Heqo0. inv Heqo0. inv H0. unfold arr in *.
+  rewrite H2 in Heqo. discriminate.
+Qed.
+Hint Resolve match_arrs_read : mgen.
+
+Lemma exec_ram_same :
+  forall rs1 ar1 ram rs2 ar2 p,
+    exec_ram rs1 ar1 (Some ram) rs2 ar2 ->
+    forall_ram (fun x => x < p) ram ->
+    forall trs1 tar1,
+      match_reg_assocs p rs1 trs1 ->
+      match_arr_assocs ar1 tar1 ->
+      exists trs2 tar2,
+        exec_ram trs1 tar1 (Some ram) trs2 tar2
+        /\ match_reg_assocs p rs2 trs2
+        /\ match_arr_assocs ar2 tar2.
+Proof.
+  Ltac exec_ram_same_facts :=
+    match goal with
+    | H: match_reg_assocs _ _ _ |- _ => let H2 := fresh "H" in learn H as H2; inv H2
+    | H: match_assocmaps _ _ _ |- _ => let H2 := fresh "H" in learn H as H2; inv H2
+    | H: match_arr_assocs _ _ |- _ => let H2 := fresh "H" in learn H as H2; inv H2
+    | H: match_arrs _ _ |- _ => let H2 := fresh "H" in learn H as H2; inv H2
+    end.
+  inversion 1; subst; destruct ram; unfold forall_ram; simplify; repeat exec_ram_same_facts.
+  - repeat (econstructor; mgen_crush).
+  - do 2 econstructor; simplify;
+      [eapply exec_ram_Some_write; [ apply H1 | apply H2 | | | | ] | | ];
+      mgen_crush.
+  - do 2 econstructor; simplify; [eapply exec_ram_Some_read | | ];
+      repeat (try econstructor; mgen_crush).
+Qed.
+
+Lemma match_assocmaps_merge :
+  forall p nasr basr nasr' basr',
+    match_assocmaps p nasr nasr' ->
+    match_assocmaps p basr basr' ->
+    match_assocmaps p (merge_regs nasr basr) (merge_regs nasr' basr').
+Proof.
+  unfold merge_regs.
+  intros. inv H. inv H0. econstructor.
+  intros.
+  destruct nasr ! r eqn:?; destruct basr ! r eqn:?.
+  erewrite AssocMapExt.merge_correct_1; mgen_crush.
+  erewrite AssocMapExt.merge_correct_1; mgen_crush.
+  erewrite AssocMapExt.merge_correct_1; mgen_crush.
+  erewrite AssocMapExt.merge_correct_1; mgen_crush.
+  erewrite AssocMapExt.merge_correct_2; mgen_crush.
+  erewrite AssocMapExt.merge_correct_2; mgen_crush.
+  erewrite AssocMapExt.merge_correct_3; mgen_crush.
+  erewrite AssocMapExt.merge_correct_3; mgen_crush.
+Qed.
+Hint Resolve match_assocmaps_merge : mgen.
+
+Ltac inv_exists :=
+  match goal with
+  | H: exists _, _ |- _ => inv H
+  end.
+
+Lemma list_combine_nth_error1 :
+  forall l l' addr v,
+    length l = length l' ->
+    nth_error l addr = Some (Some v) ->
+    nth_error (list_combine merge_cell l l') addr = Some (Some v).
+Proof. induction l; destruct l'; destruct addr; crush. Qed.
+
+Lemma list_combine_nth_error2 :
+  forall l' l addr v,
+    length l = length l' ->
+    nth_error l addr = Some None ->
+    nth_error l' addr = Some (Some v) ->
+    nth_error (list_combine merge_cell l l') addr = Some (Some v).
+Proof. induction l'; try rewrite nth_error_nil in *; destruct l; destruct addr; crush. Qed.
+
+Lemma list_combine_nth_error3 :
+  forall l l' addr,
+    length l = length l' ->
+    nth_error l addr = Some None ->
+    nth_error l' addr = Some None ->
+    nth_error (list_combine merge_cell l l') addr = Some None.
+Proof. induction l; destruct l'; destruct addr; crush. Qed.
+
+Lemma list_combine_nth_error4 :
+  forall l l' addr,
+    length l = length l' ->
+    nth_error l addr = None ->
+    nth_error (list_combine merge_cell l l') addr = None.
+Proof. induction l; destruct l'; destruct addr; crush. Qed.
+
+Lemma list_combine_nth_error5 :
+  forall l l' addr,
+    length l = length l' ->
+    nth_error l addr = None ->
+    nth_error (list_combine merge_cell l l') addr = None.
+Proof. induction l; destruct l'; destruct addr; crush. Qed.
+
+Lemma array_get_error_merge1 :
+  forall a a0 addr v,
+    arr_length a = arr_length a0 ->
+    array_get_error addr a = Some (Some v) ->
+    array_get_error addr (combine merge_cell a a0) = Some (Some v).
+Proof.
+  intros; unfold array_get_error, combine in *;
+  apply list_combine_nth_error1; destruct a; destruct a0; crush.
+Qed.
+
+Lemma array_get_error_merge2 :
+  forall a a0 addr v,
+    arr_length a = arr_length a0 ->
+    array_get_error addr a0 = Some (Some v) ->
+    array_get_error addr a = Some None ->
+    array_get_error addr (combine merge_cell a a0) = Some (Some v).
+Proof.
+  intros. unfold array_get_error, combine in *. simplify.
+  apply list_combine_nth_error2; destruct a; destruct a0; crush.
+Qed.
+
+Lemma array_get_error_merge3 :
+  forall a a0 addr,
+    arr_length a = arr_length a0 ->
+    array_get_error addr a0 = Some None ->
+    array_get_error addr a = Some None ->
+    array_get_error addr (combine merge_cell a a0) = Some None.
+Proof.
+  intros. unfold array_get_error, combine in *. simplify.
+  apply list_combine_nth_error3; destruct a; destruct a0; crush.
+Qed.
+
+Lemma array_get_error_merge4 :
+  forall a a0 addr,
+    arr_length a = arr_length a0 ->
+    array_get_error addr a = None ->
+    array_get_error addr (combine merge_cell a a0) = None.
+Proof.
+  intros. unfold array_get_error, combine in *. simplify.
+  apply list_combine_nth_error4; destruct a; destruct a0; crush.
+Qed.
+
+Lemma array_get_error_merge5 :
+  forall a a0 addr,
+    arr_length a = arr_length a0 ->
+    array_get_error addr a = None ->
+    array_get_error addr (combine merge_cell a a0) = None.
+Proof.
+  intros. unfold array_get_error, combine in *. simplify.
+  apply list_combine_nth_error5; destruct a; destruct a0; crush.
+Qed.
+
+Lemma match_arrs_merge' :
+  forall nasa basa arr s x x0 a a0 nasa' basa',
+    (AssocMap.combine merge_arr nasa basa) ! s = Some arr ->
+    nasa ! s = Some a ->
+    basa ! s = Some a0 ->
+    nasa' ! s = Some x0 ->
+    (forall addr : nat, array_get_error addr a = array_get_error addr x0) ->
+    arr_length a = arr_length x0 ->
+    basa' ! s = Some x ->
+    (forall addr : nat, array_get_error addr a0 = array_get_error addr x) ->
+    arr_length a0 = arr_length x ->
+    (forall addr, array_get_error addr arr = array_get_error addr (combine merge_cell x0 x)).
+Proof.
+  intros. rewrite AssocMap.gcombine in H by auto.
+  unfold merge_arr in H.
+  rewrite H0 in H. rewrite H1 in H. inv H.
+
+Lemma match_arrs_merge :
+  forall nasa nasa' basa basa',
+    match_arrs nasa nasa' ->
+    match_arrs basa basa' ->
+    match_arrs (merge_arrs nasa basa) (merge_arrs nasa' basa').
+Proof.
+  unfold merge_arrs.
+  intros. inv H. inv H0. econstructor. intros.
+  destruct nasa ! s eqn:?; destruct basa ! s eqn:?.
+  pose proof Heqo. apply H1 in Heqo. pose proof Heqo0. apply H in Heqo0.
+  repeat inv_exists. simplify.
+  eexists. simplify. rewrite AssocMap.gcombine; eauto.
+  unfold merge_arr. unfold Verilog.arr in *. rewrite H6. rewrite H7. auto.
+  intros.
+
 Section CORRECTNESS.
 
   Context (prog tprog: program).
@@ -1126,11 +1335,6 @@ Section CORRECTNESS.
   Proof (Genv.senv_transf TRANSL).
   Hint Resolve senv_preserved : mgen.
 
-  Ltac inv_exists :=
-    match goal with
-    | H: exists _, _ |- _ => inv H
-    end.
-
   Theorem transf_step_correct:
     forall (S1 : state) t S2,
       step ge S1 t S2 ->
@@ -1154,8 +1358,25 @@ Section CORRECTNESS.
       end.
     induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
       repeat transf_step_correct_tac.
-    - econstructor. econstructor. apply Smallstep.plus_one. econstructor; eauto with mgen.
-      rewrite RAM0; eassumption. rewrite RAM0; eassumption. rewrite RAM0. admit. admit. admit. admit.
+    - exploit match_states_same. apply H4. instantiate (1 := max_reg_module m + 1).
+      assert (max_reg_stmnt ctrl < max_reg_module m + 1) by admit; auto.
+      econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
+      intros. repeat inv_exists. simplify. inv H15. inv H9.
+      exploit match_states_same. apply H6. instantiate (1 := max_reg_module m + 1).
+      assert (max_reg_stmnt data < max_reg_module m + 1) by admit; auto.
+      econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify.
+      inv H9. inv H16.
+      exploit exec_ram_same; eauto.
+      assert (forall_ram (fun x : reg => x < (max_reg_module m + 1)) r) by admit; eauto.
+      econstructor. eapply match_assocmaps_merge; eauto. eauto with mgen.
+      econstructor.
+      econstructor; eauto.
+      econstructor; eauto. intros. repeat inv_exists. simplify. inv H9. inv H22.
+      econstructor; simplify. apply Smallstep.plus_one. econstructor.
+      mgen_crush. mgen_crush. mgen_crush. rewrite RAM0; eassumption. rewrite RAM0; eassumption.
+      rewrite RAM0. apply H13. mgen_crush. apply H14. rewrite RAM0.
+      rewrite RAM0; eassumption. rewrite RAM0; eassumption. rewrite RAM0; eassumption.
+      rewrite RAM0.
     - exploit transf_code_all; eauto. unfold exec_all.
       do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC.
       instantiate (1 := empty_assocmap). econstructor. eauto. econstructor. eassumption.
@@ -1164,10 +1385,10 @@ Section CORRECTNESS.
       intros. simplify.
       unfold exec_all_ram in *. repeat inv_exists.
       destruct x4. destruct x5. destruct x6. destruct x7. destruct x1. destruct x2.
-      econstructor. econstructor. apply Smallstep.plus_one. econstructor. simplify.
-      eauto with mgen. eauto with mgen. eauto with mgen. eauto with mgen. eauto with mgen.
+      econstructor. econstructor. apply Smallstep.plus_one.
+      econstructor; eauto with mgen; simplify.
       unfold empty_stack in *. simplify. unfold transf_module in *.
-      simplify. destruct_match. simplify. eassumption. simplify.
+      simplify. repeat destruct_match; crush. eassumption. simplify.
       admit.
       simplify. eassumption. simplify. unfold empty_stack in *. simplify.
       unfold merge_reg_assocs in *. unfold merge_arr_assocs in *. simplify.
