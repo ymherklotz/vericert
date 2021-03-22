@@ -219,7 +219,7 @@ Inductive match_assocmaps : positive -> assocmap -> assocmap -> Prop :=
     match_assocmaps p rs rs'.
 
 Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
-  match_assocmap_arr: forall ar ar',
+| match_assocmap_arr_intro: forall ar ar',
     (forall s arr,
         ar ! s = Some arr ->
         exists arr',
@@ -227,6 +227,7 @@ Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
           /\ (forall addr,
                  array_get_error addr arr = array_get_error addr arr')
           /\ arr_length arr = arr_length arr')%nat ->
+    (forall s, ar ! s = None -> ar' ! s = None) ->
     match_arrs ar ar'.
 
 Inductive match_stackframes : stackframe -> stackframe -> Prop :=
@@ -237,12 +238,30 @@ Inductive match_stackframes : stackframe -> stackframe -> Prop :=
       match_stackframes (Stackframe r m pc asr asa)
                         (Stackframe r (transf_module m) pc asr' asa').
 
+Inductive match_arrs_size : assocmap_arr -> assocmap_arr -> Prop :=
+  match_arrs_size_intro :
+    forall nasa basa,
+      (forall s arr,
+          nasa ! s = Some arr ->
+          exists arr',
+            basa ! s = Some arr' /\ arr_length arr = arr_length arr') ->
+      (forall s arr,
+          basa ! s = Some arr ->
+          exists arr',
+            nasa ! s = Some arr' /\ arr_length arr = arr_length arr') ->
+      (forall s, basa ! s = None <-> nasa ! s = None) ->
+      match_arrs_size nasa basa.
+
+Definition match_empty_size (m : module) (ar : assocmap_arr) : Prop :=
+  match_arrs_size (empty_stack m) ar.
+
 Inductive match_states : state -> state -> Prop :=
 | match_state :
     forall res res' m st asr asr' asa asa'
            (ASSOC: match_assocmaps (max_reg_module m + 1) asr asr')
            (ARRS: match_arrs asa asa')
-           (STACKS: list_forall2 match_stackframes res res'),
+           (STACKS: list_forall2 match_stackframes res res')
+           (ARRS_SIZE: match_arrs_size (empty_stack m) asa),
       match_states (State res m st asr asa)
                    (State res' (transf_module m) st asr' asa')
 | match_returnstate :
@@ -298,6 +317,10 @@ Hint Resolve match_reg_assocs_equiv : mgen.
 Lemma match_arr_assocs_equiv : forall a, match_arr_assocs a a.
 Proof. destruct a; constructor; mgen_crush. Qed.
 Hint Resolve match_arr_assocs_equiv : mgen.
+
+Lemma match_arrs_size_equiv : forall a, match_arrs_size a a.
+Proof. intros; repeat econstructor; eauto. Qed.
+Hint Resolve match_arrs_size_equiv : mgen.
 
 Lemma match_assocmaps_max1 :
   forall p p' a b,
@@ -461,7 +484,7 @@ Proof.
     inv H1.
     inv H0.
     eapply H3 in Heqo. inv Heqo. inv H0.
-    unfold arr in *. rewrite H1. inv H4.
+    unfold arr in *. rewrite H1. inv H5.
     rewrite H0. auto.
   - intros. econstructor; eauto. eapply IHexpr_runp1; eauto.
     econstructor. inv H2. intros.
@@ -561,8 +584,7 @@ Proof.
   apply H0 in Heqo. inv Heqo. inv H.
   eexists. simplify.
   unfold arr in *.
-  rewrite H1. rewrite AssocMap.gss. simplify.
-  intros.
+  rewrite H1. 
   Admitted.
 
 Hint Resolve match_arrs_gss : mgen.
@@ -990,6 +1012,7 @@ Proof.
   unfold empty_stack. unfold transf_module.
   intros. destruct_match. econstructor. simplify. eexists.
   simplify. destruct_match; eauto. eauto. eauto.
+  intros. destruct_match. auto. simplify. auto.
 Qed.
 Hint Resolve empty_arrs_match : mgen.
 
@@ -1116,7 +1139,7 @@ Proof.
   rewrite H in Heqo. inv Heqo.
   rewrite H0. auto.
   inv H0. eapply H1 in Heqo0. inv Heqo0. inv H0. unfold arr in *.
-  rewrite H2 in Heqo. discriminate.
+  rewrite H3 in Heqo. discriminate.
 Qed.
 Hint Resolve match_arrs_read : mgen.
 
@@ -1300,18 +1323,135 @@ Qed.
 
 Lemma match_arrs_merge :
   forall nasa nasa' basa basa',
+    match_arrs_size nasa basa ->
     match_arrs nasa nasa' ->
     match_arrs basa basa' ->
     match_arrs (merge_arrs nasa basa) (merge_arrs nasa' basa').
 Proof.
   unfold merge_arrs.
-  intros. inv H. inv H0. econstructor. intros.
-  destruct nasa ! s eqn:?; destruct basa ! s eqn:?.
-  pose proof Heqo. apply H1 in Heqo. pose proof Heqo0. apply H in Heqo0.
-  repeat inv_exists. simplify.
-  eexists. simplify. rewrite AssocMap.gcombine; eauto.
-  unfold merge_arr. unfold Verilog.arr in *. rewrite H6. rewrite H7. auto.
+  intros. inv H. inv H0. inv H1. econstructor.
+  - intros. destruct nasa ! s eqn:?; destruct basa ! s eqn:?; unfold Verilog.arr in *.
+    + pose proof Heqo. apply H in Heqo. pose proof Heqo0. apply H0 in Heqo0.
+      repeat inv_exists. simplify.
+      eexists. simplify. rewrite AssocMap.gcombine; eauto.
+      unfold merge_arr. unfold Verilog.arr in *. rewrite H11. rewrite H12. auto.
+      intros. eapply match_arrs_merge'; eauto. eapply H2 in H7; eauto.
+      inv_exists. simplify. congruence.
+      rewrite AssocMap.gcombine in H1; auto. unfold merge_arr in H1.
+      rewrite H7 in H1. rewrite H8 in H1. inv H1.
+      repeat rewrite combine_length; auto.
+      eapply H2 in H7; eauto. inv_exists; simplify; congruence.
+      eapply H2 in H7; eauto. inv_exists; simplify; congruence.
+    + apply H2 in Heqo; inv_exists; crush.
+    + apply H3 in Heqo0; inv_exists; crush.
+    + rewrite AssocMap.gcombine in H1 by auto. unfold merge_arr in *.
+      rewrite Heqo in H1. rewrite Heqo0 in H1. discriminate.
+  - intros. rewrite AssocMap.gcombine in H1 by auto. unfold merge_arr in H1.
+    repeat destruct_match; crush.
+    rewrite AssocMap.gcombine by auto; unfold merge_arr.
+    apply H5 in Heqo. apply H6 in Heqo0.
+    unfold Verilog.arr in *.
+    rewrite Heqo. rewrite Heqo0. auto.
+Qed.
+
+Definition match_arr_assocs_size ar :=
+  match_arrs_size (assoc_nonblocking ar) (assoc_blocking ar).
+
+Lemma match_arrs_size_stmnt_preserved :
+  forall f rs1 ar1 c rs2 ar2,
+    stmnt_runp f rs1 ar1 c rs2 ar2 ->
+    match_arr_assocs_size ar1 ->
+    match_arr_assocs_size ar2.
+Proof.
+  induction 1; inversion 1; eauto.
+  - unfold Verilog.arr in *. constructor.
+    intros. unfold block_arr in *. simplify. destruct (Pos.eq_dec r s); subst.
+    simplify. unfold arr_assocmap_set. apply H2 in H7. inv_exists.
+    simplify. unfold Verilog.arr in *.
+    rewrite H6.
+    eexists. rewrite AssocMap.gss. split. auto. rewrite <- array_set_len; auto.
+    unfold arr_assocmap_set. destruct (assoc_blocking asa) ! r eqn:?.
+    unfold Verilog.arr in *. rewrite Heqo. apply H2 in H7. inv_exists. simplify.
+    eexists. simplify. rewrite AssocMap.gso; auto. eauto. auto.
+    unfold Verilog.arr in *. rewrite Heqo. apply H2 in H7. inv_exists; simplify.
+    eexists; split; eauto.
+
+    intros. unfold block_arr in *. simplify. destruct (Pos.eq_dec r s); subst.
+    Admitted.
+
+Lemma match_arrs_size_stmnt_preserved2 :
+  forall f rs1 bar nar bar' nar' c rs2,
+    stmnt_runp f rs1 {| assoc_nonblocking := nar; assoc_blocking := bar |}
+               c rs2 {| assoc_nonblocking := nar'; assoc_blocking := bar' |} ->
+    match_arrs_size nar bar ->
+    match_arrs_size nar' bar'.
+Proof.
+  intros. remember {| assoc_blocking := bar; assoc_nonblocking := nar |} as ar1.
+  remember {| assoc_blocking := bar'; assoc_nonblocking := nar' |} as ar2.
+  assert (H1: nar' = assoc_nonblocking ar2). rewrite Heqar2. auto.
+  assert (H2: bar' = assoc_blocking ar2). rewrite Heqar2. auto.
+  rewrite H1. rewrite H2. eapply match_arrs_size_stmnt_preserved; eauto.
+  unfold match_arr_assocs_size. rewrite Heqar1. auto.
+Qed.
+
+Lemma match_arrs_size_stmnt_preserved3 :
+  forall m f rs1 bar nar bar' nar' c rs2,
+    stmnt_runp f rs1 {| assoc_nonblocking := nar; assoc_blocking := bar |}
+               c rs2 {| assoc_nonblocking := nar'; assoc_blocking := bar' |} ->
+    match_empty_size m nar ->
+    match_empty_size m bar ->
+    match_empty_size m nar' /\ match_empty_size m bar'.
+Proof.
+  induction 1; inversion 1; inversion 1; eauto.
+  Admitted.
+
+Lemma match_arrs_size_ram_preserved :
+  forall rs1 ar1 ram rs2 ar2,
+    exec_ram rs1 ar1 ram rs2 ar2 ->
+    match_arr_assocs_size ar1 ->
+    match_arr_assocs_size ar2.
+Proof. Admitted.
+
+Lemma match_arrs_size_ram_preserved2 :
+  forall rs1 nar bar ram rs2 nar' bar',
+    exec_ram rs1 {| assoc_nonblocking := nar; assoc_blocking := bar |} ram
+             rs2 {| assoc_nonblocking := nar'; assoc_blocking := bar' |} ->
+    match_arrs_size nar bar ->
+    match_arrs_size nar' bar'.
+Proof.
+  intros. remember {| assoc_blocking := bar; assoc_nonblocking := nar |} as ar1.
+  remember {| assoc_blocking := bar'; assoc_nonblocking := nar' |} as ar2.
+  assert (H1: nar' = assoc_nonblocking ar2). rewrite Heqar2. auto.
+  assert (H2: bar' = assoc_blocking ar2). rewrite Heqar2. auto.
+  rewrite H1. rewrite H2. eapply match_arrs_size_ram_preserved; eauto.
+  unfold match_arr_assocs_size. rewrite Heqar1. auto.
+Qed.
+
+Lemma match_arrs_size_ram_preserved3 :
+  forall m rs1 bar nar bar' nar' ram rs2,
+    exec_ram rs1 {| assoc_nonblocking := nar; assoc_blocking := bar |}
+             ram rs2 {| assoc_nonblocking := nar'; assoc_blocking := bar' |} ->
+    match_empty_size m nar ->
+    match_empty_size m bar ->
+    match_empty_size m nar' /\ match_empty_size m bar'.
+Proof.
+  induction 1; inversion 1; inversion 1; eauto.
+  Admitted.
+
+Lemma match_empty_size_merge :
+  forall nasa2 basa2 m,
+  match_empty_size m nasa2 ->
+  match_empty_size m basa2 ->
+  match_empty_size m (merge_arrs nasa2 basa2).
+Proof.
+  intros. inv H. inv H0. constructor.
+  simplify. unfold merge_arrs. rewrite AssocMap.gcombine by auto.
+  pose proof H0 as H6. apply H1 in H6. inv_exists; simplify.
+  pose proof H0 as H9. apply H in H9. inv_exists; simplify.
+  eexists. simplify. unfold merge_arr. unfold Verilog.arr in *. rewrite H6.
+  rewrite H9. auto. rewrite H8. symmetry. apply combine_length. congruence.
   intros.
+  Admitted.
 
 Section CORRECTNESS.
 
@@ -1376,25 +1516,39 @@ Section CORRECTNESS.
       end.
     induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
       repeat transf_step_correct_tac.
-    - exploit match_states_same. apply H4. instantiate (1 := max_reg_module m + 1).
+    - assert (MATCH_ARR1: match_arrs_size nasa1 basa1). { eapply match_arrs_size_stmnt_preserved2; eauto. }
+      assert (MATCH_ARR2: match_arrs_size nasa2 basa2). { eapply match_arrs_size_stmnt_preserved2; eauto. }
+      assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
+      { eapply match_arrs_size_stmnt_preserved3; eauto. unfold match_empty_size; mgen_crush. }
+      simplify.
+      assert (MATCH_SIZE2: match_empty_size m nasa2 /\ match_empty_size m basa2).
+      { eapply match_arrs_size_stmnt_preserved3; mgen_crush. } simplify.
+      assert (MATCH_SIZE2: match_empty_size m nasa3 /\ match_empty_size m basa3).
+      { eapply match_arrs_size_ram_preserved3; mgen_crush. unfold match_empty_size. mgen_crush.
+      unfold match_empty_size. mgen_crush. apply match_empty_size_merge; mgen_crush. } simplify.
+      assert (MATCH_ARR3: match_arrs_size nasa3 basa3).
+      { eapply match_arrs_size_ram_preserved2; eauto. apply match_empty_size_merge; eauto. }
+      exploit match_states_same. apply H4. instantiate (1 := max_reg_module m + 1).
       assert (max_reg_stmnt ctrl < max_reg_module m + 1) by admit; auto.
       econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
-      intros. repeat inv_exists. simplify. inv H15. inv H9.
+      intros. repeat inv_exists. simplify. inv H18. inv H21.
       exploit match_states_same. apply H6. instantiate (1 := max_reg_module m + 1).
       assert (max_reg_stmnt data < max_reg_module m + 1) by admit; auto.
-      econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify.
-      inv H9. inv H16.
+      econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify. inv H18. inv H23.
       exploit exec_ram_same; eauto.
       assert (forall_ram (fun x : reg => x < (max_reg_module m + 1)) r) by admit; eauto.
       econstructor. eapply match_assocmaps_merge; eauto. eauto with mgen.
       econstructor.
-      econstructor; eauto.
-      econstructor; eauto. intros. repeat inv_exists. simplify. inv H9. inv H22.
+      apply match_arrs_merge; eauto with mgen. eauto with mgen.
+      intros. repeat inv_exists. simplify. inv H18. inv H28.
       econstructor; simplify. apply Smallstep.plus_one. econstructor.
       mgen_crush. mgen_crush. mgen_crush. rewrite RAM0; eassumption. rewrite RAM0; eassumption.
-      rewrite RAM0. apply H13. mgen_crush. apply H14. rewrite RAM0.
-      rewrite RAM0; eassumption. rewrite RAM0; eassumption. rewrite RAM0; eassumption.
-      rewrite RAM0.
+      rewrite RAM0. eassumption. mgen_crush. eassumption. rewrite RAM0 in H21. rewrite RAM0.
+      rewrite RAM. eassumption. eauto. eauto. instantiate (1 := pstval).
+      assert ((merge_regs ran'3 rab'3) ! (mod_st (transf_module m)) = Some (posToValue pstval)) by admit. eauto.
+      eauto.
+      econstructor. mgen_crush. apply match_arrs_merge; mgen_crush. eauto. eauto.
+      apply match_empty_size_merge; mgen_crush.
     - exploit transf_code_all; eauto. unfold exec_all.
       do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC.
       instantiate (1 := empty_assocmap). econstructor. eauto. econstructor. eassumption.
