@@ -230,14 +230,6 @@ Inductive match_arrs : assocmap_arr -> assocmap_arr -> Prop :=
     (forall s, ar ! s = None -> ar' ! s = None) ->
     match_arrs ar ar'.
 
-Inductive match_stackframes : stackframe -> stackframe -> Prop :=
-  match_stackframe_intro :
-    forall r m pc asr asa asr' asa',
-      match_assocmaps (max_reg_module m + 1) asr asr' ->
-      match_arrs asa asa' ->
-      match_stackframes (Stackframe r m pc asr asa)
-                        (Stackframe r (transf_module m) pc asr' asa').
-
 Inductive match_arrs_size : assocmap_arr -> assocmap_arr -> Prop :=
   match_arrs_size_intro :
     forall nasa basa,
@@ -254,6 +246,16 @@ Inductive match_arrs_size : assocmap_arr -> assocmap_arr -> Prop :=
 
 Definition match_empty_size (m : module) (ar : assocmap_arr) : Prop :=
   match_arrs_size (empty_stack m) ar.
+Hint Unfold match_empty_size : mgen.
+
+Inductive match_stackframes : stackframe -> stackframe -> Prop :=
+  match_stackframe_intro :
+    forall r m pc asr asa asr' asa',
+      match_assocmaps (max_reg_module m + 1) asr asr' ->
+      match_arrs asa asa' ->
+      match_empty_size m asa ->
+      match_stackframes (Stackframe r m pc asr asa)
+                        (Stackframe r (transf_module m) pc asr' asa').
 
 Inductive match_states : state -> state -> Prop :=
 | match_state :
@@ -1594,29 +1596,33 @@ Section CORRECTNESS.
       assert (match_arrs (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2)) (merge_arrs assoc_nonblocking4 assoc_blocking4)) by admit. auto.
       eauto.
       assert (match_empty_size m (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2))) by admit. auto.
-    - intros. inv H1. inv ASSOC. inv ARRS.
-      econstructor. econstructor. apply Smallstep.plus_one.
-      apply step_finish; unfold transf_module; destruct_match; crush; eauto.
-      unfold find_assocmap in *. unfold AssocMapExt.get_default in *.
-      assert (mod_finish m < max_reg_module m + 1) by admit.
-      apply H1 in H3. rewrite <- H3. auto.
-      assert (mod_return m < max_reg_module m + 1) by admit.
-      rewrite <- H1. eauto. auto. constructor. auto.
-    - intros. inv H.
-      econstructor. econstructor. apply Smallstep.plus_one. econstructor.
+    - do 2 econstructor. apply Smallstep.plus_one.
+      apply step_finish; mgen_crush. constructor; eauto.
+    - do 2 econstructor. apply Smallstep.plus_one.
+      apply step_finish; mgen_crush. econstructor; eauto.
+    - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
+      replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m) by (rewrite RAM0; auto).
+      replace (mod_reset (transf_module m)) with (mod_reset m) by (rewrite RAM0; auto).
+      replace (mod_finish (transf_module m)) with (mod_finish m) by (rewrite RAM0; auto).
+      replace (empty_stack (transf_module m)) with (empty_stack m) by (rewrite RAM0; auto).
+      replace (mod_params (transf_module m)) with (mod_params m) by (rewrite RAM0; auto).
+      replace (mod_st (transf_module m)) with (mod_st m) by (rewrite RAM0; auto).
+      repeat econstructor; mgen_crush.
+    - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).
       replace (mod_finish (transf_module m)) with (mod_finish m).
       replace (empty_stack (transf_module m)) with (empty_stack m).
       replace (mod_params (transf_module m)) with (mod_params m).
       replace (mod_st (transf_module m)) with (mod_st m).
-      econstructor; mgen_crush.
-      all: try solve [unfold transf_module; destruct_match; crush].
-      apply list_forall2_nil.
-    - simplify. inv H0. inv STACKS. destruct b1. inv H1.
+      all: try solve [unfold transf_module; repeat destruct_match; mgen_crush].
+      repeat econstructor; mgen_crush.
+    - inv STACKS. destruct b1; subst.
       econstructor. econstructor. apply Smallstep.plus_one.
-      econstructor. unfold transf_module. destruct_match. simplify. eauto.
-      econstructor; auto. econstructor. intros. inv H2.
+      econstructor. eauto.
+      clear Learn. inv H0. inv H3. inv STACKS. inv H4. constructor.
+      constructor. intros.
+      rewrite RAM0.
       destruct (Pos.eq_dec r res); subst.
       rewrite AssocMap.gss.
       rewrite AssocMap.gss. auto.
@@ -1626,7 +1632,25 @@ Section CORRECTNESS.
       rewrite AssocMap.gss.
       rewrite AssocMap.gss. auto.
       rewrite AssocMap.gso; auto.
+      symmetry. rewrite AssocMap.gso; auto. eauto.
+      eauto. eauto.
+    - inv STACKS. destruct b1; subst.
+      econstructor. econstructor. apply Smallstep.plus_one.
+      econstructor. eauto.
+      clear Learn. inv H0. inv H3. inv STACKS. inv H4. constructor.
+      constructor. intros.
+      unfold transf_module. repeat destruct_match; crush.
+      destruct (Pos.eq_dec r res); subst.
+      rewrite AssocMap.gss.
+      rewrite AssocMap.gss. auto.
+      rewrite AssocMap.gso; auto.
       symmetry. rewrite AssocMap.gso; auto.
+      destruct (Pos.eq_dec (mod_st m) r); subst.
+      rewrite AssocMap.gss.
+      rewrite AssocMap.gss. auto.
+      rewrite AssocMap.gso; auto.
+      symmetry. rewrite AssocMap.gso; auto. eauto.
+      eauto. eauto.
   Admitted.
   Hint Resolve transf_step_correct : mgen.
 
