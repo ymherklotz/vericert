@@ -261,7 +261,7 @@ Inductive match_states : state -> state -> Prop :=
            (ASSOC: match_assocmaps (max_reg_module m + 1) asr asr')
            (ARRS: match_arrs asa asa')
            (STACKS: list_forall2 match_stackframes res res')
-           (ARRS_SIZE: match_arrs_size (empty_stack m) asa),
+           (ARRS_SIZE: match_empty_size m asa),
       match_states (State res m st asr asa)
                    (State res' (transf_module m) st asr' asa')
 | match_returnstate :
@@ -1453,6 +1453,32 @@ Proof.
   intros.
   Admitted.
 
+Lemma match_empty_size_match :
+  forall m nasa2 basa2,
+    match_empty_size m nasa2 ->
+    match_empty_size m basa2 ->
+    match_arrs_size nasa2 basa2.
+Proof.
+  Ltac match_empty_size_match_solve :=
+    match goal with
+    | H: context[forall s arr, ?ar ! s = Some arr -> _], H2: ?ar ! _ = Some _ |- _ =>
+      let H3 := fresh "H" in
+      learn H; pose proof H2 as H3; apply H in H3; repeat inv_exists
+    | H: context[forall s, ?ar ! s = None <-> _], H2: ?ar ! _ = None |- _ =>
+      let H3 := fresh "H" in
+      learn H; pose proof H2 as H3; apply H in H3
+    | H: context[forall s, _ <-> ?ar ! s = None], H2: ?ar ! _ = None |- _ =>
+      let H3 := fresh "H" in
+      learn H; pose proof H2 as H3; apply H in H3
+    | |- exists _, _ => econstructor
+    | |- _ ! _ = Some _ => eassumption
+    | |- _ = _ => congruence
+    | |- _ <-> _ => split
+    end; simplify.
+  inversion 1; inversion 1; constructor; simplify; repeat match_empty_size_match_solve.
+Qed.
+Hint Resolve match_empty_size_match : mgen.
+
 Section CORRECTNESS.
 
   Context (prog tprog: program).
@@ -1516,9 +1542,7 @@ Section CORRECTNESS.
       end.
     induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
       repeat transf_step_correct_tac.
-    - assert (MATCH_ARR1: match_arrs_size nasa1 basa1). { eapply match_arrs_size_stmnt_preserved2; eauto. }
-      assert (MATCH_ARR2: match_arrs_size nasa2 basa2). { eapply match_arrs_size_stmnt_preserved2; eauto. }
-      assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
+    - assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
       { eapply match_arrs_size_stmnt_preserved3; eauto. unfold match_empty_size; mgen_crush. }
       simplify.
       assert (MATCH_SIZE2: match_empty_size m nasa2 /\ match_empty_size m basa2).
@@ -1527,7 +1551,7 @@ Section CORRECTNESS.
       { eapply match_arrs_size_ram_preserved3; mgen_crush. unfold match_empty_size. mgen_crush.
       unfold match_empty_size. mgen_crush. apply match_empty_size_merge; mgen_crush. } simplify.
       assert (MATCH_ARR3: match_arrs_size nasa3 basa3).
-      { eapply match_arrs_size_ram_preserved2; eauto. apply match_empty_size_merge; eauto. }
+      { eapply match_arrs_size_ram_preserved2; eauto; apply match_empty_size_merge; eauto. }
       exploit match_states_same. apply H4. instantiate (1 := max_reg_module m + 1).
       assert (max_reg_stmnt ctrl < max_reg_module m + 1) by admit; auto.
       econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
@@ -1550,25 +1574,26 @@ Section CORRECTNESS.
       econstructor. mgen_crush. apply match_arrs_merge; mgen_crush. eauto. eauto.
       apply match_empty_size_merge; mgen_crush.
     - exploit transf_code_all; eauto. unfold exec_all.
-      do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC.
-      instantiate (1 := empty_assocmap). econstructor. eauto. econstructor. eassumption.
+      do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC. eauto with mgen.
+      econstructor. apply ARRS.
       eauto with mgen.
       eauto with mgen.
-      intros. simplify.
-      unfold exec_all_ram in *. repeat inv_exists.
+      intros. simplify. inv H15. inv H17.
+      unfold exec_all_ram in *. repeat inv_exists. simplify. inv H7.
       destruct x4. destruct x5. destruct x6. destruct x7. destruct x1. destruct x2.
       econstructor. econstructor. apply Smallstep.plus_one.
       econstructor; eauto with mgen; simplify.
+      assert (assoc_blocking ! (mod_st (transf_module m)) = Some (posToValue st)) by admit; auto.
       unfold empty_stack in *. simplify. unfold transf_module in *.
-      simplify. repeat destruct_match; crush. eassumption. simplify.
-      admit.
-      simplify. eassumption. simplify. unfold empty_stack in *. simplify.
-      unfold merge_reg_assocs in *. unfold merge_arr_assocs in *. simplify.
-      unfold empty_stack' in *. assert (2 ^ Nat.log2_up (mod_stk_len m) = (mod_stk_len m))%nat by admit.
-      rewrite H18 in H19. unfold transf_module; repeat destruct_match; crush. rewrite H18. eassumption. auto. auto. simplify.
-      instantiate (1 := pstval).
-      admit. eassumption.
-      admit.
+      simplify. repeat destruct_match; crush.
+      unfold merge_arr_assocs, merge_reg_assocs, empty_stack' in *. simplify.
+      assert (2 ^ Nat.log2_up (mod_stk_len m) = (mod_stk_len m))%nat by admit.
+      rewrite H7 in H17. rewrite H7.
+      eassumption.
+      econstructor. mgen_crush.
+      assert (match_arrs (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2)) (merge_arrs assoc_nonblocking4 assoc_blocking4)) by admit. auto.
+      eauto.
+      assert (match_empty_size m (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2))) by admit. auto.
     - intros. inv H1. inv ASSOC. inv ARRS.
       econstructor. econstructor. apply Smallstep.plus_one.
       apply step_finish; unfold transf_module; destruct_match; crush; eauto.
