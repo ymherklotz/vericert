@@ -565,8 +565,8 @@ Proof. inversion 1; auto. Qed.
 
 Lemma arrs_present :
   forall r i v ar arr,
-  (arr_assocmap_set r i v ar) ! r = Some arr ->
-  exists b, ar ! r = Some b.
+    (arr_assocmap_set r i v ar) ! r = Some arr ->
+    exists b, ar ! r = Some b.
 Proof.
   intros. unfold arr_assocmap_set in *.
   destruct ar!r eqn:?.
@@ -574,21 +574,87 @@ Proof.
   inv H. eexists. auto. rewrite Heqo in H. discriminate.
 Qed.
 
+Ltac inv_exists :=
+  match goal with
+  | H: exists _, _ |- _ => inv H
+  end.
+
+Lemma array_get_error_bound_gt :
+  forall A i (a : Array A),
+    (i >= arr_length a)%nat ->
+    array_get_error i a = None.
+Proof.
+  intros. unfold array_get_error.
+  apply nth_error_None. destruct a. simplify.
+  lia.
+Qed.
+Hint Resolve array_get_error_bound_gt : mgen.
+
+Lemma array_get_error_each :
+  forall A addr i (v : A) a x,
+    arr_length a = arr_length x ->
+    array_get_error addr a = array_get_error addr x ->
+    array_get_error addr (array_set i v a) = array_get_error addr (array_set i v x).
+Proof.
+  intros.
+  destruct (Nat.eq_dec addr i); subst.
+  destruct (lt_dec i (arr_length a)).
+  repeat rewrite array_get_error_set_bound; auto.
+  rewrite <- H. auto.
+  apply Nat.nlt_ge in n.
+  repeat rewrite array_get_error_bound_gt; auto.
+  rewrite <- array_set_len. rewrite <- H. lia.
+  repeat rewrite array_gso; auto.
+Qed.
+Hint Resolve array_get_error_each : mgen.
+
 Lemma match_arrs_gss :
   forall ar ar' r v i,
     match_arrs ar ar' ->
     match_arrs (arr_assocmap_set r i v ar) (arr_assocmap_set r i v ar').
 Proof.
-  intros. inv H. constructor. intros.
-  unfold arr_assocmap_set in *.
-  destruct (Pos.eq_dec s r); subst.
-  destruct ar ! r eqn:?. rewrite AssocMap.gss in H. inv H.
-  apply H0 in Heqo. inv Heqo. inv H.
-  eexists. simplify.
-  unfold arr in *.
-  rewrite H1. 
-  Admitted.
-
+  Ltac mag_tac :=
+    match goal with
+    | H: ?ar ! _ = Some _, H2: forall s arr, ?ar ! s = Some arr -> _ |- _ =>
+      let H3 := fresh "H" in
+      learn H as H3; apply H2 in H3; inv_exists; simplify
+    | H: ?ar ! _ = None, H2: forall s, ?ar ! s = None -> _ |- _ =>
+      let H3 := fresh "H" in
+      learn H as H3; apply H2 in H3; inv_exists; simplify
+    | H: ?ar ! _ = _ |- context[match ?ar ! _ with _ => _ end] =>
+      unfold Verilog.arr in *; rewrite H
+    | H: ?ar ! _ = _, H2: context[match ?ar ! _ with _ => _ end] |- _ =>
+      unfold Verilog.arr in *; rewrite H in H2
+    | H: context[(_ # ?s <- _) ! ?s] |- _ => rewrite AssocMap.gss in H
+    | H: context[(_ # ?r <- _) ! ?s], H2: ?r <> ?s |- _ => rewrite AssocMap.gso in H; auto
+    | |- context[(_ # ?s <- _) ! ?s] => rewrite AssocMap.gss
+    | H: ?r <> ?s |- context[(_ # ?r <- _) ! ?s] => rewrite AssocMap.gso; auto
+    end.
+  intros.
+  inv H. econstructor; simplify.
+  destruct (Pos.eq_dec r s); subst.
+  - unfold arr_assocmap_set, Verilog.arr in *.
+    destruct ar!s eqn:?.
+    mag_tac.
+    econstructor; simplify.
+    repeat mag_tac; auto.
+    intros. repeat mag_tac. simplify.
+    apply array_get_error_each; auto.
+    repeat mag_tac; crush.
+    repeat mag_tac; crush.
+  - unfold arr_assocmap_set in *.
+    destruct ar ! r eqn:?. rewrite AssocMap.gso in H; auto.
+    apply H0 in Heqo. apply H0 in H. repeat inv_exists. simplify.
+    econstructor. unfold Verilog.arr in *. rewrite H3. simplify.
+    rewrite AssocMap.gso; auto. eauto. intros. auto. auto.
+    apply H1 in Heqo. apply H0 in H. repeat inv_exists; simplify.
+    econstructor. unfold Verilog.arr in *. rewrite Heqo. simplify; eauto.
+  - destruct (Pos.eq_dec r s); unfold arr_assocmap_set, Verilog.arr in *; simplify; subst.
+    destruct ar!s eqn:?; repeat mag_tac; crush.
+    apply H1 in H. mag_tac; crush.
+    destruct ar!r eqn:?; repeat mag_tac; crush.
+    apply H1 in Heqo. repeat mag_tac; auto.
+Qed.
 Hint Resolve match_arrs_gss : mgen.
 
 Lemma match_arr_assocs_block :
@@ -680,7 +746,27 @@ Lemma match_reg_assocs_merge :
   forall p rs rs',
     match_reg_assocs p rs rs' ->
     match_reg_assocs p (merge_reg_assocs rs) (merge_reg_assocs rs').
-Proof. Admitted.
+Proof.
+  inversion 1.
+  econstructor; econstructor; crush. inv H3.  inv H.
+  inv H7. inv H9.
+  unfold merge_regs.
+  destruct (ran!r) eqn:?; destruct (rab!r) eqn:?.
+  erewrite AssocMapExt.merge_correct_1; eauto.
+  erewrite AssocMapExt.merge_correct_1; eauto.
+  rewrite <- H2; eauto.
+  erewrite AssocMapExt.merge_correct_1; eauto.
+  erewrite AssocMapExt.merge_correct_1; eauto.
+  rewrite <- H2; eauto.
+  erewrite AssocMapExt.merge_correct_2; eauto.
+  erewrite AssocMapExt.merge_correct_2; eauto.
+  rewrite <- H2; eauto.
+  rewrite <- H; eauto.
+  erewrite AssocMapExt.merge_correct_3; eauto.
+  erewrite AssocMapExt.merge_correct_3; eauto.
+  rewrite <- H2; eauto.
+  rewrite <- H; eauto.
+Qed.
 Hint Resolve match_reg_assocs_merge : mgen.
 
 Lemma behaviour_correct_equiv :
@@ -726,7 +812,6 @@ Proof.
   }
   inv H11; auto.*)
 Admitted.
-Hint Resolve behaviour_correct_equiv : mgen.
 
 Lemma stmnt_runp_gtassoc :
   forall st rs1 ar1 rs2 ar2 f,
@@ -1193,11 +1278,6 @@ Proof.
   erewrite AssocMapExt.merge_correct_3; mgen_crush.
 Qed.
 Hint Resolve match_assocmaps_merge : mgen.
-
-Ltac inv_exists :=
-  match goal with
-  | H: exists _, _ |- _ => inv H
-  end.
 
 Lemma list_combine_nth_error1 :
   forall l l' addr v,
@@ -1687,9 +1767,8 @@ Section CORRECTNESS.
   Theorem transf_program_correct:
     Smallstep.forward_simulation (semantics prog) (semantics tprog).
   Proof using TRANSL.
-    eapply Smallstep.forward_simulation_plus; eauto with mgen.
+    eapply Smallstep.forward_simulation_plus; mgen_crush.
     apply senv_preserved.
-    eapply transf_final_states.
   Qed.
 
 End CORRECTNESS.
