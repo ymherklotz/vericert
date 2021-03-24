@@ -428,6 +428,101 @@ Proof.
   lia.
 Qed.
 
+Lemma empty_arr :
+  forall m s,
+    (exists l, (empty_stack m) ! s = Some (arr_repeat None l))
+    \/ (empty_stack m) ! s = None.
+Proof.
+  unfold empty_stack. simplify.
+  destruct (Pos.eq_dec s (mod_stk m)); subst.
+  left. eexists. apply AssocMap.gss.
+  right. rewrite AssocMap.gso; auto. apply AssocMap.gempty.
+Qed.
+
+Lemma merge_arr_empty':
+  forall m ar s v,
+    match_empty_size m ar ->
+    (merge_arrs (empty_stack m) ar) ! s = v ->
+    ar ! s = v.
+Proof.
+  inversion 1; subst.
+  pose proof (empty_arr m s).
+  simplify.
+  destruct (merge_arrs (empty_stack m) ar) ! s eqn:?; subst.
+  - inv H3. inv H4.
+    learn H3 as H5. apply H0 in H5. inv H5. simplify.
+    unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto.
+    rewrite H3 in Heqo. erewrite merge_arr_empty2 in Heqo. auto. eauto.
+    rewrite list_repeat_len in H6. auto.
+    learn H4 as H6. apply H2 in H6.
+    unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto.
+    rewrite H4 in Heqo. unfold Verilog.arr in *. rewrite H6 in Heqo.
+    discriminate.
+  - inv H3. inv H4. learn H3 as H4. apply H0 in H4. inv H4. simplify.
+    rewrite list_repeat_len in H6.
+    unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto. rewrite H3 in Heqo.
+    unfold Verilog.arr in *. rewrite H4 in Heqo.
+    discriminate.
+    apply H2 in H4; auto.
+Qed.
+
+Lemma merge_arr_empty :
+  forall m ar ar',
+    match_empty_size m ar ->
+    match_arrs ar ar' ->
+    match_arrs (merge_arrs (empty_stack m) ar) ar'.
+Proof.
+  inversion 1; subst; inversion 1; subst;
+  econstructor; intros; apply merge_arr_empty' in H6; auto.
+Qed.
+Hint Resolve merge_arr_empty : mgen.
+
+Lemma merge_arr_empty'':
+  forall m ar s v,
+    match_empty_size m ar ->
+    ar ! s = v ->
+    (merge_arrs (empty_stack m) ar) ! s = v.
+Proof.
+  inversion 1; subst.
+  pose proof (empty_arr m s).
+  simplify.
+  destruct (merge_arrs (empty_stack m) ar) ! s eqn:?; subst.
+  - inv H3. inv H4.
+    learn H3 as H5. apply H0 in H5. inv H5. simplify.
+    unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto.
+    rewrite H3 in Heqo. erewrite merge_arr_empty2 in Heqo. auto. eauto.
+    rewrite list_repeat_len in H6. auto.
+    learn H4 as H6. apply H2 in H6.
+    unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto.
+    rewrite H4 in Heqo. unfold Verilog.arr in *. rewrite H6 in Heqo.
+    discriminate.
+  - inv H3. inv H4. learn H3 as H4. apply H0 in H4. inv H4. simplify.
+    rewrite list_repeat_len in H6.
+    unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto. rewrite H3 in Heqo.
+    unfold Verilog.arr in *. rewrite H4 in Heqo.
+    discriminate.
+    apply H2 in H4; auto.
+Qed.
+
+Lemma merge_arr_empty_match :
+  forall m ar,
+    match_empty_size m ar ->
+    match_empty_size m (merge_arrs (empty_stack m) ar).
+Proof.
+  inversion 1; subst.
+  constructor; simplify.
+  learn H3 as H4. apply H0 in H4. inv H4. simplify.
+  eexists; split; eauto. apply merge_arr_empty''; eauto.
+  apply merge_arr_empty' in H3; auto.
+  split; simplify.
+  unfold merge_arrs in H3. rewrite AssocMap.gcombine in H3; auto.
+  unfold merge_arr in *.
+  destruct (empty_stack m) ! s eqn:?;
+           destruct ar ! s; try discriminate; eauto.
+  apply merge_arr_empty''; auto. apply H2 in H3; auto.
+Qed.
+Hint Resolve merge_arr_empty_match : mgen.
+
 Definition ram_present {A: Type} ar r v v' :=
   (assoc_nonblocking ar)!(ram_mem r) = Some v
   /\ @arr_length A v = ram_size r
@@ -1672,10 +1767,11 @@ Section CORRECTNESS.
       assert (2 ^ Nat.log2_up (mod_stk_len m) = (mod_stk_len m))%nat by admit.
       rewrite H7 in H17. rewrite H7.
       eassumption.
-      econstructor. mgen_crush.
-      assert (match_arrs (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2)) (merge_arrs assoc_nonblocking4 assoc_blocking4)) by admit. auto.
-      eauto.
-      assert (match_empty_size m (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2))) by admit. auto.
+      econstructor. mgen_crush. simplify.
+      assert (match_empty_size m (merge_arrs nasa2 basa2)) by admit.
+      eauto with mgen. auto.
+      assert (match_empty_size m (merge_arrs nasa2 basa2)) by admit.
+      eauto with mgen.
     - do 2 econstructor. apply Smallstep.plus_one.
       apply step_finish; mgen_crush. constructor; eauto.
     - do 2 econstructor. apply Smallstep.plus_one.
