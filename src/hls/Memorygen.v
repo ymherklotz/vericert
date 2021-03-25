@@ -93,6 +93,71 @@ Definition max_reg_module m :=
          (Pos.max (mod_start m)
           (Pos.max (mod_reset m) (mod_clk m))))))))).
 
+Lemma max_fold_lt :
+  forall m l n, m <= n -> m <= (fold_left Pos.max l n).
+Proof. induction l; crush; apply IHl; lia. Qed.
+
+Lemma max_fold_lt2 :
+  forall (l: list (positive * stmnt)) v n,
+    v <= n ->
+    v <= fold_left (fun a p => Pos.max (max_reg_stmnt (snd p)) a) l n.
+Proof. induction l; crush; apply IHl; lia. Qed.
+
+Lemma max_fold_lt3 :
+  forall (l: list (positive * stmnt)) v v',
+    v <= v' ->
+    fold_left (fun a0 p => Pos.max (max_reg_stmnt (snd p)) a0) l v
+    <= fold_left (fun a0 p => Pos.max (max_reg_stmnt (snd p)) a0) l v'.
+Proof. induction l; crush; apply IHl; lia. Qed.
+
+Lemma max_fold_lt4 :
+  forall (l: list (positive * stmnt)) (a: positive * stmnt),
+    fold_left (fun a0 p => Pos.max (max_reg_stmnt (snd p)) a0) l 1
+    <= fold_left (fun a0 p => Pos.max (max_reg_stmnt (snd p)) a0) l
+                 (Pos.max (max_reg_stmnt (snd a)) 1).
+Proof. intros; apply max_fold_lt3; lia. Qed.
+
+Lemma max_reg_stmnt_lt_stmnt_tree':
+  forall l (i: positive) v,
+    In (i, v) l ->
+    list_norepet (map fst l) ->
+    max_reg_stmnt v <= fold_left (fun a p => Pos.max (max_reg_stmnt (snd p)) a) l 1.
+Proof.
+  induction l; crush. inv H; inv H0; simplify. apply max_fold_lt2. lia.
+  transitivity (fold_left (fun (a : positive) (p : positive * stmnt) =>
+                             Pos.max (max_reg_stmnt (snd p)) a) l 1).
+  eapply IHl; eauto. apply max_fold_lt4.
+Qed.
+
+Lemma max_reg_stmnt_le_stmnt_tree :
+  forall d i v,
+    d ! i = Some v ->
+    max_reg_stmnt v <= max_stmnt_tree d.
+Proof.
+  intros. unfold max_stmnt_tree. rewrite PTree.fold_spec.
+  apply PTree.elements_correct in H.
+  eapply max_reg_stmnt_lt_stmnt_tree'; eauto.
+  apply PTree.elements_keys_norepet.
+Qed.
+Hint Resolve max_reg_stmnt_le_stmnt_tree : mgen.
+
+Lemma max_reg_stmnt_lt_stmnt_tree :
+  forall d i v,
+    d ! i = Some v ->
+    max_reg_stmnt v < max_stmnt_tree d + 1.
+Proof. intros. apply max_reg_stmnt_le_stmnt_tree in H; lia. Qed.
+Hint Resolve max_reg_stmnt_lt_stmnt_tree : mgen.
+
+Lemma max_stmnt_lt_module :
+  forall m d i,
+    (mod_controllogic m) ! i = Some d \/ (mod_datapath m) ! i = Some d ->
+    max_reg_stmnt d < max_reg_module m + 1.
+Proof.
+  inversion 1 as [ Hv | Hv ]; unfold max_reg_module;
+  apply max_reg_stmnt_le_stmnt_tree in Hv; lia.
+Qed.
+Hint Resolve max_stmnt_lt_module : mgen.
+
 Definition transf_maps state ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
   match dc with
   | (n, d, c) =>
@@ -1729,12 +1794,10 @@ Section CORRECTNESS.
       unfold match_empty_size. mgen_crush. apply match_empty_size_merge; mgen_crush. } simplify.
       assert (MATCH_ARR3: match_arrs_size nasa3 basa3).
       { eapply match_arrs_size_ram_preserved2; eauto; apply match_empty_size_merge; eauto. }
-      exploit match_states_same. apply H4. instantiate (1 := max_reg_module m + 1).
-      assert (max_reg_stmnt ctrl < max_reg_module m + 1) by admit; auto.
+      exploit match_states_same. apply H4. eauto with mgen.
       econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
       intros. repeat inv_exists. simplify. inv H18. inv H21.
-      exploit match_states_same. apply H6. instantiate (1 := max_reg_module m + 1).
-      assert (max_reg_stmnt data < max_reg_module m + 1) by admit; auto.
+      exploit match_states_same. apply H6. eauto with mgen.
       econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify. inv H18. inv H23.
       exploit exec_ram_same; eauto.
       assert (forall_ram (fun x : reg => x < (max_reg_module m + 1)) r) by admit; eauto.
