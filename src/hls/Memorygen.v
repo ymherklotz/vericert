@@ -1699,16 +1699,97 @@ Proof.
 Qed.
 Hint Resolve match_get_merge : mgen.
 
-Lemma match_arrs_size_stmnt_preserved :
-  forall m f rs1 bar nar bar' nar' c rs2,
-    stmnt_runp f rs1 {| assoc_nonblocking := nar; assoc_blocking := bar |}
-               c rs2 {| assoc_nonblocking := nar'; assoc_blocking := bar' |} ->
-    match_empty_size m nar ->
-    match_empty_size m bar ->
-    match_empty_size m nar' /\ match_empty_size m bar'.
+Ltac masrp_tac :=
+  match goal with
+  | H: context[forall s arr, ?ar ! s = Some arr -> _], H2: ?ar ! _ = Some _ |- _ =>
+    let H3 := fresh "H" in
+    learn H; pose proof H2 as H3; apply H in H3; repeat inv_exists
+  | H: context[forall s, ?ar ! s = None <-> _], H2: ?ar ! _ = None |- _ =>
+    let H3 := fresh "H" in
+    learn H; pose proof H2 as H3; apply H in H3
+  | H: context[forall s, _ <-> ?ar ! s = None], H2: ?ar ! _ = None |- _ =>
+    let H3 := fresh "H" in
+    learn H; pose proof H2 as H3; apply H in H3
+  | ra: arr_associations |- _ =>
+    let ra1 := fresh "ran" in let ra2 := fresh "rab" in destruct ra as [ra1 ra2]
+  | |- _ ! _ = _ => solve [mgen_crush]
+  | |- _ = _ => congruence
+  | |- _ <> _ => lia
+  | H: ?ar ! ?s = _ |- context[match ?ar ! ?r with _ => _ end] => learn H; destruct (Pos.eq_dec s r); subst
+  | H: ?ar ! ?s = _ |- context[match ?ar ! ?s with _ => _ end] => setoid_rewrite H
+  | |- context[match ?ar ! ?s with _ => _ end] => destruct (ar ! s) eqn:?
+  | H: ?s <> ?r |- context[(_ # ?r <- _) ! ?s] => rewrite AssocMap.gso
+  | H: ?r <> ?s |- context[(_ # ?r <- _) ! ?s] => rewrite AssocMap.gso
+  | |- context[(_ # ?s <- _) ! ?s] => rewrite AssocMap.gss
+  | H: context[match ?ar ! ?r with _ => _ end ! ?s] |- _ =>
+    destruct (ar ! r) eqn:?; destruct (Pos.eq_dec r s); subst
+  | H: ?ar ! ?s = _, H2: context[match ?ar ! ?s with _ => _ end] |- _ =>
+    setoid_rewrite H in H2
+  | H: context[match ?ar ! ?s with _ => _ end] |- _ => destruct (ar ! s) eqn:?
+  | H: ?s <> ?r, H2: context[(_ # ?r <- _) ! ?s] |- _ => rewrite AssocMap.gso in H2
+  | H: ?r <> ?s, H2: context[(_ # ?r <- _) ! ?s] |- _ => rewrite AssocMap.gso in H2
+  | H: context[(_ # ?s <- _) ! ?s] |- _ => rewrite AssocMap.gss in H
+  | |- context[match_empty_size] => constructor
+  | |- context[arr_assocmap_set] => unfold arr_assocmap_set
+  | H: context[arr_assocmap_set] |- _ => unfold arr_assocmap_set in H
+  | |- exists _, _ => econstructor
+  | |- _ <-> _ => split
+  end; simplify.
+
+Lemma match_empty_assocmap_set :
+  forall m r i rhsval asa,
+    match_empty_size m asa ->
+    match_empty_size m (arr_assocmap_set r i rhsval asa).
 Proof.
-  induction 1; inversion 1; inversion 1; eauto.
-  Admitted.
+  inversion 1; subst; simplify.
+  constructor. intros.
+  repeat masrp_tac.
+  intros. do 5 masrp_tac; try solve [repeat masrp_tac].
+  apply H1 in H3. inv_exists. simplify.
+  econstructor. simplify. apply H3. congruence.
+  repeat masrp_tac. destruct (Pos.eq_dec r s); subst.
+  rewrite AssocMap.gss in H8. discriminate.
+  rewrite AssocMap.gso in H8; auto. apply H2 in H8. auto.
+  destruct (Pos.eq_dec r s); subst. apply H1 in H5. inv_exists. simplify.
+  rewrite H5 in H8. discriminate.
+  rewrite AssocMap.gso; auto.
+  apply H2 in H5. auto. apply H2 in H5. auto.
+  Unshelve. auto.
+Qed.
+Hint Resolve match_empty_assocmap_set : mgen.
+
+Lemma match_arrs_size_stmnt_preserved :
+  forall m f rs1 ar1 ar2 c rs2,
+    stmnt_runp f rs1 ar1 c rs2 ar2 ->
+    match_empty_size m (assoc_nonblocking ar1) ->
+    match_empty_size m (assoc_blocking ar1) ->
+    match_empty_size m (assoc_nonblocking ar2) /\ match_empty_size m (assoc_blocking ar2).
+Proof.
+  induction 1; inversion 1; inversion 1; eauto; simplify; try solve [repeat masrp_tac].
+  subst. apply IHstmnt_runp2; apply IHstmnt_runp1; auto.
+  apply IHstmnt_runp2; apply IHstmnt_runp1; auto.
+  apply match_empty_assocmap_set. auto.
+  apply match_empty_assocmap_set. auto.
+Qed.
+
+Lemma match_arrs_size_stmnt_preserved2 :
+  forall m f rs1 na ba na' ba' c rs2,
+    stmnt_runp f rs1 {| assoc_nonblocking := na; assoc_blocking := ba |} c rs2
+               {| assoc_nonblocking := na'; assoc_blocking := ba' |} ->
+    match_empty_size m na ->
+    match_empty_size m ba ->
+    match_empty_size m na' /\ match_empty_size m ba'.
+Proof.
+  intros.
+  remember ({| assoc_blocking := ba; assoc_nonblocking := na |}) as ar1.
+  remember ({| assoc_blocking := ba'; assoc_nonblocking := na' |}) as ar2.
+  assert (X1: na' = (assoc_nonblocking ar2)) by (rewrite Heqar2; auto). rewrite X1.
+  assert (X2: ba' = (assoc_blocking ar2)) by (rewrite Heqar2; auto). rewrite X2.
+  assert (X3: na = (assoc_nonblocking ar1)) by (rewrite Heqar1; auto). rewrite X3 in *.
+  assert (X4: ba = (assoc_blocking ar1)) by (rewrite Heqar1; auto). rewrite X4 in *.
+  eapply match_arrs_size_stmnt_preserved; mgen_crush.
+Qed.
+Hint Resolve match_arrs_size_stmnt_preserved2 : mgen.
 
 Lemma match_arrs_size_ram_preserved :
   forall m rs1 ar1 ar2 ram rs2,
@@ -1718,42 +1799,6 @@ Lemma match_arrs_size_ram_preserved :
     match_empty_size m (assoc_nonblocking ar2)
     /\ match_empty_size m (assoc_blocking ar2).
 Proof.
-  Ltac masrp_tac :=
-    match goal with
-    | H: context[forall s arr, ?ar ! s = Some arr -> _], H2: ?ar ! _ = Some _ |- _ =>
-      let H3 := fresh "H" in
-      learn H; pose proof H2 as H3; apply H in H3; repeat inv_exists
-    | H: context[forall s, ?ar ! s = None <-> _], H2: ?ar ! _ = None |- _ =>
-      let H3 := fresh "H" in
-      learn H; pose proof H2 as H3; apply H in H3
-    | H: context[forall s, _ <-> ?ar ! s = None], H2: ?ar ! _ = None |- _ =>
-      let H3 := fresh "H" in
-      learn H; pose proof H2 as H3; apply H in H3
-    | ra: arr_associations |- _ =>
-      let ra1 := fresh "ran" in let ra2 := fresh "rab" in destruct ra as [ra1 ra2]
-    | |- _ ! _ = _ => solve [mgen_crush]
-    | |- _ = _ => congruence
-    | |- _ <> _ => lia
-    | H: ?ar ! ?s = _ |- context[match ?ar ! ?r with _ => _ end] => learn H; destruct (Pos.eq_dec s r); subst
-    | H: ?ar ! ?s = _ |- context[match ?ar ! ?s with _ => _ end] => setoid_rewrite H
-    | |- context[match ?ar ! ?s with _ => _ end] => destruct (ar ! s) eqn:?
-    | H: ?s <> ?r |- context[(_ # ?r <- _) ! ?s] => rewrite AssocMap.gso
-    | H: ?r <> ?s |- context[(_ # ?r <- _) ! ?s] => rewrite AssocMap.gso
-    | |- context[(_ # ?s <- _) ! ?s] => rewrite AssocMap.gss
-    | H: context[match ?ar ! ?r with _ => _ end ! ?s] |- _ =>
-      destruct (ar ! r) eqn:?; destruct (Pos.eq_dec r s); subst
-    | H: ?ar ! ?s = _, H2: context[match ?ar ! ?s with _ => _ end] |- _ =>
-      setoid_rewrite H in H2
-    | H: context[match ?ar ! ?s with _ => _ end] |- _ => destruct (ar ! s) eqn:?
-    | H: ?s <> ?r, H2: context[(_ # ?r <- _) ! ?s] |- _ => rewrite AssocMap.gso in H2
-    | H: ?r <> ?s, H2: context[(_ # ?r <- _) ! ?s] |- _ => rewrite AssocMap.gso in H2
-    | H: context[(_ # ?s <- _) ! ?s] |- _ => rewrite AssocMap.gss in H
-    | |- context[match_empty_size] => constructor
-    | |- context[arr_assocmap_set] => unfold arr_assocmap_set
-    | H: context[arr_assocmap_set] |- _ => unfold arr_assocmap_set in H
-    | |- exists _, _ => econstructor
-    | |- _ <-> _ => split
-    end; simplify.
   induction 1; inversion 1; inversion 1; subst; simplify; try solve [repeat masrp_tac].
   masrp_tac. masrp_tac. solve [repeat masrp_tac].
   masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac.
@@ -1851,10 +1896,10 @@ Section CORRECTNESS.
     induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
       repeat transf_step_correct_tac.
     - assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
-      { eapply match_arrs_size_stmnt_preserved; eauto. unfold match_empty_size; mgen_crush. }
+      { eapply match_arrs_size_stmnt_preserved2; eauto. unfold match_empty_size; mgen_crush. }
       simplify.
       assert (MATCH_SIZE2: match_empty_size m nasa2 /\ match_empty_size m basa2).
-      { eapply match_arrs_size_stmnt_preserved; mgen_crush. } simplify.
+      { eapply match_arrs_size_stmnt_preserved2; mgen_crush. } simplify.
       assert (MATCH_SIZE2: match_empty_size m nasa3 /\ match_empty_size m basa3).
       { eapply match_arrs_size_ram_preserved2; mgen_crush. unfold match_empty_size. mgen_crush.
       unfold match_empty_size. mgen_crush. apply match_empty_size_merge; mgen_crush. } simplify.
