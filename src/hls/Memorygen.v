@@ -82,6 +82,17 @@ Definition max_list := fold_right Pos.max 1.
 Definition max_stmnt_tree t :=
   PTree.fold (fun i _ st => Pos.max (max_reg_stmnt st) i) t 1.
 
+Definition max_reg_ram r :=
+  match r with
+  | None => 1
+  | Some ram => Pos.max (ram_mem ram)
+                (Pos.max (ram_en ram)
+                 (Pos.max (ram_addr ram)
+                  (Pos.max (ram_addr ram)
+                   (Pos.max (ram_wr_en ram)
+                    (Pos.max (ram_d_in ram) (ram_d_out ram))))))
+  end.
+
 Definition max_reg_module m :=
   Pos.max (max_list (mod_params m))
    (Pos.max (max_stmnt_tree (mod_datapath m))
@@ -91,7 +102,8 @@ Definition max_reg_module m :=
        (Pos.max (mod_finish m)
         (Pos.max (mod_return m)
          (Pos.max (mod_start m)
-          (Pos.max (mod_reset m) (mod_clk m))))))))).
+          (Pos.max (mod_reset m)
+           (Pos.max (mod_clk m) (max_reg_ram (mod_ram m))))))))))).
 
 Lemma max_fold_lt :
   forall m l n, m <= n -> m <= (fold_left Pos.max l n).
@@ -449,6 +461,17 @@ Definition forall_ram (P: reg -> Prop) ram :=
   /\ P (ram_wr_en ram)
   /\ P (ram_d_in ram)
   /\ P (ram_d_out ram).
+
+Lemma forall_ram_lt :
+  forall m r,
+    (mod_ram m) = Some r ->
+    forall_ram (fun x => x < max_reg_module m + 1) r.
+Proof.
+  assert (X: forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
+  unfold forall_ram; simplify; unfold max_reg_module; repeat apply X;
+  unfold max_reg_ram; rewrite H; lia.
+Qed.
+Hint Resolve forall_ram_lt : mgen.
 
 Definition exec_all d_s c_s rs1 ar1 rs3 ar3 :=
   exists f rs2 ar2,
@@ -1721,6 +1744,20 @@ Proof.
 Qed.
 Hint Resolve match_empty_size_match : mgen.
 
+Lemma match_get_merge :
+  forall p ran ran' rab rab' s v,
+    s < p ->
+    match_assocmaps p ran ran' ->
+    match_assocmaps p rab rab' ->
+    (merge_regs ran rab) ! s = Some v ->
+    (merge_regs ran' rab') ! s = Some v.
+Proof.
+  intros.
+  assert (X: match_assocmaps p (merge_regs ran rab) (merge_regs ran' rab')) by auto with mgen.
+  inv X. rewrite <- H3; auto.
+Qed.
+Hint Resolve match_get_merge : mgen.
+
 Section CORRECTNESS.
 
   Context (prog tprog: program).
@@ -1799,8 +1836,7 @@ Section CORRECTNESS.
       intros. repeat inv_exists. simplify. inv H18. inv H21.
       exploit match_states_same. apply H6. eauto with mgen.
       econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify. inv H18. inv H23.
-      exploit exec_ram_same; eauto.
-      assert (forall_ram (fun x : reg => x < (max_reg_module m + 1)) r) by admit; eauto.
+      exploit exec_ram_same; eauto. eauto with mgen.
       econstructor. eapply match_assocmaps_merge; eauto. eauto with mgen.
       econstructor.
       apply match_arrs_merge; eauto with mgen. eauto with mgen.
@@ -1808,9 +1844,7 @@ Section CORRECTNESS.
       econstructor; simplify. apply Smallstep.plus_one. econstructor.
       mgen_crush. mgen_crush. mgen_crush. rewrite RAM0; eassumption. rewrite RAM0; eassumption.
       rewrite RAM0. eassumption. mgen_crush. eassumption. rewrite RAM0 in H21. rewrite RAM0.
-      rewrite RAM. eassumption. eauto. eauto. instantiate (1 := pstval).
-      assert ((merge_regs ran'3 rab'3) ! (mod_st (transf_module m)) = Some (posToValue pstval)) by admit. eauto.
-      eauto.
+      rewrite RAM. eassumption. eauto. eauto. eauto with mgen. eauto. eauto.
       econstructor. mgen_crush. apply match_arrs_merge; mgen_crush. eauto. eauto.
       apply match_empty_size_merge; mgen_crush.
     - exploit transf_code_all; eauto. unfold exec_all.
