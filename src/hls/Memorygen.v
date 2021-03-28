@@ -279,7 +279,7 @@ Definition transf_module (m: module): module :=
                    (AssocMap.set d_out (None, VScalar 32)
                     (AssocMap.set d_in (None, VScalar 32)
                      (AssocMap.set addr (None, VScalar 32) m.(mod_scldecls))))))
-                      (AssocMap.set m.(mod_stk) (None, VArray 32 new_size)%nat m.(mod_arrdecls))
+                      (AssocMap.set m.(mod_stk) (None, VArray 32 (2 ^ Nat.log2_up new_size))%nat m.(mod_arrdecls))
                  (Some ram)
                  (is_wf _ nc nd)
   | _, _ => m
