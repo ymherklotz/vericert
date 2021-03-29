@@ -177,22 +177,26 @@ Definition transf_maps state ram i (dc: node * PTree.t stmnt * PTree.t stmnt) :=
     | Some d_s, Some c_s =>
       match d_s with
       | Vnonblock (Vvari r e1) e2 =>
-        let nd := Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
-                    (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
-                       (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
-                             (Vnonblock (Vvar (ram_addr ram)) e1)))
-        in
-        (n, PTree.set i nd d, c)
+        if r =? (ram_mem ram) then
+          let nd := Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                         (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+                               (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
+                                     (Vnonblock (Vvar (ram_addr ram)) e1)))
+          in
+          (n, PTree.set i nd d, c)
+        else dc
       | Vnonblock e1 (Vvari r e2) =>
-        let nd :=
-            Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
-                 (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
-                       (Vnonblock (Vvar (ram_addr ram)) e2))
-        in
-        let aout := Vnonblock e1 (Vvar (ram_d_out ram)) in
-        let redirect := Vnonblock (Vvar state) (Vlit (posToValue n)) in
-        (n+1, PTree.set i nd (PTree.set n aout d),
-         PTree.set i redirect (PTree.set n c_s c))
+        if r =? (ram_mem ram) then
+          let nd :=
+              Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                   (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                         (Vnonblock (Vvar (ram_addr ram)) e2))
+          in
+          let aout := Vnonblock e1 (Vvar (ram_d_out ram)) in
+          let redirect := Vnonblock (Vvar state) (Vlit (posToValue n)) in
+          (n+1, PTree.set i nd (PTree.set n aout d),
+           PTree.set i redirect (PTree.set n c_s c))
+        else dc
       | _ => dc
       end
     | _, _ => dc
@@ -469,12 +473,17 @@ Proof. intros; inv H; econstructor; mgen_crush. Qed.
 Hint Resolve match_reg_assocs_ge : mgen.
 
 Definition forall_ram (P: reg -> Prop) ram :=
-  P (ram_mem ram)
-  /\ P (ram_en ram)
+  P (ram_en ram)
   /\ P (ram_addr ram)
   /\ P (ram_wr_en ram)
   /\ P (ram_d_in ram)
   /\ P (ram_d_out ram).
+
+Definition ram_ordering ram :=
+  ram_addr ram < ram_en ram
+  /\ ram_en ram < ram_d_in ram
+  /\ ram_d_in ram < ram_d_out ram
+  /\ ram_d_out ram < ram_wr_en ram.
 
 Lemma forall_ram_lt :
   forall m r,
@@ -2126,6 +2135,11 @@ Proof.
   rewrite H7. auto.
 Qed.
 
+Ltac clear_learnt :=
+  repeat match goal with
+  | H: Learnt _ |- _ => clear H
+  end.
+
 Lemma match_arrs_size_assoc :
   forall a b,
     match_arrs_size a b ->
@@ -2218,15 +2232,27 @@ Proof.
   simplify. rewrite H7. rewrite H8. auto. apply H0. mgen_crush. auto.
 Qed.
 
+Definition all_match_empty_size m ar :=
+  match_empty_size m (assoc_nonblocking ar) /\ match_empty_size m (assoc_blocking ar).
+Hint Unfold all_match_empty_size : mgen.
+
+Definition match_module_to_ram m ram :=
+  ram_size ram = mod_stk_len m /\ ram_mem ram = mod_stk m.
+Hint Unfold match_module_to_ram : mgen.
+
 Lemma transf_not_store' :
-  forall state ram n d c i c_s d' c' n' tar1 trs1 p ar1 ar2 rs1 rs2 r e1 e2,
-    d!i = Some (Vnonblock (Vvari r e1) e2) ->
-    c!i = Some c_s ->
-    transf_maps state ram i (n, d, c) = (n', d', c') ->
+  forall m state ram n i c_s d' c' n' tar1 trs1 p ar1 ar2 rs1 rs2 r e1 e2,
+    all_match_empty_size m ar1 ->
+    all_match_empty_size m tar1 ->
+    match_module_to_ram m ram ->
+    ram_ordering ram ->
+    (mod_datapath m)!i = Some (Vnonblock (Vvari r e1) e2) ->
+    (mod_controllogic m)!i = Some c_s ->
+    transf_maps state ram i (n, mod_datapath m, mod_controllogic m) = (n', d', c') ->
     exec_all (Vnonblock (Vvari (ram_mem ram) e1) e2) c_s rs1 ar1 rs2 ar2 ->
     match_reg_assocs p rs1 trs1 ->
     match_arr_assocs ar1 tar1 ->
-    Pos.max (max_stmnt_tree c) (max_stmnt_tree d) < p ->
+    max_reg_module m < p ->
     exists d_s' c_s' trs2 tar2,
       d'!i = Some d_s' /\ c'!i = Some c_s'
       /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
@@ -2234,10 +2260,11 @@ Lemma transf_not_store' :
       /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
                           (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
 Proof.
-  intros; unfold transf_maps; simplify; repeat destruct_match; mgen_crush.
+  (*intros; unfold transf_maps; simplify; repeat destruct_match; mgen_crush.
   inv H1. unfold exec_all in *. repeat inv_exists. simplify.
   exploit match_states_same. apply H0. instantiate (1 := p).
-  admit. eassumption. eassumption. intros.
+  apply max_reg_stmnt_le_stmnt_tree in Heqo0. lia.
+  eassumption. eassumption. intros.
   repeat inv_exists. simplify.
   inv H1. inv H12. inv H12.
   inv H. inv H7. simplify.
@@ -2248,10 +2275,14 @@ Proof.
   econstructor. econstructor. econstructor. econstructor.
   econstructor. econstructor. econstructor. econstructor.
   econstructor. econstructor. econstructor. eapply expr_runp_matches2.
-  eassumption. assert (max_reg_expr e2 < p) by admit. eauto.
+  eassumption.
+  apply max_reg_stmnt_le_stmnt_tree in Heqo.
+  unfold max_reg_stmnt in Heqo. assert (max_reg_expr e2 < p) by lia; eauto.
   unfold nonblock_reg. simplify. auto. auto.
   econstructor. econstructor. unfold nonblock_reg. simplify.
-  eapply expr_runp_matches2. eassumption. assert (max_reg_expr e1 < p) by admit. eauto.
+  eapply expr_runp_matches2. eassumption.
+  apply max_reg_stmnt_le_stmnt_tree in Heqo. unfold max_reg_stmnt in Heqo. simplify.
+  assert (max_reg_expr e1 < p) by lia. eauto.
   auto. auto.
   eapply exec_ram_Some_write.
   3: {
@@ -2286,8 +2317,32 @@ Proof.
   inv H7. inv H9. rewrite H7. rewrite H11.
   rewrite <- empty_stack_m.
   apply match_arrs_merge_set2. admit. admit. admit. admit. auto. auto.
-  auto with mgen.
+  auto with mgen.*)
 Admitted.
+
+Lemma transf_code_store' :
+  forall l m state ram d' c' n n',
+    fold_right (transf_maps state ram) (n, mod_datapath m, mod_controllogic m) l = (n', d', c') ->
+    Forall (fun x => n > x) l ->
+    list_norepet l ->
+    (forall p i c_s rs1 ar1 rs2 ar2 trs1 tar1 r e1 e2,
+        n > i ->
+        all_match_empty_size m ar1 ->
+        all_match_empty_size m tar1 ->
+        match_module_to_ram m ram ->
+        ram_ordering ram ->
+        (mod_datapath m)!i = Some (Vnonblock (Vvari r e1) e2) ->
+        (mod_controllogic m)!i = Some c_s ->
+        match_reg_assocs p rs1 trs1 ->
+        match_arr_assocs ar1 tar1 ->
+        max_reg_module m < p ->
+        exists d_s' c_s' trs2 tar2,
+          d'!i = Some d_s' /\ c'!i = Some c_s'
+          /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
+          /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
+          /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
+                              (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2)).
+Proof.
 
 Lemma transf_code_store :
   forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2 p trs1 tar1 r e1 e2,
