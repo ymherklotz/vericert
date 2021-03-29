@@ -24,7 +24,8 @@ From vericert Require
      RTLPar
      RTLBlockInstr
      HTLgen
-     Pipeline.
+     Pipeline
+     HLSOpts.
 
 From Coq Require DecidableClass.
 
@@ -130,6 +131,9 @@ Extract Constant Compopts.thumb =>
   "fun _ -> !Clflags.option_mthumb".
 Extract Constant Compopts.debug =>
   "fun _ -> !Clflags.option_g".
+
+Extract Constant HLSOpts.optim_if_conversion =>
+  "fun _ -> !VericertClflags.option_fif_conv".
 
 (* Compiler *)
 Extract Constant Compiler.print_Clight => "PrintClight.print_if".

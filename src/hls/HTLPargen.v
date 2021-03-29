@@ -39,6 +39,8 @@ Hint Resolve AssocMap.gss : htlh.
 Hint Resolve Ple_refl : htlh.
 Hint Resolve Ple_succ : htlh.
 
+Definition assignment : Type := expr -> expr -> stmnt.
+
 Record state: Type := mkstate {
   st_st: reg;
   st_freshreg: reg;
@@ -671,35 +673,33 @@ Fixpoint pred_expr (preg: reg) (p: pred_op) :=
     Vbinop Vor (pred_expr preg p1) (pred_expr preg p2)
   end.
 
-Definition translate_predicate (preg: reg) (p: option pred_op) (dst e: expr) :=
+Definition translate_predicate (a : assignment)
+           (preg: reg) (p: option pred_op) (dst e: expr) :=
   match p with
-  | None => ret (Vnonblock dst e)
+  | None => ret (a dst e)
   | Some pos =>
-    ret (Vnonblock dst (Vternary (pred_expr preg pos) e dst))
+    ret (a dst (Vternary (pred_expr preg pos) e dst))
   end.
 
-Definition translate_inst (fin rtrn stack preg : reg) (n : node) (i : instr)
-  : mon unit :=
+Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
+  : mon stmnt :=
   match i with
   | RBnop =>
-    add_data_instr n Vskip
+    ret Vskip
   | RBop p op args dst =>
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
-    do pred <- translate_predicate preg p (Vvar dst) instr;
-    add_data_instr n pred
+    translate_predicate a preg p (Vvar dst) instr
   | RBload p chunk addr args dst =>
     do src <- translate_arr_access chunk addr args stack;
     do _ <- declare_reg None dst 32;
-    do pred <- translate_predicate preg p (Vvar dst) src;
-    add_data_instr n pred
+    translate_predicate a preg p (Vvar dst) src
   | RBstore p chunk addr args src =>
     do dst <- translate_arr_access chunk addr args stack;
-    do pred <- translate_predicate preg p dst (Vvar src);
-    add_data_instr n pred
+    translate_predicate a preg p dst (Vvar src)
   | RBsetpred c args p =>
     do cond <- translate_condition c args;
-    add_data_instr n (Vnonblock (pred_expr preg (Pvar p)) cond)
+    ret (a (pred_expr preg (Pvar p)) cond)
   end.
 
 Lemma create_new_state_state_incr:
@@ -727,10 +727,13 @@ Definition create_new_state (p: node): mon node :=
                 s.(st_controllogic))
               (create_new_state_state_incr s p).
 
-Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * list instr) :=
+Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * list (list instr)) :=
   match ni with
   | (n, p, li) =>
-    do _ <- collectlist (translate_inst fin rtrn stack preg n) li;
+    do _ <- collectlist
+          (fun l =>
+             do stmnt <- translate_inst Vblock fin rtrn stack preg n l;
+             add_data_instr n stmnt) (concat li);
     do st <- get;
     add_control_instr n (state_goto st.(st_st) p)
   end.

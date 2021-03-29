@@ -36,11 +36,3 @@ jobs:
 
     - name: Build
       run: nix-shell --run "make -j8"
-
-    - name: Generate Documentation
-      run: nix-shell --run "make -j8 doc"
-
-    - uses: actions/upload-artifact@v2
-      with:
-        name: html-documentation
-        path: html/
