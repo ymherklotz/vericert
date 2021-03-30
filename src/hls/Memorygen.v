@@ -263,7 +263,7 @@ Definition transf_module (m: module): module :=
   let d_out := max_reg+4 in
   let wr_en := max_reg+5 in
   let new_size := (mod_stk_len m) in
-  let ram := mk_ram new_size (mod_stk m) en addr d_in d_out wr_en in
+  let ram := mk_ram new_size (mod_stk m) en addr wr_en d_in d_out in
   match transf_code (mod_st m) ram (mod_datapath m) (mod_controllogic m), (mod_ram m) with
   | (nd, nc), None =>
     mkmodule m.(mod_params)
@@ -1300,9 +1300,9 @@ Lemma transf_module_code :
                    ram_mem := mod_stk m;
                    ram_en := max_reg_module m + 2;
                    ram_addr := max_reg_module m + 1;
-                   ram_wr_en := max_reg_module m + 3;
-                   ram_d_in := max_reg_module m + 4;
-                   ram_d_out := max_reg_module m + 5 |}
+                   ram_wr_en := max_reg_module m + 5;
+                   ram_d_in := max_reg_module m + 3;
+                   ram_d_out := max_reg_module m + 4 |}
                 (mod_datapath m) (mod_controllogic m)
     = ((mod_datapath (transf_module m)), mod_controllogic (transf_module m)).
 Proof. unfold transf_module; intros; repeat destruct_match; crush. Qed.
@@ -2320,22 +2320,23 @@ Proof.
   auto with mgen.*)
 Admitted.
 
-Lemma transf_code_store' :
+Lemma transf_code_fold_correct:
   forall l m state ram d' c' n n',
     fold_right (transf_maps state ram) (n, mod_datapath m, mod_controllogic m) l = (n', d', c') ->
     Forall (fun x => n > x) l ->
     list_norepet l ->
-    (forall p i c_s rs1 ar1 rs2 ar2 trs1 tar1 r e1 e2,
+    (forall p i c_s rs1 ar1 rs2 ar2 trs1 tar1 d_s,
         n > i ->
         all_match_empty_size m ar1 ->
         all_match_empty_size m tar1 ->
         match_module_to_ram m ram ->
         ram_ordering ram ->
-        (mod_datapath m)!i = Some (Vnonblock (Vvari r e1) e2) ->
+        (mod_datapath m)!i = Some d_s ->
         (mod_controllogic m)!i = Some c_s ->
         match_reg_assocs p rs1 trs1 ->
         match_arr_assocs ar1 tar1 ->
         max_reg_module m < p ->
+        exec_all d_s c_s rs1 ar1 rs2 ar2 ->
         exists d_s' c_s' trs2 tar2,
           d'!i = Some d_s' /\ c'!i = Some c_s'
           /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
@@ -2343,16 +2344,50 @@ Lemma transf_code_store' :
           /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
                               (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2)).
 Proof.
+  induction l as [| a l IHl]; simplify.
+  - match goal with
+    | H: (_, _, _) = (_, _, _) |- _ => inv H
+    end;
+    unfold exec_all in *; repeat inv_exists; simplify.
+    exploit match_states_same;
+    try match goal with
+    | H: stmnt_runp _ _ _ ?c _ _, H2: (mod_controllogic _) ! _ = Some ?c |- _ => apply H
+    end; eauto; mgen_crush;
+    try match goal with
+    | H: (mod_controllogic _) ! _ = Some ?c |- _ =>
+      apply max_reg_stmnt_le_stmnt_tree in H; unfold max_reg_module in *; lia
+    end; intros;
+    exploit match_states_same;
+    try match goal with
+    | H: stmnt_runp _ _ _ ?c _ _, H2: (mod_datapath _) ! _ = Some ?c |- _ => apply H
+    end; eauto; mgen_crush;
+    try match goal with
+    | H: (mod_datapath _) ! _ = Some ?c |- _ =>
+      apply max_reg_stmnt_le_stmnt_tree in H; unfold max_reg_module in *; lia
+    end; intros;
+    repeat match goal with
+    | |- exists _, _ => eexists
+    end; simplify; eauto;
+    unfold exec_all_ram;
+    repeat match goal with
+    | |- exists _, _ => eexists
+    end; simplify; eauto.
+    constructor. admit.
+  Admitted.
 
-Lemma transf_code_store :
-  forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2 p trs1 tar1 r e1 e2,
+Lemma transf_code_all:
+  forall m state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2 p trs1 tar1,
     transf_code state ram d c = (d', c') ->
-    d!i = Some (Vnonblock (Vvari r e1) e2) ->
-    c!i = Some c_s ->
-    exec_all d_s c_s rs1 ar1 rs2 ar2 ->
+    all_match_empty_size m ar1 ->
+    all_match_empty_size m tar1 ->
+    match_module_to_ram m ram ->
+    ram_ordering ram ->
+    (mod_datapath m)!i = Some d_s ->
+    (mod_controllogic m)!i = Some c_s ->
     match_reg_assocs p rs1 trs1 ->
     match_arr_assocs ar1 tar1 ->
-    Pos.max (max_stmnt_tree c) (max_stmnt_tree d) < p ->
+    max_reg_module m < p ->
+    exec_all d_s c_s rs1 ar1 rs2 ar2 ->
     exists d_s' c_s' trs2 tar2,
       d'!i = Some d_s' /\ c'!i = Some c_s'
       /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
@@ -2362,23 +2397,206 @@ Lemma transf_code_store :
 Proof.
   Admitted.
 
-Lemma transf_code_all :
-  forall state ram d c d' c' i d_s c_s rs1 ar1 rs2 ar2 tar1 trs1 p,
-    transf_code state ram d c = (d', c') ->
-    d!i = Some d_s ->
-    c!i = Some c_s ->
-    exec_all d_s c_s rs1 ar1 rs2 ar2 ->
-    match_reg_assocs p rs1 trs1 ->
-    match_arr_assocs ar1 tar1 ->
-    Pos.max (max_stmnt_tree c) (max_stmnt_tree d) < p ->
-    exists d_s' c_s' trs2 tar2,
-      d'!i = Some d_s' /\ c'!i = Some c_s'
-      /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
-      /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
-      /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
-                          (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
+Lemma empty_stack_transf :
+  forall m,
+    empty_stack (transf_module m) = empty_stack m.
+Proof. unfold empty_stack, transf_module; intros; repeat destruct_match; crush. Qed.
+
+Definition alt_unchanged (d : AssocMap.t stmnt) (c: AssocMap.t stmnt) d' c' i :=
+  (d ! i = d' ! i /\ c ! i = c' ! i).
+
+Definition alt_store ram d (c : AssocMap.t stmnt) d' c' i :=
+  (exists e1 e2,
+      d' ! i = Some (Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                          (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+                                (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
+                                      (Vnonblock (Vvar (ram_addr ram)) e1))))
+      /\ c' ! i = c ! i
+      /\ d ! i = Some (Vnonblock (Vvari (ram_mem ram) e1) e2)).
+
+Definition alt_load state ram d (c : AssocMap.t stmnt) d' c' i n :=
+  (exists c_s e1 e2,
+         d' ! i = Some (Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                                (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                                      (Vnonblock (Vvar (ram_addr ram)) e2)))
+         /\ d' ! n = Some (Vnonblock e1 (Vvar (ram_d_out ram)))
+         /\ c' ! i = Some (Vnonblock (Vvar state) (Vlit (posToValue n)))
+         /\ c' ! n = Some c_s
+         /\ c ! n = None
+         /\ c ! i = Some c_s
+         /\ d ! i = Some (Vnonblock e1 (Vvari (ram_mem ram) e2))
+         /\ d ! n = None).
+
+(*Definition alternatives_1 state ram d c d' c' i :=
+  (d ! i = d' ! i /\ c ! i = c' ! i)
+  \/ (exists e1 e2,
+         d' ! i = Some (Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                             (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+                                   (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
+                                         (Vnonblock (Vvar (ram_addr ram)) e1))))
+         /\ c' ! i = c ! i
+         /\ d ! i = Some (Vnonblock (Vvari (ram_mem ram) e1) e2)).
+  \/ (exists c_s e1 e2,
+         d' ! i = Some (Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+                                (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                                      (Vnonblock (Vvar (ram_addr ram)) e2)))
+         /\ d' ! n = Some (Vnonblock e1 (Vvar (ram_d_out ram)))
+         /\ c' ! i = Some (Vnonblock (Vvar state) (Vlit (posToValue n)))
+         /\ c' ! n = Some c_s
+         /\ c ! n = None
+         /\ c ! i = Some c_s
+         /\ d ! i = Some (Vnonblock e1 (Vvari (ram_mem ram) e2))
+         /\ d ! n = None).*)
+
+Definition alternatives state ram d c d' c' i n :=
+  alt_unchanged d c d' c' i \/ alt_store ram d c d' c' i \/ alt_load state ram d c d' c' i n.
+
+Lemma transf_alternatives :
+  forall ram n d c state i n' d' c',
+    transf_maps state ram i (n, d, c) = (n', d', c') ->
+    alternatives state ram d c d' c' i n.
 Proof.
+  intros. unfold transf_maps in *.
+  repeat destruct_match; match goal with
+                         | H: (_, _, _) = (_, _, _) |- _ => inv H
+                         end; try solve [left; econstructor; crush].
   Admitted.
+
+Lemma transf_alternatives_neq :
+  forall state ram a n t0 t n' d' c' i d c nn,
+    transf_maps state ram a (n, t0, t) = (n', d', c') ->
+    a <> i -> i < nn -> a < nn -> nn < n ->
+    alternatives state ram d c t0 t i nn ->
+    alternatives state ram d c d' c' i nn.
+Proof.
+  unfold alternatives, alt_unchanged, alt_store, alt_load, transf_maps; intros;
+  repeat match goal with H: _ \/ _ |- _ => inv H | H: _ /\ _ |- _ => destruct H end;
+  [left | right; left | right; right];
+  repeat inv_exists; simplify;
+    repeat destruct_match;
+    repeat match goal with
+    | H: (_, _, _) = (_, _, _) |- _ => inv H
+    | |- exists _, _ => econstructor
+    end; repeat split; repeat (rewrite AssocMap.gso by lia); eauto; lia.
+Qed.
+
+Lemma transf_fold_alternatives :
+  forall l state ram n d c n' d' c',
+    max_pc c < n ->
+    fold_right (transf_maps state ram) (n, d, c) l = (n', d', c') ->
+    Forall (fun x => n > x) l ->
+    list_norepet l ->
+    (forall i nn d_s c_s,
+        In i l ->
+        n <= nn < n' ->
+        d ! i = Some d_s ->
+        c ! i = Some c_s ->
+        alternatives state ram d c d' c' i nn).
+Proof.
+  induction l; crush; [].
+  repeat match goal with
+         | H: context[_ :: _] |- _ => inv H
+         | H: transf_maps _ _ _ (fold_right (transf_maps ?s ?r) (?n, ?d, ?c) ?l) = (_, _, _) |- _ =>
+           let X := fresh "X" in
+           remember (fold_right (transf_maps s r) (n, d, c) l) as X
+         | X: _ * _ |- _ => destruct X
+         | H: (_, _, _) = _ |- _ => symmetry in H
+         end.
+  inv H3. admit.
+  eapply transf_alternatives_neq; eauto. destruct (Pos.eq_dec a i); subst; congruence.
+  apply max_index in H6. lia. lia. admit. eapply IHl; eauto. split. auto. admit.
+Admitted.
+
+Lemma transf_code_alternatives :
+  forall state ram d c d' c' i d_s c_s,
+    transf_code state ram d c = (d', c') ->
+    d ! i = Some d_s ->
+    c ! i = Some c_s ->
+    alternatives state ram d c d' c' i.
+Proof.
+  unfold transf_code;
+  intros; repeat destruct_match; inv H;
+  eapply transf_fold_alternatives;
+    eauto using forall_gt, PTree.elements_keys_norepet, max_index.
+  apply AssocMapExt.elements_iff; eauto.
+Qed.
+
+Lemma translation_correct :
+  forall m asr nasa1 basa1 nasr1 basr1 basr2 nasr2 nasa2 basa2 nasr3 basr3
+         nasa3 basa3 asr'0 asa'0 res' st tge pstval sf asa ctrl data f,
+    asr ! (mod_reset m) = Some (ZToValue 0) ->
+    asr ! (mod_finish m) = Some (ZToValue 0) ->
+    asr ! (mod_st m) = Some (posToValue st) ->
+    (mod_controllogic m) ! st = Some ctrl ->
+    (mod_datapath m) ! st = Some data ->
+    stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
+               {| assoc_blocking := asa; assoc_nonblocking := empty_stack m |} ctrl
+               {| assoc_blocking := basr1; assoc_nonblocking := nasr1 |}
+               {| assoc_blocking := basa1; assoc_nonblocking := nasa1 |} ->
+    basr1 ! (mod_st m) = Some (posToValue st) ->
+    stmnt_runp f {| assoc_blocking := basr1; assoc_nonblocking := nasr1 |}
+               {| assoc_blocking := basa1; assoc_nonblocking := nasa1 |} data
+               {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
+               {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |} ->
+    exec_ram {| assoc_blocking := merge_regs nasr2 basr2; assoc_nonblocking := empty_assocmap |}
+             {| assoc_blocking := merge_arrs nasa2 basa2; assoc_nonblocking := empty_stack m |} None
+             {| assoc_blocking := basr3; assoc_nonblocking := nasr3 |}
+             {| assoc_blocking := basa3; assoc_nonblocking := nasa3 |} ->
+    (merge_regs nasr3 basr3) ! (mod_st m) = Some (posToValue pstval) ->
+    (Z.pos pstval <= 4294967295)%Z ->
+    match_states (State sf m st asr asa) (State res' (transf_module m) st asr'0 asa'0) ->
+    mod_ram m = None ->
+    exists R2 : state,
+      Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
+      match_states (State sf m pstval (merge_regs nasr3 basr3) (merge_arrs nasa3 basa3)) R2.
+Proof.
+  intros.
+  repeat match goal with
+  | H: match_states _ _ |- _ => inv H
+  | H: context[exec_ram] |- _ => inv H
+  | H: mod_ram _ = None |- _ =>
+    let H2 := fresh "TRANSF" in learn H as H2; apply transf_module_code in H2
+  end.
+  eapply transf_code_alternatives in TRANSF; eauto; simplify.
+  inv TRANSF.
+  inv H16. admit. admit.
+  econstructor. simplify.
+  eapply Smallstep.plus_two.
+  econstructor;
+  repeat match goal with
+         | |- context[empty_stack (transf_module _)] => rewrite empty_stack_transf
+         | |- context[mod_ram (transf_module _)] => unfold transf_module; repeat destruct_match
+         end; mgen_crush.
+  Admitted.
+
+(*  exploit transf_code_all.
+  eassumption.
+  assert (X: all_match_empty_size m {| assoc_blocking := asa;
+                                       assoc_nonblocking := empty_stack m |}) by mgen_crush; eassumption.
+  assert (X: all_match_empty_size m {| assoc_blocking := asa'0;
+                                       assoc_nonblocking := empty_stack m |}) by mgen_crush; eassumption.
+  unfold match_module_to_ram; simplify; solve [auto].
+  unfold ram_ordering; simplify; lia.
+  eassumption. eassumption. constructor. eassumption.
+  assert (EMPTY: match_assocmaps (max_reg_module m + 1) empty_assocmap empty_assocmap)
+    by eauto with mgen. apply EMPTY.
+  constructor; solve [eauto with mgen].
+  lia. unfold exec_all.
+  repeat match goal with
+         | |- exists _, _ => econstructor
+         end; simplify; eassumption.
+  intros. simplify.
+  unfold exec_all_ram in *; simplify;
+  repeat match goal with
+         | r: arr_associations |- _ =>
+           let r1 := fresh "bar" in
+           let r2 := fresh "nar" in
+           destruct r as [r1 r2]
+         | r: reg_associations |- _ =>
+           let r1 := fresh "brs" in
+           let r2 := fresh "nrs" in
+           destruct r as [r1 r2]
+         end.*)
 
 Section CORRECTNESS.
 
@@ -2479,26 +2697,7 @@ Section CORRECTNESS.
         repeat destruct_match; crush. mgen_crush. unfold match_empty_size. mgen_crush.
       unfold match_empty_size. mgen_crush. apply match_empty_size_merge; mgen_crush. }
       apply match_empty_size_merge; mgen_crush; mgen_crush.
-    - exploit transf_code_all; eauto. unfold exec_all.
-      do 3 eexists. simplify. apply H4. apply H6. econstructor. apply ASSOC. eauto with mgen.
-      econstructor. apply ARRS.
-      eauto with mgen.
-      eauto with mgen.
-      intros. simplify. inv H15. inv H17.
-      unfold exec_all_ram in *. repeat inv_exists. simplify. inv H7.
-      destruct x4. destruct x5. destruct x6. destruct x7. destruct x1. destruct x2.
-      econstructor. econstructor. apply Smallstep.plus_one.
-      econstructor; eauto with mgen; simplify.
-      assert (assoc_blocking ! (mod_st (transf_module m)) = Some (posToValue st)) by admit; auto.
-      unfold empty_stack in *. simplify. unfold transf_module in *.
-      simplify. repeat destruct_match; crush.
-      unfold merge_arr_assocs, merge_reg_assocs, empty_stack' in *. simplify. eassumption.
-      econstructor. mgen_crush. simplify.
-      assert (match_empty_size m (merge_arrs nasa2 basa2)) by admit.
-      eauto with mgen. auto.
-      assert (match_empty_size m (merge_arrs nasa2 basa2)) by admit.
-      eauto with mgen.
-      admit.
+    - eapply translation_correct; eauto.
     - do 2 econstructor. apply Smallstep.plus_one.
       apply step_finish; mgen_crush. constructor; eauto.
     - do 2 econstructor. apply Smallstep.plus_one.
@@ -2554,7 +2753,7 @@ Section CORRECTNESS.
       rewrite AssocMap.gso; auto.
       symmetry. rewrite AssocMap.gso; auto. inv H6. apply H. auto.
       auto. auto. auto. auto.
-  Admitted.
+  Qed.
   Hint Resolve transf_step_correct : mgen.
 
   Lemma transf_initial_states :
