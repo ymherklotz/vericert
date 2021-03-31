@@ -139,7 +139,7 @@ Inductive exec_ram:
       (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some wr_en ->
       (Verilog.assoc_blocking ra)!(ram_d_in r) = Some d_in ->
       (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
-      exec_ram ra ar (Some r) ra
+      exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_en r) ra (ZToValue 0))
                (Verilog.nonblock_arr (ram_mem r) (valueToNat addr) ar d_in)
 | exec_ram_Some_read:
     forall ra ar r addr v_d_out en,
@@ -149,7 +149,8 @@ Inductive exec_ram:
       (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
       Verilog.arr_assocmap_lookup (Verilog.assoc_blocking ar)
                                   (ram_mem r) (valueToNat addr) = Some v_d_out ->
-      exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_d_out r) ra v_d_out) ar
+      exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_en r)
+                               (Verilog.nonblock_reg (ram_d_out r) ra v_d_out) (ZToValue 0)) ar
 | exec_ram_None:
     forall r a,
       exec_ram r a None r a.
