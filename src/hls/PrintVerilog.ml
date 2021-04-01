@@ -139,22 +139,22 @@ let pprint_edge_top i = function
   | Valledge -> "@*"
   | Voredge (e1, e2) -> concat ["@("; pprint_edge e1; " or "; pprint_edge e2; ")"]
 
-let declare t =
+let declare (t, i) =
   function (r, sz) ->
     concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
-             register r; " = 0;\n" ]
+             register r; if i then " = 0;\n" else ";\n" ]
 
-let declarearr t =
+let declarearr (t, _) =
   function (r, sz, ln) ->
     concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r;
              " ["; sprintf "%d" (Nat.to_int ln - 1); ":0];\n" ]
 
 let print_io = function
-  | Some Vinput -> "input"
-  | Some Voutput -> "output reg"
-  | Some Vinout -> "inout"
-  | None -> "reg"
+  | Some Vinput -> "input", false
+  | Some Voutput -> "output reg", true
+  | Some Vinout -> "inout", false
+  | None -> "reg", true
 
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
