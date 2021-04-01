@@ -164,13 +164,13 @@ let decl i = function
 let pprint_module_item i = function
   | Vdeclaration d -> decl i d
   | Valways (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; "begin\n";
+    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
   | Valways_ff (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; "begin\n";
+    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
   | Valways_comb (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; "begin\n";
+    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
 
 let rec intersperse c = function

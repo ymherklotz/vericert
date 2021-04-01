@@ -44,7 +44,7 @@ Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
 Definition inst_ram clk stk_len ram :=
   Valways (Vnegedge clk)
-          (Vseq (Vcond (Vbinop Vand (Vvar (ram_en ram))
+          (Vseq (Vcond (Vbinop Vand (Vbinop Vne (Vvar (ram_u_en ram)) (Vvar (ram_en ram)))
                                (Vbinop Vlt (Vvar (ram_addr ram)) (Vlit (natToValue stk_len))))
                  (Vcond (Vvar (ram_wr_en ram))
                         (Vnonblock (Vvari (ram_mem ram) (Vvar (ram_addr ram)))
@@ -52,7 +52,7 @@ Definition inst_ram clk stk_len ram :=
                         (Vnonblock (Vvar (ram_d_out ram))
                                    (Vvari (ram_mem ram) (Vvar (ram_addr ram)))))
                  Vskip)
-                (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 0)))).
+                (Vnonblock (Vvar (ram_en ram)) (Vvar (ram_u_en ram)))).
 
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in

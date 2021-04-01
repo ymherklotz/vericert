@@ -39,6 +39,15 @@ Require Import vericert.hls.Array.
 Local Open Scope positive.
 Local Open Scope assocmap.
 
+Lemma int_eq_not_false : forall x, Int.eq x (Int.not x) = false.
+Proof.
+  intros. unfold Int.eq.
+  rewrite Int.unsigned_not.
+  replace Int.max_unsigned with 4294967295%Z by crush.
+  assert (X: forall x, (x <> 4294967295 - x)%Z) by lia.
+  specialize (X (Int.unsigned x)). apply zeq_false; auto.
+Qed.
+
 Definition max_pc_function (m: module) :=
   List.fold_left Pos.max (List.map fst (PTree.elements m.(mod_controllogic))) 1.
 
@@ -90,7 +99,8 @@ Definition max_reg_ram r :=
                  (Pos.max (ram_addr ram)
                   (Pos.max (ram_addr ram)
                    (Pos.max (ram_wr_en ram)
-                    (Pos.max (ram_d_in ram) (ram_d_out ram))))))
+                    (Pos.max (ram_d_in ram)
+                     (Pos.max (ram_d_out ram) (ram_u_en ram)))))))
   end.
 
 Definition max_reg_module m :=
@@ -178,7 +188,7 @@ Definition transf_maps state ram in_ (dc: PTree.t stmnt * PTree.t stmnt) :=
       match d_s with
       | Vnonblock (Vvari r e1) e2 =>
         if r =? (ram_mem ram) then
-          let nd := Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+          let nd := Vseq (Vnonblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
                          (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
                                (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
                                      (Vnonblock (Vvar (ram_addr ram)) e1)))
@@ -188,7 +198,7 @@ Definition transf_maps state ram in_ (dc: PTree.t stmnt * PTree.t stmnt) :=
       | Vnonblock e1 (Vvari r e2) =>
         if r =? (ram_mem ram) then
           let nd :=
-              Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+              Vseq (Vnonblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
                    (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
                          (Vnonblock (Vvar (ram_addr ram)) e2))
           in
@@ -305,8 +315,9 @@ Definition transf_module (m: module): module :=
   let d_in := max_reg+3 in
   let d_out := max_reg+4 in
   let wr_en := max_reg+5 in
+  let u_en := max_reg+6 in
   let new_size := (mod_stk_len m) in
-  let ram := mk_ram new_size (mod_stk m) en addr wr_en d_in d_out in
+  let ram := mk_ram new_size (mod_stk m) en u_en addr wr_en d_in d_out in
   match transf_code (mod_st m) ram (mod_datapath m) (mod_controllogic m), (mod_ram m) with
   | (nd, nc), None =>
     mkmodule m.(mod_params)
@@ -384,7 +395,7 @@ Inductive match_stackframes : stackframe -> stackframe -> Prop :=
 
 Definition disable_ram (ram: option ram) (asr : assocmap_reg) : Prop :=
   match ram with
-  | Some r => asr # ((ram_en r), 32) = ZToValue 0%Z
+  | Some r => Int.eq (asr # ((ram_en r), 32)) (asr # ((ram_u_en r), 32)) = true
   | None => True
   end.
 
@@ -524,6 +535,7 @@ Hint Resolve match_reg_assocs_ge : mgen.
 
 Definition forall_ram (P: reg -> Prop) ram :=
   P (ram_en ram)
+  /\ P (ram_u_en ram)
   /\ P (ram_addr ram)
   /\ P (ram_wr_en ram)
   /\ P (ram_d_in ram)
@@ -533,7 +545,8 @@ Definition ram_ordering ram :=
   ram_addr ram < ram_en ram
   /\ ram_en ram < ram_d_in ram
   /\ ram_d_in ram < ram_d_out ram
-  /\ ram_d_out ram < ram_wr_en ram.
+  /\ ram_d_out ram < ram_wr_en ram
+  /\ ram_wr_en ram < ram_u_en ram.
 
 Lemma forall_ram_lt :
   forall m r,
@@ -542,7 +555,7 @@ Lemma forall_ram_lt :
 Proof.
   assert (X: forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
   unfold forall_ram; simplify; unfold max_reg_module; repeat apply X;
-  unfold max_reg_ram; rewrite H; lia.
+  unfold max_reg_ram; rewrite H; try lia.
 Qed.
 Hint Resolve forall_ram_lt : mgen.
 
@@ -1258,24 +1271,6 @@ Proof.
   Unshelve. unfold fext. exact tt.
 Qed.
 
-Lemma exec_all_ram_Vskip :
-  forall ram rs ar,
-    (assoc_blocking rs)!(ram_en ram) = None ->
-    (assoc_nonblocking rs)!(ram_en ram) = None ->
-    exec_all_ram ram Vskip Vskip rs ar (merge_reg_assocs rs)
-                 (merge_arr_assocs (ram_mem ram) (ram_size ram) ar).
-Proof.
-  unfold exec_all_ram.
-  intros. repeat econstructor.
-  unfold merge_reg_assocs.
-  unfold merge_regs.
-  unfold find_assocmap.
-  unfold AssocMapExt.get_default.
-  simplify.
-  rewrite AssocMapExt.merge_correct_3; auto.
-  Unshelve. unfold fext. exact tt.
-Qed.
-
 Lemma match_assocmaps_trans:
   forall p rs1 rs2 rs3,
     match_assocmaps p rs1 rs2 ->
@@ -1345,7 +1340,8 @@ Lemma transf_module_code :
                    ram_addr := max_reg_module m + 1;
                    ram_wr_en := max_reg_module m + 5;
                    ram_d_in := max_reg_module m + 3;
-                   ram_d_out := max_reg_module m + 4 |}
+                   ram_d_out := max_reg_module m + 4;
+                   ram_u_en := max_reg_module m + 6; |}
                 (mod_datapath m) (mod_controllogic m)
     = ((mod_datapath (transf_module m)), mod_controllogic (transf_module m)).
 Proof. unfold transf_module; intros; repeat destruct_match; crush. Qed.
@@ -1455,6 +1451,19 @@ Proof.
 Qed.
 Hint Resolve match_arrs_read : mgen.
 
+Lemma match_reg_implies_equal :
+  forall ra ra' p a b c,
+    Int.eq (ra # a) (ra # b) = c ->
+    a < p -> b < p ->
+    match_assocmaps p ra ra' ->
+    Int.eq (ra' # a) (ra' # b) = c.
+Proof.
+  unfold find_assocmap, AssocMapExt.get_default; intros.
+  inv H2. destruct (ra ! a) eqn:?; destruct (ra ! b) eqn:?;
+  repeat rewrite <- H3 by lia; rewrite Heqo; rewrite Heqo0; auto.
+Qed.
+Hint Resolve match_reg_implies_equal : mgen.
+
 Lemma exec_ram_same :
   forall rs1 ar1 ram rs2 ar2 p,
     exec_ram rs1 ar1 (Some ram) rs2 ar2 ->
@@ -1477,7 +1486,7 @@ Proof.
   inversion 1; subst; destruct ram; unfold forall_ram; simplify; repeat exec_ram_same_facts.
   - repeat (econstructor; mgen_crush).
   - do 2 econstructor; simplify;
-      [eapply exec_ram_Some_write; [ apply H1 | apply H2 | | | | ] | | ];
+      [eapply exec_ram_Some_write; [ apply H1 | apply H2 | | | | | ] | | ];
       mgen_crush.
   - do 2 econstructor; simplify; [eapply exec_ram_Some_read | | ];
       repeat (try econstructor; mgen_crush).
@@ -1843,13 +1852,13 @@ Proof.
   masrp_tac. masrp_tac. solve [repeat masrp_tac].
   masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac.
   masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac. masrp_tac.
-  masrp_tac. apply H7 in H9; inv_exists; simplify. repeat masrp_tac. auto.
+  masrp_tac. apply H8 in H10; inv_exists; simplify. repeat masrp_tac. auto.
   repeat masrp_tac.
   repeat masrp_tac.
   repeat masrp_tac.
   destruct (Pos.eq_dec (ram_mem r) s); subst; repeat masrp_tac.
   destruct (Pos.eq_dec (ram_mem r) s); subst; repeat masrp_tac.
-  apply H8 in H17; auto. apply H8 in H17; auto.
+  apply H9 in H18; auto. apply H9 in H18; auto.
   Unshelve. eauto.
 Qed.
 Hint Resolve match_arrs_size_ram_preserved : mgen.
@@ -2461,7 +2470,7 @@ Definition alt_unchanged (d : AssocMap.t stmnt) (c: AssocMap.t stmnt) d' c' i :=
 
 Definition alt_store ram d (c : AssocMap.t stmnt) d' c' i :=
   exists e1 e2,
-      d' ! i = Some (Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+      d' ! i = Some (Vseq (Vnonblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
                           (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
                                 (Vseq (Vnonblock (Vvar (ram_d_in ram)) e2)
                                       (Vnonblock (Vvar (ram_addr ram)) e1))))
@@ -2470,7 +2479,7 @@ Definition alt_store ram d (c : AssocMap.t stmnt) d' c' i :=
 
 Definition alt_load state ram d (c : AssocMap.t stmnt) d' c' i n :=
   exists c_s e1 e2,
-         d' ! i = Some (Vseq (Vnonblock (Vvar (ram_en ram)) (Vlit (ZToValue 1)))
+         d' ! i = Some (Vseq (Vnonblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
                                 (Vseq (Vnonblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
                                       (Vnonblock (Vvar (ram_addr ram)) e2)))
          /\ d' ! n = Some (Vnonblock e1 (Vvar (ram_d_out ram)))
@@ -2707,7 +2716,7 @@ Lemma exec_ram_resets_en :
     assoc_nonblocking rs = empty_assocmap ->
     (assoc_blocking (merge_reg_assocs rs')) # (ram_en r, 32) = ZToValue 0.
 Proof.
-  inversion 1; intros; subst; unfold merge_reg_assocs; simplify.
+(*  inversion 1; intros; subst; unfold merge_reg_assocs; simplify.
   - rewrite H6. unfold find_assocmap, AssocMapExt.get_default in *.
     destruct ((assoc_blocking rs') ! (ram_en r)) eqn:?.
     simplify. rewrite Heqo. auto.
@@ -2718,7 +2727,8 @@ Proof.
   - unfold merge_regs. rewrite H10. unfold_merge.
     unfold find_assocmap, AssocMapExt.get_default in *.
     rewrite AssocMap.gss; auto.
-Qed.
+Qed.*)
+  Admitted.
 
 Section CORRECTNESS.
 
@@ -2822,6 +2832,7 @@ Section CORRECTNESS.
       unfold disable_ram.
       unfold transf_module; repeat destruct_match; crush.
       apply exec_ram_resets_en in H21. unfold merge_reg_assocs in H21. simplify. auto. auto.
+      admit. simplify. auto.
     - eapply translation_correct; eauto.
     - do 2 econstructor. apply Smallstep.plus_one.
       apply step_finish; mgen_crush. constructor; eauto.
@@ -2838,7 +2849,7 @@ Section CORRECTNESS.
       unfold disable_ram. unfold transf_module; repeat destruct_match; crush.
       unfold find_assocmap, AssocMapExt.get_default. destruct_match.
       rewrite AssocMap.gso in Heqo1 by admit. rewrite AssocMap.gso in Heqo1 by admit.
-      rewrite AssocMap.gso in Heqo1 by admit. admit. auto.
+      rewrite AssocMap.gso in Heqo1 by admit. admit. admit.
     - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).
@@ -2851,7 +2862,7 @@ Section CORRECTNESS.
       unfold disable_ram. unfold transf_module; repeat destruct_match; crush.
       unfold find_assocmap, AssocMapExt.get_default. destruct_match.
       rewrite AssocMap.gso in Heqo by admit. rewrite AssocMap.gso in Heqo by admit.
-      rewrite AssocMap.gso in Heqo by admit. admit. auto.
+      rewrite AssocMap.gso in Heqo by admit. admit. admit.
     - inv STACKS. destruct b1; subst.
       econstructor. econstructor. apply Smallstep.plus_one.
       econstructor. eauto.

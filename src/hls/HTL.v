@@ -23,7 +23,7 @@ Require compcert.common.Events.
 Require compcert.common.Globalenvs.
 Require compcert.common.Smallstep.
 Require compcert.common.Values.
-Require compcert.lib.Integers.
+Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
@@ -55,6 +55,7 @@ Record ram := mk_ram {
   ram_size: nat;
   ram_mem: reg;
   ram_en: reg;
+  ram_u_en: reg;
   ram_addr: reg;
   ram_wr_en: reg;
   ram_d_in: reg;
@@ -123,34 +124,35 @@ Inductive state : Type :=
            (args : list value), state.
 
 Inductive exec_ram:
-  Verilog.reg_associations -> Verilog.arr_associations ->
-  option ram ->
-  Verilog.reg_associations -> Verilog.arr_associations ->
-  Prop :=
+  Verilog.reg_associations -> Verilog.arr_associations -> option ram ->
+  Verilog.reg_associations -> Verilog.arr_associations -> Prop :=
 | exec_ram_Some_idle:
     forall ra ar r,
-      (Verilog.assoc_blocking ra)#(ram_en r, 32) = ZToValue 0 ->
+      Int.eq (Verilog.assoc_blocking ra)#(ram_en r, 32)
+             (Verilog.assoc_blocking ra)#(ram_u_en r, 32) = true ->
       exec_ram ra ar (Some r) ra ar
 | exec_ram_Some_write:
-    forall ra ar r d_in addr en wr_en,
-      en <> ZToValue 0 ->
-      wr_en <> ZToValue 0 ->
+    forall ra ar r d_in addr en wr_en u_en,
+      Int.eq en u_en = false ->
+      Int.eq wr_en (ZToValue 0) = false ->
       (Verilog.assoc_blocking ra)!(ram_en r) = Some en ->
+      (Verilog.assoc_blocking ra)!(ram_u_en r) = Some u_en ->
       (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some wr_en ->
       (Verilog.assoc_blocking ra)!(ram_d_in r) = Some d_in ->
       (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
-      exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_en r) ra (ZToValue 0))
+      exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_en r) ra u_en)
                (Verilog.nonblock_arr (ram_mem r) (valueToNat addr) ar d_in)
 | exec_ram_Some_read:
-    forall ra ar r addr v_d_out en,
-      en <> ZToValue 0 ->
+    forall ra ar r addr v_d_out en u_en,
+      Int.eq en u_en = false ->
       (Verilog.assoc_blocking ra)!(ram_en r) = Some en ->
+      (Verilog.assoc_blocking ra)!(ram_u_en r) = Some u_en ->
       (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some (ZToValue 0) ->
       (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
       Verilog.arr_assocmap_lookup (Verilog.assoc_blocking ar)
                                   (ram_mem r) (valueToNat addr) = Some v_d_out ->
       exec_ram ra ar (Some r) (Verilog.nonblock_reg (ram_en r)
-                               (Verilog.nonblock_reg (ram_d_out r) ra v_d_out) (ZToValue 0)) ar
+                               (Verilog.nonblock_reg (ram_d_out r) ra v_d_out) u_en) ar
 | exec_ram_None:
     forall r a,
       exec_ram r a None r a.
