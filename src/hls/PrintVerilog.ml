@@ -142,7 +142,7 @@ let pprint_edge_top i = function
 let declare t =
   function (r, sz) ->
     concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
-             register r; ";\n" ]
+             register r; " = 0;\n" ]
 
 let declarearr t =
   function (r, sz, ln) ->
