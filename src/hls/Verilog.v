@@ -519,18 +519,27 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
 | mi_stepp_Valways :
     forall f sr0 sa0 st sr1 sa1 c,
     stmnt_runp f sr0 sa0 st sr1 sa1 ->
-    mi_stepp f sr0 sa0 (Valways c st) sr1 sa1
-| mi_stepp_Valways_ff :
-    forall f sr0 sa0 st sr1 sa1 c,
-    stmnt_runp f sr0 sa0 st sr1 sa1 ->
-    mi_stepp f sr0 sa0 (Valways_ff c st) sr1 sa1
-| mi_stepp_Valways_comb :
-    forall f sr0 sa0 st sr1 sa1 c,
-    stmnt_runp f sr0 sa0 st sr1 sa1 ->
-    mi_stepp f sr0 sa0 (Valways_comb c st) sr1 sa1
+    mi_stepp f sr0 sa0 (Valways (Vposedge c) st) sr1 sa1
+| mi_stepp_Valways_ne :
+    forall f sr0 sa0 c st,
+    mi_stepp f sr0 sa0 (Valways (Vnegedge c) st) sr0 sa0
 | mi_stepp_Vdecl :
-    forall f sr sa d,
-    mi_stepp f sr sa (Vdeclaration d) sr sa.
+    forall f sr0 sa0 d,
+    mi_stepp f sr0 sa0 (Vdeclaration d) sr0 sa0.
+Hint Constructors mi_stepp : verilog.
+
+Inductive mi_stepp_negedge : fext -> reg_associations -> arr_associations ->
+                             module_item -> reg_associations -> arr_associations -> Prop :=
+| mi_stepp_negedge_Valways :
+    forall f sr0 sa0 st sr1 sa1 c,
+    stmnt_runp f sr0 sa0 st sr1 sa1 ->
+    mi_stepp_negedge f sr0 sa0 (Valways (Vnegedge c) st) sr1 sa1
+| mi_stepp_negedge_Valways_ne :
+    forall f sr0 sa0 c st,
+    mi_stepp_negedge f sr0 sa0 (Valways (Vposedge c) st) sr0 sa0
+| mi_stepp_negedge_Vdecl :
+    forall f sr0 sa0 d,
+    mi_stepp_negedge f sr0 sa0 (Vdeclaration d) sr0 sa0.
 Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
@@ -543,6 +552,18 @@ Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
 | mis_stepp_Nil :
     forall f sr sa,
     mis_stepp f sr sa nil sr sa.
+Hint Constructors mis_stepp : verilog.
+
+Inductive mis_stepp_negedge : fext -> reg_associations -> arr_associations ->
+                      list module_item -> reg_associations -> arr_associations -> Prop :=
+| mis_stepp_negedge_Cons :
+    forall f mi mis sr0 sa0 sr1 sa1 sr2 sa2,
+    mi_stepp_negedge f sr0 sa0 mi sr1 sa1 ->
+    mis_stepp_negedge f sr1 sa1 mis sr2 sa2 ->
+    mis_stepp_negedge f sr0 sa0 (mi :: mis) sr2 sa2
+| mis_stepp_negedge_Nil :
+    forall f sr sa,
+    mis_stepp_negedge f sr sa nil sr sa.
 Hint Constructors mis_stepp : verilog.
 
 Local Close Scope error_monad_scope.
@@ -559,18 +580,24 @@ Definition empty_stack (m : module) : assocmap_arr :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
-      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
+      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 basr2 nasr2
+             basa2 nasa2 f stval pstval m sf st g ist,
       asr!(m.(mod_reset)) = Some (ZToValue 0) ->
       asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
       mis_stepp f (mkassociations asr empty_assocmap)
                   (mkassociations asa (empty_stack m))
-                  m.(mod_body)
+                  (mod_body m)
                   (mkassociations basr1 nasr1)
-                  (mkassociations basa1 nasa1)->
-      asr' = merge_regs nasr1 basr1 ->
-      asa' = merge_arrs nasa1 basa1 ->
+                  (mkassociations basa1 nasa1) ->
+      mis_stepp_negedge f (mkassociations (merge_regs nasr1 basr1) empty_assocmap)
+                        (mkassociations (merge_arrs nasa1 basa1) (empty_stack m))
+                        (mod_body m)
+                        (mkassociations basr2 nasr2)
+                        (mkassociations basa2 nasa2) ->
+      asr' = merge_regs nasr2 basr2 ->
+      asa' = merge_arrs nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
@@ -718,6 +745,22 @@ Proof.
               end; crush).
 Qed.
 
+Lemma mi_stepp_negedge_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mi_stepp_negedge f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mi_stepp_negedge f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  intros. destruct m; invert H; invert H0;
+
+  repeat (try match goal with
+              | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
+                  H2 : stmnt_runp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (stmnt_runp_determinate H1 H2)
+              end; crush).
+Qed.
+
 Lemma mis_stepp_determinate :
   forall f asr0 asa0 m asr1 asa1,
   mis_stepp f asr0 asa0 m asr1 asa1 ->
@@ -741,13 +784,37 @@ Proof.
               end; crush).
 Qed.
 
+Lemma mis_stepp_negedge_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mis_stepp_negedge f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mis_stepp_negedge f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  induction 1; intros;
+
+  repeat (try match goal with
+              | [ H : mis_stepp_negedge _ _ _ [] _ _ |- _ ] => invert H
+              | [ H : mis_stepp_negedge _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+
+              | [ H1 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _,
+                  H2 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (mi_stepp_negedge_determinate H1 H2)
+
+             | [ H1 : forall asr1 asa1, mis_stepp_negedge _ ?asr0 ?asa0 ?m asr1 asa1 -> _,
+                 H2 : mis_stepp_negedge _ ?asr0 ?asa0 ?m _ _ |- _ ] =>
+               learn (H1 _ _ H2)
+              end; crush).
+Qed.
+
 Lemma semantics_determinate :
   forall (p: program), Smallstep.determinate (semantics p).
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
   - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
-    pose proof (mis_stepp_determinate H5 H15).
+    pose proof (mis_stepp_determinate H5 H15). simplify. inv H0. inv H4.
+    pose proof (mis_stepp_negedge_determinate H6 H17).
     crush.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.

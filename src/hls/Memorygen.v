@@ -3045,6 +3045,7 @@ Proof.
     2: { inv H23. }
     inv H23. inv H27. simplify. inv H4.
     2: { inv H24. }
+    inv H24.
     do 2 econstructor. eapply Smallstep.plus_two.
     econstructor. mgen_crush. mgen_crush. mgen_crush. eassumption.
     eassumption. econstructor. simplify. econstructor. econstructor. simplify.
@@ -3118,6 +3119,27 @@ Proof.
       { eassumption. }
       { econstructor. econstructor. simplify. unfold merge_regs. unfold_merge.
         eapply expr_runp_matches. eassumption.
+        assert (max_reg_expr x0 + 1 <= max_reg_module m + 1).
+        { pose proof H2 as X. apply max_reg_stmnt_le_stmnt_tree in X.
+          apply expr_lt_max_module_controllogic in X. simplify. remember (max_reg_module m). lia. }
+        assert (max_reg_expr x0 + 1 <= mod_st m).
+        { unfold module_ordering in *. simplify.
+          repeat match goal with
+                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
+                 end.
+          pose proof H2 as X. apply max_reg_stmnt_le_stmnt_tree in X.
+          simplify. lia.
+        }
+        remember (max_reg_module m).
+        apply match_assocmaps_gt; [lia|].
+        apply match_assocmaps_gt; [lia|].
+        apply match_assocmaps_gt; [lia|].
+        apply match_assocmaps_gt; [lia|].
+        apply match_assocmaps_gt; [lia|].
+        apply match_assocmaps_gt; [lia|].
+        simplify.
+        eapply match_assocmaps_ge. eauto. lia.
+        mgen_crush.
       }
       { simplify. unfold merge_regs. unfold_merge.
         unfold transf_module; repeat destruct_match; try discriminate; simplify.
@@ -3148,9 +3170,18 @@ Proof.
       { crush. }
       { crush. }
       { unfold merge_regs. unfold_merge. simplify.
-        assert (mod_st (transf_module m) <> r) by admit.
-        repeat rewrite AssocMap.gso by lia.
+        assert (r < mod_st m).
+        { unfold module_ordering in *. simplify.
+          repeat match goal with
+                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
+                 end.
+          pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
+          simplify. lia.
+        }
+        unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8.
+        simplify. rewrite AssocMap.gso in H8 by lia. rewrite AssocMap.gss in H8.
         unfold transf_module; repeat destruct_match; try discriminate; simplify.
+        repeat rewrite AssocMap.gso by lia.
         apply AssocMap.gss. }
       { eassumption. }
     }
@@ -3175,7 +3206,14 @@ Proof.
         apply match_assocmaps_gt; [lia|].
         apply match_assocmaps_duplicate.
         apply match_assocmaps_gss. auto.
-        assert (mod_st m <> r) by admit; auto.
+        assert (r < mod_st m).
+        { unfold module_ordering in *. simplify.
+          repeat match goal with
+                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
+                 end.
+          pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
+          simplify. lia.
+        } lia.
       }
       {
         apply merge_arr_empty. mgen_crush.
@@ -3302,7 +3340,9 @@ Section CORRECTNESS.
       end.
     induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
       repeat transf_step_correct_tac.
-    - assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
+    - assert (RAM0: transf_module m = m).
+      { eapply transf_module_code_ram. left. eassumption. }
+      assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
       { eapply match_arrs_size_stmnt_preserved2; eauto. unfold match_empty_size; mgen_crush. }
       simplify.
       assert (MATCH_SIZE2: match_empty_size m nasa2 /\ match_empty_size m basa2).
@@ -3313,17 +3353,17 @@ Section CORRECTNESS.
       assert (MATCH_ARR3: match_arrs_size nasa3 basa3) by mgen_crush.
       exploit match_states_same. apply H4. eauto with mgen.
       econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
-      intros. repeat inv_exists. simplify. inv H18. inv H21.
+      intros. repeat inv_exists. simplify. inv H17. inv H20.
       exploit match_states_same. apply H6. eauto with mgen.
-      econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify. inv H18. inv H23.
+      econstructor; eauto. econstructor; eauto. intros. repeat inv_exists. simplify. inv H17. inv H22.
       exploit exec_ram_same; eauto. eauto with mgen.
       econstructor. eapply match_assocmaps_merge; eauto. eauto with mgen.
       econstructor.
       apply match_arrs_merge; eauto with mgen. eauto with mgen.
-      intros. repeat inv_exists. simplify. inv H18. inv H28.
+      intros. repeat inv_exists. simplify. inv H17. inv H27.
       econstructor; simplify. apply Smallstep.plus_one. econstructor.
       mgen_crush. mgen_crush. mgen_crush. rewrite RAM0; eassumption. rewrite RAM0; eassumption.
-      rewrite RAM0. eassumption. mgen_crush. eassumption. rewrite RAM0 in H21. rewrite RAM0.
+      rewrite RAM0. eassumption. mgen_crush. eassumption. rewrite RAM0 in H20. rewrite RAM0.
       rewrite RAM. eassumption. eauto. eauto. eauto with mgen. eauto.
       econstructor. mgen_crush. apply match_arrs_merge; mgen_crush. eauto.
       apply match_empty_size_merge; mgen_crush; mgen_crush.
@@ -3339,14 +3379,16 @@ Section CORRECTNESS.
       apply match_empty_size_merge; mgen_crush; mgen_crush.
       unfold disable_ram.
       unfold transf_module; repeat destruct_match; crush.
-      apply exec_ram_resets_en in H21. unfold merge_reg_assocs in H21.
+      apply exec_ram_resets_en in H20. unfold merge_reg_assocs in H20.
       simplify. auto. auto.
-    - eapply translation_correct; eauto.
+    - eapply translation_correct; eauto. admit.
     - do 2 econstructor. apply Smallstep.plus_one.
       apply step_finish; mgen_crush. constructor; eauto.
     - do 2 econstructor. apply Smallstep.plus_one.
       apply step_finish; mgen_crush. econstructor; eauto.
-    - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
+    - assert (RAM0: transf_module m = m).
+      { eapply transf_module_code_ram. left. eassumption. }
+      econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m) by (rewrite RAM0; auto).
       replace (mod_reset (transf_module m)) with (mod_reset m) by (rewrite RAM0; auto).
       replace (mod_finish (transf_module m)) with (mod_finish m) by (rewrite RAM0; auto).
@@ -3355,9 +3397,7 @@ Section CORRECTNESS.
       replace (mod_st (transf_module m)) with (mod_st m) by (rewrite RAM0; auto).
       repeat econstructor; mgen_crush.
       unfold disable_ram. unfold transf_module; repeat destruct_match; crush.
-      unfold find_assocmap, AssocMapExt.get_default. destruct_match.
-      rewrite AssocMap.gso in Heqo1 by admit. rewrite AssocMap.gso in Heqo1 by admit.
-      rewrite AssocMap.gso in Heqo1 by admit. admit. admit.
+      admit.
     - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).
@@ -3371,10 +3411,12 @@ Section CORRECTNESS.
       unfold find_assocmap, AssocMapExt.get_default. destruct_match.
       rewrite AssocMap.gso in Heqo by admit. rewrite AssocMap.gso in Heqo by admit.
       rewrite AssocMap.gso in Heqo by admit. admit. admit.
-    - inv STACKS. destruct b1; subst.
+    - assert (RAM0: transf_module m = m).
+      { eapply transf_module_code_ram. left. eassumption. }
+      inv STACKS. destruct b1; subst.
       econstructor. econstructor. apply Smallstep.plus_one.
       econstructor. eauto.
-      clear Learn. inv H0. inv H3. inv STACKS. inv H3. constructor.
+      clear Learn. inv H0. inv H2. inv STACKS. inv H2. constructor.
       constructor. intros.
       rewrite RAM0.
       destruct (Pos.eq_dec r res); subst.
@@ -3386,9 +3428,9 @@ Section CORRECTNESS.
       rewrite AssocMap.gss.
       rewrite AssocMap.gss. auto.
       rewrite AssocMap.gso; auto.
-      symmetry. rewrite AssocMap.gso; auto. inv MATCH_ASSOC0. apply H1. auto.
+      symmetry. rewrite AssocMap.gso; auto. inv MATCH_ASSOC0. apply H0. auto.
       auto. auto. auto. auto.
-      rewrite RAM0. rewrite H. rewrite RAM0 in DISABLE_RAM. rewrite H in DISABLE_RAM.
+      rewrite RAM0. rewrite RAM. rewrite RAM0 in DISABLE_RAM. rewrite RAM in DISABLE_RAM.
       apply disable_ram_set_gso.
       apply disable_ram_set_gso. auto. admit. admit. admit. admit.
     - inv STACKS. destruct b1; subst.
