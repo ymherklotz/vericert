@@ -60,6 +60,11 @@ Record ram := mk_ram {
   ram_wr_en: reg;
   ram_d_in: reg;
   ram_d_out: reg;
+  ram_ordering: (ram_addr < ram_en
+                 /\ ram_en < ram_d_in
+                 /\ ram_d_in < ram_d_out
+                 /\ ram_d_out < ram_wr_en
+                 /\ ram_wr_en < ram_u_en)%positive
 }.
 
 Record module: Type :=
@@ -135,7 +140,7 @@ Inductive exec_ram:
     forall ra ar r d_in addr en wr_en u_en,
       Int.eq en u_en = false ->
       Int.eq wr_en (ZToValue 0) = false ->
-      (Verilog.assoc_blocking ra)!(ram_en r) = Some en ->
+      (Verilog.assoc_blocking ra)#(ram_en r, 32) = en ->
       (Verilog.assoc_blocking ra)!(ram_u_en r) = Some u_en ->
       (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some wr_en ->
       (Verilog.assoc_blocking ra)!(ram_d_in r) = Some d_in ->
@@ -145,7 +150,7 @@ Inductive exec_ram:
 | exec_ram_Some_read:
     forall ra ar r addr v_d_out en u_en,
       Int.eq en u_en = false ->
-      (Verilog.assoc_blocking ra)!(ram_en r) = Some en ->
+      (Verilog.assoc_blocking ra)#(ram_en r, 32) = en ->
       (Verilog.assoc_blocking ra)!(ram_u_en r) = Some u_en ->
       (Verilog.assoc_blocking ra)!(ram_wr_en r) = Some (ZToValue 0) ->
       (Verilog.assoc_blocking ra)!(ram_addr r) = Some addr ->
