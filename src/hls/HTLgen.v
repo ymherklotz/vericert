@@ -583,7 +583,19 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition transf_module (f: function) : mon HTL.module :=
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
+                          && (d <? e) && (e <? f) && (f <? g))%positive true with
+          | left t => left _
+          | _ => _
+          end); auto.
+  simplify; repeat match goal with
+                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
+                   end; unfold module_ordering; auto.
+Defined.
+
+Definition transf_module (f: function) : mon HTL.module.
+  refine (
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
@@ -595,8 +607,10 @@ Definition transf_module (f: function) : mon HTL.module :=
     do clk <- create_reg (Some Vinput) 1;
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
-    | left LEDATA, left LECTRL =>
+          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned,
+          decide_order (st_st current_state) fin rtrn stack start rst clk
+    with
+    | left LEDATA, left LECTRL, left MORD =>
         ret (HTL.mkmodule
            f.(RTL.fn_params)
            current_state.(st_datapath)
@@ -613,16 +627,19 @@ Definition transf_module (f: function) : mon HTL.module :=
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            None
-           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
-    | _, _ => error (Errors.msg "More than 2^32 states.")
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
+           MORD
+           _)
+    | _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
-  else error (Errors.msg "Stack size misalignment.").
+  else error (Errors.msg "Stack size misalignment.")); discriminate.
+Defined.
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
   mkstate st
           (Pos.succ st)
-          (Pos.succ (max_pc_function f))
+          (Pos.succ (RTL.max_pc_function f))
           (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_datapath (init_state st))
@@ -632,23 +649,6 @@ Definition transl_module (f : function) : Errors.res HTL.module :=
   run_mon (max_state f) (transf_module f).
 
 Definition transl_fundef := transf_partial_fundef transl_module.
-
-(* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
-
-(*Definition transl_main_fundef f : Errors.res HTL.fundef :=
-  match f with
-  | Internal f => transl_fundef (Internal f)
-  | External f => Errors.Error (Errors.msg "Could not find internal main function")
-  end.
-
-(** Translation of a whole program. *)
-
-Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
-  transform_partial_program2 (fun i f => if Pos.eqb p.(AST.prog_main) i
-                                         then transl_fundef f
-                                         else transl_main_fundef f)
-                             (fun i v => Errors.OK v) p.
-*)
 
 Definition main_is_internal (p : RTL.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in

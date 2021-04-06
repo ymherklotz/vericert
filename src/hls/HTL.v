@@ -18,6 +18,7 @@
  *)
 
 Require Import Coq.FSets.FMapPositive.
+Require Import Coq.micromega.Lia.
 
 Require compcert.common.Events.
 Require compcert.common.Globalenvs.
@@ -31,6 +32,8 @@ Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Array.
 Require vericert.hls.Verilog.
+
+Local Open Scope positive.
 
 (** The purpose of the hardware transfer language (HTL) is to create a more
 hardware-like layout that is still similar to the register transfer language
@@ -49,7 +52,7 @@ Definition controllogic := PTree.t Verilog.stmnt.
 Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
   forall p0 : positive,
     In p0 (map fst (Maps.PTree.elements m)) ->
-    Z.pos p0 <= Integers.Int.max_unsigned.
+    (Z.pos p0 <= Integers.Int.max_unsigned)%Z.
 
 Record ram := mk_ram {
   ram_size: nat;
@@ -64,8 +67,10 @@ Record ram := mk_ram {
                  /\ ram_en < ram_d_in
                  /\ ram_d_in < ram_d_out
                  /\ ram_d_out < ram_wr_en
-                 /\ ram_wr_en < ram_u_en)%positive
+                 /\ ram_wr_en < ram_u_en)
 }.
+
+Definition module_ordering a b c d e f g := a < b < c /\ c < d < e /\ e < f < g.
 
 Record module: Type :=
   mkmodule {
@@ -84,7 +89,9 @@ Record module: Type :=
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_ram : option ram;
-    mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
+    mod_wf : map_well_formed mod_controllogic /\ map_well_formed mod_datapath;
+    mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk;
+    mod_ram_wf : forall r', mod_ram = Some r' -> mod_clk < ram_addr r';
   }.
 
 Definition fundef := AST.fundef module.
@@ -198,7 +205,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr' = Verilog.merge_regs nasr3 basr3 ->
       asa' = Verilog.merge_arrs nasa3 basa3 ->
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
-      Z.pos pstval <= Integers.Int.max_unsigned ->
+      (Z.pos pstval <= Integers.Int.max_unsigned)%Z ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
     forall g m st asr asa retval sf,
@@ -237,3 +244,97 @@ Inductive final_state : state -> Integers.int -> Prop :=
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
+
+Definition max_pc_function (m: module) :=
+  List.fold_left Pos.max (List.map fst (PTree.elements m.(mod_controllogic))) 1.
+
+Definition max_list := fold_right Pos.max 1.
+
+Definition max_stmnt_tree t :=
+  PTree.fold (fun i _ st => Pos.max (Verilog.max_reg_stmnt st) i) t 1.
+
+Definition max_reg_ram r :=
+  match r with
+  | None => 1
+  | Some ram => Pos.max (ram_mem ram)
+                (Pos.max (ram_en ram)
+                 (Pos.max (ram_addr ram)
+                  (Pos.max (ram_addr ram)
+                   (Pos.max (ram_wr_en ram)
+                    (Pos.max (ram_d_in ram)
+                     (Pos.max (ram_d_out ram) (ram_u_en ram)))))))
+  end.
+
+Definition max_reg_module m :=
+  Pos.max (max_list (mod_params m))
+   (Pos.max (max_stmnt_tree (mod_datapath m))
+    (Pos.max (max_stmnt_tree (mod_controllogic m))
+     (Pos.max (mod_st m)
+      (Pos.max (mod_stk m)
+       (Pos.max (mod_finish m)
+        (Pos.max (mod_return m)
+         (Pos.max (mod_start m)
+          (Pos.max (mod_reset m)
+           (Pos.max (mod_clk m) (max_reg_ram (mod_ram m))))))))))).
+
+Lemma max_fold_lt :
+  forall m l n, m <= n -> m <= (fold_left Pos.max l n).
+Proof. induction l; crush; apply IHl; lia. Qed.
+
+Lemma max_fold_lt2 :
+  forall (l: list (positive * Verilog.stmnt)) v n,
+    v <= n ->
+    v <= fold_left (fun a p => Pos.max (Verilog.max_reg_stmnt (snd p)) a) l n.
+Proof. induction l; crush; apply IHl; lia. Qed.
+
+Lemma max_fold_lt3 :
+  forall (l: list (positive * Verilog.stmnt)) v v',
+    v <= v' ->
+    fold_left (fun a0 p => Pos.max (Verilog.max_reg_stmnt (snd p)) a0) l v
+    <= fold_left (fun a0 p => Pos.max (Verilog.max_reg_stmnt (snd p)) a0) l v'.
+Proof. induction l; crush; apply IHl; lia. Qed.
+
+Lemma max_fold_lt4 :
+  forall (l: list (positive * Verilog.stmnt)) (a: positive * Verilog.stmnt),
+    fold_left (fun a0 p => Pos.max (Verilog.max_reg_stmnt (snd p)) a0) l 1
+    <= fold_left (fun a0 p => Pos.max (Verilog.max_reg_stmnt (snd p)) a0) l
+                 (Pos.max (Verilog.max_reg_stmnt (snd a)) 1).
+Proof. intros; apply max_fold_lt3; lia. Qed.
+
+Lemma max_reg_stmnt_lt_stmnt_tree':
+  forall l (i: positive) v,
+    In (i, v) l ->
+    list_norepet (map fst l) ->
+    Verilog.max_reg_stmnt v <= fold_left (fun a p => Pos.max (Verilog.max_reg_stmnt (snd p)) a) l 1.
+Proof.
+  induction l; crush. inv H; inv H0; simplify. apply max_fold_lt2. lia.
+  transitivity (fold_left (fun (a : positive) (p : positive * Verilog.stmnt) =>
+                             Pos.max (Verilog.max_reg_stmnt (snd p)) a) l 1).
+  eapply IHl; eauto. apply max_fold_lt4.
+Qed.
+
+Lemma max_reg_stmnt_le_stmnt_tree :
+  forall d i v,
+    d ! i = Some v ->
+    Verilog.max_reg_stmnt v <= max_stmnt_tree d.
+Proof.
+  intros. unfold max_stmnt_tree. rewrite PTree.fold_spec.
+  apply PTree.elements_correct in H.
+  eapply max_reg_stmnt_lt_stmnt_tree'; eauto.
+  apply PTree.elements_keys_norepet.
+Qed.
+
+Lemma max_reg_stmnt_lt_stmnt_tree :
+  forall d i v,
+    d ! i = Some v ->
+    Verilog.max_reg_stmnt v < max_stmnt_tree d + 1.
+Proof. intros. apply max_reg_stmnt_le_stmnt_tree in H; lia. Qed.
+
+Lemma max_stmnt_lt_module :
+  forall m d i,
+    (mod_controllogic m) ! i = Some d \/ (mod_datapath m) ! i = Some d ->
+    Verilog.max_reg_stmnt d < max_reg_module m + 1.
+Proof.
+  inversion 1 as [ Hv | Hv ]; unfold max_reg_module;
+  apply max_reg_stmnt_le_stmnt_tree in Hv; lia.
+Qed.

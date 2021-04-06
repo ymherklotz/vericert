@@ -821,3 +821,40 @@ Proof.
   - red; simplify; intro; invert H0; invert H; crush.
   - invert H; invert H0; crush.
 Qed.
+
+Local Open Scope positive.
+
+Fixpoint max_reg_expr (e: expr) :=
+  match e with
+  | Vlit _ => 1
+  | Vvar r => r
+  | Vvari r e => Pos.max r (max_reg_expr e)
+  | Vrange r e1 e2 => Pos.max r (Pos.max (max_reg_expr e1) (max_reg_expr e2))
+  | Vinputvar r => r
+  | Vbinop _ e1 e2 => Pos.max (max_reg_expr e1) (max_reg_expr e2)
+  | Vunop _ e => max_reg_expr e
+  | Vternary e1 e2 e3 => Pos.max (max_reg_expr e1) (Pos.max (max_reg_expr e2) (max_reg_expr e3))
+  end.
+
+Fixpoint max_reg_stmnt (st: stmnt) :=
+  match st with
+  | Vskip => 1
+  | Vseq s1 s2 => Pos.max (max_reg_stmnt s1) (max_reg_stmnt s2)
+  | Vcond e s1 s2 =>
+    Pos.max (max_reg_expr e)
+            (Pos.max (max_reg_stmnt s1) (max_reg_stmnt s2))
+  | Vcase e stl None => Pos.max (max_reg_expr e) (max_reg_stmnt_expr_list stl)
+  | Vcase e stl (Some s) =>
+    Pos.max (max_reg_stmnt s)
+            (Pos.max (max_reg_expr e) (max_reg_stmnt_expr_list stl))
+  | Vblock e1 e2 => Pos.max (max_reg_expr e1) (max_reg_expr e2)
+  | Vnonblock e1 e2 => Pos.max (max_reg_expr e1) (max_reg_expr e2)
+  end
+with max_reg_stmnt_expr_list (stl: stmnt_expr_list) :=
+  match stl with
+  | Stmntnil => 1
+  | Stmntcons e s stl' =>
+    Pos.max (max_reg_expr e)
+            (Pos.max (max_reg_stmnt s)
+                     (max_reg_stmnt_expr_list stl'))
+  end.

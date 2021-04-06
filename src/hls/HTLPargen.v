@@ -786,7 +786,19 @@ Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
   | _ => translate_cfi fin rtrn stack preg (nstate, bb.(bb_exit))
   end.
 
-Definition transf_module (f: function) : mon HTL.module :=
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
+                          && (d <? e) && (e <? f) && (f <? g))%positive true with
+          | left t => left _
+          | _ => _
+          end); auto.
+  simplify; repeat match goal with
+                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
+                   end; unfold module_ordering; auto.
+Defined.
+
+Definition transf_module (f: function) : mon HTL.module.
+  refine (
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
@@ -804,8 +816,10 @@ Definition transf_module (f: function) : mon HTL.module :=
     match zle (Z.pos (max_pc_map current_state.(st_datapath)))
               Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic)))
-              Integers.Int.max_unsigned with
-    | left LEDATA, left LECTRL =>
+              Integers.Int.max_unsigned,
+          decide_order (st_st current_state) fin rtrn stack start rst clk
+    with
+    | left LEDATA, left LECTRL, left MORD =>
         ret (HTL.mkmodule
            f.(fn_params)
            current_state.(st_datapath)
@@ -822,10 +836,13 @@ Definition transf_module (f: function) : mon HTL.module :=
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            None
-           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA)))
-    | _, _ => error (Errors.msg "More than 2^32 states.")
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
+           MORD
+           _)
+    | _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
-  else error (Errors.msg "Stack size misalignment.").
+  else error (Errors.msg "Stack size misalignment.")); discriminate.
+Defined.
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in

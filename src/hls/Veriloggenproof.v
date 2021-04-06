@@ -421,8 +421,8 @@ Section CORRECTNESS.
       econstructor. econstructor.
 
       eapply transl_list_correct.
-      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP]. auto.
-      apply Maps.PTree.elements_keys_norepet. eassumption.
+      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP].
+      auto. apply Maps.PTree.elements_keys_norepet. eassumption.
       2: { apply valueToPos_inj. apply unsigned_posToValue_le.
            eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
            split. lia. apply HP. eassumption. eassumption.
@@ -468,7 +468,8 @@ Section CORRECTNESS.
       econstructor. econstructor.
 
       eapply transl_list_correct.
-      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP]. auto.
+      intros. split. lia. pose proof (HTL.mod_wf m) as HP.
+      destruct HP as [_ HP]; auto.
       apply Maps.PTree.elements_keys_norepet. eassumption.
       2: { apply valueToPos_inj. apply unsigned_posToValue_le.
            eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].

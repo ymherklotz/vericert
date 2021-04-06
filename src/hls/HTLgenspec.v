@@ -178,12 +178,12 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf,
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf1 wf2 wf3,
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk scldecls arrdecls None wf) ->
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls None wf1 wf2 wf3) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
@@ -648,5 +648,9 @@ Proof.
   replace (st_datapath s10) with (st_datapath s3) by congruence.
   replace (st_st s10) with (st_st s3) by congruence.
   eapply iter_expand_instr_spec; eauto with htlspec.
+  rewrite H5. rewrite H7. apply EQ2.
   apply PTree.elements_complete.
+  eauto with htlspec.
+  erewrite <- collect_declare_freshreg_trans; try eassumption.
+  lia.
 Qed.
