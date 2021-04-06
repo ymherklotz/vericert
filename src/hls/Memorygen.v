@@ -266,7 +266,8 @@ Inductive match_stackframes : stackframe -> stackframe -> Prop :=
       (MATCH_ASSOC: match_assocmaps (max_reg_module m + 1) asr asr')
       (MATCH_ARRS: match_arrs asa asa')
       (MATCH_EMPT1: match_empty_size m asa)
-      (MATCH_EMPT2: match_empty_size m asa'),
+      (MATCH_EMPT2: match_empty_size m asa')
+      (MATCH_RES: r < mod_st m),
       match_stackframes (Stackframe r m pc asr asa)
                         (Stackframe r (transf_module m) pc asr' asa').
 
@@ -3269,9 +3270,7 @@ Section CORRECTNESS.
       all: try solve [unfold transf_module; repeat destruct_match; mgen_crush].
       repeat econstructor; mgen_crush.
       unfold disable_ram. unfold transf_module; repeat destruct_match; crush.
-      unfold find_assocmap, AssocMapExt.get_default. destruct_match.
-      rewrite AssocMap.gso in Heqo by admit. rewrite AssocMap.gso in Heqo by admit.
-      rewrite AssocMap.gso in Heqo by admit. admit. admit.
+      admit.
     - inv STACKS. destruct b1; subst.
       econstructor. econstructor. apply Smallstep.plus_one.
       econstructor. eauto.
@@ -3290,7 +3289,7 @@ Section CORRECTNESS.
       symmetry. rewrite AssocMap.gso; auto. inv MATCH_ASSOC0. apply H1. auto.
       auto. auto. auto. auto.
       rewrite RAM0. rewrite RAM. rewrite RAM0 in DISABLE_RAM. rewrite RAM in DISABLE_RAM.
-      apply disable_ram_set_gso
+      apply disable_ram_set_gso.
       apply disable_ram_set_gso. auto.
       pose proof (mod_ordering_wf m); unfold module_ordering in *.
       pose proof (ram_ordering r0). simplify.
@@ -3300,7 +3299,10 @@ Section CORRECTNESS.
       pose proof (mod_ram_wf m r0 H). lia.
       pose proof (mod_ordering_wf m); unfold module_ordering in *.
       pose proof (ram_ordering r0). simplify.
-      pose proof (mod_ram_wf m r0 H).
+      pose proof (mod_ram_wf m r0 H). lia.
+      pose proof (mod_ordering_wf m); unfold module_ordering in *.
+      pose proof (ram_ordering r0). simplify.
+      pose proof (mod_ram_wf m r0 H). lia.
     - inv STACKS. destruct b1; subst.
       econstructor. econstructor. apply Smallstep.plus_one.
       econstructor. eauto.
@@ -3317,7 +3319,16 @@ Section CORRECTNESS.
       rewrite AssocMap.gss. auto.
       rewrite AssocMap.gso; auto.
       symmetry. rewrite AssocMap.gso; auto. inv MATCH_ASSOC. apply H. auto.
-      auto. auto. auto. auto. admit.
+      auto. auto. auto. auto.
+      Opaque disable_ram.
+      unfold transf_module in *; repeat destruct_match; crush.
+      apply disable_ram_set_gso.
+      apply disable_ram_set_gso.
+      auto.
+      simplify. unfold max_reg_module. lia.
+      simplify. unfold max_reg_module. lia.
+      simplify. unfold max_reg_module. lia.
+      simplify. unfold max_reg_module. lia.
   Admitted.
   Hint Resolve transf_step_correct : mgen.
 
