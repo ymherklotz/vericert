@@ -909,25 +909,6 @@ Proof.
     repeat match_states_same_tac. eauto. mgen_crush.
 Qed.
 
-(*Definition behaviour_correct d c d' c' r :=
-  forall p rs1 ar1 rs2 ar2 trs1 tar1 d_s c_s i v v',
-    PTree.get i d = Some d_s ->
-    PTree.get i c = Some c_s ->
-    ram_present ar1 r v v' ->
-    ram_present ar2 r v v' ->
-    exec_all d_s c_s rs1 ar1 rs2 ar2 ->
-    match_reg_assocs p rs1 trs1 ->
-    match_arr_assocs ar1 tar1 ->
-    Pos.max (max_stmnt_tree d) (max_stmnt_tree c) < p ->
-    exists d_s' c_s' trs2 tar2,
-      PTree.get i d' = Some d_s'
-      /\ PTree.get i c' = Some c_s'
-      /\ exec_all_ram r d_s' c_s' trs1 tar1 trs2 tar2
-      /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
-      /\ match_arr_assocs (merge_arr_assocs (ram_mem r) (ram_size r) ar2)
-                          (merge_arr_assocs (ram_mem r) (ram_size r) tar2).
- *)
-
 Lemma match_reg_assocs_merge :
   forall p rs rs',
     match_reg_assocs p rs rs' ->
@@ -955,77 +936,6 @@ Proof.
 Qed.
 Hint Resolve match_reg_assocs_merge : mgen.
 
-(*Lemma behaviour_correct_equiv :
-  forall d c r,
-    forall_ram (fun x => max_stmnt_tree d < x /\ max_stmnt_tree c < x) r ->
-    behaviour_correct d c d c r.
-Proof.
-  intros; unfold behaviour_correct.
-  intros. exists d_s. exists c_s.
-  unfold exec_all in *. inv H3. inv H4. inv H3. inv H4. inv H3.
-  exploit match_states_same.
-  apply H4. instantiate (1 := p). admit.
-  eassumption. eassumption. intros.
-  inv H3. inv H11. inv H3. inv H12.
-  exploit match_states_same.
-  apply H10. instantiate (1 := p). admit.
-  eassumption. eassumption. intros.
-  inv H12. inv H14. inv H12. inv H15.
-  econstructor. econstructor.
-  simplify; auto.
-  unfold exec_all_ram.
-  do 5 econstructor.
-  simplify.
-  eassumption. eassumption.
-  eapply exec_ram_Some_idle. admit.
-  rewrite merge_reg_idempotent.
-  eauto with mgen.
-  admit.
-(*  unfold find_assocmap. unfold AssocMapExt.get_default.
-  assert ((assoc_blocking (merge_reg_assocs rs2)) ! (ram_en r) = None) by admit.
-  destruct_match; try discriminate; auto.
-  constructor; constructor; auto.
-  constructor; constructor; crush.
-  assert (Some arr = Some arr').
-  {
-    rewrite <- H8. rewrite <- H10.
-    symmetry.
-    assert (s = (ram_mem r)) by admit; subst.
-    eapply merge_arr_idempotent.
-    unfold ram_present in *.
-    simplify.
-    all: eauto.
-  }
-  inv H11; auto.*)
-Abort.
-*)
-
-Lemma stmnt_runp_gtassoc :
-  forall st rs1 ar1 rs2 ar2 f,
-    stmnt_runp f rs1 ar1 st rs2 ar2 ->
-    forall p v,
-      max_reg_stmnt st < p ->
-      (assoc_nonblocking rs1)!p = None ->
-      exists rs2',
-        stmnt_runp f (nonblock_reg p rs1 v) ar1 st rs2' ar2
-        /\ match_reg_assocs p rs2 rs2'
-        /\ (assoc_nonblocking rs2')!p = Some v.
-Proof.
-Abort.
-(*  induction 1; simplify.
-  - repeat econstructor. destruct (nonblock_reg p ar v) eqn:?; destruct ar. simplify.
-    constructor. inv Heqa. mgen_crush.
-    inv Heqa. constructor. intros.
-  - econstructor; [apply IHstmnt_runp1; lia | apply IHstmnt_runp2; lia].
-  - econstructor; eauto; apply IHstmnt_runp; lia.
-  - eapply stmnt_runp_Vcond_false; eauto; apply IHstmnt_runp; lia.
-  - econstructor; simplify; eauto; apply IHstmnt_runp;
-    destruct def; lia.
-  - eapply stmnt_runp_Vcase_match; simplify; eauto; apply IHstmnt_runp;
-    destruct def; lia.
-  - eapply stmnt_runp_Vcase_default; simplify; eauto; apply IHstmnt_runp; lia.
-  -*)
-
 Lemma transf_not_changed :
   forall state ram n d c i d_s c_s,
     (forall e1 e2 r, d_s <> Vnonblock (Vvari r e1) e2) ->
@@ -1047,54 +957,6 @@ Proof.
   match goal with [ H: (_, _) = (_, _) |- _ ] => inv H end;
   repeat (rewrite AssocMap.gso; auto).
 Qed.
-
-(*Lemma transf_fold_gteq :
-  forall l state ram n d c n' d' c',
-    fold_right (transf_maps state ram) (n, d, c) l = (n', d', c') -> n <= n'.
-Proof.
-  induction l; simplify;
-    [match goal with [ H: (_, _, _) = (_, _, _) |- _ ] => inv H end; lia|].
-  remember (fold_right (transf_maps state ram) (n, d, c) l). repeat destruct p.
-  apply transf_gteq in H. symmetry in Heqp. eapply IHl in Heqp. lia.
-Qed.
-
-Lemma transf_fold_not_changed :
-  forall l state ram d c d' c' n n',
-    fold_right (transf_maps state ram) (n, d, c) l = (n', d', c') ->
-    Forall (fun x => n > x) l ->
-    list_norepet l ->
-    (forall i d_s c_s,
-        n > i ->
-        (forall e1 e2 r, d_s <> Vnonblock (Vvari r e1) e2) ->
-        (forall e1 e2 r, d_s <> Vnonblock e1 (Vvari r e2)) ->
-        d!i = Some d_s ->
-        c!i = Some c_s ->
-        d'!i = Some d_s /\ c'!i = Some c_s).
-Proof.
-  induction l as [| a l IHl]; crush;
-  repeat match goal with H: context[a :: l] |- _ => inv H end;
-  destruct (Pos.eq_dec a i); subst;
-  remember (fold_right (transf_maps state ram) (n, d, c) l);
-  repeat destruct p; symmetry in Heqp;
-  repeat match goal with
-         | H: forall e1 e2 r, _ <> Vnonblock (Vvari _ _) _ |- _ =>
-           let H12 := fresh "H" in
-           let H13 := fresh "H" in
-           pose proof H as H12;
-           learn H as H13;
-           eapply IHl in H13; eauto; inv H13;
-           eapply transf_not_changed in H12; eauto
-         | [ H: transf_maps _ _ _ _ = _, H2: transf_maps _ _ _ _ = _ |- _ ] =>
-           rewrite H in H2; inv H2; solve [auto]
-         | Hneq: a <> ?i, H: transf_maps _ _ _ _ = _ |- _ =>
-           let H12 := fresh "H" in
-           learn H as H12; eapply transf_not_changed_neq in H12; inv H12; eauto
-         | Hneq: a <> ?i, H: fold_right _ _ _ = _ |- _ ! _ = Some _ =>
-           eapply IHl in H; inv H; solve [eauto]
-         | Hneq: a <> ?i, H: fold_right _ _ _ = _ |- _ <> _ =>
-           apply transf_fold_gteq in H; lia
-         end.
-Qed.*)
 
 Lemma forall_gt :
   forall l, Forall (Pos.ge (fold_right Pos.max 1 l)) l.
@@ -2160,85 +2022,6 @@ Definition match_module_to_ram m ram :=
   ram_size ram = mod_stk_len m /\ ram_mem ram = mod_stk m.
 Hint Unfold match_module_to_ram : mgen.
 
-Lemma transf_not_store' :
-  forall m state ram n i c_s d' c' tar1 trs1 p ar1 ar2 rs1 rs2 r e1 e2,
-    all_match_empty_size m ar1 ->
-    all_match_empty_size m tar1 ->
-    match_module_to_ram m ram ->
-    (mod_datapath m)!i = Some (Vnonblock (Vvari r e1) e2) ->
-    (mod_controllogic m)!i = Some c_s ->
-    transf_maps state ram (i, n) (mod_datapath m, mod_controllogic m) = (d', c') ->
-    exec_all (Vnonblock (Vvari (ram_mem ram) e1) e2) c_s rs1 ar1 rs2 ar2 ->
-    match_reg_assocs p rs1 trs1 ->
-    match_arr_assocs ar1 tar1 ->
-    max_reg_module m < p ->
-    exists d_s' c_s' trs2 tar2,
-      d'!i = Some d_s' /\ c'!i = Some c_s'
-      /\ exec_all_ram ram d_s' c_s' trs1 tar1 trs2 tar2
-      /\ match_reg_assocs p (merge_reg_assocs rs2) (merge_reg_assocs trs2)
-      /\ match_arr_assocs (merge_arr_assocs (ram_mem ram) (ram_size ram) ar2)
-                          (merge_arr_assocs (ram_mem ram) (ram_size ram) tar2).
-Proof.
-  (*intros; unfold transf_maps; simplify; repeat destruct_match; mgen_crush.
-  inv H1. unfold exec_all in *. repeat inv_exists. simplify.
-  exploit match_states_same. apply H0. instantiate (1 := p).
-  apply max_reg_stmnt_le_stmnt_tree in Heqo0. lia.
-  eassumption. eassumption. intros.
-  repeat inv_exists. simplify.
-  inv H1. inv H12. inv H12.
-  inv H. inv H7. simplify.
-  do 4 econstructor.
-  simplify. rewrite AssocMap.gss. auto. eauto.
-  unfold exec_all_ram.
-  do 5 econstructor. simplify. eassumption.
-  econstructor. econstructor. econstructor. econstructor.
-  econstructor. econstructor. econstructor. econstructor.
-  econstructor. econstructor. econstructor. eapply expr_runp_matches2.
-  eassumption.
-  apply max_reg_stmnt_le_stmnt_tree in Heqo.
-  unfold max_reg_stmnt in Heqo. assert (max_reg_expr e2 < p) by lia; eauto.
-  unfold nonblock_reg. simplify. auto. auto.
-  econstructor. econstructor. unfold nonblock_reg. simplify.
-  eapply expr_runp_matches2. eassumption.
-  apply max_reg_stmnt_le_stmnt_tree in Heqo. unfold max_reg_stmnt in Heqo. simplify.
-  assert (max_reg_expr e1 < p) by lia. eauto.
-  auto. auto.
-  eapply exec_ram_Some_write.
-  3: {
-    unfold nonblock_reg. simplify. unfold merge_regs.
-    apply AssocMapExt.merge_correct_1. rewrite AssocMap.gso by admit.
-    rewrite AssocMap.gso by admit. rewrite AssocMap.gso by admit.
-    rewrite AssocMap.gss. auto.
-  }
-  crush.
-  2: {
-    unfold nonblock_reg; simplify. apply AssocMapExt.merge_correct_1.
-    rewrite AssocMap.gso by admit. rewrite AssocMap.gso by admit.
-    rewrite AssocMap.gss. auto.
-  }
-  crush.
-  unfold nonblock_reg; simplify.
-  apply AssocMapExt.merge_correct_1.
-  rewrite AssocMap.gso by admit. rewrite AssocMap.gss. auto.
-  unfold nonblock_reg; simplify.
-  apply AssocMapExt.merge_correct_1.
-  rewrite AssocMap.gss. auto.
-  unfold nonblock_reg; simplify.
-  unfold merge_reg_assocs. simplify. econstructor.
-  unfold merge_regs. mgen_crush. apply match_assocmaps_merge.
-  apply match_assocmaps_gt. admit.
-  apply match_assocmaps_gt. admit.
-  apply match_assocmaps_gt. admit.
-  apply match_assocmaps_gt. admit. auto. auto. auto with mgen.
-  constructor. unfold nonblock_arr. simplify.
-  assert (exists m, ram_size ram = mod_stk_len m
-         /\ ram_mem ram = mod_stk m) by admit.
-  inv H7. inv H9. rewrite H7. rewrite H11.
-  rewrite <- empty_stack_m.
-  apply match_arrs_merge_set2. admit. admit. admit. admit. auto. auto.
-  auto with mgen.*)
-Abort.
-
 Lemma zip_range_forall_le :
   forall A (l: list A) n, Forall (Pos.le n) (map snd (zip_range n l)).
 Proof.
@@ -3243,8 +3026,7 @@ Section CORRECTNESS.
       assert (MATCH_SIZE2: match_empty_size m nasa2 /\ match_empty_size m basa2).
       { eapply match_arrs_size_stmnt_preserved2; mgen_crush. } simplify.
       assert (MATCH_SIZE2: match_empty_size m nasa3 /\ match_empty_size m basa3).
-      { eapply match_arrs_size_ram_preserved2; mgen_crush. (*unfold match_empty_size. mgen_crush.
-      unfold match_empty_size. mgen_crush. apply match_empty_size_merge; mgen_crush.*) } simplify.
+      { eapply match_arrs_size_ram_preserved2; mgen_crush. } simplify.
       assert (MATCH_ARR3: match_arrs_size nasa3 basa3) by mgen_crush.
       exploit match_states_same. apply H4. eauto with mgen.
       econstructor; eauto. econstructor; eauto. econstructor; eauto. econstructor; eauto.
