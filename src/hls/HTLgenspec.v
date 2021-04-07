@@ -178,12 +178,12 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf1 wf2 wf3,
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf1 wf2 wf3 wf4,
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk scldecls arrdecls None wf1 wf2 wf3) ->
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls None wf1 wf2 wf3 wf4) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->

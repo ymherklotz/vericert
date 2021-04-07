@@ -207,9 +207,9 @@ Definition transf_module (m: module): module.
                        (AssocMap.set m.(mod_stk)
                                  (None, VArray 32 (2 ^ Nat.log2_up new_size))%nat m.(mod_arrdecls))
                  (Some ram)
-                 _ _ _
+                 _ (mod_ordering_wf m) _ (mod_params_wf m)
   | _, _ => m
-  end). apply is_wf. exact (mod_ordering_wf m).
+  end). apply is_wf.
   inversion 1; subst. auto using module_ram_wf'.
 Defined.
 
@@ -3139,9 +3139,17 @@ Proof.
 Qed.
 Hint Resolve disable_ram_set_gso : mgen.
 
-Lemma disable_ram_None : forall rs, disable_ram None rs.
+Lemma disable_ram_None rs : disable_ram None rs.
 Proof. unfold disable_ram; auto. Qed.
 Hint Resolve disable_ram_None : mgen.
+
+Lemma init_regs_equal_empty l st :
+  Forall (Pos.gt st) l -> (init_regs nil l) ! st = None.
+Proof. induction l; simplify; apply AssocMap.gempty. Qed.
+
+Lemma forall_lt_num :
+  forall l p p', Forall (Pos.gt p) l -> p < p' -> Forall (Pos.gt p') l.
+Proof. induction l; crush; inv H; constructor; [lia | eauto]. Qed.
 
 Section CORRECTNESS.
 
@@ -3259,7 +3267,17 @@ Section CORRECTNESS.
       replace (mod_st (transf_module m)) with (mod_st m) by (rewrite RAM0; auto).
       repeat econstructor; mgen_crush.
       unfold disable_ram. unfold transf_module; repeat destruct_match; crush.
-      admit.
+      pose proof (mod_ordering_wf m); unfold module_ordering in *.
+      pose proof (mod_params_wf m).
+      pose proof (mod_ram_wf m r Heqo0).
+      pose proof (ram_ordering r).
+      simplify.
+      repeat rewrite find_assocmap_gso by lia.
+      assert ((init_regs nil (mod_params m)) ! (ram_en r) = None).
+      { apply init_regs_equal_empty. eapply forall_lt_num. eassumption. lia. }
+      assert ((init_regs nil (mod_params m)) ! (ram_u_en r) = None).
+      { apply init_regs_equal_empty. eapply forall_lt_num. eassumption. lia. }
+      unfold find_assocmap, AssocMapExt.get_default. rewrite H7. rewrite H14. auto.
     - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).
@@ -3270,7 +3288,15 @@ Section CORRECTNESS.
       all: try solve [unfold transf_module; repeat destruct_match; mgen_crush].
       repeat econstructor; mgen_crush.
       unfold disable_ram. unfold transf_module; repeat destruct_match; crush.
-      admit.
+      unfold max_reg_module.
+      repeat rewrite find_assocmap_gso by lia.
+      assert (max_reg_module m + 1 > max_list (mod_params m)).
+      { unfold max_reg_module. lia. }
+      apply max_list_correct in H0.
+      unfold find_assocmap, AssocMapExt.get_default.
+      rewrite init_regs_equal_empty. rewrite init_regs_equal_empty. auto.
+      eapply forall_lt_num. eassumption. unfold max_reg_module. lia.
+      eapply forall_lt_num. eassumption. unfold max_reg_module. lia.
     - inv STACKS. destruct b1; subst.
       econstructor. econstructor. apply Smallstep.plus_one.
       econstructor. eauto.
@@ -3329,7 +3355,7 @@ Section CORRECTNESS.
       simplify. unfold max_reg_module. lia.
       simplify. unfold max_reg_module. lia.
       simplify. unfold max_reg_module. lia.
-  Admitted.
+  Qed.
   Hint Resolve transf_step_correct : mgen.
 
   Lemma transf_initial_states :

@@ -2602,7 +2602,7 @@ Section CORRECTNESS.
       constructor. constructor. constructor.
 
       unfold state_st_wf in WF; big_tac; eauto.
-      destruct wf as [HCTRL HDATA]. apply HCTRL.
+      destruct wf1 as [HCTRL HDATA]. apply HCTRL.
       apply AssocMapExt.elements_iff. eexists.
       match goal with H: control ! pc = Some _ |- _ => apply H end.
 
@@ -2632,7 +2632,7 @@ Section CORRECTNESS.
 
       unfold state_st_wf in WF; big_tac; eauto.
 
-      destruct wf as [HCTRL HDATA]. apply HCTRL.
+      destruct wf1 as [HCTRL HDATA]. apply HCTRL.
       apply AssocMapExt.elements_iff. eexists.
       match goal with H: control ! pc = Some _ |- _ => apply H end.
 

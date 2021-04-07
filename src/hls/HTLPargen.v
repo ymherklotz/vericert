@@ -817,9 +817,10 @@ Definition transf_module (f: function) : mon HTL.module.
               Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic)))
               Integers.Int.max_unsigned,
-          decide_order (st_st current_state) fin rtrn stack start rst clk
+          decide_order (st_st current_state) fin rtrn stack start rst clk,
+          max_list_dec (fn_params f) (st_st current_state)
     with
-    | left LEDATA, left LECTRL, left MORD =>
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
         ret (HTL.mkmodule
            f.(fn_params)
            current_state.(st_datapath)
@@ -838,8 +839,9 @@ Definition transf_module (f: function) : mon HTL.module.
            None
            (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
            MORD
-           _)
-    | _, _, _ => error (Errors.msg "More than 2^32 states.")
+           _
+           WFPARAMS)
+    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
   else error (Errors.msg "Stack size misalignment.")); discriminate.
 Defined.

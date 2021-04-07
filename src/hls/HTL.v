@@ -92,6 +92,7 @@ Record module: Type :=
     mod_wf : map_well_formed mod_controllogic /\ map_well_formed mod_datapath;
     mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk;
     mod_ram_wf : forall r', mod_ram = Some r' -> mod_clk < ram_addr r';
+    mod_params_wf : Forall (Pos.gt mod_st) mod_params;
   }.
 
 Definition fundef := AST.fundef module.
@@ -337,4 +338,17 @@ Lemma max_stmnt_lt_module :
 Proof.
   inversion 1 as [ Hv | Hv ]; unfold max_reg_module;
   apply max_reg_stmnt_le_stmnt_tree in Hv; lia.
+Qed.
+
+Lemma max_list_correct l st : st > max_list l -> Forall (Pos.gt st) l.
+Proof. induction l; crush; constructor; [|apply IHl]; lia. Qed.
+
+Definition max_list_dec (l: list reg) (st: reg) : {Forall (Pos.gt st) l} + {True}.
+  refine (
+      match bool_dec (max_list l <? st) true with
+      | left _ => left _
+      | _ => _
+      end
+    ); auto.
+  apply max_list_correct. apply Pos.ltb_lt in e. lia.
 Qed.
