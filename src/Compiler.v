@@ -269,6 +269,7 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
+  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
@@ -306,7 +307,8 @@ Proof.
   destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
-  set (p15 := Veriloggen.transl_program p14) in *.
+  set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.
+  set (p16 := Veriloggen.transl_program p15) in *.
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -322,9 +324,10 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  exists p15; split. apply Veriloggenproof.transf_program_match; auto.
-  inv T. Admitted. (*reflexivity.
-Qed.*)
+  exists p15; split. apply total_if_match. apply Memorygen.transf_program_match; auto.
+  exists p16; split. apply Veriloggenproof.transf_program_match; auto.
+  inv T. reflexivity.
+Qed.
 
 Theorem cstrategy_semantic_preservation:
   forall p tp,
@@ -340,7 +343,7 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p15)).
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p16)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -370,6 +373,8 @@ Ltac DestructM :=
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct. eassumption.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. exact Memorygen.transf_program_correct; eassumption.
   eapply Veriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.
