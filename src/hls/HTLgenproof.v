@@ -836,49 +836,49 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
-    - unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu,
-      repeat (rewrite Int.unsigned_repr). auto.
-    - assert (Int.unsigned n <= 30).
-      { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate.
-        rewrite Int.unsigned_repr in l by (simplify; lia).
-        replace 31 with (Z.succ 30) in l by auto.
-        apply Zlt_succ_le in l.
-        auto.
-      }
-      destruct (zlt (Int.signed i0) 0).
-      + repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
-        repeat (simplify; eval_correct_tac).
-        rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_true; try lia.
-        simplify. inv_lessdef. unfold valueToInt in *.
-        rewrite Heqv0 in H0. auto. inv H0. auto.
-        rewrite Heqv0 in H2. discriminate.
-        unfold valueToInt in l. auto.
-        inv_lessdef. unfold valueToInt in *. rewrite Heqv0 in H0.
-        inv H0.
-        unfold Int.lt in *. rewrite zlt_true in Heqb0. simplify.
-        rewrite Int.unsigned_repr in Heqb0. discriminate.
-        simplify; lia.
-        unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
-        auto.
-        rewrite Heqv0 in H0; discriminate.
-        rewrite Heqv0 in H2; discriminate.
-      + eapply Verilog.erun_Vternary_false; repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
-        repeat (simplify; eval_correct_tac).
-        rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_false; try lia.
-        simplify. inv_lessdef. unfold valueToInt in *.
-        rewrite Heqv0 in H0. auto. inv H0. auto.
-        rewrite Heqv0 in H2. discriminate.
-        unfold valueToInt in *. auto.
-        inv_lessdef. unfold valueToInt in *.
-        rewrite Heqv0 in H0.
-        inv H0.
-        unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify.
-        rewrite Int.unsigned_repr in Heqb0. lia.
-        simplify; lia.
-        unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
-        auto.
-        rewrite Heqv0 in H0; discriminate.
-        rewrite Heqv0 in H2; discriminate.
+    (* - unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu, *)
+    (*   repeat (rewrite Int.unsigned_repr). auto. *)
+    (* - assert (Int.unsigned n <= 30). *)
+    (*   { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate. *)
+    (*     rewrite Int.unsigned_repr in l by (simplify; lia). *)
+    (*     replace 31 with (Z.succ 30) in l by auto. *)
+    (*     apply Zlt_succ_le in l. *)
+    (*     auto. *)
+    (*   } *)
+    (*   destruct (zlt (Int.signed i0) 0). *)
+    (*   + repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue; *)
+    (*     repeat (simplify; eval_correct_tac). *)
+    (*     rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_true; try lia. *)
+    (*     simplify. inv_lessdef. unfold valueToInt in *. *)
+    (*     rewrite Heqv0 in H0. auto. inv H0. auto. *)
+    (*     rewrite Heqv0 in H2. discriminate. *)
+    (*     unfold valueToInt in l. auto. *)
+    (*     inv_lessdef. unfold valueToInt in *. rewrite Heqv0 in H0. *)
+    (*     inv H0. *)
+    (*     unfold Int.lt in *. rewrite zlt_true in Heqb0. simplify. *)
+    (*     rewrite Int.unsigned_repr in Heqb0. discriminate. *)
+    (*     simplify; lia. *)
+    (*     unfold ZToValue. rewrite Int.signed_repr by (simplify; lia). *)
+    (*     auto. *)
+    (*     rewrite Heqv0 in H0; discriminate. *)
+    (*     rewrite Heqv0 in H2; discriminate. *)
+    (*   + eapply Verilog.erun_Vternary_false; repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue; *)
+    (*     repeat (simplify; eval_correct_tac). *)
+    (*     rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_false; try lia. *)
+    (*     simplify. inv_lessdef. unfold valueToInt in *. *)
+    (*     rewrite Heqv0 in H0. auto. inv H0. auto. *)
+    (*     rewrite Heqv0 in H2. discriminate. *)
+    (*     unfold valueToInt in *. auto. *)
+    (*     inv_lessdef. unfold valueToInt in *. *)
+    (*     rewrite Heqv0 in H0. *)
+    (*     inv H0. *)
+    (*     unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify. *)
+    (*     rewrite Int.unsigned_repr in Heqb0. lia. *)
+    (*     simplify; lia. *)
+    (*     unfold ZToValue. rewrite Int.signed_repr by (simplify; lia). *)
+    (*     auto. *)
+    (*     rewrite Heqv0 in H0; discriminate. *)
+    (*     rewrite Heqv0 in H2; discriminate. *)
     - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1).
         destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
@@ -1001,9 +1001,7 @@ Section CORRECTNESS.
         destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
         rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
         constructor.
-      - admit.
-      - admit.
-  Admitted.
+    Qed.
 
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:
@@ -2788,22 +2786,8 @@ Section CORRECTNESS.
         match_states S1 R1 ->
         exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-    - eauto with htlproof; intros; inv_state.
-  Qed.
+    induction 1; try (eauto with htlproof; intros; inv_state).
+  Admitted.
 
   Hint Resolve transl_step_correct : htlproof.
 
