@@ -135,23 +135,23 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
       tr_instr fin rtrn st stk (RTL.Iop op args dst n) (data_vstmnt (Vnonblock (Vvar dst) e)) (state_goto st n)
-| tr_instr_Icall :
-    forall n sig fn args dst,
-      Z.pos n <= Int.max_unsigned ->
-      tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLfork fn args) (state_goto st n)
+(* | tr_instr_Icall : *)
+(*     forall n sig fn args dst, *)
+(*       Z.pos n <= Int.max_unsigned -> *)
+(*       tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLfork fn args) (state_goto st n) *)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       Z.pos n1 <= Int.max_unsigned ->
       Z.pos n2 <= Int.max_unsigned ->
       translate_condition cond args s = OK c s' i ->
       tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) (data_vstmnt Vskip) (state_cond st c n1 n2)
-| tr_instr_Ireturn_None :
-    tr_instr fin rtrn st stk (RTL.Ireturn None) (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z)))
-                                                  (block rtrn (Vlit (ZToValue 0%Z))))) (ctrl_vstmnt Vskip)
-| tr_instr_Ireturn_Some :
-    forall r,
-      tr_instr fin rtrn st stk (RTL.Ireturn (Some r))
-               (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r)))) (ctrl_vstmnt Vskip)
+(* | tr_instr_Ireturn_None : *)
+(*     tr_instr fin rtrn st stk (RTL.Ireturn None) (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) *)
+(*                                                   (block rtrn (Vlit (ZToValue 0%Z))))) (ctrl_vstmnt Vskip) *)
+(* | tr_instr_Ireturn_Some : *)
+(*     forall r, *)
+(*       tr_instr fin rtrn st stk (RTL.Ireturn (Some r)) *)
+(*                (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r)))) (ctrl_vstmnt Vskip) *)
 | tr_instr_Iload :
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
@@ -554,24 +554,29 @@ Proof.
   - subst.
     destruct instr1 eqn:?; try discriminate;
       try destruct_optional; try inv_add_instr; econstructor; try assumption.
+
+    (* Inop *)
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
       apply Z.leb_le. assumption.
       eapply in_map with (f := fst) in H9. contradiction.
 
+    (* Iop *)
     + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + inversion H2. inversion H14. unfold nonblock. replace (st_st s4) with (st_st s2) by congruence.
       econstructor. apply Z.leb_le; assumption.
       apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
 
+    (* Iload *)
     + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + inversion H2. inversion H14. rewrite <- e2. replace (st_st s2) with (st_st s0) by congruence.
       econstructor. apply Z.leb_le; assumption.
       apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
 
+    (* Istore *)
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct H2.
@@ -581,17 +586,12 @@ Proof.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
 
-    + admit. (* destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate. *)
-    + admit. (* destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; discriminate. *)
+    (* Icall *)
     + admit.
-      (* destruct H2. *)
-      (* * inversion H2. *)
-      (*   replace (st_st s2) with (st_st s0) by congruence. *)
-      (*   replace (st_st s1) with (st_st s0) by congruence. *)
-      (*   econstructor. *)
-      (*   apply Z.leb_le. assumption. *)
-      (* * apply in_map with (f := fst) in H2. contradiction. *)
+    + admit.
+    + admit.
 
+    (* Icond *)
     + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
     + destruct H2.
@@ -601,32 +601,20 @@ Proof.
         eauto with htlspec.
       * apply in_map with (f := fst) in H2. contradiction.
 
-    (* + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
-    (* + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
-    (* + inversion H2. *)
-    (*   * inversion H14. constructor. congruence. *)
-    (*   * apply in_map with (f := fst) in H14. contradiction. *)
+    (* Ireturn (Some r) *)
+    + admit.
+    + admit.
+    + admit.
 
-    (* + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-    (* + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-    (* + inversion H2. *)
-    (*   * inversion H9. *)
-    (*     replace (st_st s2) with (st_st s0) by congruence. *)
-    (*     eauto with htlspec. *)
-    (*   * apply in_map with (f := fst) in H9. contradiction. *)
+    (* Ireturn None *)
+    + admit.
+    + admit.
+    + admit.
 
-    (* + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-    (* + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-    (* + inversion H2. *)
-    (*   * inversion H9. *)
-    (*     replace (st_st s2) with (st_st s0) by congruence. *)
-    (*     eauto with htlspec. *)
-    (*   * apply in_map with (f := fst) in H9. contradiction. *)
-
-  (* - eapply IHl. apply EQ0. assumption. *)
-  (*   destruct H2. inversion H2. subst. contradiction. *)
-  (*   intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial. *)
-  (*   destruct H2. inv H2. contradiction. assumption. assumption. *)
+  - eapply IHl. apply EQ0. assumption.
+    destruct H2. inversion H2. subst. contradiction.
+    intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
+    destruct H2. inv H2. contradiction. assumption. assumption.
 Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
