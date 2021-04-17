@@ -99,14 +99,11 @@ Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
 Export MonadNotation.
 
-Definition data_vstmnt : Verilog.stmnt -> HTL.datapath_stmnt := HTLDataVstmnt.
-Definition ctrl_vstmnt : Verilog.stmnt -> HTL.control_stmnt := HTLCtrlVstmnt.
-
 Definition state_goto (st : reg) (n : node) : control_stmnt :=
-  ctrl_vstmnt (Vnonblock (Vvar st) (Vlit (posToValue n))).
+  Vnonblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : control_stmnt :=
-  ctrl_vstmnt (Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2))).
+  Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition nonblock (dst : reg) (e : expr) := (Vnonblock (Vvar dst) e).
 Definition block (dst : reg) (e : expr) := (Vblock (Vvar dst) e).
@@ -218,7 +215,7 @@ Lemma add_instr_skip_state_incr :
        s.(st_scldecls)
        s.(st_arrdecls)
        (AssocMap.set n st s.(st_datapath))
-       (AssocMap.set n (ctrl_vstmnt Vskip) s.(st_controllogic))).
+       (AssocMap.set n Vskip s.(st_controllogic))).
 Proof.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
@@ -271,7 +268,7 @@ Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
                s.(st_scldecls)
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (ctrl_vstmnt Vskip) s.(st_controllogic)))
+               (AssocMap.set n Vskip s.(st_controllogic)))
          (add_instr_skip_state_incr s n st STM TRANS)
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
@@ -287,7 +284,7 @@ Lemma add_node_skip_state_incr :
        (st_freshstate s)
        s.(st_scldecls)
        s.(st_arrdecls)
-       (AssocMap.set n (data_vstmnt Vskip) s.(st_datapath))
+       (AssocMap.set n Vskip s.(st_datapath))
        (AssocMap.set n st s.(st_controllogic))).
 Proof.
   constructor; intros;
@@ -305,7 +302,7 @@ Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
-               (AssocMap.set n (data_vstmnt Vskip) s.(st_datapath))
+               (AssocMap.set n Vskip s.(st_datapath))
                (AssocMap.set n st s.(st_controllogic)))
          (add_node_skip_state_incr s n st STM TRANS)
     | _, _ => Error (Errors.msg "HTL.add_instr")
@@ -462,7 +459,7 @@ Lemma add_branch_instr_state_incr:
                 (st_freshstate s)
                 s.(st_scldecls)
                 s.(st_arrdecls)
-                (AssocMap.set n (data_vstmnt Vskip) (st_datapath s))
+                (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
 Proof.
   intros. apply state_incr_intro; simpl;
@@ -480,7 +477,7 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 (st_freshstate s)
                 s.(st_scldecls)
                 s.(st_arrdecls)
-                (AssocMap.set n (data_vstmnt Vskip) (st_datapath s))
+                (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
     | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
@@ -526,24 +523,24 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     match i with
     | Inop n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
-        add_instr n n' (data_vstmnt Vskip)
+        add_instr n n' Vskip
       else error (Errors.msg "State is larger than 2^32.")
     | Iop op args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do instr <- translate_instr op args;
         do _ <- declare_reg None dst 32;
-        add_instr n n' (data_vstmnt (nonblock dst instr))
+        add_instr n n' (nonblock dst instr)
       else error (Errors.msg "State is larger than 2^32.")
     | Iload mem addr args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do src <- translate_arr_access mem addr args stack;
         do _ <- declare_reg None dst 32;
-        add_instr n n' (data_vstmnt (nonblock dst src))
+        add_instr n n' (nonblock dst src)
       else error (Errors.msg "State is larger than 2^32.")
     | Istore mem addr args src n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do dst <- translate_arr_access mem addr args stack;
-        add_instr n n' (data_vstmnt (Vnonblock dst (Vvar src))) (* TODO: Could juse use add_instr? reg exists. *)
+        add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
       else error (Errors.msg "State is larger than 2^32.")
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
@@ -570,8 +567,8 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
                     | Some r' => Vvar r'
                     | None => Vlit (ZToValue 0%Z)
                     end in
-      do _ <- add_instr n idle_state (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn retval)));
-      add_instr_skip idle_state (data_vstmnt (nonblock fin (Vlit (ZToValue 0%Z))))
+      do _ <- add_instr n idle_state (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn retval));
+      add_instr_skip idle_state (nonblock fin (Vlit (ZToValue 0%Z)))
     end
   end.
 

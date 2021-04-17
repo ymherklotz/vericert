@@ -44,16 +44,9 @@ Definition reg := positive.
 Definition node := positive.
 Definition ident := positive.
 
-Inductive datapath_stmnt :=
-| HTLfork : ident -> list reg -> datapath_stmnt
-| HTLjoin : ident -> reg -> datapath_stmnt
-| HTLDataVstmnt : Verilog.stmnt -> datapath_stmnt.
-
-Inductive control_stmnt :=
-| HTLwait : ident -> reg -> Verilog.expr -> control_stmnt
-| HTLCtrlVstmnt : Verilog.stmnt -> control_stmnt.
-
+Definition datapath_stmnt := Verilog.stmnt.
 Definition datapath := PTree.t datapath_stmnt.
+Definition control_stmnt := Verilog.stmnt.
 Definition controllogic := PTree.t control_stmnt.
 
 Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
@@ -143,8 +136,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr!(mod_reset m) = Some (ZToValue 0) ->
       asr!(mod_finish m) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some (posToValue st) ->
-      m.(mod_controllogic)!st = Some (HTLCtrlVstmnt ctrl_stmnt) ->
-      m.(mod_datapath)!st = Some (HTLDataVstmnt data_stmnt) ->
+      m.(mod_controllogic)!st = Some ctrl_stmnt ->
+      m.(mod_datapath)!st = Some data_stmnt ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations asr empty_assocmap)
         (Verilog.mkassociations asa (empty_stack m))
@@ -163,51 +156,6 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
       Z.pos pstval <= Integers.Int.max_unsigned ->
       step g (State sf m st calls asr asa) Events.E0 (State sf m pstval calls asr' asa')
-(** [HTLfork] simply adds the called instruction to the list of active calls*)
-| step_fork :
-    forall g m st sf ctrl_stmnt
-      asr asa
-      basr basa nasr nasa
-      call_ident arg_regs arg_vals
-      calls calls' asr' asa'
-      f pstval,
-      asr!(mod_reset m) = Some (ZToValue 0) ->
-      asr!(mod_finish m) = Some (ZToValue 0) ->
-      asr!(m.(mod_st)) = Some (posToValue st) ->
-      m.(mod_controllogic)!st = Some (HTLCtrlVstmnt ctrl_stmnt) ->
-      m.(mod_datapath)!st = Some (HTLfork call_ident arg_regs) ->
-      Verilog.stmnt_runp f
-        (Verilog.mkassociations asr empty_assocmap)
-        (Verilog.mkassociations asa (empty_stack m))
-        ctrl_stmnt
-        (Verilog.mkassociations basr nasr)
-        (Verilog.mkassociations basa nasa) ->
-      basr!(m.(mod_st)) = Some (posToValue st) ->
-      asr' = Verilog.merge_regs nasr basr ->
-      asa' = Verilog.merge_arrs nasa basa ->
-      arg_vals = List.map (fun r => basr#r) arg_regs ->
-      calls' = (ActiveCall call_ident arg_vals :: calls) ->
-      asr'!(m.(mod_st)) = Some (posToValue pstval) ->
-      Z.pos pstval <= Integers.Int.max_unsigned ->
-      step g (State sf m st calls asr asa) Events.E0 (State sf m pstval calls' asr' asa')
-(** [HTLjoin] acts like a call, using the arguments stored from a previous fork *)
-| step_join :
-    forall g m st sf asr asa
-      calls call_ident call_mod arg_vals dst
-      pstval,
-      asr!(mod_reset m) = Some (ZToValue 0) ->
-      asr!(mod_finish m) = Some (ZToValue 0) ->
-      asr!(mod_st m) = Some (posToValue st) ->
-
-      m.(mod_controllogic)!st = Some (HTLwait call_ident (mod_st m) (Verilog.posToExpr pstval)) ->
-      m.(mod_datapath)!st = Some (HTLjoin call_ident dst) ->
-
-      In (ActiveCall call_ident arg_vals) calls ->
-      find_module call_ident g = Some (AST.Internal call_mod) ->
-
-      Z.pos pstval <= Integers.Int.max_unsigned ->
-      step g (State sf m st calls asr asa) Events.E0
-             (Callstate (Stackframe dst m pstval calls asr asa :: sf) call_mod arg_vals)
 | step_finish :
     forall g m st calls asr asa retval sf,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->
