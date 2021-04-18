@@ -147,43 +147,18 @@ Proof.
   intros. case (s.(st_controllogic)!n); tauto.
 Defined.
 
-Lemma declare_reg_state_incr :
-  forall i s r sz,
-    st_incr s
-    (mkstate
-       s.(st_st)
-       s.(st_freshreg)
-       s.(st_freshstate)
-       (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
-       s.(st_arrdecls)
-       s.(st_datapath)
-       s.(st_controllogic)).
-Proof. auto with htlh. Qed.
-
-Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
+Program Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
   fun s => OK tt (mkstate
-                s.(st_st)
-                s.(st_freshreg)
-                s.(st_freshstate)
+                (st_st s)
+                (st_freshreg s)
+                (st_freshstate s)
                 (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
-                s.(st_arrdecls)
-                s.(st_datapath)
-                s.(st_controllogic))
-              (declare_reg_state_incr i s r sz).
+                (st_arrdecls s)
+                (st_datapath s)
+                (st_controllogic s)) _.
+Next Obligation. auto with htlh. Qed.
 
-Lemma create_state_state_incr:
-  forall s,
-    st_incr s (mkstate
-         s.(st_st)
-         (st_freshreg s)
-         (Pos.succ (st_freshstate s))
-         (st_scldecls s)
-         (st_arrdecls s)
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_state : mon node :=
+Program Definition create_state : mon node :=
   fun s => let r := s.(st_freshstate) in
            OK r (mkstate
                    s.(st_st)
@@ -192,29 +167,10 @@ Definition create_state : mon node :=
                    (st_scldecls s)
                    (st_arrdecls s)
                    (st_datapath s)
-                   (st_controllogic s))
-              (create_state_state_incr s).
+                   (st_controllogic s)) _.
+Next Obligation. constructor; simpl; eauto with htlh. Qed.
 
-Lemma add_instr_state_incr :
-  forall s n n' st,
-    (st_datapath s)!n = None ->
-    (st_controllogic s)!n = None ->
-    st_incr s
-    (mkstate
-       s.(st_st)
-       s.(st_freshreg)
-       (st_freshstate s)
-       s.(st_scldecls)
-       s.(st_arrdecls)
-       (AssocMap.set n st s.(st_datapath))
-       (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
-Proof.
-  constructor; intros;
-    try (simpl; destruct (peq n n0); subst);
-    auto with htlh.
-Qed.
-
-Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
+Program Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
     match check_empty_node_datapath s n, check_empty_node_controllogic s n with
     | left STM, left TRANS =>
@@ -225,48 +181,14 @@ Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
                s.(st_scldecls)
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
-         (add_instr_state_incr s n n' st STM TRANS)
+               (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))) _
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
-
-Lemma add_instr_skip_state_incr :
-  forall s n st,
-    (st_datapath s)!n = None ->
-    (st_controllogic s)!n = None ->
-    st_incr s
-    (mkstate
-       s.(st_st)
-       s.(st_freshreg)
-       (st_freshstate s)
-       s.(st_scldecls)
-       s.(st_arrdecls)
-       (AssocMap.set n st s.(st_datapath))
-       (AssocMap.set n Vskip s.(st_controllogic))).
-Proof.
+Next Obligation.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
-Qed.
-
-Lemma add_instr_wait_state_incr :
-  forall wait_mod s n n' st,
-    (st_datapath s)!n = None ->
-    (st_controllogic s)!n = None ->
-    st_incr s
-    (mkstate
-       s.(st_st)
-       s.(st_freshreg)
-       (st_freshstate s)
-       s.(st_scldecls)
-       s.(st_arrdecls)
-       (AssocMap.set n st s.(st_datapath))
-       (AssocMap.set n (HTLwait wait_mod s.(st_st) (Vlit (posToValue n'))) s.(st_controllogic))).
-Proof.
-  constructor; intros;
-    try (simpl; destruct (peq n n0); subst);
-    auto with htlh.
-Qed.
+  Qed.
 
 Program Definition add_instr_wait (wait_reg : reg) (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
@@ -289,7 +211,7 @@ Next Obligation.
     auto with htlh.
 Qed.
 
-Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
+Program Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
     match check_empty_node_datapath s n, check_empty_node_controllogic s n with
     | left STM, left TRANS =>
@@ -301,30 +223,16 @@ Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n Vskip s.(st_controllogic)))
-         (add_instr_skip_state_incr s n st STM TRANS)
+         _
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
-
-Lemma add_node_skip_state_incr :
-  forall s n st,
-    (st_datapath s)!n = None ->
-    (st_controllogic s)!n = None ->
-    st_incr s
-    (mkstate
-       s.(st_st)
-       s.(st_freshreg)
-       (st_freshstate s)
-       s.(st_scldecls)
-       s.(st_arrdecls)
-       (AssocMap.set n Vskip s.(st_datapath))
-       (AssocMap.set n st s.(st_controllogic))).
-Proof.
+Next Obligation.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
 Qed.
 
-Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
+Program Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
   fun s =>
     match check_empty_node_datapath s n, check_empty_node_controllogic s n with
     | left STM, left TRANS =>
@@ -336,10 +244,14 @@ Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
                s.(st_arrdecls)
                (AssocMap.set n Vskip s.(st_datapath))
                (AssocMap.set n st s.(st_controllogic)))
-         (add_node_skip_state_incr s n st STM TRANS)
+         _
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
-
+Next Obligation.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
 
 Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
@@ -473,25 +385,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
 
-Lemma add_branch_instr_state_incr:
-  forall s e n n1 n2,
-    (st_datapath s) ! n = None ->
-    (st_controllogic s) ! n = None ->
-    st_incr s (mkstate
-                 s.(st_st)
-                (st_freshreg s)
-                (st_freshstate s)
-                s.(st_scldecls)
-                s.(st_arrdecls)
-                (AssocMap.set n Vskip (st_datapath s))
-                (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
-Proof.
-  intros. apply state_incr_intro; simpl;
-            try (intros; destruct (peq n0 n); subst);
-            auto with htlh.
-Qed.
-
-Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
+Program Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
   fun s =>
     match check_empty_node_datapath s n, check_empty_node_controllogic s n with
     | left NSTM, left NTRANS =>
@@ -503,9 +397,14 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
-         (add_branch_instr_state_incr s e n n1 n2 NSTM NTRANS)
+         _
     | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
+Next Obligation.
+  intros. apply state_incr_intro; simpl;
+            try (intros; destruct (peq n0 n); subst);
+            auto with htlh.
+Qed.
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
@@ -597,19 +496,7 @@ Definition transf_instr (modmap : PTree.t HTL.module) (fin rtrn stack: reg) (ni:
     end
   end.
 
-Lemma create_reg_state_incr:
-  forall s sz i,
-    st_incr s (mkstate
-         s.(st_st)
-         (Pos.succ (st_freshreg s))
-         (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
-         s.(st_arrdecls)
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_reg (i : option io) (sz : nat) : mon reg :=
+Program Definition create_reg (i : option io) (sz : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
            OK r (mkstate
                    s.(st_st)
@@ -618,22 +505,10 @@ Definition create_reg (i : option io) (sz : nat) : mon reg :=
                    (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
                    (st_arrdecls s)
                    (st_datapath s)
-                   (st_controllogic s))
-              (create_reg_state_incr s sz i).
+                   (st_controllogic s)) _.
+Next Obligation. constructor; simpl; auto with htlh. Qed.
 
-Lemma create_arr_state_incr:
-  forall s sz ln i,
-    st_incr s (mkstate
-         s.(st_st)
-         (Pos.succ (st_freshreg s))
-         (st_freshstate s)
-         s.(st_scldecls)
-         (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
+Program Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
   fun s => let r := s.(st_freshreg) in
            OK (r, ln) (mkstate
                    s.(st_st)
@@ -642,8 +517,8 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
                    s.(st_scldecls)
                    (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
                    (st_datapath s)
-                   (st_controllogic s))
-              (create_arr_state_incr s sz ln i).
+                   (st_controllogic s)) _.
+Next Obligation. constructor; simpl; auto with htlh. Qed.
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
