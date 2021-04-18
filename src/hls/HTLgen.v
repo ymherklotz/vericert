@@ -99,14 +99,41 @@ Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
 Export MonadNotation.
 
+Definition bop (op : binop) (r1 r2 : reg) : expr :=
+  Vbinop op (Vvar r1) (Vvar r2).
+
+Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
+  Vbinop op (Vvar r) (Vlit (intToValue l)).
+
+Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
+  Vbinop op (Vvar r) (Vlit (ZToValue l)).
+
 Definition state_goto (st : reg) (n : node) : control_stmnt :=
   Vnonblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : control_stmnt :=
   Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
+Definition state_wait (st wait_reg : reg) (n : node) : control_stmnt :=
+  Vnonblock (Vvar st) (Vternary (boplitz Veq wait_reg 1) (posToExpr n) (Vvar st)).
+
 Definition nonblock (dst : reg) (e : expr) := (Vnonblock (Vvar dst) e).
+
 Definition block (dst : reg) (e : expr) := (Vblock (Vvar dst) e).
+
+Definition fork (m : HTL.module) (args : list reg) : datapath_stmnt :=
+  let reset_mod := Vnonblock (Vvar (HTL.mod_reset m)) (posToLit 1) in
+  let zipped_args := List.combine (HTL.mod_params m) args in
+  let assign_args :=
+      List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (to, from) := a in
+                                                        Vseq acc (Vnonblock (Vvar to) (Vvar from)))
+                     zipped_args Vskip in
+  Vseq reset_mod assign_args.
+
+Definition join (m : HTL.module) (args : list reg) (dst : reg) : datapath_stmnt :=
+  let set_result := Vnonblock (Vvar dst) (Vvar (HTL.mod_return m)) in
+  let stop_reset := Vnonblock (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 0)) in
+  Vseq stop_reset set_result.
 
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
@@ -241,7 +268,7 @@ Proof.
     auto with htlh.
 Qed.
 
-Definition add_instr_wait (wait_mod : ident) (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
+Program Definition add_instr_wait (wait_reg : reg) (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
     match check_empty_node_datapath s n, check_empty_node_controllogic s n with
     | left STM, left TRANS =>
@@ -252,10 +279,15 @@ Definition add_instr_wait (wait_mod : ident) (n : node) (n' : node) (st : datapa
                s.(st_scldecls)
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (HTLwait wait_mod s.(st_st) (Vlit (posToValue n'))) s.(st_controllogic)))
-         (add_instr_wait_state_incr wait_mod s n n' st STM TRANS)
+               (AssocMap.set n (state_wait (st_st s) wait_reg n') s.(st_controllogic)))
+         _
     | _, _ => Error (Errors.msg "HTL.add_instr_wait")
     end.
+Next Obligation.
+  constructor; intros;
+    try (simpl; destruct (peq n n0); subst);
+    auto with htlh.
+Qed.
 
 Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
@@ -308,14 +340,6 @@ Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
     | _, _ => Error (Errors.msg "HTL.add_instr")
     end.
 
-Definition bop (op : binop) (r1 r2 : reg) : expr :=
-  Vbinop op (Vvar r1) (Vvar r2).
-
-Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
-  Vbinop op (Vvar r) (Vlit (intToValue l)).
-
-Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
-  Vbinop op (Vvar r) (Vlit (ZToValue l)).
 
 Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
@@ -517,7 +541,7 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
+Definition transf_instr (modmap : PTree.t HTL.module) (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -547,8 +571,9 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do _ <- declare_reg None dst 32;
         do join_state <- create_state;
-        do _ <- add_instr n join_state (HTLfork fn args);
-        add_instr_wait fn join_state n' (HTLjoin fn dst)
+        do called_mod <- handle_opt (Errors.msg "module does not exist") (modmap ! fn);
+        do _ <- add_instr n join_state (fork called_mod args);
+        add_instr_wait fn join_state n' (join called_mod args dst)
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -657,7 +682,7 @@ Definition transf_module (f: function) : mon HTL.module :=
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+    do _ <- collectlist (transf_instr _ fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
