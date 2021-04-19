@@ -45,6 +45,7 @@ Record state: Type := mkstate {
   st_freshstate: node;
   st_scldecls: AssocMap.t (option io * scl_decl);
   st_arrdecls: AssocMap.t (option io * arr_decl);
+  st_externctrl : AssocMap.t (ident * controlsignal);
   st_datapath: datapath;
   st_controllogic: controllogic;
 }.
@@ -55,6 +56,7 @@ Definition init_state (st : reg) : state :=
           1%positive
           (AssocMap.empty (option io * scl_decl))
           (AssocMap.empty (option io * arr_decl))
+          (AssocMap.empty (ident * controlsignal))
           (AssocMap.empty datapath_stmnt)
           (AssocMap.empty control_stmnt).
 
@@ -121,20 +123,6 @@ Definition nonblock (dst : reg) (e : expr) := (Vnonblock (Vvar dst) e).
 
 Definition block (dst : reg) (e : expr) := (Vblock (Vvar dst) e).
 
-Definition fork (m : HTL.module) (args : list reg) : datapath_stmnt :=
-  let reset_mod := Vnonblock (Vvar (HTL.mod_reset m)) (posToLit 1) in
-  let zipped_args := List.combine (HTL.mod_params m) args in
-  let assign_args :=
-      List.fold_left (fun (acc : stmnt) (a : reg * reg) => let (to, from) := a in
-                                                        Vseq acc (Vnonblock (Vvar to) (Vvar from)))
-                     zipped_args Vskip in
-  Vseq reset_mod assign_args.
-
-Definition join (m : HTL.module) (args : list reg) (dst : reg) : datapath_stmnt :=
-  let set_result := Vnonblock (Vvar dst) (Vvar (HTL.mod_return m)) in
-  let stop_reset := Vnonblock (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 0)) in
-  Vseq stop_reset set_result.
-
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
 Proof.
@@ -154,9 +142,37 @@ Program Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :
                 (st_freshstate s)
                 (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
                 (st_arrdecls s)
+                (st_externctrl s)
                 (st_datapath s)
                 (st_controllogic s)) _.
 Next Obligation. auto with htlh. Qed.
+
+Program Definition create_reg (i : option io) (sz : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+                   (st_arrdecls s)
+                   (st_externctrl s)
+                   (st_datapath s)
+                   (st_controllogic s)) _.
+Next Obligation. constructor; simpl; auto with htlh. Qed.
+
+Program Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mon reg :=
+  do r <- create_reg None (controlsignal_sz ctrl);
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   (st_scldecls s)
+                   (st_arrdecls s)
+                   (AssocMap.set r (othermod, ctrl) (st_externctrl s))
+                   (st_datapath s)
+                   (st_controllogic s)) _.
+Next Obligation. constructor; simpl; auto with htlh. Qed.
 
 Program Definition create_state : mon node :=
   fun s => let r := s.(st_freshstate) in
@@ -166,6 +182,7 @@ Program Definition create_state : mon node :=
                    (Pos.succ (st_freshstate s))
                    (st_scldecls s)
                    (st_arrdecls s)
+                   (st_externctrl s)
                    (st_datapath s)
                    (st_controllogic s)) _.
 Next Obligation. constructor; simpl; eauto with htlh. Qed.
@@ -180,6 +197,7 @@ Program Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon 
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
+               (st_externctrl s)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))) _
     | _, _ => Error (Errors.msg "HTL.add_instr")
@@ -200,9 +218,9 @@ Program Definition add_instr_wait (wait_reg : reg) (n : node) (n' : node) (st : 
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
+               (st_externctrl s)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (state_wait (st_st s) wait_reg n') s.(st_controllogic)))
-         _
+               (AssocMap.set n (state_wait (st_st s) wait_reg n') s.(st_controllogic))) _
     | _, _ => Error (Errors.msg "HTL.add_instr_wait")
     end.
 Next Obligation.
@@ -221,6 +239,7 @@ Program Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
+               (st_externctrl s)
                (AssocMap.set n st s.(st_datapath))
                (AssocMap.set n Vskip s.(st_controllogic)))
          _
@@ -242,6 +261,7 @@ Program Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
                (st_freshstate s)
                s.(st_scldecls)
                s.(st_arrdecls)
+               (st_externctrl s)
                (AssocMap.set n Vskip s.(st_datapath))
                (AssocMap.set n st s.(st_controllogic)))
          _
@@ -395,6 +415,7 @@ Program Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 (st_freshstate s)
                 s.(st_scldecls)
                 s.(st_arrdecls)
+                (st_externctrl s)
                 (AssocMap.set n Vskip (st_datapath s))
                 (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
          _
@@ -440,7 +461,28 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-Definition transf_instr (modmap : PTree.t HTL.module) (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
+(** [mk_fork] creates a datapath statement which sets up the execution of a *)
+Definition mk_fork (m : ident) (args : list reg) : mon datapath_stmnt :=
+  do reset_reg <- map_externctrl m ctrl_reset;
+  do param_assigns <- traverselist
+                (fun (a: (nat * reg)) => let (idx, arg) := a in
+                                    do param_reg <- map_externctrl m (ctrl_param idx);
+                                    ret (Vnonblock (Vvar param_reg) (Vvar arg)))
+                (enumerate 0 args);
+  let reset_mod := Vnonblock (Vvar reset_reg) (posToLit 1) in
+  let assign_params :=
+      List.fold_left (fun (acc : stmnt) (s : stmnt) => Vseq acc s)
+                     param_assigns Vskip in
+  ret (Vseq reset_mod assign_params).
+
+Definition mk_join (m : ident) (dst : reg) : mon datapath_stmnt :=
+  do return_reg <- map_externctrl m ctrl_return;
+  do reset_reg <- map_externctrl m ctrl_reset;
+  let set_result := Vnonblock (Vvar dst) (Vvar return_reg) in
+  let stop_reset := Vnonblock (Vvar reset_reg) (Vlit (ZToValue 0)) in
+  ret (Vseq stop_reset set_result).
+
+Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -470,9 +512,10 @@ Definition transf_instr (modmap : PTree.t HTL.module) (fin rtrn stack: reg) (ni:
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do _ <- declare_reg None dst 32;
         do join_state <- create_state;
-        do called_mod <- handle_opt (Errors.msg "module does not exist") (modmap ! fn);
-        do _ <- add_instr n join_state (fork called_mod args);
-        add_instr_wait fn join_state n' (join called_mod args dst)
+        do fork_instr <- mk_fork fn args;
+        do join_instr <- mk_join fn dst;
+        do _ <- add_instr n join_state fork_instr;
+        add_instr_wait fn join_state n' (join_instr)
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -496,18 +539,6 @@ Definition transf_instr (modmap : PTree.t HTL.module) (fin rtrn stack: reg) (ni:
     end
   end.
 
-Program Definition create_reg (i : option io) (sz : nat) : mon reg :=
-  fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
-                   s.(st_st)
-                   (Pos.succ r)
-                   (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
-                   (st_arrdecls s)
-                   (st_datapath s)
-                   (st_controllogic s)) _.
-Next Obligation. constructor; simpl; auto with htlh. Qed.
-
 Program Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
   fun s => let r := s.(st_freshreg) in
            OK (r, ln) (mkstate
@@ -516,6 +547,7 @@ Program Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg *
                    (st_freshstate s)
                    s.(st_scldecls)
                    (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
+                   (st_externctrl s)
                    (st_datapath s)
                    (st_controllogic s)) _.
 Next Obligation. constructor; simpl; auto with htlh. Qed.
@@ -557,7 +589,7 @@ Definition transf_module (f: function) : mon HTL.module :=
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_instr _ fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+    do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
@@ -581,6 +613,7 @@ Definition transf_module (f: function) : mon HTL.module :=
            clk
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
+           current_state.(st_externctrl)
            (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA)))
     | _, _ => error (Errors.msg "More than 2^32 states.")
     end
@@ -593,6 +626,7 @@ Definition max_state (f: function) : state :=
           (Pos.succ (max_pc_function f))
           (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
+          (st_externctrl (init_state st))
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 

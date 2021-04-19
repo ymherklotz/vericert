@@ -54,6 +54,20 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
     In p0 (map fst (Maps.PTree.elements m)) ->
     Z.pos p0 <= Integers.Int.max_unsigned.
 
+Inductive controlsignal : Type :=
+  | ctrl_finish : controlsignal
+  | ctrl_return : controlsignal
+  | ctrl_start : controlsignal
+  | ctrl_reset : controlsignal
+  | ctrl_param (idx : nat) : controlsignal.
+
+Definition controlsignal_sz (s : controlsignal) : nat :=
+  match s with
+  | ctrl_param _ => 32
+  | ctrl_return => 32
+  | _ => 1
+  end.
+
 Record module: Type :=
   mkmodule {
     mod_params : list reg;
@@ -70,6 +84,9 @@ Record module: Type :=
     mod_clk : reg;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
+    (** Map from registers in this module to control registers in other modules.
+        These will be mapped to the same verilog register. *)
+    mod_externctrl : AssocMap.t (ident * controlsignal);
     mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
   }.
 
