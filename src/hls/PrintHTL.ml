@@ -43,29 +43,6 @@ let registers a = String.concat "" (intersperse ", " (List.map register a))
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
 
-let pprint_datapath_stmnt i = function
-  | HTLDataVstmnt s -> pprint_stmnt i s
-  | HTLfork (name, args) -> concat [
-      "fork "; extern_atom name; "("; concat (intersperse ", " (List.map register args)); ");\n"
-    ]
-  | HTLjoin (name, dst) -> concat [
-      register dst; " <= join "; extern_atom name; ";\n"
-    ]
-
-let print_datapath_instruction pp (pc, i) =
-  fprintf pp "%5d:\t%s" pc (pprint_datapath_stmnt 0 i)
-
-let pprint_control_stmnt i = function
-  | HTLCtrlVstmnt s -> pprint_stmnt i s
-  | HTLwait (name, statereg, expr) -> concat [
-      "wait("; extern_atom name; ", ";
-      register statereg; ", ";
-      pprint_expr expr; ");\n"
-    ]
-
-let print_control_instruction pp (pc, i) =
-  fprintf pp "%5d:\t%s" pc (pprint_control_stmnt 0 i)
-
 let ptree_to_list ptree =
   List.sort
     (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
@@ -78,9 +55,9 @@ let print_module pp id f =
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
   fprintf pp "datapath {\n";
-  List.iter (print_datapath_instruction pp) datapath;
+  List.iter (print_instruction pp) datapath;
   fprintf pp "  }\n\n  controllogic {\n";
-  List.iter (print_control_instruction pp) controllogic;
+  List.iter (print_instruction pp) controllogic;
   fprintf pp "  }\n}\n\n"
 
 let print_globdef pp (id, gd) =
