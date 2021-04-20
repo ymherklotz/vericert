@@ -80,7 +80,7 @@ We then need to declare the external OCaml functions used to print out intermedi
 |*)
 
 Parameter print_RTL: Z -> RTL.program -> unit.
-Parameter print_HTL: HTL.program -> unit.
+Parameter print_HTL: Z -> HTL.program -> unit.
 Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
@@ -190,7 +190,9 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
-   @@ print print_HTL
+   @@ print (print_HTL 1)
+  @@@ HTLgen.renumber_program
+   @@ print (print_HTL 2)
   @@@ Veriloggen.transl_program.
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
@@ -236,7 +238,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTLBlock 2)
   @@@ RTLPargen.transl_program
   @@@ HTLPargen.transl_program
-   @@ print print_HTL
+   @@ print (print_HTL 1)
   @@@ Veriloggen.transl_program.
 
 (*|
