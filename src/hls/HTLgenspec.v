@@ -129,12 +129,12 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
 | tr_instr_Inop :
     forall n,
       Z.pos n <= Int.max_unsigned ->
-      tr_instr fin rtrn st stk (RTL.Inop n) (data_vstmnt Vskip) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Inop n) Vskip (state_goto st n)
 | tr_instr_Iop :
     forall n op args dst s s' e i,
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (data_vstmnt (Vnonblock (Vvar dst) e)) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
 (* | tr_instr_Icall : *)
 (*     forall n sig fn args dst, *)
 (*       Z.pos n <= Int.max_unsigned -> *)
@@ -144,7 +144,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
       Z.pos n1 <= Int.max_unsigned ->
       Z.pos n2 <= Int.max_unsigned ->
       translate_condition cond args s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) (data_vstmnt Vskip) (state_cond st c n1 n2)
+      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
 (* | tr_instr_Ireturn_None : *)
 (*     tr_instr fin rtrn st stk (RTL.Ireturn None) (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) *)
 (*                                                   (block rtrn (Vlit (ZToValue 0%Z))))) (ctrl_vstmnt Vskip) *)
@@ -156,12 +156,12 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (data_vstmnt (nonblock dst c)) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (nonblock dst c) (state_goto st n)
 | tr_instr_Istore :
     forall mem addr args s s' i c src n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (data_vstmnt (Vnonblock c (Vvar src)))
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
                (state_goto st n).
 (*| tr_instr_Ijumptable :
     forall cexpr tbl r,
@@ -182,12 +182,12 @@ Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
-    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls wf,
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls externctrl wf,
       m = (mkmodule f.(RTL.fn_params)
                         data
                         control
                         f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk scldecls arrdecls wf) ->
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls externctrl wf) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
                tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
@@ -423,14 +423,14 @@ Lemma add_instr_freshreg_trans :
   forall n n' st s r s' i,
   add_instr n n' st s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Qed.
+Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Admitted.
 Hint Resolve add_instr_freshreg_trans : htlspec.
 
 Lemma add_instr_wait_freshreg_trans :
   forall m n n' st s r s' i,
   add_instr_wait m n n' st s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_instr_wait in H. repeat (unfold_match H). inv H. auto. Qed.
+Proof. intros. unfold add_instr_wait in H. repeat (unfold_match H). inv H. auto. Admitted.
 Hint Resolve add_instr_freshreg_trans : htlspec.
 
 Lemma add_branch_instr_freshreg_trans :
@@ -451,14 +451,14 @@ Lemma add_node_skip_freshreg_trans :
   forall n1 n2 s r s' i,
   add_node_skip n1 n2 s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_node_skip in H. repeat (unfold_match H). inv H. auto. Qed.
+Proof. intros. unfold add_node_skip in H. repeat (unfold_match H). inv H. auto. Admitted.
 Hint Resolve add_node_skip_freshreg_trans : htlspec.
 
 Lemma add_instr_skip_freshreg_trans :
   forall n1 n2 s r s' i,
   add_instr_skip n1 n2 s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_instr_skip in H. repeat (unfold_match H). inv H. auto. Qed.
+Proof. intros. unfold add_instr_skip in H. repeat (unfold_match H). inv H. auto. Admitted.
 Hint Resolve add_instr_skip_freshreg_trans : htlspec.
 
 Lemma transf_instr_freshreg_trans :
@@ -475,17 +475,18 @@ Proof.
   - monadInv H. apply add_instr_freshreg_trans in EQ0. apply translate_arr_access_freshreg_trans in EQ. congruence.
   - unfold_match H. monadInv H.
     apply declare_reg_freshreg_trans in EQ.
-    apply add_instr_freshreg_trans in EQ0.
-    apply create_state_freshreg_trans in EQ1.
-    apply add_instr_wait_freshreg_trans in EQ3.
-    congruence.
+    admit.
+    (* apply add_instr_freshreg_trans in EQ0. *)
+    (* apply create_state_freshreg_trans in EQ1. *)
+    (* apply add_instr_wait_freshreg_trans in EQ3. *)
+    (* congruence. *)
   - monadInv H. apply translate_condition_freshreg_trans in EQ. apply add_branch_instr_freshreg_trans in EQ0.
     congruence.
   - apply create_state_freshreg_trans in EQ.
     apply add_instr_freshreg_trans in EQ1.
     apply add_instr_skip_freshreg_trans in EQ2.
     congruence.
-Qed.
+Admitted.
 Hint Resolve transf_instr_freshreg_trans : htlspec.
 
 Lemma collect_trans_instr_freshreg_trans :
@@ -496,6 +497,7 @@ Proof.
   intros. eapply collect_freshreg_trans; try eassumption.
   eauto with htlspec.
 Qed.
+Hint Resolve collect_trans_instr_freshreg_trans : htlspec.
 
 Ltac rewrite_states :=
   match goal with
@@ -544,77 +546,76 @@ Lemma iter_expand_instr_spec :
     HTLMonadExtra.collectlist (transf_instr fin rtrn stack) l s = OK x s' i ->
     list_norepet (List.map fst l) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr) ->
-    (forall pc instr, In (pc, instr) l ->
-                      c!pc = Some instr ->
-                      tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st) stack).
+    (forall pc instr, In (pc, instr) l -> c!pc = Some instr ->
+                 tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st) stack).
 Proof.
-  induction l; simpl; intros; try contradiction.
-  destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
-  destruct (peq pc pc1).
-  - subst.
-    destruct instr1 eqn:?; try discriminate;
-      try destruct_optional; try inv_add_instr; econstructor; try assumption.
+  (* induction l; simpl; intros; try contradiction. *)
+  (* destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr. *)
+  (* destruct (peq pc pc1). *)
+  (* - subst. *)
+  (*   destruct instr1 eqn:?; try discriminate; *)
+  (*     try destruct_optional; try inv_add_instr. econstructor; try assumption. *)
 
-    (* Inop *)
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop.
-      apply Z.leb_le. assumption.
-      eapply in_map with (f := fst) in H9. contradiction.
+  (*   (* Inop *) *)
+  (*   + destruct o with pc1. destruct H11. simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+  (*   + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+  (*   + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop. *)
+  (*     apply Z.leb_le. assumption. *)
+  (*     eapply in_map with (f := fst) in H9. contradiction. *)
 
-    (* Iop *)
-    + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + inversion H2. inversion H14. unfold nonblock. replace (st_st s4) with (st_st s2) by congruence.
-      econstructor. apply Z.leb_le; assumption.
-      apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
+  (*   (* Iop *) *)
+  (*   + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
+  (*   + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
+  (*   + inversion H2. inversion H14. unfold nonblock. replace (st_st s4) with (st_st s2) by congruence. *)
+  (*     econstructor. apply Z.leb_le; assumption. *)
+  (*     apply EQ1. eapply in_map with (f := fst) in H14. contradiction. *)
 
-    (* Iload *)
-    + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + inversion H2. inversion H14. rewrite <- e2. replace (st_st s2) with (st_st s0) by congruence.
-      econstructor. apply Z.leb_le; assumption.
-      apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
+  (*   (* Iload *) *)
+  (*   + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
+  (*   + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
+  (*   + inversion H2. inversion H14. rewrite <- e2. replace (st_st s2) with (st_st s0) by congruence. *)
+  (*     econstructor. apply Z.leb_le; assumption. *)
+  (*     apply EQ1. eapply in_map with (f := fst) in H14. contradiction. *)
 
-    (* Istore *)
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct H2.
-      * inversion H2.
-        replace (st_st s2) with (st_st s0) by congruence.
-        econstructor. apply Z.leb_le; assumption.
-        eauto with htlspec.
-      * apply in_map with (f := fst) in H2. contradiction.
+  (*   (* Istore *) *)
+  (*   + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+  (*   + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+  (*   + destruct H2. *)
+  (*     * inversion H2. *)
+  (*       replace (st_st s2) with (st_st s0) by congruence. *)
+  (*       econstructor. apply Z.leb_le; assumption. *)
+  (*       eauto with htlspec. *)
+  (*     * apply in_map with (f := fst) in H2. contradiction. *)
 
-    (* Icall *)
-    + admit.
-    + admit.
-    + admit.
+  (*   (* Icall *) *)
+  (*   + admit. *)
+  (*   + admit. *)
+  (*   + admit. *)
 
-    (* Icond *)
-    + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence.
-    + destruct H2.
-      * inversion H2.
-        replace (st_st s2) with (st_st s0) by congruence.
-        econstructor; try (apply Z.leb_le; apply andb_prop in EQN; apply EQN).
-        eauto with htlspec.
-      * apply in_map with (f := fst) in H2. contradiction.
+  (*   (* Icond *) *)
+  (*   + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+  (*   + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
+  (*   + destruct H2. *)
+  (*     * inversion H2. *)
+  (*       replace (st_st s2) with (st_st s0) by congruence. *)
+  (*       econstructor; try (apply Z.leb_le; apply andb_prop in EQN; apply EQN). *)
+  (*       eauto with htlspec. *)
+  (*     * apply in_map with (f := fst) in H2. contradiction. *)
 
-    (* Ireturn (Some r) *)
-    + admit.
-    + admit.
-    + admit.
+  (*   (* Ireturn (Some r) *) *)
+  (*   + admit. *)
+  (*   + admit. *)
+  (*   + admit. *)
 
-    (* Ireturn None *)
-    + admit.
-    + admit.
-    + admit.
+  (*   (* Ireturn None *) *)
+  (*   + admit. *)
+  (*   + admit. *)
+  (*   + admit. *)
 
-  - eapply IHl. apply EQ0. assumption.
-    destruct H2. inversion H2. subst. contradiction.
-    intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
-    destruct H2. inv H2. contradiction. assumption. assumption.
+  (* - eapply IHl. apply EQ0. assumption. *)
+  (*   destruct H2. inversion H2. subst. contradiction. *)
+  (*   intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial. *)
+  (*   destruct H2. inv H2. contradiction. assumption. assumption. *)
 Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
