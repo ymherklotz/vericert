@@ -690,7 +690,7 @@ Section RENUMBER.
          _.
   Next Obligation. unfold st_prop; auto. Qed.
 
-  Program Definition clear_mapping : mon unit :=
+  Program Definition clear_regmap : mon unit :=
     fun st => OK
          tt
          (mk_renumber_state (renumber_freshreg st)
@@ -775,6 +775,19 @@ Section RENUMBER.
       ret (Vnonblock e1' e2')
     end.
 
+  Fixpoint xrenumber_reg_assocmap {A} (regmap : list (reg * A)) : mon (list (reg * A)) :=
+    match regmap with
+    | nil => ret nil
+    | (r, v) :: l =>
+      do r' <- renumber_reg r;
+      do l' <- xrenumber_reg_assocmap l;
+      ret ((r', v) :: l')
+    end.
+
+  Definition renumber_reg_assocmap {A} (regmap : AssocMap.t A) : mon (AssocMap.t A) :=
+    do l <- xrenumber_reg_assocmap (AssocMap.elements regmap);
+    ret (AssocMap_Properties.of_list l).
+
   Definition renumber_module (m : HTL.module) : mon HTL.module :=
       do mod_start' <- renumber_reg (HTL.mod_start m);
       do mod_reset' <- renumber_reg (HTL.mod_reset m);
@@ -787,7 +800,11 @@ Section RENUMBER.
       do mod_controllogic' <- traverse_ptree1 renumber_stmnt (HTL.mod_controllogic m);
       do mod_datapath' <- traverse_ptree1 renumber_stmnt (HTL.mod_datapath m);
 
-      do _ <- clear_mapping;
+      do mod_scldecls' <- renumber_reg_assocmap (HTL.mod_scldecls m);
+      do mod_arrdecls' <- renumber_reg_assocmap (HTL.mod_arrdecls m);
+      do mod_externctrl' <- renumber_reg_assocmap (HTL.mod_externctrl m);
+
+      do _ <- clear_regmap;
 
       match zle (Z.pos (max_pc_map mod_datapath')) Integers.Int.max_unsigned,
             zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned with
@@ -798,16 +815,16 @@ Section RENUMBER.
            mod_controllogic'
            (HTL.mod_entrypoint m)
            mod_st'
-           (HTL.mod_stk m)
+           mod_stk'
            (HTL.mod_stk_len m)
            mod_finish'
            mod_return'
            mod_start'
            mod_reset'
            mod_clk'
-           (HTL.mod_scldecls m)
-           (HTL.mod_arrdecls m)
-           (HTL.mod_externctrl m)
+           mod_scldecls'
+           mod_arrdecls'
+           mod_externctrl'
            (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA)))
       | _, _ => error (Errors.msg "More than 2^32 states.")
       end.
@@ -860,7 +877,7 @@ Section RENUMBER.
   Definition renumber_program (p : HTL.program) : Errors.res HTL.program :=
     Errors.bind (get_main_clk p)
                 (fun main_clk => transform_stateful_program _ _ _
-                                                         (fun _ => renumber_fundef)
+                                                         (fun _ f => renumber_fundef f)
                                                          (mk_renumber_state 1%positive (PTree.empty reg) main_clk)
                                                          p).
 End RENUMBER.

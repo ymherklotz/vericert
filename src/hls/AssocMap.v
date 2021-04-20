@@ -25,6 +25,7 @@ Require Import vericert.hls.ValueInt.
 Definition reg := positive.
 
 Module AssocMap := Maps.PTree.
+Module AssocMap_Properties := Maps.PTree_Properties.
 
 Module AssocMapExt.
   Import AssocMap.
