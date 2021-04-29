@@ -657,19 +657,18 @@ Record renumber_state: Type :=
   mk_renumber_state {
     renumber_freshreg : reg;
     renumber_regmap : PTree.t reg;
-    renumber_clk : reg;
   }.
 
 Module RenumberState <: State.
   Definition st := renumber_state.
 
-  Definition st_prop (st1 st2 : st) := renumber_clk st1 = renumber_clk st2.
+  Definition st_prop (st1 st2 : st) := True.
 
   Lemma st_refl : forall (s : st), st_prop s s.
   Proof. constructor. Qed.
 
   Lemma st_trans : forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
-  Proof. congruence. Qed.
+  Proof. constructor. Qed.
 End RenumberState.
 
 Module RenumberMonad := Statemonad(RenumberState).
@@ -685,8 +684,7 @@ Section RENUMBER.
     fun st => OK
          (renumber_freshreg st)
          (mk_renumber_state (Pos.succ (renumber_freshreg st))
-                            (PTree.set r (renumber_freshreg st) (renumber_regmap st))
-                            (renumber_clk st))
+                            (PTree.set r (renumber_freshreg st) (renumber_regmap st)))
          _.
   Next Obligation. unfold st_prop; auto. Qed.
 
@@ -694,8 +692,7 @@ Section RENUMBER.
     fun st => OK
          tt
          (mk_renumber_state (renumber_freshreg st)
-                            (PTree.empty reg)
-                            (renumber_clk st))
+                            (PTree.empty reg))
          _.
   Next Obligation. unfold st_prop; auto. Qed.
 
@@ -705,8 +702,6 @@ Section RENUMBER.
     | Some reg' => ret reg'
     | None => map_reg r
     end.
-
-  Definition get_clk : mon reg := do st <- get; ret (renumber_clk st).
 
   Fixpoint renumber_expr (expr : Verilog.expr) :=
     match expr with
@@ -791,7 +786,7 @@ Section RENUMBER.
   Definition renumber_module (m : HTL.module) : mon HTL.module :=
       do mod_start' <- renumber_reg (HTL.mod_start m);
       do mod_reset' <- renumber_reg (HTL.mod_reset m);
-      do mod_clk' <- get_clk;
+      do mod_clk' <- renumber_reg (HTL.mod_clk m);
       do mod_finish' <- renumber_reg (HTL.mod_finish m);
       do mod_return' <- renumber_reg (HTL.mod_return m);
       do mod_st' <- renumber_reg (HTL.mod_st m);
@@ -875,11 +870,10 @@ Section RENUMBER.
     end.
 
   Definition renumber_program (p : HTL.program) : Errors.res HTL.program :=
-    Errors.bind (get_main_clk p)
-                (fun main_clk => transform_stateful_program _ _ _
-                                                         (fun _ f => renumber_fundef f)
-                                                         (mk_renumber_state 1%positive (PTree.empty reg) main_clk)
-                                                         p).
+    transform_stateful_program _ _ _
+                               (fun _ f => renumber_fundef f)
+                               (mk_renumber_state 1%positive (PTree.empty reg))
+                               p.
 End RENUMBER.
 
 Definition main_is_internal (p : RTL.program) : bool :=
