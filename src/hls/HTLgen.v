@@ -858,17 +858,6 @@ Section RENUMBER.
 
   End TRANSF_PROGRAM_STATEFUL.
 
-  Definition get_main_clk (p : HTL.program) : Errors.res reg :=
-    let ge := Globalenvs.Genv.globalenv p in
-    match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
-    | Some b =>
-      match Globalenvs.Genv.find_funct_ptr ge b with
-      | Some (AST.Internal m) => Errors.OK (HTL.mod_clk m)
-      | _ => Errors.Error (Errors.msg "Cannot find internal main for renumbering")
-      end
-    | _ => Errors.Error (Errors.msg "Cannot find internal main for renumbering")
-    end.
-
   Definition renumber_program (p : HTL.program) : Errors.res HTL.program :=
     transform_stateful_program _ _ _
                                (fun _ f => renumber_fundef f)
