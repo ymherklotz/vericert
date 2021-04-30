@@ -584,7 +584,7 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition transf_module (f: function) : mon HTL.module :=
+Definition transf_module (main : ident) (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
@@ -593,7 +593,7 @@ Definition transf_module (f: function) : mon HTL.module :=
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
-    do clk <- create_reg (Some Vinput) 1;
+    do clk <- map_externctrl main ctrl_clk;
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
@@ -630,10 +630,10 @@ Definition max_state (f: function) : state :=
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
-Definition transl_module (f : function) : Errors.res HTL.module :=
-  run_mon (max_state f) (transf_module f).
+Definition transl_module main (f : function) : Errors.res HTL.module :=
+  run_mon (max_state f) (transf_module main f).
 
-Definition transl_fundef := transf_partial_fundef transl_module.
+Definition transl_fundef main := transf_partial_fundef (transl_module main).
 
 (* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
 
@@ -877,5 +877,5 @@ Definition main_is_internal (p : RTL.program) : bool :=
 
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
   if main_is_internal p
-  then transform_partial_program transl_fundef p
+  then transform_partial_program (transl_fundef p.(prog_main)) p
   else Errors.Error (Errors.msg "Main function is not Internal.").

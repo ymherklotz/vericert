@@ -217,6 +217,24 @@ Lemma create_reg_controllogic_trans :
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_controllogic_trans : htlspec.
 
+Lemma map_externctrl_datapath_trans :
+  forall s s' x i om sig,
+    map_externctrl om sig s = OK x s' i ->
+    s.(st_datapath) = s'.(st_datapath).
+Proof.
+  intros. monadInv H. apply create_reg_datapath_trans in EQ. auto.
+Qed.
+Hint Resolve map_externctrl_datapath_trans : htlspec.
+
+Lemma map_externctrl_controllogic_trans :
+  forall s s' x i om sig,
+    map_externctrl om sig s = OK x s' i ->
+    s.(st_controllogic) = s'.(st_controllogic).
+Proof.
+  intros. monadInv H. apply create_reg_controllogic_trans in EQ. auto.
+Qed.
+Hint Resolve map_externctrl_datapath_trans : htlspec.
+
 Lemma declare_reg_datapath_trans :
   forall sz s s' x i iop r,
     declare_reg iop r sz s = OK x s' i ->
@@ -272,6 +290,10 @@ Ltac inv_incr :=
     let H1 := fresh "H" in
     assert (H1 := H); eapply create_reg_datapath_trans in H;
     eapply create_reg_controllogic_trans in H1
+  | [ H: map_externctrl _ _ ?s = OK _ ?s' _ |- _ ] =>
+    let H1 := fresh "H" in
+    assert (H1 := H); eapply map_externctrl_datapath_trans in H;
+    eapply map_externctrl_controllogic_trans in H1
   | [ H: create_arr _ _ _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
     assert (H1 := H); eapply create_arr_datapath_trans in H;
@@ -633,14 +655,21 @@ Proof.
   inversion 1; auto.
 Qed.
 
+Lemma map_externctrl_inv : forall a b s r s' i,
+    map_externctrl a b s = OK r s' i ->
+    r = s.(st_freshreg) /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg)).
+Proof.
+  inversion 1; auto.
+Qed.
+
 Theorem transl_module_correct :
-  forall f m,
-    transl_module f = Errors.OK m -> tr_module f m.
+  forall i f m,
+    transl_module i f = Errors.OK m -> tr_module f m.
 Proof.
   intros until m.
   unfold transl_module.
   unfold run_mon.
-  destruct (transf_module f (max_state f)) eqn:?; try discriminate.
+  destruct (transf_module i f (max_state f)) eqn:?; try discriminate.
   intros. inv H.
   inversion s; subst.
 
@@ -663,7 +692,7 @@ Proof.
   pose proof (collect_declare_freshreg_trans _ _ _ _ _ _ EQ3) as TR_DEC.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ4) as START_VAL. inv START_VAL.
   pose proof (create_reg_inv _ _ _ _ _ _ EQ5) as RESET_VAL. inv RESET_VAL.
-  pose proof (create_reg_inv _ _ _ _ _ _ EQ6) as CLK_VAL. inv CLK_VAL.
+  pose proof (map_externctrl_inv _ _ _ _ _ _ EQ6) as CLK_VAL. inv CLK_VAL.
   rewrite H9 in *. rewrite H8 in *. replace (st_freshreg s4) with (st_freshreg s2) in * by congruence.
   rewrite H6 in *. rewrite H7 in *. rewrite H5 in *. simpl in *.
   inv_incr.

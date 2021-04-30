@@ -59,6 +59,7 @@ Inductive controlsignal : Type :=
   | ctrl_return : controlsignal
   | ctrl_start : controlsignal
   | ctrl_reset : controlsignal
+  | ctrl_clk : controlsignal
   | ctrl_param (idx : nat) : controlsignal.
 
 Definition controlsignal_sz (s : controlsignal) : nat :=
