@@ -29,25 +29,136 @@ Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 Import ListNotations.
 
-Local Open Scope error_monad_scope.
+Section APPLY_MAPPING.
+  Local Open Scope assocmap.
+  Local Open Scope error_monad_scope.
 
+  Variable externctrl : AssocMap.t (ident * controlsignal).
+  Variable modmap : PTree.t HTL.module.
+
+  Definition get_mod_signal (m : HTL.module) (signal : HTL.controlsignal) :=
+    match signal with
+    | ctrl_finish => OK (HTL.mod_finish m)
+    | ctrl_return => OK (HTL.mod_return m)
+    | ctrl_start => OK (HTL.mod_start m)
+    | ctrl_reset => OK (HTL.mod_reset m)
+    | ctrl_clk => OK (HTL.mod_clk m)
+    | ctrl_param idx =>
+      match List.nth_error (HTL.mod_params m) idx with
+      | Some r => OK r
+      | None => Error (msg "Module does not have nth parameter")
+      end
+    end.
+
+  Definition reg_apply_map (r : Verilog.reg) : res reg :=
+    match externctrl ! r with
+    | None => OK r
+    | Some (m, signal) =>
+      match modmap ! m with
+      | None => Error (msg "Veriloggen: Could not find definition for called module")
+      | Some othermod => get_mod_signal othermod signal
+      end
+    end.
+
+  Fixpoint expr_apply_map (expr : Verilog.expr) {struct expr} : res Verilog.expr :=
+    match expr with
+    | Vlit n =>
+      OK (Vlit n)
+    | Vvar r =>
+      do r' <- reg_apply_map r;
+      OK (Vvar r')
+    | Vvari r e =>
+      do r' <- reg_apply_map r;
+      do e' <- expr_apply_map e;
+      OK (Vvari r e)
+    | Vrange r e1 e2 =>
+      do r' <- reg_apply_map r;
+      do e1' <- expr_apply_map e1;
+      do e2' <- expr_apply_map e2;
+      OK (Vrange r' e1' e2')
+    | Vinputvar r =>
+      do r' <- reg_apply_map r;
+      OK (Vinputvar r')
+    | Vbinop op e1 e2 =>
+      do e1' <- expr_apply_map e1;
+      do e2' <- expr_apply_map e2;
+      OK (Vbinop op e1' e2')
+    | Vunop op e =>
+      do e' <- expr_apply_map e;
+      OK (Vunop op e')
+    | Vternary e1 e2 e3 =>
+      do e1' <- expr_apply_map e1;
+      do e2' <- expr_apply_map e2;
+      do e3' <- expr_apply_map e3;
+      OK (Vternary e1' e2' e3')
+    end.
+
+  Definition mmap_option {A B} (f : A -> res B) (opt : option A) : res (option B) :=
+    match opt with
+    | None => OK None
+    | Some a => do a' <- f a; OK (Some a')
+    end.
+
+  Definition cases_apply_map_ (stmnt_apply_map_ : Verilog.stmnt -> res Verilog.stmnt) :=
+    fix cases_apply_map (cs : list (Verilog.expr * Verilog.stmnt)) :=
+      match cs with
+      | nil => OK nil
+      | (c_e, c_s) :: tl =>
+        do c_e' <- expr_apply_map c_e;
+        do c_s' <- stmnt_apply_map_ c_s;
+        do tl' <- cases_apply_map tl;
+        OK ((c_e', c_s') :: tl')
+      end.
+
+  Fixpoint stmnt_apply_map (stmnt : Verilog.stmnt) {struct stmnt} : res Verilog.stmnt :=
+    match stmnt with
+    | Vskip => OK Vskip
+    | Vseq s1 s2 =>
+      do s1' <- stmnt_apply_map s1;
+      do s2' <- stmnt_apply_map s2;
+      OK (Vseq s1' s2')
+    | Vcond e s1 s2 =>
+      do e' <- expr_apply_map e;
+      do s1' <- stmnt_apply_map s1;
+      do s2' <- stmnt_apply_map s2;
+      OK (Vcond e s1 s2)
+    | Vcase e cases def =>
+      do e' <- expr_apply_map e;
+      do cases' <- cases_apply_map_ stmnt_apply_map cases;
+      do def' <- mmap_option (fun x => stmnt_apply_map x) def;
+      OK (Vcase e' cases' None)
+    | Vblock e1 e2 =>
+      do e1' <- expr_apply_map e1;
+      do e2' <- expr_apply_map e2;
+      OK (Vblock e1' e2')
+    | Vnonblock e1 e2 =>
+      do e1' <- expr_apply_map e1;
+      do e2' <- expr_apply_map e2;
+      OK (Vnonblock e1' e2')
+    end.
+
+  (* Unused. Defined for completeness *)
+  Definition cases_apply_map := cases_apply_map_ stmnt_apply_map.
+End APPLY_MAPPING.
 
 Section TRANSLATE.
   Local Open Scope error_monad_scope.
 
-  Definition transl_datapath_fun (a : Verilog.node * HTL.datapath_stmnt) :=
+  Definition transl_datapath_fun externctrl modmap (a : Verilog.node * HTL.datapath_stmnt) :=
     let (n, s) := a in
     let node := Verilog.Vlit (posToValue n) in
-    OK (node, s).
+    do stmnt <- stmnt_apply_map externctrl modmap s;
+    OK (node, stmnt).
 
-  Definition transl_datapath st := Errors.mmap transl_datapath_fun st.
+  Definition transl_datapath externctrl modmap st := Errors.mmap (transl_datapath_fun externctrl modmap) st.
 
-  Definition transl_ctrl_fun (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
+  Definition transl_ctrl_fun externctrl modmap (a : Verilog.node * HTL.control_stmnt) : Errors.res (Verilog.expr * Verilog.stmnt):=
     let (n, s) := a in
     let node := Verilog.Vlit (posToValue n) in
-    Errors.OK (node, s).
+    do stmnt <- stmnt_apply_map externctrl modmap s;
+    OK (node, stmnt).
 
-  Definition transl_ctrl st := Errors.mmap transl_ctrl_fun st.
+  Definition transl_ctrl externctrl modmap st := Errors.mmap (transl_ctrl_fun externctrl modmap) st.
 
   Definition scl_to_Vdecl_fun (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
     match a with (r, (io, Verilog.VScalar sz)) => (Verilog.Vdecl io r sz) end.
@@ -59,11 +170,17 @@ Section TRANSLATE.
 
   Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
-  Definition called_functions (m : HTL.module) : list ident :=
-    List.nodup Pos.eq_dec (List.map (Basics.compose fst snd) (PTree.elements (HTL.mod_externctrl m))).
+  Definition called_functions (main_name : ident) (m : HTL.module) : list ident :=
+    (* remove duplicates *)
+    List.nodup Pos.eq_dec
+               (* Take just the module name *)
+               (List.map (Basics.compose fst snd)
+                         (* Remove the main module if it's referenced *)
+                         (List.filter (fun it => negb (Pos.eqb (fst (snd it)) main_name))
+                                      (PTree.elements (HTL.mod_externctrl m)))).
 
-  Definition find_module (program : HTL.program) (name : ident) : Errors.res HTL.module :=
-    match option_map snd (find (fun named_module => Pos.eqb (fst named_module) name) program.(prog_defs)) with
+  Definition find_module (prog : HTL.program) (name : ident) : Errors.res HTL.module :=
+    match option_map snd (find (fun named_module => Pos.eqb (fst named_module) name) prog.(prog_defs)) with
     | Some (Gfun (Internal f)) => OK f
     | _ => Error (msg "Veriloggen: Could not find definition for called module")
     end.
@@ -100,30 +217,38 @@ Section TRANSLATE.
     end.
 
   (* FIXME Remove the fuel parameter (recursion limit)*)
-  Fixpoint transf_module (fuel : nat) (program : HTL.program) (m : HTL.module) : res Verilog.module :=
+  Fixpoint transf_module (fuel : nat) (prog : HTL.program) (m : HTL.module) : res Verilog.module :=
     match fuel with
     | O => Error (msg "Veriloggen: transf_module recursion too deep")
     | S fuel' =>
 
       let inline_start_reg := max_reg_module m in
-      let inline_names := called_functions m in
+      let inline_names := called_functions (AST.prog_main prog) m in
+      let modmap := prog_modmap prog in
       let htl_modules := PTree.filter
                        (fun m _ => List.existsb (Pos.eqb m) inline_names)
-                       (prog_modmap program) in
-      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' program) htl_modules;
+                       modmap in
+      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' prog) htl_modules;
       let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl (HTL.mod_clk m))))
                                         translated_modules in
 
-      do case_el_ctrl <- transl_ctrl (PTree.elements (HTL.mod_controllogic m));
-      do case_el_data <- transl_datapath (PTree.elements (HTL.mod_datapath m));
+
+      do case_el_ctrl <- transl_ctrl (HTL.mod_externctrl m) modmap (PTree.elements (HTL.mod_controllogic m));
+      do case_el_data <- transl_datapath (HTL.mod_externctrl m) modmap (PTree.elements (HTL.mod_datapath m));
+
+      let externctrl := HTL.mod_externctrl m in
+      do clk <- reg_apply_map externctrl modmap (HTL.mod_clk m);
+      do rst <- reg_apply_map externctrl modmap (HTL.mod_reset m);
+      do st <- reg_apply_map externctrl modmap (HTL.mod_st m);
+      do finish <- reg_apply_map externctrl modmap (HTL.mod_finish m);
 
       let body : list Verilog.module_item:=
-          Valways (Vposedge (HTL.mod_clk m)) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+          Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar rst) (Vlit (ZToValue 1)))
                                                     (Vseq
-                                                      (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
-                                                      (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
-                                                    (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
-                  :: Valways (Vposedge (HTL.mod_clk m)) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
+                                                      (Vnonblock (Vvar st) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                                      (Vnonblock (Vvar finish) (Vlit (ZToValue 0))))
+                                                    (Vcase (Vvar st) case_el_ctrl (Some Vskip)))
+                  :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
                   :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements (HTL.mod_arrdecls m))
                                                            ++ scl_to_Vdecl (AssocMap.elements (HTL.mod_scldecls m)))
                   ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules)) in
