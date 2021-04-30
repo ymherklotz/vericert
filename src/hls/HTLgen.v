@@ -163,10 +163,9 @@ Next Obligation. constructor; simpl; auto with htlh. Qed.
 
 Program Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mon reg :=
   do r <- create_reg None (controlsignal_sz ctrl);
-  fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
+  fun s => OK r (mkstate
                    s.(st_st)
-                   (Pos.succ r)
+                   (st_freshreg s)
                    (st_freshstate s)
                    (st_scldecls s)
                    (st_arrdecls s)
