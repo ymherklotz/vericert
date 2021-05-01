@@ -118,7 +118,7 @@ Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : control_stmnt :=
   Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition state_wait (st wait_reg : reg) (n : node) : control_stmnt :=
-  Vnonblock (Vvar st) (Vternary (boplitz Veq wait_reg 1) (posToExpr n) (Vvar st)).
+  Vcond (boplitz Veq wait_reg 1) (Vnonblock (Vvar st) (posToExpr n)) Vskip.
 
 Definition nonblock (dst : reg) (e : expr) := (Vnonblock (Vvar dst) e).
 
@@ -511,11 +511,12 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do _ <- declare_reg None dst 32;
+        do finish_reg <- map_externctrl fn ctrl_finish;
         do join_state <- create_state;
         do fork_instr <- mk_fork fn args;
         do join_instr <- mk_join fn dst;
         do _ <- add_instr n join_state fork_instr;
-        add_instr_wait fn join_state n' (join_instr)
+        add_instr_wait finish_reg join_state n' join_instr
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
