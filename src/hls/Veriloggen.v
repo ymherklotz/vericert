@@ -179,23 +179,6 @@ Section TRANSLATE.
                          (List.filter (fun it => negb (Pos.eqb (fst (snd it)) main_name))
                                       (PTree.elements (HTL.mod_externctrl m)))).
 
-  Definition find_module (prog : HTL.program) (name : ident) : Errors.res HTL.module :=
-    match option_map snd (find (fun named_module => Pos.eqb (fst named_module) name) prog.(prog_defs)) with
-    | Some (Gfun (Internal f)) => OK f
-    | _ => Error (msg "Veriloggen: Could not find definition for called module")
-    end.
-
-  Definition max_reg_module (m : HTL.module) : positive :=
-    fold_left Pos.max (
-    [ HTL.mod_st m
-    ; HTL.mod_stk m
-    ; HTL.mod_finish m
-    ; HTL.mod_return m
-    ; HTL.mod_start m
-    ; HTL.mod_reset m
-    ; HTL.mod_clk m
-    ] ++ HTL.mod_params m ++ map fst (PTree.elements (mod_scldecls m)) ++ map fst (PTree.elements (mod_arrdecls m))) 1%positive.
-
   Definition prog_modmap (p : HTL.program) :=
     PTree_Properties.of_list (Option.map_option
                             (fun a => match a with
