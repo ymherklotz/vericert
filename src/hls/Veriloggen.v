@@ -217,7 +217,7 @@ Section TRANSLATE.
     end.
 
   (* FIXME Remove the fuel parameter (recursion limit)*)
-  Fixpoint transf_module (fuel : nat) (prog : HTL.program) (m : HTL.module) : res Verilog.module :=
+  Fixpoint transf_module (fuel : nat) (prog : HTL.program) (externclk : option reg) (m : HTL.module) : res Verilog.module :=
     match fuel with
     | O => Error (msg "Veriloggen: transf_module recursion too deep")
     | S fuel' =>
@@ -228,7 +228,7 @@ Section TRANSLATE.
       let htl_modules := PTree.filter
                        (fun m _ => List.existsb (Pos.eqb m) inline_names)
                        modmap in
-      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' prog) htl_modules;
+      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' prog externclk) htl_modules;
       let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl (HTL.mod_clk m))))
                                         translated_modules in
 
@@ -237,10 +237,14 @@ Section TRANSLATE.
       do case_el_data <- transl_datapath (HTL.mod_externctrl m) modmap (PTree.elements (HTL.mod_datapath m));
 
       let externctrl := HTL.mod_externctrl m in
-      do clk <- reg_apply_map externctrl modmap (HTL.mod_clk m);
       do rst <- reg_apply_map externctrl modmap (HTL.mod_reset m);
       do st <- reg_apply_map externctrl modmap (HTL.mod_st m);
       do finish <- reg_apply_map externctrl modmap (HTL.mod_finish m);
+      let clk := match externclk with
+                 | None => HTL.mod_clk m
+                 | Some c => c
+                 end in
+      let clk_decl := scl_to_Vdecl_fun (clk, (Some Vinput, VScalar 1)) in
 
       let body : list Verilog.module_item:=
           Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar rst) (Vlit (ZToValue 1)))
@@ -249,6 +253,7 @@ Section TRANSLATE.
                                                       (Vnonblock (Vvar finish) (Vlit (ZToValue 0))))
                                                     (Vcase (Vvar st) case_el_ctrl (Some Vskip)))
                   :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
+                  :: Vdeclaration clk_decl
                   :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements (HTL.mod_arrdecls m))
                                                            ++ scl_to_Vdecl (AssocMap.elements (HTL.mod_scldecls m)))
                   ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules)) in
@@ -256,8 +261,8 @@ Section TRANSLATE.
       OK (Verilog.mkmodule
                (HTL.mod_start m)
                (HTL.mod_reset m)
-               (HTL.mod_clk m)
                (HTL.mod_finish m)
+               clk
                (HTL.mod_return m)
                (HTL.mod_st m)
                (HTL.mod_stk m)
@@ -268,7 +273,7 @@ Section TRANSLATE.
                 )
     end.
 
-  Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transf_module 10 prog).
+  Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transf_module 10 prog None).
   Definition transl_program (prog : HTL.program) := transform_partial_program (transl_fundef prog) prog.
 
 End TRANSLATE.

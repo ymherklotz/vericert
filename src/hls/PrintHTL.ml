@@ -43,6 +43,17 @@ let registers a = String.concat "" (intersperse ", " (List.map register a))
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
 
+let string_controlsignal = function
+  | Coq_ctrl_finish -> "finish"
+  | Coq_ctrl_return -> "return"
+  | Coq_ctrl_start -> "start"
+  | Coq_ctrl_reset -> "rst"
+  | Coq_ctrl_clk -> "clk"
+  | Coq_ctrl_param idx -> sprintf "param_%d" (Nat.to_int idx)
+
+let print_externctrl pp ((local_reg : reg), ((target_mod: ident), (target_reg: controlsignal))) =
+  fprintf pp "%s -> %s.%s\n" (register local_reg) (extern_atom target_mod) (string_controlsignal target_reg)
+
 let ptree_to_list ptree =
   List.sort
     (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
@@ -52,11 +63,20 @@ let ptree_to_list ptree =
 
 let print_module pp id f =
   fprintf pp "%s(%s) {\n" (extern_atom id) (registers f.mod_params);
+
+  let externctrl = PTree.elements f.mod_externctrl in
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
+
+  fprintf pp "externctrl {\n";
+  List.iter (print_externctrl pp) externctrl;
+  fprintf pp "  }\n\n";
+
   fprintf pp "datapath {\n";
   List.iter (print_instruction pp) datapath;
-  fprintf pp "  }\n\n  controllogic {\n";
+  fprintf pp "  }\n\n";
+
+  fprintf pp "controllogic {\n";
   List.iter (print_instruction pp) controllogic;
   fprintf pp "  }\n}\n\n"
 
