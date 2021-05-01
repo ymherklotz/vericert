@@ -121,12 +121,12 @@ Section APPLY_MAPPING.
       do e' <- expr_apply_map e;
       do s1' <- stmnt_apply_map s1;
       do s2' <- stmnt_apply_map s2;
-      OK (Vcond e s1 s2)
+      OK (Vcond e' s1' s2')
     | Vcase e cases def =>
       do e' <- expr_apply_map e;
       do cases' <- cases_apply_map_ stmnt_apply_map cases;
       do def' <- mmap_option (fun x => stmnt_apply_map x) def;
-      OK (Vcase e' cases' None)
+      OK (Vcase e' cases' def')
     | Vblock e1 e2 =>
       do e1' <- expr_apply_map e1;
       do e2' <- expr_apply_map e2;
