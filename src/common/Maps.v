@@ -88,4 +88,11 @@ Proof.
   - reflexivity.
 Qed.
 
+Definition contains (A: Type) (i: positive) (m: t A) : bool :=
+  match get i m with
+  | Some _ => true
+  | None => false
+  end.
+
+
 End PTree.

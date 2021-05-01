@@ -160,15 +160,21 @@ Section TRANSLATE.
 
   Definition transl_ctrl externctrl modmap st := Errors.mmap (transl_ctrl_fun externctrl modmap) st.
 
-  Definition scl_to_Vdecl_fun (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
-    match a with (r, (io, Verilog.VScalar sz)) => (Verilog.Vdecl io r sz) end.
+  Definition scl_to_Vdecl_fun externctrl modmap (a : reg * (option Verilog.io * Verilog.scl_decl)) :=
+    match a with (r, (io, Verilog.VScalar sz)) =>
+                 do r' <- reg_apply_map externctrl modmap r;
+                 OK (Verilog.Vdecl io r' sz)
+    end.
 
-  Definition scl_to_Vdecl scldecl := map scl_to_Vdecl_fun scldecl.
+  Definition scl_to_Vdecl externctrl modmap scldecl := mmap (scl_to_Vdecl_fun externctrl modmap) scldecl.
 
-  Definition arr_to_Vdeclarr_fun (a : reg * (option Verilog.io * Verilog.arr_decl)) :=
-    match a with (r, (io, Verilog.VArray sz l)) => (Verilog.Vdeclarr io r sz l) end.
+  Definition arr_to_Vdeclarr_fun externctrl modmap (a : reg * (option Verilog.io * Verilog.arr_decl)) :=
+    match a with (r, (io, Verilog.VArray sz l)) =>
+                 do r' <- reg_apply_map externctrl modmap r;
+                 OK (Verilog.Vdeclarr io r' sz l)
+    end.
 
-  Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
+  Definition arr_to_Vdeclarr externctrl modmap arrdecl := mmap (arr_to_Vdeclarr_fun externctrl modmap) arrdecl.
 
   Definition called_functions (main_name : ident) (m : HTL.module) : list ident :=
     (* remove duplicates *)
@@ -190,7 +196,7 @@ Section TRANSLATE.
   (** Clean up declarations for an inlined module. Make IO decls into reg, and remove the clk declaration *)
   Definition clean_up_decl (clk : reg) (it : Verilog.module_item) :=
     match it with
-    | Vdeclaration (Vdecl (Some _) reg sz) =>
+    | Vdeclaration (Vdecl _ reg sz) =>
       if Pos.eqb reg clk
       then None
       else Some (Vdeclaration (Vdecl None reg sz))
@@ -204,15 +210,18 @@ Section TRANSLATE.
     match fuel with
     | O => Error (msg "Veriloggen: transf_module recursion too deep")
     | S fuel' =>
+      let clk := match externclk with
+                 | None => HTL.mod_clk m
+                 | Some c => c
+                 end in
 
-      let inline_start_reg := max_reg_module m in
       let inline_names := called_functions (AST.prog_main prog) m in
       let modmap := prog_modmap prog in
       let htl_modules := PTree.filter
                        (fun m _ => List.existsb (Pos.eqb m) inline_names)
                        modmap in
-      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' prog externclk) htl_modules;
-      let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl (HTL.mod_clk m))))
+      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' prog (Some clk)) htl_modules;
+      let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl clk)))
                                         translated_modules in
 
 
@@ -223,11 +232,21 @@ Section TRANSLATE.
       do rst <- reg_apply_map externctrl modmap (HTL.mod_reset m);
       do st <- reg_apply_map externctrl modmap (HTL.mod_st m);
       do finish <- reg_apply_map externctrl modmap (HTL.mod_finish m);
-      let clk := match externclk with
-                 | None => HTL.mod_clk m
-                 | Some c => c
-                 end in
-      let clk_decl := scl_to_Vdecl_fun (clk, (Some Vinput, VScalar 1)) in
+      do params <- mmap (reg_apply_map externctrl modmap) (HTL.mod_params m);
+
+      (* Only declare the clock if this is the top-level module, i.e. there is no inherited clock *)
+      do maybe_clk_decl <- match externclk with
+                          | None =>
+                            do decl <- scl_to_Vdecl_fun externctrl modmap (clk, (Some Vinput, VScalar 1));
+                            OK [Vdeclaration decl]
+                          | Some _ => OK []
+                          end;
+
+      let local_arrdecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_arrdecls m) in
+      do arr_decls <- arr_to_Vdeclarr externctrl modmap (AssocMap.elements local_arrdecls);
+
+      let local_scldecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_scldecls m) in
+      do scl_decls <- scl_to_Vdecl externctrl modmap (AssocMap.elements local_scldecls);
 
       let body : list Verilog.module_item:=
           Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar rst) (Vlit (ZToValue 1)))
@@ -236,24 +255,22 @@ Section TRANSLATE.
                                                       (Vnonblock (Vvar finish) (Vlit (ZToValue 0))))
                                                     (Vcase (Vvar st) case_el_ctrl (Some Vskip)))
                   :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                  :: Vdeclaration clk_decl
-                  :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements (HTL.mod_arrdecls m))
-                                                           ++ scl_to_Vdecl (AssocMap.elements (HTL.mod_scldecls m)))
+                  :: List.map Vdeclaration (arr_decls ++ scl_decls)
+                  ++ maybe_clk_decl
                   ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules)) in
 
       OK (Verilog.mkmodule
                (HTL.mod_start m)
-               (HTL.mod_reset m)
-               (HTL.mod_finish m)
+               rst
                clk
+               finish
                (HTL.mod_return m)
-               (HTL.mod_st m)
+               st
                (HTL.mod_stk m)
                (HTL.mod_stk_len m)
-               (HTL.mod_params m)
+               params
                body
-               (HTL.mod_entrypoint m)
-                )
+               (HTL.mod_entrypoint m))
     end.
 
   Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transf_module 10 prog None).
