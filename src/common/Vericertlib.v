@@ -57,6 +57,11 @@ Ltac learn_tac fact name :=
 Tactic Notation "learn" constr(fact) := let name := fresh "H" in learn_tac fact name.
 Tactic Notation "learn" constr(fact) "as" simple_intropattern(name) := learn_tac fact name.
 
+Ltac auto_hyp H :=
+  match goal with
+  | H' : _ |- _ => solve [ apply H in H'; auto | auto ]
+  end.
+
 Ltac unfold_rec c := unfold c; fold c.
 
 Ltac solve_by_inverts n :=

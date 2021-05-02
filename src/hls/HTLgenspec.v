@@ -222,7 +222,7 @@ Lemma map_externctrl_datapath_trans :
     map_externctrl om sig s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof.
-  intros. monadInv H. apply create_reg_datapath_trans in EQ. auto.
+  intros. monadInv H. auto_hyp create_reg_datapath_trans.
 Qed.
 Hint Resolve map_externctrl_datapath_trans : htlspec.
 
@@ -231,7 +231,7 @@ Lemma map_externctrl_controllogic_trans :
     map_externctrl om sig s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof.
-  intros. monadInv H. apply create_reg_controllogic_trans in EQ. auto.
+  intros. monadInv H. auto_hyp create_reg_controllogic_trans.
 Qed.
 Hint Resolve map_externctrl_datapath_trans : htlspec.
 
