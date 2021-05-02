@@ -461,26 +461,28 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-(** [mk_fork] creates a datapath statement which sets up the execution of a *)
-Definition mk_fork (m : ident) (args : list reg) : mon datapath_stmnt :=
-  do reset_reg <- map_externctrl m ctrl_reset;
-  do param_assigns <- traverselist
-                (fun (a: (nat * reg)) => let (idx, arg) := a in
-                                    do param_reg <- map_externctrl m (ctrl_param idx);
-                                    ret (Vnonblock (Vvar param_reg) (Vvar arg)))
-                (enumerate 0 args);
-  let reset_mod := Vnonblock (Vvar reset_reg) (posToLit 1) in
+(** [fork] a datapath statement which sets up the execution of a function *)
+Definition fork (rst : reg) (params : list (reg * reg)) : datapath_stmnt :=
+  let reset_mod := Vnonblock (Vvar rst) (posToLit 1) in
   let assign_params :=
-      List.fold_left (fun (acc : stmnt) (s : stmnt) => Vseq acc s)
-                     param_assigns Vskip in
-  ret (Vseq reset_mod assign_params).
+      List.fold_left (fun acc (a : reg*reg) => let (dst, src) := a in Vseq (nonblock dst (Vvar src)) acc)
+                     params Vskip in
+  Vseq reset_mod assign_params.
 
-Definition mk_join (m : ident) (dst : reg) : mon datapath_stmnt :=
-  do return_reg <- map_externctrl m ctrl_return;
-  do reset_reg <- map_externctrl m ctrl_reset;
-  let set_result := Vnonblock (Vvar dst) (Vvar return_reg) in
-  let stop_reset := Vnonblock (Vvar reset_reg) (Vlit (ZToValue 0)) in
-  ret (Vseq stop_reset set_result).
+Definition join (fn_rtrn fn_rst fn_dst : reg) : datapath_stmnt :=
+  let set_result := Vnonblock (Vvar fn_dst) (Vvar fn_rtrn) in
+  let stop_reset := Vnonblock (Vvar fn_rst) (Vlit (ZToValue 0)) in
+  Vseq stop_reset set_result.
+
+Definition return_val fin rtrn r :=
+  let retval :=
+      match r with
+      | Some r' => Vvar r'
+      | None => Vlit (ZToValue 0%Z)
+      end in
+  Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn retval).
+
+Definition idle fin := nonblock fin (Vlit (ZToValue 0%Z)).
 
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
@@ -511,12 +513,24 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do _ <- declare_reg None dst 32;
-        do finish_reg <- map_externctrl fn ctrl_finish;
         do join_state <- create_state;
-        do fork_instr <- mk_fork fn args;
-        do join_instr <- mk_join fn dst;
+
+        do finish_reg <- map_externctrl fn ctrl_finish;
+        do reset_reg <- map_externctrl fn ctrl_reset;
+        do return_reg <- map_externctrl fn ctrl_return;
+
+        do params <- traverselist
+                  (fun (a: nat * reg) => let (idx, arg) := a in
+                                    do param_reg <- map_externctrl fn (ctrl_param idx);
+                                    ret (param_reg, arg))
+                  (enumerate 0 args);
+
+        let fork_instr := fork reset_reg params in
+        let join_instr := join return_reg reset_reg dst in
+
         do _ <- add_instr n join_state fork_instr;
         add_instr_wait finish_reg join_state n' join_instr
+
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -531,12 +545,8 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       error (Errors.msg "Ijumptable: Case statement not supported.")
     | Ireturn r =>
       do idle_state <- create_state;
-      let retval := match r with
-                    | Some r' => Vvar r'
-                    | None => Vlit (ZToValue 0%Z)
-                    end in
-      do _ <- add_instr n idle_state (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn retval));
-      add_instr_skip idle_state (nonblock fin (Vlit (ZToValue 0%Z)))
+      do _ <- add_instr n idle_state (return_val fin rtrn r);
+      add_instr_skip idle_state (idle fin)
     end
   end.
 

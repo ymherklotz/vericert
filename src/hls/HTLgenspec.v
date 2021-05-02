@@ -125,6 +125,7 @@ Ltac monadInv H :=
 statemachine that is created by the translation contains the correct
 translations for each of the elements *)
 
+(** [tr_instr] describes the translation of instructions that are directly translated into a single state *)
 Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -> control_stmnt -> Prop :=
 | tr_instr_Inop :
     forall n,
@@ -135,23 +136,12 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
       tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
-(* | tr_instr_Icall : *)
-(*     forall n sig fn args dst, *)
-(*       Z.pos n <= Int.max_unsigned -> *)
-(*       tr_instr fin rtrn st stk (RTL.Icall sig (inr fn) args dst n) (HTLfork fn args) (state_goto st n) *)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       Z.pos n1 <= Int.max_unsigned ->
       Z.pos n2 <= Int.max_unsigned ->
       translate_condition cond args s = OK c s' i ->
       tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
-(* | tr_instr_Ireturn_None : *)
-(*     tr_instr fin rtrn st stk (RTL.Ireturn None) (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) *)
-(*                                                   (block rtrn (Vlit (ZToValue 0%Z))))) (ctrl_vstmnt Vskip) *)
-(* | tr_instr_Ireturn_Some : *)
-(*     forall r, *)
-(*       tr_instr fin rtrn st stk (RTL.Ireturn (Some r)) *)
-(*                (data_vstmnt (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r)))) (ctrl_vstmnt Vskip) *)
 | tr_instr_Iload :
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
@@ -171,12 +161,34 @@ Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
           (fin rtrn st stk : reg) : Prop :=
-  tr_code_intro :
+| tr_code_single :
     forall s t,
       c!pc = Some i ->
       stmnts!pc = Some s ->
       trans!pc = Some t ->
       tr_instr fin rtrn st stk i s t ->
+      tr_code c pc i stmnts trans fin rtrn st stk
+| tr_code_call :
+    forall sig fn args dst n,
+      c!pc = Some (RTL.Icall sig (inr fn) args dst n) ->
+      Z.pos n <= Int.max_unsigned ->
+
+      (exists pc2 fn_rst fn_return fn_finish fn_params,
+          stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) ->
+          trans!pc = Some (state_goto st pc2) ->
+          stmnts!pc2 = Some (join fn_return fn_rst dst) ->
+          trans!pc2 = Some (state_wait st fn_finish n)) ->
+
+      tr_code c pc i stmnts trans fin rtrn st stk
+| tr_code_return :
+    forall r,
+      c!pc = Some (RTL.Ireturn r) ->
+      (exists pc2,
+          stmnts!pc = Some (return_val fin rtrn r) ->
+          trans!pc = Some (state_goto st pc2) ->
+          stmnts!pc2 = Some (idle fin) ->
+          trans!pc2 = Some Vskip) ->
+
       tr_code c pc i stmnts trans fin rtrn st stk.
 Hint Constructors tr_code : htlspec.
 
