@@ -146,7 +146,7 @@ Program Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :
                 (st_externctrl s)
                 (st_datapath s)
                 (st_controllogic s)) _.
-Next Obligation. auto with htlh. Qed.
+Next Obligation. auto with htlh. Defined.
 
 Program Definition create_reg (i : option io) (sz : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
@@ -159,7 +159,7 @@ Program Definition create_reg (i : option io) (sz : nat) : mon reg :=
                    (st_externctrl s)
                    (st_datapath s)
                    (st_controllogic s)) _.
-Next Obligation. constructor; simpl; auto with htlh. Qed.
+Next Obligation. constructor; simpl; auto with htlh. Defined.
 
 Program Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mon reg :=
   do r <- create_reg None (controlsignal_sz ctrl);
@@ -172,7 +172,7 @@ Program Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mo
                    (AssocMap.set r (othermod, ctrl) (st_externctrl s))
                    (st_datapath s)
                    (st_controllogic s)) _.
-Next Obligation. constructor; simpl; auto with htlh. Qed.
+Next Obligation. constructor; simpl; auto with htlh. Defined.
 
 Program Definition create_state : mon node :=
   fun s => let r := s.(st_freshstate) in
@@ -185,7 +185,7 @@ Program Definition create_state : mon node :=
                    (st_externctrl s)
                    (st_datapath s)
                    (st_controllogic s)) _.
-Next Obligation. constructor; simpl; eauto with htlh. Qed.
+Next Obligation. constructor; simpl; eauto with htlh. Defined.
 
 Program Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
@@ -206,7 +206,7 @@ Next Obligation.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
-  Qed.
+Defined.
 
 Program Definition add_instr_wait (wait_reg : reg) (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
@@ -227,7 +227,7 @@ Next Obligation.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
-Qed.
+Defined.
 
 Program Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
   fun s =>
@@ -249,7 +249,7 @@ Next Obligation.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
-Qed.
+Defined.
 
 Program Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
   fun s =>
@@ -271,7 +271,7 @@ Next Obligation.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
-Qed.
+Defined.
 
 Definition translate_comparison (c : Integers.comparison) (args : list reg) : mon expr :=
   match c, args with
@@ -425,7 +425,7 @@ Next Obligation.
   intros. apply state_incr_intro; simpl;
             try (intros; destruct (peq n0 n); subst);
             auto with htlh.
-Qed.
+Defined.
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
@@ -561,7 +561,7 @@ Program Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg *
                    (st_externctrl s)
                    (st_datapath s)
                    (st_controllogic s)) _.
-Next Obligation. constructor; simpl; auto with htlh. Qed.
+Next Obligation. constructor; simpl; auto with htlh. Defined.
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
@@ -696,7 +696,7 @@ Section RENUMBER.
          (mk_renumber_state (Pos.succ (renumber_freshreg st))
                             (PTree.set r (renumber_freshreg st) (renumber_regmap st)))
          _.
-  Next Obligation. unfold st_prop; auto. Qed.
+  Next Obligation. unfold st_prop; auto. Defined.
 
   Program Definition clear_regmap : mon unit :=
     fun st => OK
@@ -704,7 +704,7 @@ Section RENUMBER.
          (mk_renumber_state (renumber_freshreg st)
                             (PTree.empty reg))
          _.
-  Next Obligation. unfold st_prop; auto. Qed.
+  Next Obligation. unfold st_prop; auto. Defined.
 
   Definition renumber_reg (r : reg) : mon reg :=
     do st <- get;
