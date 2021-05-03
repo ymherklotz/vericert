@@ -89,10 +89,13 @@ Record module: Type :=
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_ram : option ram;
+    mod_div : option Verilog.div;
     mod_wf : map_well_formed mod_controllogic /\ map_well_formed mod_datapath;
     mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk;
     mod_ram_wf : forall r', mod_ram = Some r' -> mod_clk < ram_addr r';
     mod_params_wf : Forall (Pos.gt mod_st) mod_params;
+    mod_div_wf : forall d, mod_div = Some d -> mod_clk < Verilog.div_a d;
+    mod_div_ram_wf : forall d r, mod_div = Some d -> mod_ram = Some r -> ram_u_en r < Verilog.div_a d;
   }.
 
 Definition fundef := AST.fundef module.
@@ -175,7 +178,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     forall g m st sf ctrl data
       asr asa
       basr1 basa1 nasr1 nasa1
-      basr2 basa2 nasr2 nasa2
+      basr2 basa2 nasr2 nasa2 basr2' nasr2'
       basr3 basa3 nasr3 nasa3
       asr' asa'
       f pstval,
@@ -197,8 +200,10 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
         data
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
+      Verilog.exec_div (Verilog.mkassociations basr2 nasr2) (mod_div m)
+                       (Verilog.mkassociations basr2' nasr2') ->
       exec_ram
-        (Verilog.mkassociations (Verilog.merge_regs nasr2 basr2) empty_assocmap)
+        (Verilog.mkassociations (Verilog.merge_regs nasr2' basr2') empty_assocmap)
         (Verilog.mkassociations (Verilog.merge_arrs nasa2 basa2) (empty_stack m))
         (mod_ram m)
         (Verilog.mkassociations basr3 nasr3)
@@ -208,6 +213,11 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
       (Z.pos pstval <= Integers.Int.max_unsigned)%Z ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
+| trigger_call :
+    asr!(new_reset) = Some r ->
+    maping_reg r = Some r' ->
+    r' = (mod_reset f) ->
+    State -> Callstate
 | step_finish :
     forall g m st asr asa retval sf,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->

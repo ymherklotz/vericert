@@ -267,6 +267,20 @@ Inductive module_item : Type :=
 - [mod_body] The body of the module, including the state machine.
 *)
 
+
+Record div := mk_div {
+    div_a: reg;
+    div_b: reg;
+    div_q: reg;
+    div_r: reg;
+    div_u_en: reg;
+    div_en: reg;
+    div_done: reg;
+    div_ordering: (div_a < div_b < div_q
+                   /\ div_q < div_r < div_u_en
+                   /\ div_u_en < div_en < div_done)%positive
+  }.
+
 Record module : Type := mkmodule {
   mod_start : reg;
   mod_reset : reg;
@@ -279,6 +293,7 @@ Record module : Type := mkmodule {
   mod_args : list reg;
   mod_body : list module_item;
   mod_entrypoint : node;
+  mod_div : option div;
 }.
 
 Definition fundef := AST.fundef module.
@@ -578,10 +593,39 @@ Definition genv := Globalenvs.Genv.t fundef unit.
 Definition empty_stack (m : module) : assocmap_arr :=
   (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty arr)).
 
+Inductive exec_div :
+  Verilog.reg_associations -> option div -> Verilog.reg_associations -> Prop :=
+| exec_div_Some_idle:
+    forall r d,
+      Int.eq (Verilog.assoc_blocking r)#(div_en d, 32)
+             (Verilog.assoc_blocking r)#(div_u_en d, 32) = true ->
+      Int.eq ((Verilog.assoc_blocking r)#(div_done d, 32)) (ZToValue 0) = true ->
+      exec_div r (Some d) r
+| exec_div_Some_input:
+    forall r d u_en en don,
+      Int.eq en u_en = false ->
+      Int.eq don (ZToValue 0) = true ->
+      (Verilog.assoc_blocking r)#(div_done d, 32) = don ->
+      (Verilog.assoc_blocking r)#(div_en d, 32) = en ->
+      (Verilog.assoc_blocking r)!(div_u_en d) = Some u_en ->
+      exec_div r (Some d) (Verilog.nonblock_reg (div_en d)
+                             (Verilog.nonblock_reg (div_done d) r (ZToValue 1)) u_en)
+| exec_div_Some_output:
+    forall r d don a b,
+      Int.eq don (ZToValue 0) = false ->
+      (Verilog.assoc_blocking r)#(div_done d, 32) = don ->
+      (Verilog.assoc_blocking r)!(div_a d) = Some a ->
+      (Verilog.assoc_blocking r)!(div_b d) = Some b ->
+      exec_div r (Some d) (Verilog.nonblock_reg (div_done d)
+                             (Verilog.nonblock_reg (div_r d)
+                                (Verilog.nonblock_reg (div_q d) r (Int.divs a b)) (Int.mods a b))
+                             (ZToValue 0))
+| exec_div_None: forall r, exec_div r None r.
+
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
-      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 basr2 nasr2
-             basa2 nasa2 f stval pstval m sf st g ist,
+      forall asr asa asr' asa' basr1 nasr1 basr1' nasr1' basa1
+             nasa1 basr2 nasr2 basa2 nasa2 f stval pstval m sf st g ist,
       asr!(m.(mod_reset)) = Some (ZToValue 0) ->
       asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
@@ -591,7 +635,8 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
                   (mod_body m)
                   (mkassociations basr1 nasr1)
                   (mkassociations basa1 nasa1) ->
-      mis_stepp_negedge f (mkassociations (merge_regs nasr1 basr1) empty_assocmap)
+      exec_div (mkassociations basr1 nasr1) (mod_div m) (mkassociations basr1' nasr1') ->
+      mis_stepp_negedge f (mkassociations (merge_regs nasr1' basr1') empty_assocmap)
                         (mkassociations (merge_arrs nasa1 basa1) (empty_stack m))
                         (mod_body m)
                         (mkassociations basr2 nasr2)
@@ -807,14 +852,38 @@ Proof.
               end; crush).
 Qed.
 
+Lemma exec_div_determinate :
+  forall asr0 d asr1,
+  exec_div asr0 d asr1 ->
+  forall asr1',
+  exec_div asr0 d asr1' ->
+  asr1' = asr1.
+Proof.
+  induction 1; intros.
+  - inv H1. auto. unfold find_assocmap, AssocMapExt.get_default in *.
+    rewrite H8 in H. rewrite H3 in H. discriminate.
+    unfold find_assocmap, AssocMapExt.get_default in *.
+    rewrite H3 in H0. discriminate.
+  - inv H4. unfold find_assocmap, AssocMapExt.get_default in *. rewrite H3 in H6.
+    rewrite H6 in H. discriminate.
+    rewrite H3 in H11. inv H11. auto.
+    unfold find_assocmap, AssocMapExt.get_default in *.
+    rewrite H6 in H0. discriminate.
+  - inv H3. rewrite H7 in H. discriminate.
+    rewrite H6 in H. discriminate.
+    rewrite H7 in H1. rewrite H9 in H2. inv H1. inv H2. auto.
+  - inv H. auto.
+Qed.
+
 Lemma semantics_determinate :
   forall (p: program), Smallstep.determinate (semantics p).
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
   - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
-    pose proof (mis_stepp_determinate H5 H15). simplify. inv H0. inv H4.
-    pose proof (mis_stepp_negedge_determinate H6 H17).
+    pose proof (mis_stepp_determinate H5 H16). simplify. inv H0. inv H4.
+    pose proof (exec_div_determinate H6 H17). simplify. inv H.
+    pose proof (mis_stepp_negedge_determinate H7 H19).
     crush.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.

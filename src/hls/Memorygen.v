@@ -222,8 +222,8 @@ Definition transf_module (m: module): module.
   let new_size := (mod_stk_len m) in
   let ram := mk_ram new_size (mod_stk m) en u_en addr wr_en d_in d_out ltac:(eauto using ram_wf) in
   let tc := transf_code (mod_st m) ram (mod_datapath m) (mod_controllogic m) in
-  match mod_ram m with
-  | None =>
+  match mod_ram m, mod_div m with
+  | None, None =>
     mkmodule m.(mod_params)
                  (fst tc)
                  (snd tc)
@@ -245,8 +245,9 @@ Definition transf_module (m: module): module.
                        (AssocMap.set m.(mod_stk)
                                  (None, VArray 32 (2 ^ Nat.log2_up new_size))%nat m.(mod_arrdecls))
                  (Some ram)
-                 _ (mod_ordering_wf m) _ (mod_params_wf m)
-  | _ => m
+                 None
+                 _ (mod_ordering_wf m) _ (mod_params_wf m) ltac:(discriminate) ltac:(discriminate)
+  | _, _ => m
   end).
   eapply transf_code_wf. apply (mod_wf m). destruct tc eqn:?; simpl.
   rewrite <- Heqp. intuition.
@@ -1081,6 +1082,7 @@ Hint Resolve max_module_stmnts : mgen.
 Lemma transf_module_code :
   forall m,
     mod_ram m = None ->
+    mod_div m = None ->
     transf_code (mod_st m)
                 {| ram_size := mod_stk_len m;
                    ram_mem := mod_stk m;
@@ -1098,8 +1100,10 @@ Proof. unfold transf_module; intros; repeat destruct_match; crush.
 Hint Resolve transf_module_code : mgen.
 
 Lemma transf_module_code_ram :
-  forall m r, mod_ram m = Some r -> transf_module m = m.
-Proof. unfold transf_module; intros; repeat destruct_match; crush. Qed.
+  forall m r d, mod_ram m = Some r \/ mod_div m = Some d -> transf_module m = m.
+Proof. unfold transf_module; intros; repeat destruct_match; crush.
+       inv H; discriminate.
+Qed.
 Hint Resolve transf_module_code_ram : mgen.
 
 Lemma mod_reset_lt : forall m, mod_reset m < max_reg_module m + 1.
@@ -1241,6 +1245,15 @@ Proof.
   - do 2 econstructor; simplify; [eapply exec_ram_Some_read | | ];
       repeat (try econstructor; mgen_crush).
 Qed.
+
+Definition forall_div (P: reg -> Prop) div :=
+  P (div_en div)
+  /\ P (div_u_en div)
+  /\ P (div_a div)
+  /\ P (div_b div)
+  /\ P (div_q div)
+  /\ P (div_r div)
+  /\ P (div_done div).
 
 Lemma match_assocmaps_merge :
   forall p nasr basr nasr' basr',
@@ -2481,6 +2494,60 @@ Proof.
   auto.
 Qed.
 
+Lemma match_assocmap_set :
+  forall p rs1 rs2,
+    match_assocmaps p rs1 rs2 ->
+    forall s v,
+      match_assocmaps p (rs1 # s <- v) (rs2 # s <- v).
+Proof.
+  inversion 1; simplify.
+  constructor; intros.
+  destruct (Pos.eq_dec s r); subst.
+  repeat rewrite AssocMap.gss. auto.
+  repeat rewrite AssocMap.gso; auto.
+Qed.
+
+Lemma exec_div_same :
+  forall rs1 div rs2 p,
+    exec_div rs1 (Some div) rs2 ->
+    forall_div (fun x => x < p) div ->
+    forall trs1,
+      match_reg_assocs p rs1 trs1 ->
+      exists trs2,
+        exec_div trs1 (Some div) trs2
+        /\ match_reg_assocs p rs2 trs2.
+Proof.
+  inversion 1; crush.
+  - inv H6. simplify. eexists. split.
+    unfold forall_div in *; simplify.
+    constructor; simplify.
+    eapply int_eq_not_changed. eauto.
+    inv H7. inv H8. eauto.
+    inv H7. eauto.
+    apply Int.same_if_eq in H3. inv H7. apply H10 in H11.
+    unfold find_assocmap, AssocMapExt.get_default in *.
+    rewrite H11 in H3. rewrite H3. auto.
+    constructor; auto.
+  - unfold forall_div in *; simplify. inv H9. simplify.
+    econstructor. split.
+    inv H8. inv H12.
+    eapply exec_div_Some_input; simplify; auto.
+    apply Int.same_if_eq in H2. unfold find_assocmap, AssocMapExt.get_default in *.
+    rewrite H9 in H1; auto. eauto.
+    unfold find_assocmap, AssocMapExt.get_default in *. rewrite H9 in H2; auto.
+    rewrite <- H9; auto.
+    constructor; simplify; auto.
+    repeat apply match_assocmap_set; auto.
+  - unfold forall_div in *; simplify. inv H8; simplify.
+    econstructor. split. inv H10. inv H12.
+    eapply exec_div_Some_output; simplify; auto.
+    unfold find_assocmap, AssocMapExt.get_default in *. rewrite H8 in H1; auto.
+    rewrite <- H8; eauto.
+    rewrite <- H8; eauto.
+    constructor; simplify; auto.
+    repeat apply match_assocmap_set; auto.
+Qed.
+
 Lemma translation_correct :
   forall m asr nasa1 basa1 nasr1 basr1 basr2 nasr2 nasa2 basa2 nasr3 basr3
          nasa3 basa3 asr'0 asa'0 res' st tge pstval sf asa ctrl data f,
@@ -2506,6 +2573,7 @@ Lemma translation_correct :
     (Z.pos pstval <= 4294967295)%Z ->
     match_states (State sf m st asr asa) (State res' (transf_module m) st asr'0 asa'0) ->
     mod_ram m = None ->
+    mod_div m = None ->
     exists R2 : state,
       Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
       match_states (State sf m pstval (merge_regs nasr3 basr3) (merge_arrs nasa3 basa3)) R2.
@@ -2544,20 +2612,21 @@ Proof.
     assert (MATCH_ARR3': match_arrs_size ran'2 rab'2) by eauto with mgen.
     do 2 econstructor. apply Smallstep.plus_one. econstructor.
     eauto with mgen. eauto with mgen. eauto with mgen.
-    rewrite <- H12. eassumption. rewrite <- H7. eassumption.
+    rewrite <- H13. eassumption. rewrite <- H7. eassumption.
     eauto. eauto with mgen. eauto.
+    unfold transf_module; repeat destruct_match; crush. constructor.
     rewrite empty_stack_transf. unfold transf_module; repeat destruct_match; try discriminate.
     econstructor. simplify.
     unfold disable_ram in *. unfold transf_module in DISABLE_RAM.
     repeat destruct_match; try discriminate; []. simplify.
-    pose proof H17 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
-    pose proof H17 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
-    pose proof H18 as R3. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R3.
-    pose proof H18 as R4. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R4.
-    pose proof H17 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
-    pose proof H17 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
-    pose proof H18 as R3'. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R3'.
-    pose proof H18 as R4'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R4'.
+    pose proof H18 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
+    pose proof H18 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
+    pose proof H19 as R3. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R3.
+    pose proof H19 as R4. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R4.
+    pose proof H18 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
+    pose proof H18 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
+    pose proof H19 as R3'. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R3'.
+    pose proof H19 as R4'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R4'.
     simplify.
     pose proof DISABLE_RAM as DISABLE_RAM1.
     eapply int_eq_not_changed with (ar' := rab') in DISABLE_RAM; try congruence.
@@ -2577,14 +2646,14 @@ Proof.
     econstructor; mgen_crush. apply merge_arr_empty; mgen_crush.
     unfold disable_ram in *. unfold transf_module in DISABLE_RAM.
     repeat destruct_match; crush. unfold transf_module in Heqo; repeat destruct_match; crush.
-    pose proof H17 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
-    pose proof H17 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
-    pose proof H18 as R3. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R3.
-    pose proof H18 as R4. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R4.
-    pose proof H17 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
-    pose proof H17 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
-    pose proof H18 as R3'. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R3'.
-    pose proof H18 as R4'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R4'.
+    pose proof H18 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
+    pose proof H18 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
+    pose proof H19 as R3. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R3.
+    pose proof H19 as R4. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R4.
+    pose proof H18 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
+    pose proof H18 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
+    pose proof H19 as R3'. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R3'.
+    pose proof H19 as R4'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R4'.
     simplify.
     pose proof DISABLE_RAM as DISABLE_RAM1.
     eapply int_eq_not_changed with (ar' := rab') in DISABLE_RAM; try congruence.
@@ -2600,7 +2669,7 @@ Proof.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
-  - unfold alt_store in *; simplify. inv H6. inv H19. inv H19. simplify.
+  - unfold alt_store in *; simplify. inv H6. inv H20. inv H20. simplify.
     exploit match_states_same; try solve [eapply H4 | eapply max_stmnt_lt_module; eauto
                                           | econstructor; eauto with mgen];
     intros; repeat inv_exists; simplify; tac0.
@@ -2618,14 +2687,14 @@ Proof.
     pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
     apply expr_lt_max_module_datapath in X.
     remember (max_reg_module m); simplify; lia.
-
+    unfold transf_module; repeat destruct_match; crush. constructor.
     rewrite empty_stack_transf.
     unfold transf_module; repeat destruct_match; try discriminate; simplify; [].
     eapply exec_ram_Some_write.
     3: {
       simplify. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
       repeat rewrite find_assocmap_gso by lia.
-      pose proof H12 as X.
+      pose proof H13 as X.
       eapply max_reg_stmnt_not_modified_nb with (r := (max_reg_module m + 2)) in X.
       rewrite AssocMap.gempty in X.
       apply merge_find_assocmap. auto.
@@ -2639,8 +2708,8 @@ Proof.
     { unfold disable_ram in *. unfold transf_module in DISABLE_RAM;
                                repeat destruct_match; try discriminate.
       simplify.
-      pose proof H12 as X2.
-      pose proof H12 as X4.
+      pose proof H13 as X2.
+      pose proof H13 as X4.
       apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in X2.
       apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in X4.
       assert (forall ar ar' x, ar ! x = ar' ! x -> ar # x = ar' # x).
@@ -2672,10 +2741,10 @@ Proof.
     unfold transf_module; repeat destruct_match; try discriminate; simplify.
     replace (AssocMapExt.merge value ran' rab') with (merge_regs ran' rab');
     [|unfold merge_regs; auto].
-    pose proof H19 as X.
+    pose proof H20 as X.
     eapply match_assocmaps_merge in X.
-    2: { apply H21. }
-    inv X. rewrite <- H14. eassumption. unfold transf_module in H6; repeat destruct_match;
+    2: apply H22.
+    inv X. rewrite <- H12. eassumption. unfold transf_module in H6; repeat destruct_match;
                                         try discriminate; simplify.
     lia. auto.
 
@@ -2692,9 +2761,9 @@ Proof.
     apply match_arrs_merge_set2; auto.
     eapply match_arrs_size_stmnt_preserved in H4; mgen_crush.
     eapply match_arrs_size_stmnt_preserved in H4; mgen_crush.
-    eapply match_arrs_size_stmnt_preserved in H12; mgen_crush.
+    eapply match_arrs_size_stmnt_preserved in H13; mgen_crush.
     rewrite empty_stack_transf. mgen_crush.
-    eapply match_arrs_size_stmnt_preserved in H12; mgen_crush.
+    eapply match_arrs_size_stmnt_preserved in H13; mgen_crush.
     rewrite empty_stack_transf. mgen_crush.
     auto.
     apply merge_arr_empty_match.
@@ -2702,7 +2771,7 @@ Proof.
     eapply match_arrs_size_stmnt_preserved in H4; mgen_crush.
     eapply match_arrs_size_stmnt_preserved in H4; mgen_crush.
     apply match_empty_size_merge. apply match_empty_assocmap_set.
-    mgen_crush. eapply match_arrs_size_stmnt_preserved in H12; mgen_crush.
+    mgen_crush. eapply match_arrs_size_stmnt_preserved in H13; mgen_crush.
     rewrite empty_stack_transf; mgen_crush.
     unfold disable_ram. unfold transf_module; repeat destruct_match; try discriminate; simplify.
     unfold merge_regs. unfold_merge.
@@ -2713,7 +2782,7 @@ Proof.
   - unfold alt_load in *; simplify. inv H6.
     2: { match goal with H: context[location_is] |- _ => inv H end. }
     match goal with H: context[location_is] |- _ => inv H end.
-    inv H30. simplify. inv H4.
+    inv H31. simplify. inv H4.
     2: { match goal with H: context[location_is] |- _ => inv H end. }
     inv H27. simplify.
     do 2 econstructor. eapply Smallstep.plus_two.
@@ -2728,7 +2797,8 @@ Proof.
     apply expr_lt_max_module_datapath in X. simplify. remember (max_reg_module m); lia.
     auto.
 
-    simplify. rewrite empty_stack_transf. unfold transf_module; repeat destruct_match; crush.
+    simplify. unfold transf_module; repeat destruct_match; crush. constructor.
+    rewrite empty_stack_transf. unfold transf_module; repeat destruct_match; crush.
     eapply exec_ram_Some_read; simplify.
     2: {
       unfold merge_regs. unfold_merge. repeat rewrite find_assocmap_gso; try (remember (max_reg_module m); lia).
@@ -2766,7 +2836,7 @@ Proof.
                  end; lia.
         }
         repeat rewrite AssocMap.gso by lia.
-        inv ASSOC. rewrite <- H19. auto. lia.
+        inv ASSOC. rewrite <- H20. auto. lia.
       }
       { unfold merge_regs. unfold_merge.
         assert (mod_finish m < max_reg_module m + 1).
@@ -2779,7 +2849,7 @@ Proof.
                  end; lia.
         }
         repeat rewrite AssocMap.gso by lia.
-        inv ASSOC. rewrite <- H19. auto. lia.
+        inv ASSOC. rewrite <- H20. auto. lia.
       }
       { unfold merge_regs. unfold_merge.
         assert (mod_st m < max_reg_module m + 1).
@@ -2825,7 +2895,8 @@ Proof.
         unfold merge_regs; unfold_merge.
         repeat rewrite find_assocmap_gso by lia. apply find_assocmap_gss.
       }
-      { simplify. rewrite empty_stack_transf.
+      { simplify. unfold transf_module; repeat destruct_match; crush. constructor. }
+      { rewrite empty_stack_transf.
         unfold transf_module; repeat destruct_match; try discriminate; simplify.
         econstructor. simplify.
         unfold merge_regs; unfold_merge. simplify.
@@ -2851,7 +2922,7 @@ Proof.
           simplify. lia.
         }
         unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8.
-        simplify. rewrite AssocMap.gso in H8 by lia. rewrite AssocMap.gss in H8.
+        simplify. rewrite AssocMap.gso in H8 by lia. inv H28. rewrite AssocMap.gss in H8.
         unfold transf_module; repeat destruct_match; try discriminate; simplify.
         repeat rewrite AssocMap.gso by lia.
         apply AssocMap.gss. }
@@ -2862,7 +2933,7 @@ Proof.
       { unfold merge_regs. unfold_merge. simplify.
         apply match_assocmaps_gss.
         unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8.
-        rewrite AssocMap.gso in H8. rewrite AssocMap.gss in H8. inv H8.
+        rewrite AssocMap.gso in H8. inv H28. rewrite AssocMap.gss in H8. inv H8.
         remember (max_reg_module m).
         assert (mod_st m < max_reg_module m + 1).
         { unfold max_reg_module; lia. }
@@ -2912,7 +2983,8 @@ Proof.
         rewrite find_assocmap_gss. apply Int.eq_true.
       }
     }
-Qed.
+    - auto.
+Admitted.
 
 Lemma exec_ram_resets_en :
   forall rs ar rs' ar' r,
@@ -3020,7 +3092,8 @@ Section CORRECTNESS.
       end.
     induction 1; destruct (mod_ram m) eqn:RAM; simplify; repeat transf_step_correct_assum;
       repeat transf_step_correct_tac.
-    - assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
+    -
+      assert (MATCH_SIZE1: match_empty_size m nasa1 /\ match_empty_size m basa1).
       { eapply match_arrs_size_stmnt_preserved2; eauto. unfold match_empty_size; mgen_crush. }
       simplify.
       assert (MATCH_SIZE2: match_empty_size m nasa2 /\ match_empty_size m basa2).
