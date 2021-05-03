@@ -493,18 +493,18 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
+        do params <- traverselist
+                  (fun (a: nat * reg) => let (idx, arg) := a in
+                                    do param_reg <- map_externctrl fn (ctrl_param idx);
+                                    ret (param_reg, arg))
+                  (enumerate 0 args);
+
         do _ <- declare_reg None dst 32;
         do join_state <- create_state;
 
         do finish_reg <- map_externctrl fn ctrl_finish;
         do reset_reg <- map_externctrl fn ctrl_reset;
         do return_reg <- map_externctrl fn ctrl_return;
-
-        do params <- traverselist
-                  (fun (a: nat * reg) => let (idx, arg) := a in
-                                    do param_reg <- map_externctrl fn (ctrl_param idx);
-                                    ret (param_reg, arg))
-                  (enumerate 0 args);
 
         let fork_instr := fork reset_reg params in
         let join_instr := join return_reg reset_reg dst in
