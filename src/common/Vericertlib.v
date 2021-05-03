@@ -57,9 +57,9 @@ Ltac learn_tac fact name :=
 Tactic Notation "learn" constr(fact) := let name := fresh "H" in learn_tac fact name.
 Tactic Notation "learn" constr(fact) "as" simple_intropattern(name) := learn_tac fact name.
 
-Ltac auto_hyp H :=
+Ltac auto_apply H :=
   match goal with
-  | H' : _ |- _ => solve [ apply H in H'; auto | auto ]
+  | H' : _ |- _ => apply H in H'
   end.
 
 (** Specialize all hypotheses with a forall to a specific term *)
