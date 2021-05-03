@@ -19,7 +19,7 @@
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
-Require compcert.common.Memory.
+Require Import compcert.common.Memory.
 Require Import compcert.common.Values.
 Require Import compcert.lib.Floats.
 Require Import compcert.lib.Integers.
@@ -246,7 +246,7 @@ the result of executing the expressions will be an expressions.
 
 Section SEMANTICS.
 
-Context (A : Set) (genv : Genv.t A unit).
+Context {A : Type} (genv : Genv.t A unit).
 
 Inductive sem_value :
       val -> sem_state -> expression -> val -> Prop :=
@@ -276,8 +276,8 @@ with sem_mem :
           Memory.Mem.storev chunk m' a v = Some m'' ->
           sem_mem sp st (Estore mem_exp chunk addr args val_exp) m''
     | Sbase_mem :
-            forall st m sp,
-            sem_mem sp st (Ebase Mem) m
+            forall st sp,
+            sem_mem sp st (Ebase Mem) (sem_state_memory st)
 with sem_val_list :
           val -> sem_state -> expression_list -> list val -> Prop :=
     | Snil :
@@ -292,7 +292,7 @@ with sem_val_list :
 Inductive sem_regset :
   val -> sem_state -> forest -> regset -> Prop :=
   | Sregset:
-        forall st f rs' sp,
+        forall st f sp rs',
         (forall x, sem_value sp st (f # (Reg x)) (Registers.Regmap.get x rs')) ->
         sem_regset sp st f rs'.
 
@@ -460,6 +460,8 @@ Lemma ge_preserved_same:
 Proof. unfold ge_preserved; auto. Qed.
 Hint Resolve ge_preserved_same : rtlpar.
 
+Ltac rtlpar_crush := crush; eauto with rtlpar.
+
 Inductive sem_state_ld : sem_state -> sem_state -> Prop :=
 | sem_state_ld_intro:
   forall rs rs' m m',
@@ -471,15 +473,15 @@ Lemma sems_det:
   forall A ge tge sp st f,
   ge_preserved ge tge ->
   forall v v' mv mv',
-  (sem_value A ge sp st f v /\ sem_value A tge sp st f v' -> v = v') /\
-  (sem_mem A ge sp st f mv /\ sem_mem A tge sp st f mv' -> mv = mv').
+  (@sem_value A ge sp st f v /\ @sem_value A tge sp st f v' -> v = v') /\
+  (@sem_mem A ge sp st f mv /\ @sem_mem A tge sp st f mv' -> mv = mv').
 Proof. Admitted.
 
 Lemma sem_value_det:
   forall A ge tge sp st f v v',
   ge_preserved ge tge ->
-  sem_value A ge sp st f v ->
-  sem_value A tge sp st f v' ->
+  @sem_value A ge sp st f v ->
+  @sem_value A tge sp st f v' ->
   v = v'.
 Proof.
   intros;
@@ -491,8 +493,8 @@ Hint Resolve sem_value_det : rtlpar.
 
 Lemma sem_value_det':
   forall FF ge sp s f v v',
-  sem_value FF ge sp s f v ->
-  sem_value FF ge sp s f v' ->
+  @sem_value FF ge sp s f v ->
+  @sem_value FF ge sp s f v' ->
   v = v'.
 Proof.
   simplify; eauto with rtlpar.
@@ -501,8 +503,8 @@ Qed.
 Lemma sem_mem_det:
   forall A ge tge sp st f m m',
   ge_preserved ge tge ->
-  sem_mem A ge sp st f m ->
-  sem_mem A tge sp st f m' ->
+  @sem_mem A ge sp st f m ->
+  @sem_mem A tge sp st f m' ->
   m = m'.
 Proof.
   intros;
@@ -513,8 +515,8 @@ Hint Resolve sem_mem_det : rtlpar.
 
 Lemma sem_mem_det':
   forall FF ge sp s f m m',
-    sem_mem FF ge sp s f m ->
-    sem_mem FF ge sp s f m' ->
+    @sem_mem FF ge sp s f m ->
+    @sem_mem FF ge sp s f m' ->
     m = m'.
 Proof.
   simplify; eauto with rtlpar.
@@ -525,8 +527,8 @@ Hint Resolve Val.lessdef_same : rtlpar.
 Lemma sem_regset_det:
   forall FF ge tge sp st f v v',
     ge_preserved ge tge ->
-    sem_regset FF ge sp st f v ->
-    sem_regset FF tge sp st f v' ->
+    @sem_regset FF ge sp st f v ->
+    @sem_regset FF tge sp st f v' ->
     regs_lessdef v v'.
 Proof.
   intros; unfold regs_lessdef.
@@ -538,8 +540,8 @@ Hint Resolve sem_regset_det : rtlpar.
 Lemma sem_det:
   forall FF ge tge sp st f st' st'',
     ge_preserved ge tge ->
-    sem FF ge sp st f st' ->
-    sem FF tge sp st f st'' ->
+    @sem FF ge sp st f st' ->
+    @sem FF tge sp st f st'' ->
     sem_state_ld st' st''.
 Proof.
   intros.
@@ -551,8 +553,8 @@ Hint Resolve sem_det : rtlpar.
 
 Lemma sem_det':
   forall FF ge sp st f st' st'',
-    sem FF ge sp st f st' ->
-    sem FF ge sp st f st'' ->
+    @sem FF ge sp st f st' ->
+    @sem FF ge sp st f st'' ->
     sem_state_ld st' st''.
 Proof. eauto with rtlpar. Qed.
 
@@ -588,7 +590,7 @@ Get a sequence from the basic block.
 Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   match b with
   | nil => f
-  | i :: l => update (abstract_sequence f l) i
+  | i :: l => abstract_sequence (update f i) l
   end.
 
 (*|
@@ -650,14 +652,162 @@ Abstract computations
 =====================
 |*)
 
+Definition is_regs i := match i with InstrState rs _ => rs end.
+Definition is_mem i := match i with InstrState _ m => m end.
+
+Lemma regs_lessdef_refl r : regs_lessdef r r.
+Proof. unfold regs_lessdef; auto using Val.lessdef_refl. Qed.
+
+Inductive state_lessdef : instr_state -> instr_state -> Prop :=
+  state_lessdef_intro :
+    forall rs1 rs2 m1,
+    regs_lessdef rs1 rs2 ->
+    state_lessdef (InstrState rs1 m1) (InstrState rs2 m1).
+
+(*|
+RTLBlock to abstract translation
+--------------------------------
+
+Correctness of translation from RTLBlock to the abstract interpretation language.
+|*)
+
+Inductive match_abstr_st : instr_state -> sem_state -> Prop :=
+| match_abstr_st_intro :
+    forall m rs1 rs2,
+    regs_lessdef rs1 rs2 ->
+    match_abstr_st (InstrState rs1 m) (mk_sem_state rs2 m).
+
+Inductive match_abstr_st' : sem_state -> instr_state -> Prop :=
+| match_abstr_st'_intro :
+    forall m rs1 rs2,
+    regs_lessdef rs1 rs2 ->
+    match_abstr_st' (mk_sem_state rs1 m) (InstrState rs2 m).
+
+Inductive match_sem_st : sem_state -> sem_state -> Prop :=
+| match_sem_st_intro :
+    forall m rs1 rs2,
+    regs_lessdef rs1 rs2 ->
+    match_sem_st (mk_sem_state rs1 m) (mk_sem_state rs2 m).
+
+Definition tr_instr_state s := match s with InstrState r m => mk_sem_state r m end.
+Definition tr_sem_state s := match s with mk_sem_state r m => InstrState r m end.
+
+Lemma tr_instr_state_eq s : tr_sem_state (tr_instr_state s) = s.
+Proof. destruct s; auto. Qed.
+
+Lemma tr_sem_state_eq s : tr_instr_state (tr_sem_state s) = s.
+Proof. destruct s; auto. Qed.
+
+Lemma tr_instr_state_ld st : match_abstr_st st (tr_instr_state st).
+Proof. destruct st. constructor. apply regs_lessdef_refl. Qed.
+
+Lemma tr_sem_state_ld st : match_abstr_st (tr_sem_state st) st.
+Proof. destruct st. constructor. apply regs_lessdef_refl. Qed.
+
+Lemma abstract_interp_empty A ge sp st : @sem A ge sp st empty st.
+Proof. destruct st; repeat constructor. Qed.
+
+Lemma abstract_interp_empty3 :
+  forall A ge sp st st',
+    @sem A ge sp st empty st' ->
+    match_sem_st st st'.
+Proof.
+  inversion 1; subst; simplify.
+  destruct st. inv H1. simplify.
+  constructor. unfold regs_lessdef.
+  intros. inv H0.
+  specialize (H1 r). inv H1. auto.
+Qed.
+
+Lemma abstract_sequence_trans :
+  forall c A ge sp st1 st2 st2' st3 i,
+  @sem A ge sp st1 (update empty i) st2 ->
+  sem ge sp st2' (abstract_sequence empty c) st3 ->
+  match_sem_st st2 st2' ->
+  exists st3', sem ge sp st1 (abstract_sequence (update empty i) c) st3
+               /\ match_sem_st st3 st3'.
+Proof.
+  intros * UP RA MA. Admitted.
+
+Lemma rtlblock_trans_correct :
+  forall ge sp st bb st',
+  RTLBlock.step_instr_list ge sp st bb st' ->
+  exists sem_st', sem ge sp (tr_instr_state st) (abstract_sequence empty bb) sem_st'
+                  /\ match_abstr_st st' sem_st'.
+Proof. Admitted.
+
+Lemma rtlpar_trans_correct :
+  forall ge sp bb sem_st' sem_st,
+  sem ge sp sem_st (abstract_sequence empty (concat (concat bb))) sem_st' ->
+  exists st', RTLPar.step_instr_block ge sp (tr_sem_state sem_st) bb st'
+              /\ match_abstr_st' sem_st' st'.
+Proof. Admitted.
+
+Lemma abstract_execution_correct':
+  forall A B ge tge sp sem_st' a a' sem_st tsem_st,
+  ge_preserved ge tge ->
+  check a a' = true ->
+  @sem A ge sp sem_st a sem_st' ->
+  match_sem_st sem_st tsem_st ->
+  exists tsem_st', @sem B tge sp tsem_st a' tsem_st'
+                   /\ match_sem_st sem_st' tsem_st'.
+Proof. Admitted.
+
+Lemma states_match :
+  forall st1 st2 st3 st4,
+  match_abstr_st st1 st2 ->
+  match_sem_st st2 st3 ->
+  match_abstr_st' st3 st4 ->
+  state_lessdef st1 st4.
+Proof.
+  intros * H1 H2 H3; destruct st1; destruct st2; destruct st3; destruct st4.
+  inv H1. inv H2. inv H3; constructor.
+  unfold regs_lessdef in *. intros.
+  repeat match goal with
+         | H: forall _, _, r : positive |- _ => specialize (H r)
+         end.
+  eapply Val.lessdef_trans. eassumption.
+  eapply Val.lessdef_trans; eassumption.
+Qed.
+
+Ltac inv_simp :=
+  repeat match goal with
+  | H: exists _, _ |- _ => inv H
+  end; simplify.
+
+Lemma match_sem_st_refl r : match_sem_st r r.
+Proof. destruct r; constructor; apply regs_lessdef_refl. Qed.
+
+Lemma state_lessdef_match_sem:
+  forall st tst,
+  state_lessdef st tst ->
+  match_sem_st (tr_instr_state st) (tr_instr_state tst).
+Proof.
+  intros * H; destruct st; destruct tst; simplify;
+  inv H; constructor; auto.
+Qed.
+
 Lemma abstract_execution_correct:
-  forall bb bb' cfi ge tge sp rs m rs' m',
+  forall bb bb' cfi ge tge sp st st' tst,
+    RTLBlock.step_instr_list ge sp st bb st' ->
     ge_preserved ge tge ->
     schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
-    RTLBlock.step_instr_list ge sp (InstrState rs m) bb (InstrState rs' m') ->
-    exists rs'', RTLPar.step_instr_block tge sp (InstrState rs m) bb' (InstrState rs'' m')
-                 /\ regs_lessdef rs' rs''.
-Proof. Admitted.
+    state_lessdef st tst ->
+    exists tst', RTLPar.step_instr_block tge sp tst bb' tst'
+                 /\ state_lessdef st' tst'.
+Proof.
+  intros.
+  unfold schedule_oracle in *. simplify.
+  exploit rtlblock_trans_correct; try eassumption; []; inv_simp.
+  exploit abstract_execution_correct';
+  try solve [eassumption | apply state_lessdef_match_sem; eassumption]; inv_simp.
+  exploit rtlpar_trans_correct; try eassumption; []; inv_simp.
+  econstructor; simplify.
+  match goal with
+  | H: context[tr_sem_state (tr_instr_state _)] |- _ => rewrite tr_instr_state_eq in H
+  end; eassumption.
+  eapply states_match; eauto.
+Qed.
 
 (*|
 Top-level functions
