@@ -62,6 +62,13 @@ Ltac auto_hyp H :=
   | H' : _ |- _ => solve [ apply H in H'; auto | auto ]
   end.
 
+(** Specialize all hypotheses with a forall to a specific term *)
+Tactic Notation "specialize_all" constr(v) :=
+  let t := type of v in
+  repeat match goal with
+         | [H : (forall (x: t), _) |- _ ] => learn H; destruct H with v
+         end.
+
 Ltac unfold_rec c := unfold c; fold c.
 
 Ltac solve_by_inverts n :=

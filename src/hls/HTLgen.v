@@ -66,17 +66,18 @@ Module HTLState <: State.
   Definition st := state.
 
   Inductive st_incr: state -> state -> Prop :=
-    state_incr_intro:
+  | state_incr_intro:
       forall (s1 s2: state),
-        st_st s1 = st_st s2 ->
-        Ple s1.(st_freshreg) s2.(st_freshreg) ->
-        Ple s1.(st_freshstate) s2.(st_freshstate) ->
-        (forall n,
-            s1.(st_datapath)!n = None \/ s2.(st_datapath)!n = s1.(st_datapath)!n) ->
-        (forall n,
-            s1.(st_controllogic)!n = None
-            \/ s2.(st_controllogic)!n = s1.(st_controllogic)!n) ->
-        st_incr s1 s2.
+    st_st s1 = st_st s2 ->
+    Ple s1.(st_freshreg) s2.(st_freshreg) ->
+    Ple s1.(st_freshstate) s2.(st_freshstate) ->
+    (forall n, s1.(st_datapath)!n = None \/
+          s2.(st_datapath)!n = s1.(st_datapath)!n) ->
+    (forall n, s1.(st_controllogic)!n = None \/
+          s2.(st_controllogic)!n = s1.(st_controllogic)!n) ->
+    (forall n, s1.(st_externctrl)!n = None \/
+          s2.(st_externctrl)!n = s1.(st_externctrl)!n) ->
+    st_incr s1 s2.
   Hint Constructors st_incr : htlh.
 
   Definition st_prop := st_incr.
@@ -87,9 +88,9 @@ Module HTLState <: State.
   Lemma st_trans :
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
-    intros. inv H. inv H0. apply state_incr_intro; eauto using Ple_trans; intros; try congruence.
-    - destruct H4 with n; destruct H8 with n; intuition congruence.
-    - destruct H5 with n; destruct H9 with n; intuition congruence.
+    intros. inv H. inv H0.
+    apply state_incr_intro; eauto using Ple_trans; intros; try congruence;
+      specialize_all n; intuition congruence.
   Qed.
 
 End HTLState.
@@ -136,20 +137,19 @@ Proof.
   intros. case (s.(st_controllogic)!n); tauto.
 Defined.
 
-(** Used for discharging the st_incr proof in simple operations *)
-Ltac htl_st_tac := constructor; intros; simpl; auto with htlh.
+Definition check_unmapped_externctrl:
+  forall (s: state) (n: reg), { s.(st_externctrl)!n = None } + { True }.
+Proof.
+  intros. case (s.(st_externctrl)!n); tauto.
+Defined.
 
-(** Used for discharging the st_incr proof in operations that add instructions.
-    Assumes that check_empty_node_(datapath|controllogic) has been used and matched
-    on. *)
-Ltac add_instr_st_tac :=
-  htl_st_tac;
+(** Used for discharging the st_incr proof in simple operations *)
+Local Ltac st_tac :=
+  constructor; intros; simpl; auto with htlh;
   match goal with
-  | [ STM : (st_datapath ?s) ! ?n = None, TRANS : (st_controllogic ?s) ! ?n = None, n0 : positive |- _] =>
-    destruct (peq n n0)
+  | [ H : (?map ?s) ! ?n = None, n' : positive |- _] => destruct (peq n n')
   end;
   subst; auto with htlh.
-
 
 Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
   fun s => OK tt (mkstate
@@ -160,7 +160,7 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                      (st_arrdecls s)
                      (st_externctrl s)
                      (st_datapath s)
-                     (st_controllogic s)) ltac:(htl_st_tac).
+                     (st_controllogic s)) ltac:(st_tac).
 
 Definition create_reg (i : option io) (sz : nat) : mon reg :=
   fun s => let r := s.(st_freshreg) in
@@ -172,19 +172,22 @@ Definition create_reg (i : option io) (sz : nat) : mon reg :=
             (st_arrdecls s)
             (st_externctrl s)
             (st_datapath s)
-            (st_controllogic s)) ltac:(htl_st_tac).
+            (st_controllogic s)) ltac:(st_tac).
 
 Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mon reg :=
   do r <- create_reg None (controlsignal_sz ctrl);
-  fun s => OK r (mkstate
-                       s.(st_st)
-                       (st_freshreg s)
-                       (st_freshstate s)
-                       (st_scldecls s)
-                       (st_arrdecls s)
-                       (AssocMap.set r (othermod, ctrl) (st_externctrl s))
-                       (st_datapath s)
-                       (st_controllogic s)) ltac:(htl_st_tac).
+  fun s => match check_unmapped_externctrl s r with
+        | left CTRL => OK r (mkstate
+                          (st_st s)
+                          (st_freshreg s)
+                          (st_freshstate s)
+                          (st_scldecls s)
+                          (st_arrdecls s)
+                          (AssocMap.set r (othermod, ctrl) (st_externctrl s))
+                          (st_datapath s)
+                          (st_controllogic s)) ltac:(st_tac)
+        | right CTRL => Error (Errors.msg "HTL.map_externctrl")
+        end.
 
 Definition create_state : mon node :=
   fun s => let r := s.(st_freshstate) in
@@ -196,7 +199,7 @@ Definition create_state : mon node :=
             (st_arrdecls s)
             (st_externctrl s)
             (st_datapath s)
-            (st_controllogic s)) ltac:(htl_st_tac).
+            (st_controllogic s)) ltac:(st_tac).
 
 Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s => match check_empty_node_datapath s n, check_empty_node_controllogic s n with
@@ -209,7 +212,7 @@ Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
                s.(st_arrdecls)
                (st_externctrl s)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))) ltac:(add_instr_st_tac)
+               (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))) ltac:(st_tac)
         | _, _ => Error (Errors.msg "HTL.add_instr")
         end.
 
@@ -224,7 +227,7 @@ Definition add_instr_wait (wait_reg : reg) (n : node) (n' : node) (st : datapath
                s.(st_arrdecls)
                (st_externctrl s)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (state_wait (st_st s) wait_reg n') s.(st_controllogic))) ltac:(add_instr_st_tac)
+               (AssocMap.set n (state_wait (st_st s) wait_reg n') s.(st_controllogic))) ltac:(st_tac)
         | _, _ => Error (Errors.msg "HTL.add_instr_wait")
         end.
 
@@ -239,7 +242,7 @@ Definition add_instr_skip (n : node) (st : datapath_stmnt) : mon unit :=
                s.(st_arrdecls)
                (st_externctrl s)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n Vskip s.(st_controllogic))) ltac:(add_instr_st_tac)
+               (AssocMap.set n Vskip s.(st_controllogic))) ltac:(st_tac)
         | _, _ => Error (Errors.msg "HTL.add_instr")
         end.
 
@@ -254,7 +257,7 @@ Definition add_node_skip (n : node) (st : control_stmnt) : mon unit :=
                s.(st_arrdecls)
                (st_externctrl s)
                (AssocMap.set n Vskip s.(st_datapath))
-               (AssocMap.set n st s.(st_controllogic))) ltac:(add_instr_st_tac)
+               (AssocMap.set n st s.(st_controllogic))) ltac:(st_tac)
         | _, _ => Error (Errors.msg "HTL.add_instr")
         end.
 
@@ -401,7 +404,7 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                s.(st_arrdecls)
                (st_externctrl s)
                (AssocMap.set n Vskip (st_datapath s))
-               (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))) ltac:(add_instr_st_tac)
+               (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))) ltac:(st_tac)
         | _, _ => Error (Errors.msg "Htlgen: add_branch_instr")
         end.
 
@@ -538,7 +541,7 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
                   (AssocMap.set s.(st_freshreg) (i, VArray sz ln) s.(st_arrdecls))
                   (st_externctrl s)
                   (st_datapath s)
-                  (st_controllogic s)) ltac:(htl_st_tac).
+                  (st_controllogic s)) ltac:(st_tac).
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
