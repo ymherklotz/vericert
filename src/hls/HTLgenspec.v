@@ -160,26 +160,30 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
 Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
-          (fin rtrn st stk : reg) : Prop :=
+          (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
 | tr_code_single :
     forall s t,
       c!pc = Some i ->
       stmnts!pc = Some s ->
       trans!pc = Some t ->
       tr_instr fin rtrn st stk i s t ->
-      tr_code c pc i stmnts trans fin rtrn st stk
+      tr_code c pc i stmnts trans externctrl fin rtrn st stk
 | tr_code_call :
     forall sig fn args dst n,
       c!pc = Some (RTL.Icall sig (inr fn) args dst n) ->
       Z.pos n <= Int.max_unsigned ->
 
       (exists pc2 fn_rst fn_return fn_finish fn_params,
-          stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) ->
-          trans!pc = Some (state_goto st pc2) ->
-          stmnts!pc2 = Some (join fn_return fn_rst dst) ->
+          externctrl ! fn_rst = Some (fn, ctrl_reset) /\
+          externctrl ! fn_return = Some (fn, ctrl_return) /\
+          externctrl ! fn_finish = Some (fn, ctrl_finish) /\
+
+          stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
+          trans!pc = Some (state_goto st pc2) /\
+          stmnts!pc2 = Some (join fn_return fn_rst dst) /\
           trans!pc2 = Some (state_wait st fn_finish n)) ->
 
-      tr_code c pc i stmnts trans fin rtrn st stk
+      tr_code c pc i stmnts trans externctrl fin rtrn st stk
 | tr_code_return :
     forall r,
       c!pc = Some (RTL.Ireturn r) ->
@@ -189,7 +193,7 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts :
           stmnts!pc2 = Some (idle fin) ->
           trans!pc2 = Some Vskip) ->
 
-      tr_code c pc i stmnts trans fin rtrn st stk.
+      tr_code c pc i stmnts trans externctrl fin rtrn st stk.
 Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
@@ -201,7 +205,7 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
                         f.(RTL.fn_entrypoint)
                         st stk stk_len fin rtrn start rst clk scldecls arrdecls externctrl wf) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-               tr_code f.(RTL.fn_code) pc i data control fin rtrn st stk) ->
+               tr_code f.(RTL.fn_code) pc i data control externctrl fin rtrn st stk) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
       Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
       0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
@@ -581,7 +585,7 @@ Lemma iter_expand_instr_spec :
     list_norepet (List.map fst l) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr ->
-                 tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) fin rtrn s'.(st_st) stack).
+                 tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack).
 Proof.
   (* induction l; simpl; intros; try contradiction. *)
   (* destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr. *)
