@@ -34,6 +34,11 @@ Require Import vericert.hls.AssocMap.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 Hint Resolve Maps.PTree.elements_correct : htlspec.
+Hint Resolve Maps.PTree.gss : htlspec.
+Hint Resolve -> Z.leb_le : htlspec.
+
+Hint Unfold block : htlspec.
+Hint Unfold nonblock : htlspec.
 
 Remark bind_inversion:
   forall (A B: Type) (f: mon A) (g: A -> mon B)
@@ -124,6 +129,14 @@ Ltac unfold_match H :=
   | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
   end.
 
+Ltac rewrite_states :=
+  match goal with
+  | [ H: ?x ?s = ?x ?s' |- _ ] =>
+    let c1 := fresh "c" in
+    let c2 := fresh "c" in
+    learn (?x ?s) as c1; learn (?x ?s') as c2; try subst
+  end.
+
 (** * Relational specification of the translation *)
 
 (** We now define inductive predicates that characterise the fact that the
@@ -151,7 +164,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (nonblock dst c) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (Vnonblock (Vvar dst) c) (state_goto st n)
 | tr_instr_Istore :
     forall mem addr args s s' i c src n,
       Z.pos n <= Int.max_unsigned ->
@@ -182,6 +195,9 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts :
           externctrl ! fn_rst = Some (fn, ctrl_reset) /\
           externctrl ! fn_return = Some (fn, ctrl_return) /\
           externctrl ! fn_finish = Some (fn, ctrl_finish) /\
+
+          (forall n r, List.nth_error fn_params n = Some r ->
+                  externctrl ! r = Some (fn, ctrl_param n)) /\
 
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
           trans!pc = Some (state_goto st pc2) /\
@@ -244,6 +260,54 @@ Lemma create_reg_externctrl_trans :
     s.(st_externctrl) = s'.(st_externctrl).
 Proof. intros. monadInv H. trivial. Qed.
 Hint Resolve create_reg_externctrl_trans : htlspec.
+
+Lemma create_reg_trans :
+  forall sz s s' x i iop,
+    create_reg iop sz s = OK x s' i ->
+    s.(st_datapath) = s'.(st_datapath) /\
+    s.(st_controllogic) = s'.(st_controllogic) /\
+    s.(st_externctrl) = s'.(st_externctrl).
+Proof. intros. monadInv H. auto. Qed.
+Hint Resolve create_reg_trans : htlspec.
+
+Lemma create_reg_inv : forall a b s r s' i,
+    create_reg a b s = OK r s' i ->
+    r = s.(st_freshreg) /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg)).
+Proof.
+  inversion 1; auto.
+Qed.
+
+Lemma map_externctrl_inv : forall othermod ctrl r s s' i,
+    map_externctrl othermod ctrl s = OK r s' i ->
+    s.(st_externctrl) ! r = None
+    /\ r = s.(st_freshreg)
+    /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg))
+    /\ s'.(st_externctrl) ! r = Some (othermod, ctrl).
+Proof.
+  intros. monadInv H.
+  destruct_match; try discriminate.
+  auto_apply create_reg_inv.
+  auto_apply create_reg_externctrl_trans.
+  replace (st_externctrl s).
+  inv EQ0; simplify; auto with htlspec.
+Qed.
+
+Lemma create_state_inv : forall n s s' i,
+    create_state s = OK n s' i ->
+    n = s.(st_freshstate).
+Proof. inversion 1. trivial. Qed.
+
+Lemma create_arr_inv : forall w x y z a b c d,
+    create_arr w x y z = OK (a, b) c d ->
+    y = b
+    /\ a = z.(st_freshreg)
+    /\ c.(st_freshreg) = Pos.succ (z.(st_freshreg)).
+Proof.
+  inversion 1; split; auto.
+Qed.
+
+
+
 
 Lemma map_externctrl_datapath_trans :
   forall s s' x i om sig,
@@ -369,19 +433,48 @@ Ltac inv_incr :=
   repeat match goal with
   | [ H: create_reg _ _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
-    assert (H1 := H); eapply create_reg_datapath_trans in H;
-    eapply create_reg_controllogic_trans in H1
+    let H2 := fresh "H" in
+    let H3 := fresh "H" in
+    pose proof H as H1;
+    pose proof H as H2;
+    learn H as H3;
+    eapply create_reg_datapath_trans in H1;
+    eapply create_reg_controllogic_trans in H2;
+    eapply create_reg_externctrl_trans in H3
   | [ H: map_externctrl _ _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
-    assert (H1 := H); eapply map_externctrl_datapath_trans in H;
-    eapply map_externctrl_controllogic_trans in H1
-  | [ H: create_arr _ _ _ ?s = OK _ ?s' _ |- _ ] =>
+    let H2 := fresh "H" in
+    pose proof H as H1;
+    learn H as H2;
+    eapply map_externctrl_datapath_trans in H1;
+    eapply map_externctrl_controllogic_trans in H2
+  | [ H: create_arr _ _ ?s = OK _ ?s' _ |- _ ] =>
     let H1 := fresh "H" in
-    assert (H1 := H); eapply create_arr_datapath_trans in H;
-    eapply create_arr_controllogic_trans in H1
+    let H2 := fresh "H" in
+    let H3 := fresh "H" in
+    pose proof H as H1;
+    pose proof H as H2;
+    learn H as H3;
+    eapply create_arr_datapath_trans in H1;
+    eapply create_arr_controllogic_trans in H2;
+    eapply create_arr_externctrl_trans in H3
+  | [ H: create_state _ _ ?s = OK _ ?s' _ |- _ ] =>
+    let H1 := fresh "H" in
+    let H2 := fresh "H" in
+    let H3 := fresh "H" in
+    pose proof H as H1;
+    pose proof H as H2;
+    learn H as H3;
+    eapply create_state_datapath_trans in H1;
+    eapply create_state_controllogic_trans in H2;
+    eapply create_state_externctrl_trans in H3
   | [ H: get ?s = OK _ _ _ |- _ ] =>
     let H1 := fresh "H" in
-    assert (H1 := H); apply get_refl_x in H; apply get_refl_s in H1;
+    let H2 := fresh "H" in
+    pose proof H as H1;
+    learn H as H2;
+    apply get_refl_x in H1;
+    apply get_refl_s in H2;
     subst
   | [ H: st_prop _ _ |- _ ] => unfold st_prop in H; destruct H
   | [ H: st_incr _ _ |- _ ] => destruct st_incr
@@ -559,14 +652,6 @@ Lemma add_instr_skip_freshreg_trans :
 Proof. intros. unfold add_instr_skip in H. repeat (unfold_match H). inv H. auto. Qed.
 Hint Resolve add_instr_skip_freshreg_trans : htlspec.
 
-Ltac rewrite_states :=
-  match goal with
-  | [ H: ?x ?s = ?x ?s' |- _ ] =>
-    let c1 := fresh "c" in
-    let c2 := fresh "c" in
-    remember (?x ?s) as c1; remember (?x ?s') as c2; try subst
-  end.
-
 Ltac inv_add_instr' H :=
   match type of H with
   | ?f _ _ = OK _ _ _ => unfold f in H
@@ -583,6 +668,10 @@ Ltac inv_add_instr :=
   | H: context[add_instr_skip _ _ _] |- _ =>
     inv_add_instr' H
   | H: context[add_instr_skip _ _] |- _ =>
+    monadInv H; inv_incr; inv_add_instr
+  | H: context[add_instr_wait _ _ _ _ _] |- _ =>
+    inv_add_instr' H
+  | H: context[add_instr_skip _ _ _ _] |- _ =>
     monadInv H; inv_incr; inv_add_instr
   | H: context[add_instr _ _ _ _] |- _ =>
     inv_add_instr' H
@@ -601,6 +690,23 @@ Ltac inv_add_instr :=
 Ltac destruct_optional :=
   match goal with H: option ?r |- _ => destruct H end.
 
+Local Ltac htlgen_inv :=
+  repeat (
+      match goal with
+      | [ H : ?F _ = OK _ _ _ |- _] => progress (unfold F in H); inversion H
+      | [ H : ?F _ _ = OK _ _ _ |- _] => progress (unfold F in H); inversion H
+      | [ H : ?F _ _ _= OK _ _ _ |- _] => progress (unfold F in H); inversion H
+      | [ H : ?F _ _ _ _  OK _ _ _ |- _] => progress (unfold F in H); inversion H
+      | [ H : ?F _ _ _ _ _ = OK _ _ _ |- _] => progress (unfold F in H); inversion H
+      end
+    ).
+
+Hint Transparent nonblock : htlspec.
+Print HintDb htlspec.
+
+Ltac rewrite_st :=
+  repeat match goal with [ H : (st_st ?s = st_st ?s') |- _ ] => progress (rewrite H in *) end.
+
 Lemma iter_expand_instr_spec :
   forall l fin rtrn stack s s' i x c,
     HTLMonadExtra.collectlist (transf_instr fin rtrn stack) l s = OK x s' i ->
@@ -609,96 +715,64 @@ Lemma iter_expand_instr_spec :
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr ->
                  tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack).
 Proof.
-  (* induction l; simpl; intros; try contradiction. *)
-  (* destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr. *)
-  (* destruct (peq pc pc1). *)
-  (* - subst. *)
-  (*   destruct instr1 eqn:?; try discriminate; *)
-  (*     try destruct_optional; try inv_add_instr. econstructor; try assumption. *)
+  Ltac tr_code_single_tac :=
+    inv_add_instr; econstructor; try assumption;
+    repeat
+      match goal with
+      | [o : (forall n : positive, (?path ?s0) ! n = None \/ (?path ?s1) ! n = (?path ?s0) ! n),
+             pc : Verilog.node, H : _ = ?s0 |- _ ] =>
+        solve [
+            destruct o with pc; destruct H; simpl in *;
+            repeat match goal with
+                   | [ H2 : context[(AssocMap.set ?a ?b ?c) ! pc] |- _] =>
+                     rewrite AssocMap.gss in H2; eauto; congruence
+                   end
+          ]
+      end.
 
-  (*   (* Inop *) *)
-  (*   + destruct o with pc1. destruct H11. simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-  (*   + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-  (*   + inversion H2. inversion H9. rewrite H. apply tr_instr_Inop. *)
-  (*     apply Z.leb_le. assumption. *)
-  (*     eapply in_map with (f := fst) in H9. contradiction. *)
+  Ltac tr_instr_tac :=
+    match goal with
+      [ H : (?pc, _) = (?pc, ?instr) \/ In (?pc, ?instr) _ |- _ ] =>
+      inversion H;
+      do 2
+         match goal with
+         | [ H' : In (_, _) _ |- _ ] => solve [ eapply in_map with (f:=fst) in H'; contradiction ]
+         | [ H' : (pc, _) = (pc, instr) |- _ ] => inversion H'
+         end;
+      rewrite_st;
+      autounfold with htlspec; eauto with htlspec
+    end.
 
-  (*   (* Iop *) *)
-  (*   + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
-  (*   + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
-  (*   + inversion H2. inversion H14. unfold nonblock. replace (st_st s4) with (st_st s2) by congruence. *)
-  (*     econstructor. apply Z.leb_le; assumption. *)
-  (*     apply EQ1. eapply in_map with (f := fst) in H14. contradiction. *)
+  induction l; simpl; intros; try contradiction.
+  destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
+  destruct (peq pc pc1).
+  - subst.
+    destruct instr1 eqn:?; try discriminate; try destruct_optional; try (solve [ tr_code_single_tac; tr_instr_tac ]).
+    (* Icall *)
+    + repeat (destruct_match; try discriminate).
+      monadInv EQ.
+      admit.
 
-  (*   (* Iload *) *)
-  (*   + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
-  (*   + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence. *)
-  (*   + inversion H2. inversion H14. rewrite <- e2. replace (st_st s2) with (st_st s0) by congruence. *)
-  (*     econstructor. apply Z.leb_le; assumption. *)
-  (*     apply EQ1. eapply in_map with (f := fst) in H14. contradiction. *)
+    (* Icond *)
+    + tr_code_single_tac.
+      replace (st_st s2) with (st_st s0) by congruence.
+      unfold state_cond.
+      econstructor.
+      * apply Z.leb_le. apply andb_prop in EQN. intuition.
+      * eauto with htlspec.
 
-  (*   (* Istore *) *)
-  (*   + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-  (*   + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-  (*   + destruct H2. *)
-  (*     * inversion H2. *)
-  (*       replace (st_st s2) with (st_st s0) by congruence. *)
-  (*       econstructor. apply Z.leb_le; assumption. *)
-  (*       eauto with htlspec. *)
-  (*     * apply in_map with (f := fst) in H2. contradiction. *)
+    (* Ireturn (Some r) *)
+    + admit.
 
-  (*   (* Icall *) *)
-  (*   + admit. *)
-  (*   + admit. *)
-  (*   + admit. *)
+    (* Ireturn None *)
+    + admit.
 
-  (*   (* Icond *) *)
-  (*   + destruct o with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-  (*   + destruct o0 with pc1; destruct H11; simpl in *; rewrite AssocMap.gss in H9; eauto; congruence. *)
-  (*   + destruct H2. *)
-  (*     * inversion H2. *)
-  (*       replace (st_st s2) with (st_st s0) by congruence. *)
-  (*       econstructor; try (apply Z.leb_le; apply andb_prop in EQN; apply EQN). *)
-  (*       eauto with htlspec. *)
-  (*     * apply in_map with (f := fst) in H2. contradiction. *)
-
-  (*   (* Ireturn (Some r) *) *)
-  (*   + admit. *)
-  (*   + admit. *)
-  (*   + admit. *)
-
-  (*   (* Ireturn None *) *)
-  (*   + admit. *)
-  (*   + admit. *)
-  (*   + admit. *)
-
-  (* - eapply IHl. apply EQ0. assumption. *)
-  (*   destruct H2. inversion H2. subst. contradiction. *)
-  (*   intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial. *)
-  (*   destruct H2. inv H2. contradiction. assumption. assumption. *)
+  - eapply IHl. apply EQ0. assumption.
+    destruct H2. inversion H2. subst. contradiction.
+    intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
+    destruct H2. inv H2. contradiction. assumption. assumption.
 Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
-
-Lemma create_arr_inv : forall w x y z a b c d,
-    create_arr w x y z = OK (a, b) c d ->
-    y = b /\ a = z.(st_freshreg) /\ c.(st_freshreg) = Pos.succ (z.(st_freshreg)).
-Proof.
-  inversion 1; split; auto.
-Qed.
-
-Lemma create_reg_inv : forall a b s r s' i,
-    create_reg a b s = OK r s' i ->
-    r = s.(st_freshreg) /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg)).
-Proof.
-  inversion 1; auto.
-Qed.
-
-Lemma map_externctrl_inv : forall a b s r s' i,
-    map_externctrl a b s = OK r s' i ->
-    r = s.(st_freshreg) /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg)).
-Proof.
-  inversion 1; auto.
-Qed.
 
 Theorem transl_module_correct :
   forall i f m,
