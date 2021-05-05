@@ -61,6 +61,13 @@ Definition init_state (st : reg) : state :=
           (AssocMap.empty datapath_stmnt)
           (AssocMap.empty control_stmnt).
 
+(** Describes a map that is created incrementally in the monad, i.e. only new
+    values can be added, not changed or deleted. *)
+Definition map_incr {S B} (map : S -> PTree.t B) (s1 s2 : S) :=
+  forall n, s1.(map)!n = None \/
+       s2.(map)!n = s1.(map)!n.
+Hint Unfold map_incr : htlh.
+
 Module HTLState <: State.
 
   Definition st := state.
@@ -71,12 +78,9 @@ Module HTLState <: State.
     st_st s1 = st_st s2 ->
     Ple s1.(st_freshreg) s2.(st_freshreg) ->
     Ple s1.(st_freshstate) s2.(st_freshstate) ->
-    (forall n, s1.(st_datapath)!n = None \/
-          s2.(st_datapath)!n = s1.(st_datapath)!n) ->
-    (forall n, s1.(st_controllogic)!n = None \/
-          s2.(st_controllogic)!n = s1.(st_controllogic)!n) ->
-    (forall n, s1.(st_externctrl)!n = None \/
-          s2.(st_externctrl)!n = s1.(st_externctrl)!n) ->
+    map_incr st_datapath s1 s2 ->
+    map_incr st_controllogic s1 s2 ->
+    map_incr st_externctrl s1 s2 ->
     st_incr s1 s2.
   Hint Constructors st_incr : htlh.
 
@@ -89,8 +93,8 @@ Module HTLState <: State.
     forall s1 s2 s3, st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
   Proof.
     intros. inv H. inv H0.
-    apply state_incr_intro; eauto using Ple_trans; intros; try congruence;
-      specialize_all n; intuition congruence.
+    apply state_incr_intro; autounfold with htlh in *;
+      eauto using Ple_trans; intros; try congruence; specialize_all n; intuition congruence.
   Qed.
 
 End HTLState.
@@ -145,7 +149,7 @@ Defined.
 
 (** Used for discharging the st_incr proof in simple operations *)
 Local Ltac st_tac :=
-  constructor; intros; simpl; auto with htlh;
+  constructor; autounfold with htlh in *; intros; simpl; auto with htlh;
   match goal with
   | [ H : (?map ?s) ! ?n = None, n' : positive |- _] => destruct (peq n n')
   end;
