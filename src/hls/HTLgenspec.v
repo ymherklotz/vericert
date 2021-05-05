@@ -701,11 +701,8 @@ Local Ltac htlgen_inv :=
       end
     ).
 
-Hint Transparent nonblock : htlspec.
-Print HintDb htlspec.
-
 Ltac rewrite_st :=
-  repeat match goal with [ H : (st_st ?s = st_st ?s') |- _ ] => progress (rewrite H in *) end.
+  repeat match goal with [ H : (st_st ?s = st_st ?s') |- context[?s] ] => progress (rewrite H in *) end.
 
 Lemma iter_expand_instr_spec :
   forall l fin rtrn stack s s' i x c,
@@ -732,7 +729,7 @@ Proof.
 
   Ltac tr_instr_tac :=
     match goal with
-      [ H : (?pc, _) = (?pc, ?instr) \/ In (?pc, ?instr) _ |- _ ] =>
+    | [ H : (?pc, _) = (?pc, ?instr) \/ In (?pc, ?instr) _ |- _ ] =>
       inversion H;
       do 2
          match goal with
@@ -740,32 +737,24 @@ Proof.
          | [ H' : (pc, _) = (pc, instr) |- _ ] => inversion H'
          end;
       rewrite_st;
-      autounfold with htlspec; eauto with htlspec
+      autounfold with htlspec; simplify; eauto with htlspec
+    end.
+
+  Ltac tr_code_simple :=
+    lazymatch goal with
+    | [ H : ?instr = RTL.Icall _ _ _ _ _ |- _ ] => fail 0
+    | _ => solve [ tr_code_single_tac; tr_instr_tac ]
     end.
 
   induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
   destruct (peq pc pc1).
   - subst.
-    destruct instr1 eqn:?; try discriminate; try destruct_optional; try (solve [ tr_code_single_tac; tr_instr_tac ]).
+    destruct instr1 eqn:instr_eq; try discriminate; try tr_code_simple.
     (* Icall *)
     + repeat (destruct_match; try discriminate).
       monadInv EQ.
       admit.
-
-    (* Icond *)
-    + tr_code_single_tac.
-      replace (st_st s2) with (st_st s0) by congruence.
-      unfold state_cond.
-      econstructor.
-      * apply Z.leb_le. apply andb_prop in EQN. intuition.
-      * eauto with htlspec.
-
-    (* Ireturn (Some r) *)
-    + admit.
-
-    (* Ireturn None *)
-    + admit.
 
   - eapply IHl. apply EQ0. assumption.
     destruct H2. inversion H2. subst. contradiction.
