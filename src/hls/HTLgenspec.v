@@ -69,6 +69,8 @@ Qed.
 
 Ltac monadInv1 H :=
   match type of H with
+  | ((match ?x with | _ => _ end) = OK _ _ _) =>
+    destruct x eqn:?; try discriminate; try monadInv1 H
   | (OK _ _ _ = OK _ _ _) =>
     inversion H; clear H; try subst
   | (Error _ _ = OK _ _ _) =>
@@ -103,6 +105,7 @@ Ltac monadInv1 H :=
 Ltac monadInv H :=
   match type of H with
   | (ret _ _ = OK _ _ _) => monadInv1 H
+  | (OK _ _ = OK _ _ _) => monadInv1 H
   | (error _ _ = OK _ _ _) => monadInv1 H
   | (bind ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
   | (bind2 ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
@@ -285,11 +288,10 @@ Lemma map_externctrl_inv : forall othermod ctrl r s s' i,
     /\ s'.(st_externctrl) ! r = Some (othermod, ctrl).
 Proof.
   intros. monadInv H.
-  destruct_match; try discriminate.
   auto_apply create_reg_inv.
   auto_apply create_reg_externctrl_trans.
   replace (st_externctrl s).
-  inv EQ0; simplify; auto with htlspec.
+  simplify; auto with htlspec.
 Qed.
 
 Lemma create_state_inv : forall n s s' i,
@@ -306,9 +308,6 @@ Proof.
   inversion 1; split; auto.
 Qed.
 
-
-
-
 Lemma map_externctrl_datapath_trans :
   forall s s' x i om sig,
     map_externctrl om sig s = OK x s' i ->
@@ -316,7 +315,7 @@ Lemma map_externctrl_datapath_trans :
 Proof.
   intros. monadInv H.
   auto_apply create_reg_datapath_trans.
-  destruct_match; [ inv EQ0; auto | discriminate ].
+  inv EQ; auto.
 Qed.
 Hint Resolve map_externctrl_datapath_trans : htlspec.
 
@@ -327,7 +326,7 @@ Lemma map_externctrl_controllogic_trans :
 Proof.
   intros. monadInv H.
   auto_apply create_reg_controllogic_trans.
-  destruct_match; [ inv EQ0; auto | discriminate ].
+  inv EQ; auto.
 Qed.
 Hint Resolve map_externctrl_datapath_trans : htlspec.
 
@@ -690,19 +689,17 @@ Ltac inv_add_instr :=
 Ltac destruct_optional :=
   match goal with H: option ?r |- _ => destruct H end.
 
-Local Ltac htlgen_inv :=
-  repeat (
-      match goal with
-      | [ H : ?F _ = OK _ _ _ |- _] => progress (unfold F in H); inversion H
-      | [ H : ?F _ _ = OK _ _ _ |- _] => progress (unfold F in H); inversion H
-      | [ H : ?F _ _ _= OK _ _ _ |- _] => progress (unfold F in H); inversion H
-      | [ H : ?F _ _ _ _  OK _ _ _ |- _] => progress (unfold F in H); inversion H
-      | [ H : ?F _ _ _ _ _ = OK _ _ _ |- _] => progress (unfold F in H); inversion H
-      end
-    ).
+Ltac rewrite_st := (repeat (match goal with | [ H : (st_st ?s = st_st ?s') |- context[?s] ] => progress (rewrite H in *) end)).
 
-Ltac rewrite_st :=
-  repeat match goal with [ H : (st_st ?s = st_st ?s') |- context[?s] ] => progress (rewrite H in *) end.
+Tactic Notation "destruct_match" := destruct_match.
+
+Tactic Notation "destruct_match" constr(H) :=
+  match type of H with
+  | context[match ?x with | _ => _ end] => destruct x eqn:?
+  end.
+
+Definition map_incr {A B} (map : A -> PTree.t B) s s' :=
+  forall (n : positive), (map s) ! n = None \/ (map s') ! n = (map s) ! n.
 
 Lemma iter_expand_instr_spec :
   forall l fin rtrn stack s s' i x c,
@@ -713,11 +710,10 @@ Lemma iter_expand_instr_spec :
                  tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack).
 Proof.
   Ltac tr_code_single_tac :=
-    inv_add_instr; econstructor; try assumption;
+    inv_incr; inv_add_instr; econstructor; try assumption;
     repeat
       match goal with
-      | [o : (forall n : positive, (?path ?s0) ! n = None \/ (?path ?s1) ! n = (?path ?s0) ! n),
-             pc : Verilog.node, H : _ = ?s0 |- _ ] =>
+      | [o : HTLgen.map_incr _ ?s _, pc : Verilog.node, H : _ = ?s |- _ ] =>
         solve [
             destruct o with pc; destruct H; simpl in *;
             repeat match goal with
@@ -740,26 +736,65 @@ Proof.
       autounfold with htlspec; simplify; eauto with htlspec
     end.
 
+  (** Used to solve the simpler cases of tr_code: those involving tr_instr *)
   Ltac tr_code_simple :=
     lazymatch goal with
     | [ H : ?instr = RTL.Icall _ _ _ _ _ |- _ ] => fail 0
     | _ => solve [ tr_code_single_tac; tr_instr_tac ]
     end.
 
+  (** Used to solve goals that follow directly from a single monadic operation *)
+  Ltac intro_step :=
+    match goal with
+    | [ H : _ = OK _ _ _  |- _ ] => solve [ monadInv H; simplify; eauto with htlspec ]
+    end.
+
+  (** Used to transfer a result about one of the maps in the state from one
+      state to a latter one *)
+  Ltac trans_step x :=
+    saturate_incr;
+    multimatch goal with
+    | [ INCR : st_prop _ _ |- _ ] => destruct INCR
+    (* We are using multimatch, but want to allow for matching nothing *)
+    | _ => idtac
+    end;
+    solve [
+        match goal with
+        | [ MAP_INCR : HTLgen.map_incr ?map _ _ |- context[?map] ] =>
+          destruct MAP_INCR with x; crush
+        end
+      ].
+
   induction l; simpl; intros; try contradiction.
-  destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H. inv_incr.
+  destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H.
   destruct (peq pc pc1).
   - subst.
     destruct instr1 eqn:instr_eq; try discriminate; try tr_code_simple.
     (* Icall *)
     + repeat (destruct_match; try discriminate).
       monadInv EQ.
-      admit.
+      eapply tr_code_call; eauto with htlspec.
 
-  - eapply IHl. apply EQ0. assumption.
-    destruct H2. inversion H2. subst. contradiction.
-    intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
-    destruct H2. inv H2. contradiction. assumption. assumption.
+      exists x3. exists x5. exists x6. exists x4. eexists ?[fn_params].
+
+      repeat split.
+      * assert (s7.(st_externctrl) ! x5 = Some (i0, ctrl_reset)) by intro_step.
+        trans_step x5.
+      * assert (s8.(st_externctrl) ! x6 = Some (i0, ctrl_return)) by intro_step.
+        trans_step x6.
+      * assert (s6.(st_externctrl) ! x4 = Some (i0, ctrl_finish)) by intro_step.
+        trans_step x4.
+      * admit.
+      * replace (combine ?fn_params l0) with x1 in * by admit.
+        assert (s9.(st_datapath) ! pc1 = Some (fork x5 x1)) by intro_step.
+        trans_step pc1.
+      * assert (s9.(st_controllogic) ! pc1 = Some (state_goto (st_st s9) x3)) by intro_step.
+        trans_step pc1.
+      * assert (s0.(st_datapath) ! x3 = Some (join x6 x5 r)) by intro_step.
+        trans_step x3.
+      * assert (s0.(st_controllogic) ! x3 = Some (state_wait (st_st s0) x4 n)) by intro_step.
+        trans_step x3.
+  - eapply IHl; eauto; inv H2; crush.
 Admitted.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
