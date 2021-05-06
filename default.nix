@@ -27,7 +27,7 @@ stdenv.mkDerivation {
   name = "vericert";
   src = ./.;
 
-  buildInputs = [ ncoq dune_2 gcc
+  buildInputs = [ ncoq ncoqPackages.coqhammer cvc4 eprover z3-tptp dune_2 gcc
                   ocaml ocamlPackages.findlib ocamlPackages.menhir
                   ocamlPackages.ocamlgraph
                 ];
