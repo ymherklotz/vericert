@@ -469,6 +469,17 @@ Definition return_val fin rtrn r :=
 
 Definition idle fin := nonblock fin (Vlit (ZToValue 0%Z)).
 
+Fixpoint xmap_externctrl_params (n : nat) (fn : ident) (l : list reg) :=
+  match l with
+  | nil => ret nil
+  | arg::args =>
+    do param_reg <- map_externctrl fn (ctrl_param n);
+    do rest <- xmap_externctrl_params (S n) fn args;
+    ret ((param_reg, arg) :: rest)
+  end.
+
+Definition map_externctrl_params := xmap_externctrl_params 0.
+
 Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
@@ -497,11 +508,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
-        do params <- traverselist
-                  (fun (a: nat * reg) => let (idx, arg) := a in
-                                    do param_reg <- map_externctrl fn (ctrl_param idx);
-                                    ret (param_reg, arg))
-                  (enumerate 0 args);
+        do params <- map_externctrl_params fn args;
 
         do _ <- declare_reg None dst 32;
         do join_state <- create_state;

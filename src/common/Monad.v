@@ -50,19 +50,18 @@ Module MonadExtra(M : Monad).
   End MonadNotation.
   Import MonadNotation.
 
-  Fixpoint sequence {A: Type} (l: list (mon A)) {struct l}: mon (list A) :=
+  Fixpoint traverselist {A B: Type} (f: A -> mon B) (l: list A) {struct l}: mon (list B) :=
     match l with
     | nil => ret nil
     | x::xs =>
-      do r <- x;
-      do rs <- sequence xs;
+      do r <- f x;
+      do rs <- traverselist f xs;
       ret (r::rs)
     end.
 
-  Fixpoint traverselist {A B: Type} (f: A -> mon B) (l: list A) {struct l}: mon (list B) :=
-    sequence (map f l).
+  Definition sequence {A} : list (mon A) -> mon (list A) := traverselist (fun x => x).
 
-  Fixpoint traverseoption {A B: Type} (f: A -> mon B) (opt: option A) {struct opt}: mon (option B) :=
+  Definition traverseoption {A B: Type} (f: A -> mon B) (opt: option A) : mon (option B) :=
     match opt with
     | None => ret None
     | Some x =>

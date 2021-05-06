@@ -32,6 +32,9 @@ Require Import vericert.hls.HTL.
 Require Import vericert.hls.HTLgen.
 Require Import vericert.hls.AssocMap.
 
+From Hammer Require Import Tactics.
+From Hammer Require Import Hammer.
+
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 Hint Resolve Maps.PTree.elements_correct : htlspec.
 Hint Resolve Maps.PTree.gss : htlspec.
@@ -46,13 +49,7 @@ Remark bind_inversion:
     bind f g s1 = OK y s3 i ->
     exists x, exists s2, exists i1, exists i2,
             f s1 = OK x s2 i1 /\ g x s2 = OK y s3 i2.
-Proof.
-  intros until i. unfold bind. destruct (f s1); intros.
-  discriminate.
-  exists a; exists s'; exists s.
-  destruct (g a s'); inv H.
-  exists s0; auto.
-Qed.
+Proof. unfold bind. sauto. Qed.
 
 Remark bind2_inversion:
   forall (A B C: Type) (f: mon (A*B)) (g: A -> B -> mon C)
@@ -60,12 +57,7 @@ Remark bind2_inversion:
     bind2 f g s1 = OK z s3 i ->
     exists x, exists y, exists s2, exists i1, exists i2,
               f s1 = OK (x, y) s2 i1 /\ g x y s2 = OK z s3 i2.
-Proof.
-  unfold bind2; intros.
-  exploit bind_inversion; eauto.
-  intros [[x y] [s2 [i1 [i2 [P Q]]]]]. simpl in Q.
-  exists x; exists y; exists s2; exists i1; exists i2; auto.
-Qed.
+Proof. sauto using bind_inversion. Qed.
 
 Ltac monadInv1 H :=
   match type of H with
@@ -140,6 +132,35 @@ Ltac rewrite_states :=
     learn (?x ?s) as c1; learn (?x ?s') as c2; try subst
   end.
 
+Ltac saturate_incr :=
+  repeat match goal with
+         | [INCR1 : st_prop ?s1 ?s2, INCR2 : st_prop ?s2 ?s3 |- _] =>
+           let INCR3 := fresh "INCR" in
+           learn (st_trans s1 s2 s3 INCR1 INCR2)
+         end.
+
+(** Used to solve goals that follow directly from a single monadic operation *)
+Ltac intro_step :=
+  match goal with
+  | [ H : _ = OK _ _ _  |- _ ] => solve [ monadInv H; simplify; eauto with htlspec ]
+  end.
+
+(** Used to transfer a result about one of the maps in the state from one
+      state to a latter one *)
+Ltac trans_step x :=
+  saturate_incr;
+  multimatch goal with
+  | [ INCR : st_prop _ _ |- _ ] => destruct INCR
+  (* We are using multimatch, but want to allow for matching nothing *)
+  | _ => idtac
+  end;
+  solve [
+      match goal with
+      | [ MAP_INCR : HTLgen.map_incr ?map _ _ |- context[?map] ] =>
+        destruct MAP_INCR with x; crush
+      end
+    ].
+
 (** * Relational specification of the translation *)
 
 (** We now define inductive predicates that characterise the fact that the
@@ -180,6 +201,77 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
+Lemma xmap_externctrl_params_combine : forall args k fn s param_pairs s' i,
+    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+    exists params, param_pairs = List.combine params args /\ length params = length args.
+Proof.
+  induction args; intros; monadInv H.
+  - exists nil. auto.
+  - unshelve (edestruct IHargs with (k:=S k) (s:=s0) (s':=s')); auto.
+    subst. exists (x::x1); crush.
+Qed.
+Hint Resolve xmap_externctrl_params_combine : htlspec.
+
+Lemma map_externctrl_params_combine : forall args fn s param_pairs s' i,
+    map_externctrl_params fn args s = OK param_pairs s' i ->
+    exists params, param_pairs = List.combine params args /\ length params = length args.
+Proof. unfold map_externctrl_params. eauto using xmap_externctrl_params_combine. Qed.
+Hint Resolve map_externctrl_params_combine : htlspec.
+
+Lemma xmap_externctrl_params_snd : forall args param_pairs k fn s s' i,
+    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+    List.map snd param_pairs = args.
+Proof.
+  induction args.
+  - sauto.
+  - intros. monadInv H. sauto.
+Qed.
+Hint Resolve xmap_externctrl_params_snd : htlspec.
+
+Lemma xmap_externctrl_params_fst : forall args n param_pairs k r fn s s' i,
+    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+    nth_error (List.map fst param_pairs) n = Some r ->
+    s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k)).
+Proof.
+  induction args.
+  - intros. monadInv H.
+    scongruence use: nth_error_nil.
+  - induction n; intros; monadInv H.
+    + assert ((st_externctrl s0) ! r = Some (fn, ctrl_param k)) by intro_step.
+      trans_step r.
+    + sauto.
+Qed.
+Hint Resolve xmap_externctrl_params_fst : htlspec.
+
+Lemma helper__map_externctrl_params_spec :
+  forall args n arg,
+    List.nth_error args n = Some arg ->
+    forall k fn s param_pairs s' i,
+      xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+      exists r, (In (r, arg) param_pairs) /\
+           (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
+Proof.
+  induction args; [ sauto use: nth_error_nil | idtac ].
+  destruct n; intros * Hnth * H; monadInv H.
+  - exists x. crush.
+    assert ((st_externctrl s0) ! x = Some (fn, ctrl_param k)) by intro_step.
+    trans_step x.
+  - destruct (IHargs _ _ Hnth _ _ _ _ _ _ EQ1) as [? [? ?]].
+    eexists; crush; sauto.
+Qed.
+
+Lemma map_externctrl_params_spec :
+  forall args n arg fn s param_pairs s' i,
+    map_externctrl_params fn args s = OK param_pairs s' i ->
+    List.nth_error args n = Some arg ->
+    exists r, (In (r, arg) param_pairs) /\
+         (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
+Proof.
+  pose proof helper__map_externctrl_params_spec.
+  sauto.
+Qed.
+
+
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
           (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
 | tr_code_single :
@@ -199,8 +291,9 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts :
           externctrl ! fn_return = Some (fn, ctrl_return) /\
           externctrl ! fn_finish = Some (fn, ctrl_finish) /\
 
-          (forall n r, List.nth_error fn_params n = Some r ->
-                  externctrl ! r = Some (fn, ctrl_param n)) /\
+          (forall n r arg, List.nth_error args n = Some arg ->
+                      List.nth_error fn_params n = Some r ->
+                      externctrl ! r = Some (fn, ctrl_param n)) /\
 
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
           trans!pc = Some (state_goto st pc2) /\
@@ -743,28 +836,6 @@ Proof.
     | _ => solve [ tr_code_single_tac; tr_instr_tac ]
     end.
 
-  (** Used to solve goals that follow directly from a single monadic operation *)
-  Ltac intro_step :=
-    match goal with
-    | [ H : _ = OK _ _ _  |- _ ] => solve [ monadInv H; simplify; eauto with htlspec ]
-    end.
-
-  (** Used to transfer a result about one of the maps in the state from one
-      state to a latter one *)
-  Ltac trans_step x :=
-    saturate_incr;
-    multimatch goal with
-    | [ INCR : st_prop _ _ |- _ ] => destruct INCR
-    (* We are using multimatch, but want to allow for matching nothing *)
-    | _ => idtac
-    end;
-    solve [
-        match goal with
-        | [ MAP_INCR : HTLgen.map_incr ?map _ _ |- context[?map] ] =>
-          destruct MAP_INCR with x; crush
-        end
-      ].
-
   induction l; simpl; intros; try contradiction.
   destruct a as [pc1 instr1]; simpl in *. inv H0. monadInv H.
   destruct (peq pc pc1).
@@ -784,7 +855,9 @@ Proof.
         trans_step x6.
       * assert (s6.(st_externctrl) ! x4 = Some (i0, ctrl_finish)) by intro_step.
         trans_step x4.
-      * admit.
+      * eapply map_externctrl_params_spec in EQ1.
+
+        admit.
       * replace (combine ?fn_params l0) with x1 in * by admit.
         assert (s9.(st_datapath) ! pc1 = Some (fork x5 x1)) by intro_step.
         trans_step pc1.
