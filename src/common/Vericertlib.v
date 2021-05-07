@@ -90,6 +90,11 @@ Ltac destruct_match :=
   | [ H: context[match ?x with | _ => _ end] |- _ ] => destruct x eqn:?
   end.
 
+Ltac unfold_match H :=
+  match type of H with
+  | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
+  end.
+
 Ltac auto_destruct x := destruct x eqn:?; simpl in *; try discriminate; try congruence.
 
 Ltac nicify_hypotheses :=
@@ -202,6 +207,14 @@ Ltac liapp :=
 
 Ltac crush := simplify; try discriminate; try congruence; try lia; liapp;
               try assumption; try (solve [auto]).
+
+Ltac crush_trans :=
+  match goal with
+  | [ H : ?g = ?inter |- ?g = _ ] => transitivity inter; crush
+  | [ H : ?inter = ?g |- ?g = _ ] => transitivity inter; crush
+  | [ H : ?g = ?inter |- _ = ?g ] => transitivity inter; crush
+  | [ H : ?inter = ?g |- _ = ?g ] => transitivity inter; crush
+  end.
 
 Global Opaque Nat.div.
 Global Opaque Z.mul.
