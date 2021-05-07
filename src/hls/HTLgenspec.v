@@ -270,7 +270,7 @@ Proof.
   pose proof helper__map_externctrl_params_spec.
   sauto.
 Qed.
-
+Hint Resolve map_externctrl_params_spec : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
           (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
@@ -290,10 +290,9 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts :
           externctrl ! fn_rst = Some (fn, ctrl_reset) /\
           externctrl ! fn_return = Some (fn, ctrl_return) /\
           externctrl ! fn_finish = Some (fn, ctrl_finish) /\
-
-          (forall n r arg, List.nth_error args n = Some arg ->
-                      List.nth_error fn_params n = Some r ->
-                      externctrl ! r = Some (fn, ctrl_param n)) /\
+          (forall n arg, List.nth_error args n = Some arg ->
+                    exists r, In (r, arg) (List.combine fn_params args) /\
+                         externctrl ! r = Some (fn, ctrl_param n)) /\
 
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
           trans!pc = Some (state_goto st pc2) /\
@@ -846,21 +845,31 @@ Proof.
       monadInv EQ.
       eapply tr_code_call; eauto with htlspec.
 
-      exists x3. exists x5. exists x6. exists x4. eexists ?[fn_params].
+      destruct (map_externctrl_params_combine _ _ _ _ _ _ EQ1) as [fn_params [? ?]]; subst.
 
-      repeat split.
+      exists x3. exists x5. exists x6. exists x4. exists fn_params.
+
+      repeat match goal with
+             | [ |- _ /\ _ ] => split
+             end.
       * assert (s7.(st_externctrl) ! x5 = Some (i0, ctrl_reset)) by intro_step.
         trans_step x5.
       * assert (s8.(st_externctrl) ! x6 = Some (i0, ctrl_return)) by intro_step.
         trans_step x6.
       * assert (s6.(st_externctrl) ! x4 = Some (i0, ctrl_finish)) by intro_step.
         trans_step x4.
-      * eapply map_externctrl_params_spec in EQ1.
-
-        admit.
-      * replace (combine ?fn_params l0) with x1 in * by admit.
-        assert (s9.(st_datapath) ! pc1 = Some (fork x5 x1)) by intro_step.
-        trans_step pc1.
+      * intros.
+        destruct (map_externctrl_params_spec l0 n0 arg i0 s (combine fn_params l0) s3 INCR1 EQ1 H) as [param [? ?]].
+        exists param. crush.
+        saturate_incr.
+        destruct H37.
+        destruct H48 with param; crush.
+        transitivity ((st_externctrl s2) ! param); crush.
+      * assert (s9.(st_datapath) ! pc1 = Some (fork x5 (combine fn_params l0))) by intro_step.
+        saturate_incr.
+        destruct H41.
+        destruct H44 with pc1; crush.
+        transitivity ((st_datapath s2) ! pc1); crush.
       * assert (s9.(st_controllogic) ! pc1 = Some (state_goto (st_st s9) x3)) by intro_step.
         trans_step pc1.
       * assert (s0.(st_datapath) ! x3 = Some (join x6 x5 r)) by intro_step.
@@ -868,7 +877,7 @@ Proof.
       * assert (s0.(st_controllogic) ! x3 = Some (state_wait (st_st s0) x4 n)) by intro_step.
         trans_step x3.
   - eapply IHl; eauto; inv H2; crush.
-Admitted.
+Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Theorem transl_module_correct :
