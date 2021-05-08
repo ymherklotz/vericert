@@ -216,6 +216,8 @@ Ltac crush_trans :=
   | [ H : ?inter = ?g |- _ = ?g ] => transitivity inter; crush
   end.
 
+Ltac maybe t := t + idtac.
+
 Global Opaque Nat.div.
 Global Opaque Z.mul.
 

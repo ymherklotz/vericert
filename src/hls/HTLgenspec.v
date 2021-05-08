@@ -145,9 +145,8 @@ Ltac intro_step :=
 Ltac trans_step s1 s2 :=
   saturate_incr;
   match goal with
-  | [ INCR : st_prop s1 s2 |- _ ] => destruct INCR
+  | [ INCR : st_prop s1 s2 |- _ ] => try solve [inversion INCR; crush]; destruct INCR
   end;
-  try solve [ crush ];
   solve [
       match goal with
       | [ MAP_INCR : HTLgen.map_incr ?map _ _ |- (?map _) ! ?idx = _ ] =>
@@ -337,13 +336,13 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
       Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
       0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
-      st = ((RTL.max_reg_function f) + 1)%positive ->
-      fin = ((RTL.max_reg_function f) + 2)%positive ->
-      rtrn = ((RTL.max_reg_function f) + 3)%positive ->
-      stk = ((RTL.max_reg_function f) + 4)%positive ->
-      start = ((RTL.max_reg_function f) + 5)%positive ->
-      rst = ((RTL.max_reg_function f) + 6)%positive ->
-      clk = ((RTL.max_reg_function f) + 7)%positive ->
+      (st > (RTL.max_reg_function f))%positive ->
+      (fin > (RTL.max_reg_function f))%positive ->
+      (rtrn > (RTL.max_reg_function f))%positive ->
+      (stk > (RTL.max_reg_function f))%positive ->
+      (start > (RTL.max_reg_function f))%positive ->
+      (rst > (RTL.max_reg_function f))%positive ->
+      (clk > (RTL.max_reg_function f))%positive ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
@@ -430,7 +429,7 @@ Proof.
   auto_apply create_reg_controllogic_trans.
   inv EQ; auto.
 Qed.
-Hint Resolve map_externctrl_datapath_trans : htlspec.
+Hint Resolve map_externctrl_controllogic_trans : htlspec.
 
 Lemma declare_reg_datapath_trans :
   forall sz s s' x i iop r,
@@ -582,9 +581,9 @@ Ltac inv_incr :=
   end.
 
 Lemma collect_controllogic_trans :
-  forall A f l cs cs' ci,
+  forall A f l cs cs' ci x,
   (forall s s' x i y, f y s = OK x s' i -> s.(st_controllogic) = s'.(st_controllogic)) ->
-  @HTLMonadExtra.collectlist A f l cs = OK tt cs' ci -> cs.(st_controllogic) = cs'.(st_controllogic).
+  @HTLMonadExtra.collectlist A f l cs = OK x cs' ci -> cs.(st_controllogic) = cs'.(st_controllogic).
 Proof.
   induction l; intros; monadInv H0.
   - trivial.
@@ -592,9 +591,9 @@ Proof.
 Qed.
 
 Lemma collect_datapath_trans :
-  forall A f l cs cs' ci,
+  forall A f l cs cs' ci x,
   (forall s s' x i y, f y s = OK x s' i -> s.(st_datapath) = s'.(st_datapath)) ->
-  @HTLMonadExtra.collectlist A f l cs = OK tt cs' ci -> cs.(st_datapath) = cs'.(st_datapath).
+  @HTLMonadExtra.collectlist A f l cs = OK x cs' ci -> cs.(st_datapath) = cs'.(st_datapath).
 Proof.
   induction l; intros; monadInv H0.
   - trivial.
@@ -602,9 +601,9 @@ Proof.
 Qed.
 
 Lemma collect_freshreg_trans :
-  forall A f l cs cs' ci,
+  forall A f l cs cs' ci x,
   (forall s s' x i y, f y s = OK x s' i -> s.(st_freshreg) = s'.(st_freshreg)) ->
-  @HTLMonadExtra.collectlist A f l cs = OK tt cs' ci -> cs.(st_freshreg) = cs'.(st_freshreg).
+  @HTLMonadExtra.collectlist A f l cs = OK x cs' ci -> cs.(st_freshreg) = cs'.(st_freshreg).
 Proof.
   induction l; intros; monadInv H0.
   - trivial.
@@ -612,26 +611,28 @@ Proof.
 Qed.
 
 Lemma collect_declare_controllogic_trans :
-  forall io n l s s' i,
-  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
+  forall io n l s s' i x,
+  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK x s' i ->
   s.(st_controllogic) = s'.(st_controllogic).
 Proof.
   intros. eapply collect_controllogic_trans; try eassumption.
   intros. eapply declare_reg_controllogic_trans. simpl in H0. eassumption.
 Qed.
+Hint Resolve collect_declare_controllogic_trans : htlspec.
 
 Lemma collect_declare_datapath_trans :
-  forall io n l s s' i,
-  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
+  forall io n l s s' i x,
+  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK x s' i ->
   s.(st_datapath) = s'.(st_datapath).
 Proof.
   intros. eapply collect_datapath_trans; try eassumption.
   intros. eapply declare_reg_datapath_trans. simpl in H0. eassumption.
 Qed.
+Hint Resolve collect_declare_datapath_trans : htlspec.
 
 Lemma collect_declare_freshreg_trans :
-  forall io n l s s' i,
-  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK tt s' i ->
+  forall io n l s s' i x,
+  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK x s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
 Proof.
   intros. eapply collect_freshreg_trans; try eassumption.
@@ -801,48 +802,75 @@ Proof.
 Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
+Lemma map_incr_some : forall {A} map (s s' : st) idx (x : A),
+    (map s) ! idx = Some x ->
+    map_incr map s s' ->
+    (map s') ! idx = Some x.
+Proof. intros * ? Hincr. destruct Hincr with idx; crush. Qed.
+Hint Resolve map_incr_some : htlspec.
+
+Lemma tr_code_trans : forall c pc instr fin rtrn stack s s',
+  tr_code c pc instr (st_datapath s) (st_controllogic s) (st_externctrl s) fin rtrn (st_st s) stack ->
+  st_prop s s' ->
+  tr_code c pc instr (st_datapath s') (st_controllogic s') (st_externctrl s') fin rtrn (st_st s') stack.
+Proof.
+  intros * Htr Htrans.
+  destruct Htr.
+  + eapply tr_code_single.
+    * trans_step s s'.
+    * inversion Htrans.
+      destruct H6 with pc. crush.
+      rewrite H11. eauto.
+    * inversion Htrans.
+      destruct H7 with pc. crush.
+      rewrite H11. eauto.
+    * inversion Htrans. crush.
+  + eapply tr_code_call; eauto with htlspec.
+    simplify.
+    inversion Htrans.
+    replace (st_st s').
+    repeat eexists; try (eapply map_incr_some; inversion Htrans; eauto with htlspec); try eauto with htlspec; admit.
+  + eapply tr_code_return; eauto with htlspec.
+    inversion Htrans.
+    simplify. eexists.
+    replace (st_st s').
+    repeat split; eauto with htlspec.
+    Unshelve. eauto.
+Admitted.
+Hint Resolve tr_code_trans : htlspec.
+
+Hint Resolve PTree.elements_complete : htlspec.
+
 Theorem transl_module_correct :
   forall i f m,
     transl_module i f = Errors.OK m -> tr_module f m.
 Proof.
-  intros until m.
-  unfold transl_module.
-  unfold run_mon.
-  destruct (transf_module i f (max_state f)) eqn:?; try discriminate.
-  intros. inv H.
+  intros * H.
+  unfold transl_module in *.
+  unfold run_mon in *.
+  unfold_match H.
+  inv H.
   inversion s; subst.
 
   unfold transf_module in *.
   unfold stack_correct in *.
+  unfold_match Heqr.
   destruct (0 <=? RTL.fn_stacksize f) eqn:STACK_BOUND_LOW;
     destruct (RTL.fn_stacksize f <? Integers.Ptrofs.modulus) eqn:STACK_BOUND_HIGH;
     destruct (RTL.fn_stacksize f mod 4 =? 0) eqn:STACK_ALIGN;
-    crush;
-    monadInv Heqr.
+    crush.
+  monadInv Heqr.
 
   repeat unfold_match EQ9. monadInv EQ9.
 
-  (* TODO: We should be able to fold this into the automation. *)
-  pose proof (create_arr_inv _ _ _ _ _ _ _ _ EQ0) as STK_LEN. inv STK_LEN. inv H5.
-  pose proof (create_reg_inv _ _ _ _ _ _ EQ) as FIN_VAL. inv FIN_VAL.
-  pose proof (create_reg_inv _ _ _ _ _ _ EQ1) as RET_VAL. inv RET_VAL.
-  destruct x3. destruct x4.
-  pose proof (collect_trans_instr_freshreg_trans _ _ _ _ _ _ _ EQ2) as TR_INSTR.
-  pose proof (collect_declare_freshreg_trans _ _ _ _ _ _ EQ3) as TR_DEC.
-  pose proof (create_reg_inv _ _ _ _ _ _ EQ4) as START_VAL. inv START_VAL.
-  pose proof (create_reg_inv _ _ _ _ _ _ EQ5) as RESET_VAL. inv RESET_VAL.
-  pose proof (map_externctrl_inv _ _ _ _ _ _ EQ6) as CLK_VAL. inv CLK_VAL.
-  rewrite H9 in *. rewrite H8 in *. replace (st_freshreg s4) with (st_freshreg s2) in * by congruence.
-  rewrite H6 in *. rewrite H7 in *. rewrite H5 in *. simpl in *.
-  inv_incr.
-  econstructor; simpl; auto; try lia.
-  intros.
-  assert (EQ3D := EQ3).
-  apply collect_declare_datapath_trans in EQ3.
-  apply collect_declare_controllogic_trans in EQ3D.
-  replace (st_controllogic s10) with (st_controllogic s3) by congruence.
-  replace (st_datapath s10) with (st_datapath s3) by congruence.
-  replace (st_st s10) with (st_st s3) by congruence.
-  eapply iter_expand_instr_spec; eauto with htlspec.
-  apply PTree.elements_complete.
+  monadInv EQ7.
+  econstructor; eauto with htlspec.
+  * admit.
+  * admit.
+  * admit.
+  * admit.
+  * admit.
+  * admit.
+  * admit.
+  * admit.
 Admitted.
