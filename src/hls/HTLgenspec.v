@@ -74,15 +74,15 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
-Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
-          (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
+Inductive tr_code (c : RTL.code) (pc : RTL.node)  (stmnts : datapath) (trans : controllogic)
+          (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : RTL.instruction -> Prop :=
 | tr_code_single :
-    forall s t,
+    forall i s t,
       c!pc = Some i ->
       stmnts!pc = Some s ->
       trans!pc = Some t ->
       tr_instr fin rtrn st stk i s t ->
-      tr_code c pc i stmnts trans externctrl fin rtrn st stk
+      tr_code c pc stmnts trans externctrl fin rtrn st stk i
 | tr_code_call :
     forall sig fn args dst n,
       c!pc = Some (RTL.Icall sig (inr fn) args dst n) ->
@@ -101,7 +101,7 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts :
           stmnts!pc2 = Some (join fn_return fn_rst dst) /\
           trans!pc2 = Some (state_wait st fn_finish n)) ->
 
-      tr_code c pc i stmnts trans externctrl fin rtrn st stk
+      tr_code c pc stmnts trans externctrl fin rtrn st stk (RTL.Icall sig (inr fn) args dst n)
 | tr_code_return :
     forall r,
       c!pc = Some (RTL.Ireturn r) ->
@@ -112,7 +112,7 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts :
           stmnts!pc2 = Some (idle fin) /\
           trans!pc2 = Some Vskip) ->
 
-      tr_code c pc i stmnts trans externctrl fin rtrn st stk.
+      tr_code c pc stmnts trans externctrl fin rtrn st stk (RTL.Ireturn r).
 Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
@@ -124,7 +124,7 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
                         f.(RTL.fn_entrypoint)
                         st stk stk_len fin rtrn start rst clk scldecls arrdecls externctrl wf) ->
       (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-               tr_code f.(RTL.fn_code) pc i data control externctrl fin rtrn st stk) ->
+               tr_code f.(RTL.fn_code) pc data control externctrl fin rtrn st stk i) ->
       stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
       Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
       0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
@@ -343,7 +343,7 @@ Lemma iter_expand_instr_spec :
     list_norepet (List.map fst l) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr ->
-                 tr_code c pc instr s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack).
+                 tr_code c pc s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack instr).
 Proof.
   (** Used to solve the simpler cases of tr_code: those involving tr_instr *)
   Ltac tr_code_simple_tac :=
@@ -371,15 +371,22 @@ Proof.
     + (* Iload *) tr_code_simple_tac.
     + (* Istore *) tr_code_simple_tac.
     + (* Icall *)
+      inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
+      inversion H.
+
       eapply tr_code_call; crush.
+
       destruct (map_externctrl_params_combine _ _ _ _ _ _ EQ1) as [? [? ?]]; subst.
       repeat (eapply ex_intro).
       repeat split; try monad_crush. (* slow *)
       * intros.
-        destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 H) as [param [? ?]].
+        destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 ltac:(eauto)) as [param [? ?]].
         exists param; crush; trans_step s3 s'.
     + (* Icond *) tr_code_simple_tac.
-    + (* Ireturn *) eapply tr_code_return; crush; eexists; monad_crush.
+    + (* Ireturn *)
+      inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
+      inversion H.
+      eapply tr_code_return; crush; eexists; monad_crush.
   - clear EQ. (* EQ is very big and sauto gets lost *)
     sauto q: on.
 Qed.
@@ -393,9 +400,9 @@ Proof. intros * ? Hincr. destruct Hincr with idx; crush. Qed.
 Hint Resolve map_incr_some : htlspec.
 
 Lemma tr_code_trans : forall c pc instr fin rtrn stack s s',
-  tr_code c pc instr (st_datapath s) (st_controllogic s) (st_externctrl s) fin rtrn (st_st s) stack ->
+  tr_code c pc (st_datapath s) (st_controllogic s) (st_externctrl s) fin rtrn (st_st s) stack instr ->
   st_prop s s' ->
-  tr_code c pc instr (st_datapath s') (st_controllogic s') (st_externctrl s') fin rtrn (st_st s') stack.
+  tr_code c pc (st_datapath s') (st_controllogic s') (st_externctrl s') fin rtrn (st_st s') stack instr.
 Proof.
   intros * Htr Htrans.
   destruct Htr.
