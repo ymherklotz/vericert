@@ -528,57 +528,6 @@ Lemma get_refl_s :
 Proof. inversion 1. trivial. Qed.
 Hint Resolve get_refl_s : htlspec.
 
-Ltac inv_incr :=
-  repeat match goal with
-  | [ H: create_reg _ _ ?s = OK _ ?s' _ |- _ ] =>
-    let H1 := fresh "H" in
-    let H2 := fresh "H" in
-    let H3 := fresh "H" in
-    pose proof H as H1;
-    pose proof H as H2;
-    learn H as H3;
-    eapply create_reg_datapath_trans in H1;
-    eapply create_reg_controllogic_trans in H2;
-    eapply create_reg_externctrl_trans in H3
-  | [ H: map_externctrl _ _ ?s = OK _ ?s' _ |- _ ] =>
-    let H1 := fresh "H" in
-    let H2 := fresh "H" in
-    pose proof H as H1;
-    learn H as H2;
-    eapply map_externctrl_datapath_trans in H1;
-    eapply map_externctrl_controllogic_trans in H2
-  | [ H: create_arr _ _ ?s = OK _ ?s' _ |- _ ] =>
-    let H1 := fresh "H" in
-    let H2 := fresh "H" in
-    let H3 := fresh "H" in
-    pose proof H as H1;
-    pose proof H as H2;
-    learn H as H3;
-    eapply create_arr_datapath_trans in H1;
-    eapply create_arr_controllogic_trans in H2;
-    eapply create_arr_externctrl_trans in H3
-  | [ H: create_state _ _ ?s = OK _ ?s' _ |- _ ] =>
-    let H1 := fresh "H" in
-    let H2 := fresh "H" in
-    let H3 := fresh "H" in
-    pose proof H as H1;
-    pose proof H as H2;
-    learn H as H3;
-    eapply create_state_datapath_trans in H1;
-    eapply create_state_controllogic_trans in H2;
-    eapply create_state_externctrl_trans in H3
-  | [ H: get ?s = OK _ _ _ |- _ ] =>
-    let H1 := fresh "H" in
-    let H2 := fresh "H" in
-    pose proof H as H1;
-    learn H as H2;
-    apply get_refl_x in H1;
-    apply get_refl_s in H2;
-    subst
-  | [ H: st_prop _ _ |- _ ] => unfold st_prop in H; destruct H
-  | [ H: st_incr _ _ |- _ ] => destruct st_incr
-  end.
-
 Lemma collect_controllogic_trans :
   forall A f l cs cs' ci x,
   (forall s s' x i y, f y s = OK x s' i -> s.(st_controllogic) = s'.(st_controllogic)) ->
