@@ -34,9 +34,114 @@ Require Import vericert.hls.AssocMap.
 
 From Hammer Require Import Tactics.
 
+(** * Relational specification of the translation *)
+
+(** We now define inductive predicates that characterise the fact that the
+statemachine that is created by the translation contains the correct
+translations for each of the elements *)
+
+(** [tr_instr] describes the translation of instructions that are directly translated into a single state *)
+Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -> control_stmnt -> Prop :=
+| tr_instr_Inop :
+    forall n,
+      Z.pos n <= Int.max_unsigned ->
+      tr_instr fin rtrn st stk (RTL.Inop n) Vskip (state_goto st n)
+| tr_instr_Iop :
+    forall n op args dst s s' e i,
+      Z.pos n <= Int.max_unsigned ->
+      translate_instr op args s = OK e s' i ->
+      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
+| tr_instr_Icond :
+    forall n1 n2 cond args s s' i c,
+      Z.pos n1 <= Int.max_unsigned ->
+      Z.pos n2 <= Int.max_unsigned ->
+      translate_condition cond args s = OK c s' i ->
+      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
+| tr_instr_Iload :
+    forall mem addr args s s' i c dst n,
+      Z.pos n <= Int.max_unsigned ->
+      translate_arr_access mem addr args stk s = OK c s' i ->
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (Vnonblock (Vvar dst) c) (state_goto st n)
+| tr_instr_Istore :
+    forall mem addr args s s' i c src n,
+      Z.pos n <= Int.max_unsigned ->
+      translate_arr_access mem addr args stk s = OK c s' i ->
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
+               (state_goto st n).
+(*| tr_instr_Ijumptable :
+    forall cexpr tbl r,
+    cexpr = tbl_to_case_expr st tbl ->
+    tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
+Hint Constructors tr_instr : htlspec.
+
+Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
+          (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
+| tr_code_single :
+    forall s t,
+      c!pc = Some i ->
+      stmnts!pc = Some s ->
+      trans!pc = Some t ->
+      tr_instr fin rtrn st stk i s t ->
+      tr_code c pc i stmnts trans externctrl fin rtrn st stk
+| tr_code_call :
+    forall sig fn args dst n,
+      c!pc = Some (RTL.Icall sig (inr fn) args dst n) ->
+      Z.pos n <= Int.max_unsigned ->
+
+      (exists pc2 fn_rst fn_return fn_finish fn_params,
+          externctrl ! fn_rst = Some (fn, ctrl_reset) /\
+          externctrl ! fn_return = Some (fn, ctrl_return) /\
+          externctrl ! fn_finish = Some (fn, ctrl_finish) /\
+          (forall n arg, List.nth_error args n = Some arg ->
+                    exists r, In (r, arg) (List.combine fn_params args) /\
+                         externctrl ! r = Some (fn, ctrl_param n)) /\
+
+          stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
+          trans!pc = Some (state_goto st pc2) /\
+          stmnts!pc2 = Some (join fn_return fn_rst dst) /\
+          trans!pc2 = Some (state_wait st fn_finish n)) ->
+
+      tr_code c pc i stmnts trans externctrl fin rtrn st stk
+| tr_code_return :
+    forall r,
+      c!pc = Some (RTL.Ireturn r) ->
+
+      (exists pc2,
+          stmnts!pc = Some (return_val fin rtrn r) /\
+          trans!pc = Some (state_goto st pc2) /\
+          stmnts!pc2 = Some (idle fin) /\
+          trans!pc2 = Some Vskip) ->
+
+      tr_code c pc i stmnts trans externctrl fin rtrn st stk.
+Hint Constructors tr_code : htlspec.
+
+Inductive tr_module (f : RTL.function) : module -> Prop :=
+  tr_module_intro :
+    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls externctrl wf,
+      m = (mkmodule f.(RTL.fn_params)
+                        data
+                        control
+                        f.(RTL.fn_entrypoint)
+                        st stk stk_len fin rtrn start rst clk scldecls arrdecls externctrl wf) ->
+      (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
+               tr_code f.(RTL.fn_code) pc i data control externctrl fin rtrn st stk) ->
+      stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
+      Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
+      0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
+      (st > (RTL.max_reg_function f))%positive ->
+      (fin > (RTL.max_reg_function f))%positive ->
+      (rtrn > (RTL.max_reg_function f))%positive ->
+      (stk > (RTL.max_reg_function f))%positive ->
+      (start > (RTL.max_reg_function f))%positive ->
+      (rst > (RTL.max_reg_function f))%positive ->
+      (clk > (RTL.max_reg_function f))%positive ->
+      tr_module f m.
+Hint Constructors tr_module : htlspec.
+
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 Hint Resolve Maps.PTree.elements_correct : htlspec.
 Hint Resolve Maps.PTree.gss : htlspec.
+Hint Resolve PTree.elements_complete : htlspec.
 Hint Resolve -> Z.leb_le : htlspec.
 
 Hint Unfold block : htlspec.
@@ -176,109 +281,20 @@ Ltac monad_crush :=
 
 Ltac full_split := repeat match goal with [ |- _ /\ _ ] => split end.
 
-(** * Relational specification of the translation *)
+Ltac some_monad_inv :=
+  multimatch goal with
+  | [ EQ : _ ?s = OK ?x _ _ |- context[?x] ] => monadInv EQ
+  | [ EQ : _ ?s = OK (?x, _) _ _ |- context[?x] ] => monadInv EQ
+  | [ EQ : _ ?s = OK (_, ?x) _ _ |- context[?x] ] => monadInv EQ
+  | [ EQ : _ ?s = OK (_, ?x) _ _ |- context[?x] ] => monadInv EQ
+  end.
 
-(** We now define inductive predicates that characterise the fact that the
-statemachine that is created by the translation contains the correct
-translations for each of the elements *)
+Ltac some_incr :=
+  saturate_incr;
+  multimatch goal with
+  | [ INCR : st_prop _ _ |- _ ] => inversion INCR
+  end.
 
-(** [tr_instr] describes the translation of instructions that are directly translated into a single state *)
-Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -> control_stmnt -> Prop :=
-| tr_instr_Inop :
-    forall n,
-      Z.pos n <= Int.max_unsigned ->
-      tr_instr fin rtrn st stk (RTL.Inop n) Vskip (state_goto st n)
-| tr_instr_Iop :
-    forall n op args dst s s' e i,
-      Z.pos n <= Int.max_unsigned ->
-      translate_instr op args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
-| tr_instr_Icond :
-    forall n1 n2 cond args s s' i c,
-      Z.pos n1 <= Int.max_unsigned ->
-      Z.pos n2 <= Int.max_unsigned ->
-      translate_condition cond args s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Icond cond args n1 n2) Vskip (state_cond st c n1 n2)
-| tr_instr_Iload :
-    forall mem addr args s s' i c dst n,
-      Z.pos n <= Int.max_unsigned ->
-      translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (Vnonblock (Vvar dst) c) (state_goto st n)
-| tr_instr_Istore :
-    forall mem addr args s s' i c src n,
-      Z.pos n <= Int.max_unsigned ->
-      translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
-               (state_goto st n).
-(*| tr_instr_Ijumptable :
-    forall cexpr tbl r,
-    cexpr = tbl_to_case_expr st tbl ->
-    tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
-Hint Constructors tr_instr : htlspec.
-
-Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
-          (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
-| tr_code_single :
-    forall s t,
-      c!pc = Some i ->
-      stmnts!pc = Some s ->
-      trans!pc = Some t ->
-      tr_instr fin rtrn st stk i s t ->
-      tr_code c pc i stmnts trans externctrl fin rtrn st stk
-| tr_code_call :
-    forall sig fn args dst n,
-      c!pc = Some (RTL.Icall sig (inr fn) args dst n) ->
-      Z.pos n <= Int.max_unsigned ->
-
-      (exists pc2 fn_rst fn_return fn_finish fn_params,
-          externctrl ! fn_rst = Some (fn, ctrl_reset) /\
-          externctrl ! fn_return = Some (fn, ctrl_return) /\
-          externctrl ! fn_finish = Some (fn, ctrl_finish) /\
-          (forall n arg, List.nth_error args n = Some arg ->
-                    exists r, In (r, arg) (List.combine fn_params args) /\
-                         externctrl ! r = Some (fn, ctrl_param n)) /\
-
-          stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
-          trans!pc = Some (state_goto st pc2) /\
-          stmnts!pc2 = Some (join fn_return fn_rst dst) /\
-          trans!pc2 = Some (state_wait st fn_finish n)) ->
-
-      tr_code c pc i stmnts trans externctrl fin rtrn st stk
-| tr_code_return :
-    forall r,
-      c!pc = Some (RTL.Ireturn r) ->
-
-      (exists pc2,
-          stmnts!pc = Some (return_val fin rtrn r) /\
-          trans!pc = Some (state_goto st pc2) /\
-          stmnts!pc2 = Some (idle fin) /\
-          trans!pc2 = Some Vskip) ->
-
-      tr_code c pc i stmnts trans externctrl fin rtrn st stk.
-Hint Constructors tr_code : htlspec.
-
-Inductive tr_module (f : RTL.function) : module -> Prop :=
-  tr_module_intro :
-    forall data control fin rtrn st stk stk_len m start rst clk scldecls arrdecls externctrl wf,
-      m = (mkmodule f.(RTL.fn_params)
-                        data
-                        control
-                        f.(RTL.fn_entrypoint)
-                        st stk stk_len fin rtrn start rst clk scldecls arrdecls externctrl wf) ->
-      (forall pc i, Maps.PTree.get pc f.(RTL.fn_code) = Some i ->
-               tr_code f.(RTL.fn_code) pc i data control externctrl fin rtrn st stk) ->
-      stk_len = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
-      Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
-      0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
-      (st > (RTL.max_reg_function f))%positive ->
-      (fin > (RTL.max_reg_function f))%positive ->
-      (rtrn > (RTL.max_reg_function f))%positive ->
-      (stk > (RTL.max_reg_function f))%positive ->
-      (start > (RTL.max_reg_function f))%positive ->
-      (rst > (RTL.max_reg_function f))%positive ->
-      (clk > (RTL.max_reg_function f))%positive ->
-      tr_module f m.
-Hint Constructors tr_module : htlspec.
 
 Lemma xmap_externctrl_params_combine : forall args k fn s param_pairs s' i,
     xmap_externctrl_params k fn args s = OK param_pairs s' i ->
@@ -402,17 +418,15 @@ Proof.
     insterU H4.
     destruct H4 as [r [? ?]].
     eexists. split; eauto with htlspec.
-
   + eapply tr_code_return; eauto with htlspec.
     inversion Htrans.
     simplify. eexists.
     replace (st_st s').
     repeat split; eauto with htlspec.
-    Unshelve. eauto.
-Qed.
 
+  Unshelve. all: eauto.
+Qed.
 Hint Resolve tr_code_trans : htlspec.
-Hint Resolve PTree.elements_complete : htlspec.
 
 Theorem transl_module_correct :
   forall i f m,
@@ -427,30 +441,19 @@ Proof.
 
   unfold transf_module in *.
   unfold stack_correct in *.
-  unfold_match Heqr.
-  destruct (0 <=? RTL.fn_stacksize f) eqn:STACK_BOUND_LOW;
-    destruct (RTL.fn_stacksize f <? Integers.Ptrofs.modulus) eqn:STACK_BOUND_HIGH;
-    destruct (RTL.fn_stacksize f mod 4 =? 0) eqn:STACK_ALIGN;
-    crush.
+  destruct_match; simplify; crush.
   monadInv Heqr.
 
-  repeat unfold_match EQ9. monadInv EQ9.
+  repeat destruct_match; crush.
+  repeat match goal with
+         | [ EQ : ret _ _ = OK _ _ _ |- _ ] => monadInv EQ
+         | [ EQ : OK _ _ _ = OK _ _ _ |- _ ] => monadInv EQ
+         | [ EQ : get _ = OK _ _ _ |- _ ] => monadInv EQ
+         end.
 
-  monadInv EQ7.
   econstructor; eauto with htlspec; try lia;
-    try (
-        multimatch goal with
-        | [ EQ : _ ?s = OK ?x _ _ |- context[?x] ] => monadInv EQ
-        | [ EQ : _ ?s = OK (?x, _) _ _ |- context[?x] ] => monadInv EQ
-        | [ EQ : _ ?s = OK (_, ?x) _ _ |- context[?x] ] => monadInv EQ
-        end;
-        saturate_incr;
-        multimatch goal with
-        | [ INCR : st_prop (max_state f) _ |- _ ] => inversion INCR
-        end;
-        simplify; unfold Ple in *; lia
-      ).
-  monadInv EQ6. simpl in EQ7.
-  monadInv EQ7.
-  simplify. unfold Ple in *. lia.
+    try solve [some_monad_inv; repeat ((simpl in *; some_monad_inv) + idtac);
+               some_incr; simplify;
+               unfold Ple in *; lia
+              ].
 Qed.
