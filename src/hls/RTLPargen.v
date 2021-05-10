@@ -925,16 +925,11 @@ Proof.
   }
 Qed.
 
-Lemma list_translate:
-  forall l A ge sp rs1 m0 f rs0 m rs o0 v,
-  @sem A ge sp (InstrState rs1 m0) f (InstrState rs0 m) ->
-  Op.eval_operation ge sp o0 (rs ## l) m = Some v ->
-  (forall r, rs0 !! r = rs !! r) ->
-  sem_val_list ge sp (InstrState rs1 m0) (list_translation l f) (rs ## l).
-Proof.
-  intros.
-  destruct l. simplify; constructor.
-  constructor; simplify.
+Lemma regmap_list_equiv :
+  forall A (rs1: Regmap.t A) rs2,
+    (forall x, rs1 !! x = rs2 !! x) ->
+    forall rl, rs1##rl = rs2##rl.
+Proof. induction rl; crush. Qed.
 
 Lemma sem_update_Op :
   forall A ge sp st f st' r l o0 o m rs v,
@@ -947,8 +942,61 @@ Proof.
   intros. inv H1. simplify.
   destruct st.
   econstructor. simplify.
-  constructor. constructor. intros. destruct (Pos.eq_dec x r); subst. specialize (H5 r).
-  rewrite map2. econstructor.
+  { constructor.
+    { constructor. intros. destruct (Pos.eq_dec x r); subst.
+      { pose proof (H5 r). rewrite map2. pose proof H. inv H. econstructor; eauto.
+        { inv H9. eapply gen_list_base; eauto. }
+        { instantiate (1 := (Regmap.set r v rs0)). rewrite Regmap.gss. erewrite regmap_list_equiv; eauto. } }
+      { rewrite Regmap.gso by auto. rewrite genmap1; crush. inv H. inv H7; eauto. } }
+    { inv H. rewrite genmap1; crush. eauto. } }
+  { constructor; eauto. intros.
+    destruct (Pos.eq_dec r x);
+    subst; [repeat rewrite Regmap.gss | repeat rewrite Regmap.gso]; auto. }
+Qed.
+
+Lemma sem_update_load :
+  forall A ge sp st f st' r o m a l m0 rs v a0,
+  @sem A ge sp st f st' ->
+  Op.eval_addressing ge sp a rs ## l = Some a0 ->
+  Mem.loadv m m0 a0 = Some v ->
+  match_states st' (InstrState rs m0) ->
+  exists tst : instr_state,
+    sem ge sp st (update f (RBload o m a l r)) tst
+    /\ match_states (InstrState (Regmap.set r v rs) m0) tst.
+Proof.
+  intros. inv H2. pose proof H. inv H. inv H9.
+  destruct st.
+  econstructor; simplify.
+  { constructor.
+    { constructor. intros.
+      destruct (Pos.eq_dec x r); subst.
+      { rewrite map2. econstructor; eauto. eapply gen_list_base. intros.
+        rewrite <- H6. eauto.
+        instantiate (1 := (Regmap.set r v rs0)). rewrite Regmap.gss. auto. }
+      { rewrite Regmap.gso by auto. rewrite genmap1; crush. } }
+    { rewrite genmap1; crush. eauto. } }
+  { constructor; auto; intros. destruct (Pos.eq_dec r x);
+    subst; [repeat rewrite Regmap.gss | repeat rewrite Regmap.gso]; auto. }
+Qed.
+
+Lemma sem_update_store :
+  forall A ge sp a0 m a l r o f st m' rs m0 st',
+  @sem A ge sp st f st' ->
+  Op.eval_addressing ge sp a rs ## l = Some a0 ->
+  Mem.storev m m0 a0 rs !! r = Some m' ->
+  match_states st' (InstrState rs m0) ->
+  exists tst, sem ge sp st (update f (RBstore o m a l r)) tst
+              /\ match_states (InstrState rs m') tst.
+Proof.
+  intros. inv H2. pose proof H. inv H. inv H9.
+  destruct st.
+  econstructor; simplify.
+  { econstructor.
+    { econstructor; intros. rewrite genmap1; crush. }
+    { rewrite map2. econstructor; eauto. eapply gen_list_base. intros. rewrite <- H6.
+      eauto. specialize (H6 r). rewrite H6. eauto. } }
+  { econstructor; eauto. }
+Qed.
 
 Lemma sem_update :
   forall A ge sp st x st' st'' st''' f,
@@ -957,12 +1005,14 @@ Lemma sem_update :
   @step_instr A ge sp st''' x st'' ->
   exists tst, sem ge sp st (update f x) tst /\ match_states st'' tst.
 Proof.
-  intros. destruct x.
-  { inv H1.
-    econstructor. split.
+  intros. destruct x; inv H1.
+  { econstructor. split.
     apply sem_update_RBnop. eassumption.
     apply match_states_commut. auto. }
-  { inv H1.
+  { eapply sem_update_Op; eauto. }
+  { eapply sem_update_load; eauto. }
+  { eapply sem_update_store; eauto. }
+Qed.
 
 Lemma rtlblock_trans_correct :
   forall bb ge sp st st',
@@ -974,14 +1024,13 @@ Lemma rtlblock_trans_correct :
 Proof.
   induction bb using rev_ind; simplify.
   { econstructor. simplify. apply abstract_interp_empty.
-  inv H. auto. }
+    inv H. auto. }
   { apply rtlblock_trans_correct' in H. inv_simp.
     rewrite abstract_seq.
     exploit IHbb; try eassumption; []; inv_simp.
     exploit sem_update. apply H1. apply match_states_commut; eassumption.
     eauto. inv_simp. econstructor. split. apply H3.
-    auto.
-  }
+    auto. }
 Qed.
 
 Lemma rtlpar_trans_correct :
