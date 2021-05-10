@@ -33,7 +33,6 @@ Require Import vericert.hls.HTLgen.
 Require Import vericert.hls.AssocMap.
 
 From Hammer Require Import Tactics.
-From Hammer Require Import Hammer.
 
 Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 Hint Resolve Maps.PTree.elements_correct : htlspec.
@@ -829,16 +828,22 @@ Proof.
     simplify.
     inversion Htrans.
     replace (st_st s').
-    repeat eexists; try (eapply map_incr_some; inversion Htrans; eauto with htlspec); try eauto with htlspec; admit.
+    repeat (eapply ex_intro).
+    repeat split; try (eapply map_incr_some; inversion Htrans; eauto with htlspec); try eauto with htlspec.
+    intros.
+    insterU H4.
+    destruct H4 as [r [? ?]].
+    eexists. split; eauto with htlspec.
+
   + eapply tr_code_return; eauto with htlspec.
     inversion Htrans.
     simplify. eexists.
     replace (st_st s').
     repeat split; eauto with htlspec.
     Unshelve. eauto.
-Admitted.
-Hint Resolve tr_code_trans : htlspec.
+Qed.
 
+Hint Resolve tr_code_trans : htlspec.
 Hint Resolve PTree.elements_complete : htlspec.
 
 Theorem transl_module_correct :
@@ -864,13 +869,20 @@ Proof.
   repeat unfold_match EQ9. monadInv EQ9.
 
   monadInv EQ7.
-  econstructor; eauto with htlspec.
-  * admit.
-  * admit.
-  * admit.
-  * admit.
-  * admit.
-  * admit.
-  * admit.
-  * admit.
-Admitted.
+  econstructor; eauto with htlspec; try lia;
+    try (
+        multimatch goal with
+        | [ EQ : _ ?s = OK ?x _ _ |- context[?x] ] => monadInv EQ
+        | [ EQ : _ ?s = OK (?x, _) _ _ |- context[?x] ] => monadInv EQ
+        | [ EQ : _ ?s = OK (_, ?x) _ _ |- context[?x] ] => monadInv EQ
+        end;
+        saturate_incr;
+        multimatch goal with
+        | [ INCR : st_prop (max_state f) _ |- _ ] => inversion INCR
+        end;
+        simplify; unfold Ple in *; lia
+      ).
+  monadInv EQ6. simpl in EQ7.
+  monadInv EQ7.
+  simplify. unfold Ple in *. lia.
+Qed.
