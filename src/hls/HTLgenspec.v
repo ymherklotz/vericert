@@ -216,71 +216,6 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
-Lemma xmap_externctrl_params_combine : forall args k fn s param_pairs s' i,
-    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-    exists params, param_pairs = List.combine params args /\ length params = length args.
-Proof.
-  induction args; intros; monadInv H.
-  - exists nil. auto.
-  - unshelve (edestruct IHargs with (k:=S k) (s:=s0) (s':=s')); auto.
-    subst. exists (x::x1); crush.
-Qed.
-Hint Resolve xmap_externctrl_params_combine : htlspec.
-
-Lemma map_externctrl_params_combine : forall args fn s param_pairs s' i,
-    map_externctrl_params fn args s = OK param_pairs s' i ->
-    exists params, param_pairs = List.combine params args /\ length params = length args.
-Proof. unfold map_externctrl_params. eauto using xmap_externctrl_params_combine. Qed.
-Hint Resolve map_externctrl_params_combine : htlspec.
-
-Lemma xmap_externctrl_params_snd : forall args param_pairs k fn s s' i,
-    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-    List.map snd param_pairs = args.
-Proof.
-  induction args.
-  - sauto.
-  - intros. monadInv H. sauto.
-Qed.
-Hint Resolve xmap_externctrl_params_snd : htlspec.
-
-Lemma xmap_externctrl_params_fst : forall args n param_pairs k r fn s s' i,
-    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-    nth_error (List.map fst param_pairs) n = Some r ->
-    s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k)).
-Proof.
-  induction args.
-  - intros. monadInv H.
-    scongruence use: nth_error_nil.
-  - induction n; intros; monadInv H.
-    + monad_crush.
-    + sauto.
-Qed.
-Hint Resolve xmap_externctrl_params_fst : htlspec.
-
-Lemma helper__map_externctrl_params_spec :
-  forall args n arg,
-    List.nth_error args n = Some arg ->
-    forall k fn s param_pairs s' i,
-      xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-      exists r, (In (r, arg) param_pairs) /\
-           (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
-Proof.
-  induction args.
-  - sauto use: nth_error_nil.
-  - destruct n; intros * ? * H; monadInv H.
-    + eexists. monad_crush.
-    + sauto.
-Qed.
-
-Lemma map_externctrl_params_spec :
-  forall args n arg fn s param_pairs s' i,
-    map_externctrl_params fn args s = OK param_pairs s' i ->
-    List.nth_error args n = Some arg ->
-    exists r, (In (r, arg) param_pairs) /\
-         (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
-Proof. sauto use: helper__map_externctrl_params_spec. Qed.
-Hint Resolve map_externctrl_params_spec : htlspec.
-
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts : datapath) (trans : controllogic)
           (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : Prop :=
 | tr_code_single :
@@ -345,362 +280,46 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
-Lemma create_reg_datapath_trans :
-  forall sz s s' x i iop,
-    create_reg iop sz s = OK x s' i ->
-    s.(st_datapath) = s'.(st_datapath).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_datapath_trans : htlspec.
-
-Lemma create_reg_controllogic_trans :
-  forall sz s s' x i iop,
-    create_reg iop sz s = OK x s' i ->
-    s.(st_controllogic) = s'.(st_controllogic).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_controllogic_trans : htlspec.
-
-Lemma create_reg_externctrl_trans :
-  forall sz s s' x i iop,
-    create_reg iop sz s = OK x s' i ->
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_externctrl_trans : htlspec.
-
-Lemma create_reg_trans :
-  forall sz s s' x i iop,
-    create_reg iop sz s = OK x s' i ->
-    s.(st_datapath) = s'.(st_datapath) /\
-    s.(st_controllogic) = s'.(st_controllogic) /\
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. monadInv H. auto. Qed.
-Hint Resolve create_reg_trans : htlspec.
-
-Lemma create_reg_inv : forall a b s r s' i,
-    create_reg a b s = OK r s' i ->
-    r = s.(st_freshreg) /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg)).
+Lemma xmap_externctrl_params_combine : forall args k fn s param_pairs s' i,
+    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+    exists params, param_pairs = List.combine params args /\ length params = length args.
 Proof.
-  inversion 1; auto.
+  induction args; intros; monadInv H.
+  - exists nil. auto.
+  - unshelve (edestruct IHargs with (k:=S k) (s:=s0) (s':=s')); auto.
+    subst. exists (x::x1); crush.
+Qed.
+Hint Resolve xmap_externctrl_params_combine : htlspec.
+
+Lemma map_externctrl_params_combine : forall args fn s param_pairs s' i,
+    map_externctrl_params fn args s = OK param_pairs s' i ->
+    exists params, param_pairs = List.combine params args /\ length params = length args.
+Proof. unfold map_externctrl_params. eauto using xmap_externctrl_params_combine. Qed.
+Hint Resolve map_externctrl_params_combine : htlspec.
+
+Lemma helper__map_externctrl_params_spec :
+  forall args n arg,
+    List.nth_error args n = Some arg ->
+    forall k fn s param_pairs s' i,
+      xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+      exists r, (In (r, arg) param_pairs) /\
+           (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
+Proof.
+  induction args.
+  - sauto use: nth_error_nil.
+  - destruct n; intros * ? * H; monadInv H.
+    + eexists. monad_crush.
+    + sauto.
 Qed.
 
-Lemma map_externctrl_inv : forall othermod ctrl r s s' i,
-    map_externctrl othermod ctrl s = OK r s' i ->
-    s.(st_externctrl) ! r = None
-    /\ r = s.(st_freshreg)
-    /\ s'.(st_freshreg) = Pos.succ (s.(st_freshreg))
-    /\ s'.(st_externctrl) ! r = Some (othermod, ctrl).
-Proof.
-  intros. monadInv H.
-  auto_apply create_reg_inv.
-  auto_apply create_reg_externctrl_trans.
-  replace (st_externctrl s).
-  simplify; auto with htlspec.
-Qed.
-
-Lemma create_state_inv : forall n s s' i,
-    create_state s = OK n s' i ->
-    n = s.(st_freshstate).
-Proof. inversion 1. trivial. Qed.
-
-Lemma create_arr_inv : forall w x y z a b c d,
-    create_arr w x y z = OK (a, b) c d ->
-    y = b
-    /\ a = z.(st_freshreg)
-    /\ c.(st_freshreg) = Pos.succ (z.(st_freshreg)).
-Proof. inversion 1; crush. Qed.
-
-Lemma map_externctrl_datapath_trans :
-  forall s s' x i om sig,
-    map_externctrl om sig s = OK x s' i ->
-    s.(st_datapath) = s'.(st_datapath).
-Proof.
-  intros. monadInv H.
-  auto_apply create_reg_datapath_trans.
-  inv EQ; auto.
-Qed.
-Hint Resolve map_externctrl_datapath_trans : htlspec.
-
-Lemma map_externctrl_controllogic_trans :
-  forall s s' x i om sig,
-    map_externctrl om sig s = OK x s' i ->
-    s.(st_controllogic) = s'.(st_controllogic).
-Proof.
-  intros. monadInv H.
-  auto_apply create_reg_controllogic_trans.
-  inv EQ; auto.
-Qed.
-Hint Resolve map_externctrl_controllogic_trans : htlspec.
-
-Lemma declare_reg_datapath_trans :
-  forall sz s s' x i iop r,
-    declare_reg iop r sz s = OK x s' i ->
-    s.(st_datapath) = s'.(st_datapath).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_datapath_trans : htlspec.
-
-Lemma declare_reg_controllogic_trans :
-  forall sz s s' x i iop r,
-    declare_reg iop r sz s = OK x s' i ->
-    s.(st_controllogic) = s'.(st_controllogic).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_controllogic_trans : htlspec.
-
-Lemma declare_reg_freshreg_trans :
-  forall sz s s' x i iop r,
-    declare_reg iop r sz s = OK x s' i ->
-    s.(st_freshreg) = s'.(st_freshreg).
-Proof. inversion 1; auto. Qed.
-Hint Resolve declare_reg_freshreg_trans : htlspec.
-
-Lemma declare_reg_externctrl_trans :
-  forall sz s s' x i iop r,
-    declare_reg iop r sz s = OK x s' i ->
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_externctrl_trans : htlspec.
-
-Lemma create_arr_datapath_trans :
-  forall sz ln s s' x i iop,
-    create_arr iop sz ln s = OK x s' i ->
-    s.(st_datapath) = s'.(st_datapath).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_arr_datapath_trans : htlspec.
-
-Lemma create_arr_controllogic_trans :
-  forall sz ln s s' x i iop,
-    create_arr iop sz ln s = OK x s' i ->
-    s.(st_controllogic) = s'.(st_controllogic).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_arr_controllogic_trans : htlspec.
-
-Lemma create_arr_externctrl_trans :
-  forall sz ln s s' x i iop,
-    create_arr iop sz ln s = OK x s' i ->
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_arr_externctrl_trans : htlspec.
-
-Lemma create_state_datapath_trans :
-  forall s s' x i,
-    create_state s = OK x s' i ->
-    s.(st_datapath) = s'.(st_datapath).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_state_datapath_trans : htlspec.
-
-Lemma create_state_controllogic_trans :
-  forall s s' x i,
-    create_state s = OK x s' i ->
-    s.(st_controllogic) = s'.(st_controllogic).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_state_controllogic_trans : htlspec.
-
-Lemma create_state_externctrl_trans :
-  forall s s' x i,
-    create_state s = OK x s' i ->
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_state_externctrl_trans : htlspec.
-
-Lemma add_instr_externctrl_trans :
-  forall s s' x i n n' st,
-    add_instr n n' st s = OK x s' i ->
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. eauto with htlspec. Qed.
-Hint Resolve add_instr_externctrl_trans : htlspec.
-
-Lemma add_instr_wait_externctrl_trans :
-  forall m n n' st s r s' i,
-    add_instr_wait m n n' st s = OK r s' i ->
-    s.(st_externctrl) = s'.(st_externctrl).
-Proof. intros. unfold add_instr_wait in H. repeat (unfold_match H). inv H. eauto with htlspec. Qed.
-Hint Resolve add_instr_wait_externctrl_trans : htlspec.
-
-Lemma get_refl_x :
-  forall s s' x i,
-    get s = OK x s' i ->
-    s = x.
-Proof. inversion 1. trivial. Qed.
-Hint Resolve get_refl_x : htlspec.
-
-Lemma get_refl_s :
-  forall s s' x i,
-    get s = OK x s' i ->
-    s = s'.
-Proof. inversion 1. trivial. Qed.
-Hint Resolve get_refl_s : htlspec.
-
-Lemma collect_controllogic_trans :
-  forall A f l cs cs' ci x,
-  (forall s s' x i y, f y s = OK x s' i -> s.(st_controllogic) = s'.(st_controllogic)) ->
-  @HTLMonadExtra.collectlist A f l cs = OK x cs' ci -> cs.(st_controllogic) = cs'.(st_controllogic).
-Proof.
-  induction l; intros; monadInv H0.
-  - trivial.
-  - apply H in EQ. rewrite EQ. eauto.
-Qed.
-
-Lemma collect_datapath_trans :
-  forall A f l cs cs' ci x,
-  (forall s s' x i y, f y s = OK x s' i -> s.(st_datapath) = s'.(st_datapath)) ->
-  @HTLMonadExtra.collectlist A f l cs = OK x cs' ci -> cs.(st_datapath) = cs'.(st_datapath).
-Proof.
-  induction l; intros; monadInv H0.
-  - trivial.
-  - apply H in EQ. rewrite EQ. eauto.
-Qed.
-
-Lemma collect_freshreg_trans :
-  forall A f l cs cs' ci x,
-  (forall s s' x i y, f y s = OK x s' i -> s.(st_freshreg) = s'.(st_freshreg)) ->
-  @HTLMonadExtra.collectlist A f l cs = OK x cs' ci -> cs.(st_freshreg) = cs'.(st_freshreg).
-Proof.
-  induction l; intros; monadInv H0.
-  - trivial.
-  - apply H in EQ. rewrite EQ. eauto.
-Qed.
-
-Lemma collect_declare_controllogic_trans :
-  forall io n l s s' i x,
-  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK x s' i ->
-  s.(st_controllogic) = s'.(st_controllogic).
-Proof.
-  intros. eapply collect_controllogic_trans; try eassumption.
-  intros. eapply declare_reg_controllogic_trans. simpl in H0. eassumption.
-Qed.
-Hint Resolve collect_declare_controllogic_trans : htlspec.
-
-Lemma collect_declare_datapath_trans :
-  forall io n l s s' i x,
-  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK x s' i ->
-  s.(st_datapath) = s'.(st_datapath).
-Proof.
-  intros. eapply collect_datapath_trans; try eassumption.
-  intros. eapply declare_reg_datapath_trans. simpl in H0. eassumption.
-Qed.
-Hint Resolve collect_declare_datapath_trans : htlspec.
-
-Lemma collect_declare_freshreg_trans :
-  forall io n l s s' i x,
-  HTLMonadExtra.collectlist (fun r : reg => declare_reg io r n) l s = OK x s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  intros. eapply collect_freshreg_trans; try eassumption.
-  inversion 1. auto.
-Qed.
-
-Lemma translate_eff_addressing_freshreg_trans :
-  forall op args s r s' i,
-  translate_eff_addressing op args s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
-Qed.
-Hint Resolve translate_eff_addressing_freshreg_trans : htlspec.
-
-Lemma translate_comparison_freshreg_trans :
-  forall op args s r s' i,
-  translate_comparison op args s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
-Qed.
-Hint Resolve translate_comparison_freshreg_trans : htlspec.
-
-Lemma translate_comparisonu_freshreg_trans :
-  forall op args s r s' i,
-  translate_comparisonu op args s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
-Qed.
-Hint Resolve translate_comparisonu_freshreg_trans : htlspec.
-
-Lemma translate_comparison_imm_freshreg_trans :
-  forall op args s r s' i n,
-  translate_comparison_imm op args n s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
-Qed.
-Hint Resolve translate_comparison_imm_freshreg_trans : htlspec.
-
-Lemma translate_comparison_immu_freshreg_trans :
-  forall op args s r s' i n,
-  translate_comparison_immu op args n s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
-Qed.
-Hint Resolve translate_comparison_immu_freshreg_trans : htlspec.
-
-Lemma translate_condition_freshreg_trans :
-  forall op args s r s' i,
-  translate_condition op args s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; eauto with htlspec.
-Qed.
-Hint Resolve translate_condition_freshreg_trans : htlspec.
-
-Lemma translate_instr_freshreg_trans :
-  forall op args s r s' i,
-  translate_instr op args s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  destruct op; intros; simpl in *; repeat (unfold_match H); inv H; eauto with htlspec.
-  monadInv H1. eauto with htlspec.
-Qed.
-Hint Resolve translate_instr_freshreg_trans : htlspec.
-
-Lemma translate_arr_access_freshreg_trans :
-  forall mem addr args st s r s' i,
-  translate_arr_access mem addr args st s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof.
-  intros. unfold translate_arr_access in H. repeat (unfold_match H); inv H; eauto with htlspec.
-Qed.
-Hint Resolve translate_arr_access_freshreg_trans : htlspec.
-
-Lemma add_instr_freshreg_trans :
-  forall n n' st s r s' i,
-  add_instr n n' st s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_instr_freshreg_trans : htlspec.
-
-Lemma add_instr_wait_freshreg_trans :
-  forall m n n' st s r s' i,
-  add_instr_wait m n n' st s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_instr_wait in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_instr_freshreg_trans : htlspec.
-
-Lemma add_branch_instr_freshreg_trans :
-  forall n n0 n1 e s r s' i,
-  add_branch_instr e n n0 n1 s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_branch_instr in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_branch_instr_freshreg_trans : htlspec.
-
-Lemma create_state_freshreg_trans :
-  forall n s s' i,
-  create_state s = OK n s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold create_state in H. inv H. auto. Qed.
-Hint Resolve create_state_freshreg_trans : htlspec.
-
-Lemma add_node_skip_freshreg_trans :
-  forall n1 n2 s r s' i,
-  add_node_skip n1 n2 s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_node_skip in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_node_skip_freshreg_trans : htlspec.
-
-Lemma add_instr_skip_freshreg_trans :
-  forall n1 n2 s r s' i,
-  add_instr_skip n1 n2 s = OK r s' i ->
-  s.(st_freshreg) = s'.(st_freshreg).
-Proof. intros. unfold add_instr_skip in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_instr_skip_freshreg_trans : htlspec.
+Lemma map_externctrl_params_spec :
+  forall args n arg fn s param_pairs s' i,
+    map_externctrl_params fn args s = OK param_pairs s' i ->
+    List.nth_error args n = Some arg ->
+    exists r, (In (r, arg) param_pairs) /\
+         (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
+Proof. sauto use: helper__map_externctrl_params_spec. Qed.
+Hint Resolve map_externctrl_params_spec : htlspec.
 
 Lemma iter_expand_instr_spec :
   forall l fin rtrn stack s s' i x c,
