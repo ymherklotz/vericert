@@ -207,7 +207,7 @@ that enables mutual recursive definitions over the datatypes.
 
 Inductive expression : Set :=
 | Ebase : resource -> expression
-| Eop : Op.operation -> expression_list -> expression
+| Eop : Op.operation -> expression_list -> expression -> expression
 | Eload : AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Estore : expression -> AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 with expression_list : Set :=
@@ -253,7 +253,7 @@ Inductive sem_value :
           sem_mem sp (InstrState rs m) mem_exp m' ->
           sem_val_list sp (InstrState rs m) args lv ->
           Op.eval_operation genv sp op lv m' = Some v ->
-          sem_value sp (InstrState rs m) (Eop op args) v
+          sem_value sp (InstrState rs m) (Eop op args mem_exp) v
   | Sload :
           forall st mem_exp addr chunk args a v m' lv sp,
           sem_mem sp st mem_exp m' ->
@@ -305,8 +305,10 @@ End SEMANTICS.
 Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
   match e1, e2 with
   | Ebase r1, Ebase r2 => if resource_eq r1 r2 then true else false
-  | Eop op1 el1, Eop op2 el2 =>
-      if operation_eq op1 op2 then beq_expression_list el1 el2 else false
+  | Eop op1 el1 exp1, Eop op2 el2 exp2 =>
+      if operation_eq op1 op2 then
+      if beq_expression exp1 exp2 then
+      beq_expression_list el1 el2 else false else false
   | Eload chk1 addr1 el1 e1, Eload chk2 addr2 el2 e2 =>
       if memory_chunk_eq chk1 chk2
       then if addressing_eq addr1 addr2
@@ -353,7 +355,7 @@ This function checks if all the elements in [fa] are in [fb], but not the other 
 
 Definition check := Rtree.beq beq_expression.
 
-Lemma check_correct: forall (fa fb : forest) (x : resource),
+Lemma check_correct: forall (fa fb : forest),
   check fa fb = true -> (forall x, fa # x = fb # x).
 Proof.
   unfold check, get_forest; intros;
@@ -568,7 +570,7 @@ Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
   | RBop p op rl r =>
-    f # (Reg r) <- (Eop op (list_translation rl f))
+    f # (Reg r) <- (Eop op (list_translation rl f) (f # Mem))
   | RBload p chunk addr rl r =>
     f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
   | RBstore p chunk addr rl r =>
@@ -694,44 +696,6 @@ Proof.
   auto.
 Qed.
 
-Lemma abstract_sequence_run :
-  forall A ge sp tst st i st',
-  @step_instr A ge sp st i st' ->
-  match_states st tst ->
-  exists tst', sem ge sp tst (update empty i) tst'
-               /\ match_states st' tst'.
-Proof.
-Admitted.
-
-Lemma match_start_state :
-  forall b A ge sp st1 st2,
-  @sem A ge sp st1 b st2 ->
-  forall st1',
-    match_states st1 st1' ->
-    sem ge sp st1' b st2.
-Proof.
-  Admitted.
-
-Lemma abstract_sequence_trans :
-  forall i c A ge sp st1 st2 st2' st3,
-  @sem A ge sp st1 (update empty i) st2 ->
-  sem ge sp st2' (abstract_sequence empty c) st3 ->
-  match_states st2 st2' ->
-  sem ge sp st1 (abstract_sequence empty (i :: c)) st3.
-Proof.
-  induction i. simplify. apply abstract_interp_empty3 in H.
-  eapply match_states_trans in H1; eauto. eapply match_start_state.
-  apply H0. apply match_states_commut. auto.
-  { simplify. inv H. inv H3. inv H2. destruct st3. constructor.
-  constructor.  intros. specialize (H x). inv H1. specialize (H4 x).
-  rewrite H4 in *. inv H0.  inv H7. specialize (H0 x). admit.
-  inv H1. admit.
-  }
-  { admit.
-  }
-  { admit.
-  } Admitted.
-
 Definition check_dest i r' :=
   match i with
   | RBop p op rl r => (r =? r')%positive
@@ -808,7 +772,7 @@ Qed.
 
 Lemma check_dest_update2 :
   forall f r rl op p,
-  (update f (RBop p op rl r)) # (Reg r) = Eop op (list_translation rl f).
+  (update f (RBop p op rl r)) # (Reg r) = Eop op (list_translation rl f) (f # Mem).
 Proof. crush; rewrite map2; auto. Qed.
 
 Lemma check_dest_update3 :
@@ -1036,26 +1000,118 @@ Qed.
 Lemma rtlpar_trans_correct :
   forall ge sp bb sem_st' sem_st,
   sem ge sp sem_st (abstract_sequence empty (concat (concat bb))) sem_st' ->
-  exists st', RTLPar.step_instr_block ge sp (tr_sem_state sem_st) bb st'
-              /\ match_abstr_st' sem_st' st'.
+  exists st', RTLPar.step_instr_block ge sp sem_st bb st'
+              /\ match_states sem_st' st'.
 Proof. Admitted.
 
+Lemma abstr_sem_val_mem :
+  forall A B ge tge st tst sp a,
+    ge_preserved ge tge ->
+    forall v m,
+    (@sem_mem A ge sp st a m /\ match_states st tst -> @sem_mem B tge sp tst a m) /\
+    (@sem_value A ge sp st a v /\ match_states st tst -> @sem_value B tge sp tst a v).
+Proof.
+  intros * H.
+  apply expression_ind2 with
+
+    (P := fun (e1: expression) =>
+    forall v m,
+    (@sem_mem A ge sp st e1 m /\ match_states st tst -> @sem_mem B tge sp tst e1 m) /\
+    (@sem_value A ge sp st e1 v /\ match_states st tst -> @sem_value B tge sp tst e1 v))
+
+    (P0 := fun (e1: expression_list) =>
+    forall lv, @sem_val_list A ge sp st e1 lv /\ match_states st tst -> @sem_val_list B tge sp tst e1 lv);
+  simplify; intros; simplify.
+  { inv H1. inv H2. constructor. }
+  { inv H2. inv H1. rewrite H0. constructor. }
+  { inv H3. }
+  { inv H3. inv H4. econstructor. apply H1; auto. simplify. eauto. constructor. auto. auto.
+    apply H0; simplify; eauto. constructor; eauto.
+    unfold ge_preserved in *. simplify. rewrite <- H2. auto.
+  }
+  { inv H3. }
+  { inv H3. inv H4. econstructor. apply H1; eauto; simplify; eauto. constructor; eauto.
+    apply H0; simplify; eauto. constructor; eauto.
+    inv H. rewrite <- H4. eauto.
+    auto.
+  }
+  { inv H4. inv H5. econstructor. apply H0; eauto. simplify; eauto. constructor; eauto.
+    apply H2; eauto. simplify; eauto. constructor; eauto.
+    apply H1; eauto. simplify; eauto. constructor; eauto.
+    inv H. rewrite <- H5. eauto. auto.
+  }
+  { inv H4. }
+  { inv H1. constructor. }
+  { inv H3. constructor; auto. apply H0; eauto. apply Mem.empty. }
+Qed.
+
+Lemma abstr_sem_value :
+  forall a A B ge tge sp st tst v,
+    @sem_value A ge sp st a v ->
+    ge_preserved ge tge ->
+    match_states st tst ->
+    @sem_value B tge sp tst a v.
+Proof. intros; eapply abstr_sem_val_mem; eauto; apply Mem.empty. Qed.
+
+Lemma abstr_sem_mem :
+  forall a A B ge tge sp st tst v,
+    @sem_mem A ge sp st a v ->
+    ge_preserved ge tge ->
+    match_states st tst ->
+    @sem_mem B tge sp tst a v.
+Proof. intros; eapply abstr_sem_val_mem; eauto. Qed.
+
+Lemma abstr_sem_regset :
+  forall a a' A B ge tge sp st tst rs,
+    @sem_regset A ge sp st a rs ->
+    ge_preserved ge tge ->
+    (forall x, a # x = a' # x) ->
+    match_states st tst ->
+    exists rs', @sem_regset B tge sp tst a' rs' /\ (forall x, rs !! x = rs' !! x).
+Proof.
+  inversion 1; intros.
+  inv H7.
+  econstructor. simplify. econstructor. intros.
+  eapply abstr_sem_value; eauto. rewrite <- H6.
+  eapply H0. constructor; eauto.
+  auto.
+Qed.
+
+Lemma abstr_sem :
+  forall a a' A B ge tge sp st tst st',
+    @sem A ge sp st a st' ->
+    ge_preserved ge tge ->
+    (forall x, a # x = a' # x) ->
+    match_states st tst ->
+    exists tst', @sem B tge sp tst a' tst' /\ match_states st' tst'.
+Proof.
+  inversion 1; subst; intros.
+  inversion H4; subst.
+  exploit abstr_sem_regset; eauto; inv_simp.
+  do 3 econstructor; eauto.
+  rewrite <- H3.
+  eapply abstr_sem_mem; eauto.
+Qed.
+
 Lemma abstract_execution_correct':
-  forall A B ge tge sp sem_st' a a' sem_st tsem_st,
+  forall A B ge tge sp st' a a' st tst,
+  @sem A ge sp st a st' ->
   ge_preserved ge tge ->
   check a a' = true ->
-  @sem A ge sp sem_st a sem_st' ->
-  match_sem_st sem_st tsem_st ->
-  exists tsem_st', @sem B tge sp tsem_st a' tsem_st'
-                   /\ match_sem_st sem_st' tsem_st'.
-Proof. Admitted.
+  match_states st tst ->
+  exists tst', @sem B tge sp tst a' tst' /\ match_states st' tst'.
+Proof.
+  intros;
+  pose proof (check_correct a a' H1);
+  eapply abstr_sem; eauto.
+Qed.
 
 Lemma states_match :
   forall st1 st2 st3 st4,
-  match_abstr_st st1 st2 ->
-  match_sem_st st2 st3 ->
-  match_abstr_st' st3 st4 ->
-  state_lessdef st1 st4.
+  match_states st1 st2 ->
+  match_states st2 st3 ->
+  match_states st3 st4 ->
+  match_states st1 st4.
 Proof.
   intros * H1 H2 H3; destruct st1; destruct st2; destruct st3; destruct st4.
   inv H1. inv H2. inv H3; constructor.
@@ -1063,20 +1119,88 @@ Proof.
   repeat match goal with
          | H: forall _, _, r : positive |- _ => specialize (H r)
          end.
-  eapply Val.lessdef_trans. eassumption.
-  eapply Val.lessdef_trans; eassumption.
+  congruence.
+  auto.
 Qed.
 
-Lemma match_sem_st_refl r : match_sem_st r r.
-Proof. destruct r; constructor; apply regs_lessdef_refl. Qed.
+Lemma step_instr_block_same :
+  forall ge sp st st',
+  step_instr_block ge sp st nil st' ->
+  st = st'.
+Proof. inversion 1; auto. Qed.
 
-Lemma state_lessdef_match_sem:
-  forall st tst,
-  state_lessdef st tst ->
-  match_sem_st (tr_instr_state st) (tr_instr_state tst).
+Lemma step_instr_seq_same :
+  forall ge sp st st',
+  step_instr_seq ge sp st nil st' ->
+  st = st'.
+Proof. inversion 1; auto. Qed.
+
+Lemma match_states_list :
+  forall A (rs: Regmap.t A) rs',
+  (forall r, rs !! r = rs' !! r) ->
+  forall l, rs ## l = rs' ## l.
+Proof. induction l; crush. Qed.
+
+Lemma PTree_matches :
+  forall A (v: A) res rs rs',
+  (forall r, rs !! r = rs' !! r) ->
+  forall x, (Regmap.set res v rs) !! x = (Regmap.set res v rs') !! x.
 Proof.
-  intros * H; destruct st; destruct tst; simplify;
-  inv H; constructor; auto.
+  intros; destruct (Pos.eq_dec x res); subst;
+  [ repeat rewrite Regmap.gss by auto
+  | repeat rewrite Regmap.gso by auto ]; auto.
+Qed.
+
+Lemma step_instr_matches :
+  forall A a ge sp st st',
+  @step_instr A ge sp st a st' ->
+  forall tst, match_states st tst ->
+              exists tst', step_instr ge sp tst a tst'
+                           /\ match_states st' tst'.
+Proof.
+  induction 1; simplify;
+  match goal with H: match_states _ _ |- _ => inv H end;
+  repeat econstructor; try erewrite match_states_list;
+  try apply PTree_matches; eauto;
+  match goal with
+    H: forall _, _ |- context[Mem.storev] => erewrite <- H; eauto
+  end.
+Qed.
+
+Lemma step_instr_list_matches :
+  forall a ge sp st st',
+  step_instr_list ge sp st a st' ->
+  forall tst, match_states st tst ->
+              exists tst', step_instr_list ge sp tst a tst'
+                           /\ match_states st' tst'.
+Proof.
+  induction a; intros; inv H;
+  try (exploit step_instr_matches; eauto; []; inv_simp;
+       exploit IHa; eauto; []; inv_simp); repeat econstructor; eauto.
+Qed.
+
+Lemma step_instr_seq_matches :
+  forall a ge sp st st',
+  step_instr_seq ge sp st a st' ->
+  forall tst, match_states st tst ->
+              exists tst', step_instr_seq ge sp tst a tst'
+                           /\ match_states st' tst'.
+Proof.
+  induction a; intros; inv H;
+  try (exploit step_instr_list_matches; eauto; []; inv_simp;
+       exploit IHa; eauto; []; inv_simp); repeat econstructor; eauto.
+Qed.
+
+Lemma step_instr_block_matches :
+  forall bb ge sp st st',
+  step_instr_block ge sp st bb st' ->
+  forall tst, match_states st tst ->
+              exists tst', step_instr_block ge sp tst bb tst'
+                           /\ match_states st' tst'.
+Proof.
+  induction bb; intros; inv H;
+  try (exploit step_instr_seq_matches; eauto; []; inv_simp;
+       exploit IHbb; eauto; []; inv_simp); repeat econstructor; eauto.
 Qed.
 
 Lemma abstract_execution_correct:
@@ -1084,21 +1208,21 @@ Lemma abstract_execution_correct:
     RTLBlock.step_instr_list ge sp st bb st' ->
     ge_preserved ge tge ->
     schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
-    state_lessdef st tst ->
+    match_states st tst ->
     exists tst', RTLPar.step_instr_block tge sp tst bb' tst'
-                 /\ state_lessdef st' tst'.
+                 /\ match_states st' tst'.
 Proof.
   intros.
   unfold schedule_oracle in *. simplify.
   exploit rtlblock_trans_correct; try eassumption; []; inv_simp.
   exploit abstract_execution_correct';
-  try solve [eassumption | apply state_lessdef_match_sem; eassumption]; inv_simp.
+  try solve [eassumption | apply state_lessdef_match_sem; eassumption].
+  apply match_states_commut. eauto. inv_simp.
   exploit rtlpar_trans_correct; try eassumption; []; inv_simp.
-  econstructor; simplify.
-  match goal with
-  | H: context[tr_sem_state (tr_instr_state _)] |- _ => rewrite tr_instr_state_eq in H
-  end; eassumption.
-  eapply states_match; eauto.
+  exploit step_instr_block_matches; eauto; inv_simp.
+  repeat match goal with | H: match_states _ _ |- _ => inv H end.
+  do 2 econstructor; eauto.
+  econstructor; congruence.
 Qed.
 
 (*|
