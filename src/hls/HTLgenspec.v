@@ -263,9 +263,9 @@ Ltac trans_step s1 s2 :=
 (* Try to prove a goal about a state by first proving it for an earlier state and then transfering it to the final. *)
 Ltac monad_crush :=
   crush;
-  match reverse goal with
+  match goal with
   | [ finalstate : st, prevstate : st |- _] =>
-    match reverse goal with
+    match goal with
     | [ |- context f[finalstate]] =>
       let inter := context f[prevstate] in
       try solve [
