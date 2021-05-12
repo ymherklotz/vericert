@@ -129,12 +129,12 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
       Z.modulo (f.(RTL.fn_stacksize)) 4 = 0 ->
       0 <= f.(RTL.fn_stacksize) < Integers.Ptrofs.modulus ->
       (st > (RTL.max_reg_function f))%positive ->
-      (fin > (RTL.max_reg_function f))%positive ->
-      (rtrn > (RTL.max_reg_function f))%positive ->
-      (stk > (RTL.max_reg_function f))%positive ->
-      (start > (RTL.max_reg_function f))%positive ->
-      (rst > (RTL.max_reg_function f))%positive ->
-      (clk > (RTL.max_reg_function f))%positive ->
+      (fin > st)%positive ->
+      (rtrn > fin)%positive ->
+      (stk > rtrn)%positive ->
+      (start > stk)%positive ->
+      (rst > start)%positive ->
+      (clk > rst)%positive ->
       tr_module f m.
 Hint Constructors tr_module : htlspec.
 
