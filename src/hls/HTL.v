@@ -108,17 +108,19 @@ Definition empty_stack (m : module) : Verilog.assocmap_arr :=
 
 Definition genv := Globalenvs.Genv.t fundef unit.
 
-Definition find_module (i: ident) (ge : genv) : option fundef :=
-   match Globalenvs.Genv.find_symbol ge i with
-   | None => None
-   | Some b => Globalenvs.Genv.find_funct_ptr ge b
-   end.
-
+Definition find_module (i: ident) (ge : genv) : option module :=
+  match Globalenvs.Genv.find_symbol ge i with
+  | None => None
+  | Some b =>
+    match Globalenvs.Genv.find_funct_ptr ge b with
+    | Some (AST.Internal f) => Some f
+    | _ => None
+    end
+  end.
 
 Inductive stackframe : Type :=
   Stackframe :
-    forall  (res : reg)
-            (m : module)
+    forall (m : module)
             (st : node)
             (reg_assoc : Verilog.assocmap_reg)
             (arr_assoc : Verilog.assocmap_arr),
@@ -133,6 +135,7 @@ Inductive state : Type :=
            (arr_assoc : Verilog.assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
+           (mid : ident)
            (v : value), state
 | Callstate :
     forall (stack : list stackframe)
@@ -171,10 +174,29 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       Z.pos pstval <= Integers.Int.max_unsigned ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
-    forall g m st asr asa retval sf,
+    forall g m st asr asa retval sf mid,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->
     asr!(m.(mod_return)) = Some retval ->
-    step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
+
+    (* FIXME: We need to check that mid actually matches the current module *)
+    step g (State sf m st asr asa) Events.E0 (Returnstate sf mid retval)
+| step_initcall :
+    forall g m st asr asa sf othermod_id othermod othermod_reset othermod_params othermod_param_vals,
+    find_module othermod_id g = Some othermod ->
+
+    m.(mod_externctrl)!othermod_reset = Some (othermod_id, ctrl_reset) ->
+    (forall n param, nth_error othermod_params n = Some param ->
+          m.(mod_externctrl)!param = Some (othermod_id, ctrl_param n)) ->
+
+    (* The fact that this is the only condition on the current state to trigger
+       a call introduces non-determinism into the semantics. The semantics
+       permit initiating a call from any state where a reset has been set to 0.
+     *)
+    asr!othermod_reset = Some (ZToValue 0) ->
+    othermod_param_vals = List.map (fun p => asr#p) othermod_params ->
+
+    step g (State sf m st asr asa) Events.E0
+         (Callstate (Stackframe m st asr asa :: sf) othermod othermod_param_vals)
 | step_call :
     forall g m args res,
       step g (Callstate res m args) Events.E0
@@ -185,10 +207,14 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
                 (init_regs args m.(mod_params)))))
              (empty_stack m))
 | step_return :
-    forall g m asr asa i r sf pc mst,
+    forall g m asr asa othermod_id othermod_return othermod_finish i r sf pc mst,
       mst = mod_st m ->
-      step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
-           (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
+
+      m.(mod_externctrl)!othermod_return = Some (othermod_id, ctrl_return) ->
+      m.(mod_externctrl)!othermod_finish = Some (othermod_id, ctrl_finish) ->
+
+      step g (Returnstate (Stackframe m pc asr asa :: sf) othermod_id i) Events.E0
+           (State sf m pc (asr # mst <- (posToValue pc) # othermod_finish <- (ZToValue 1) # r <- i) asa).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -200,9 +226,9 @@ Inductive initial_state (p: program): state -> Prop :=
       initial_state p (Callstate nil m nil).
 
 Inductive final_state : state -> Integers.int -> Prop :=
-| final_state_intro : forall retval retvali,
+| final_state_intro : forall retval mid retvali,
     retvali = valueToInt retval ->
-    final_state (Returnstate nil retval) retvali.
+    final_state (Returnstate nil mid retval) retvali.
 
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
