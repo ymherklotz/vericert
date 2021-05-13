@@ -54,8 +54,8 @@ Inductive match_assocmaps : RTL.function -> RTL.regset -> assocmap -> Prop :=
 Hint Constructors match_assocmaps : htlproof.
 
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
-  forall st calls asa asr res,
-  s = HTL.State res m st calls asa asr ->
+  forall st asa asr res,
+  s = HTL.State res m st asa asr ->
   asa!(m.(HTL.mod_st)) = Some (posToValue st).
 Hint Unfold state_st_wf : htlproof.
 
@@ -110,10 +110,10 @@ Inductive match_constants : HTL.module -> assocmap -> Prop :=
       match_constants m asr.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
-| match_state : forall asa asr sf f sp sp' rs mem m st calls res
+| match_state : forall asa asr sf f sp sp' rs mem m st res
     (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module f m)
-    (WF : state_st_wf m (HTL.State res m st calls asr asa))
+    (WF : state_st_wf m (HTL.State res m st asr asa))
     (MF : match_frames sf res)
     (MARR : match_arrs m f sp mem asa)
     (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
@@ -122,7 +122,7 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
     (CONST : match_constants m asr),
     match_states (RTL.State sf f sp st rs mem)
-                 (HTL.State res m st calls asr asa)
+                 (HTL.State res m st asr asa)
 | match_returnstate :
     forall
       v v' stack mem res
@@ -305,7 +305,7 @@ Ltac inv_state :=
       inversion TF;
       match goal with
         TC : forall _ _,
-          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _ _,
+          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _ _ _,
         H : Maps.PTree.get _ _ = Some _ |- _ =>
         apply TC in H; inversion H;
         match goal with
@@ -593,8 +593,8 @@ Section CORRECTNESS.
         end.
 
   Lemma eval_cond_correct :
-    forall stk f sp pc rs m res ml st calls asr asa e b f' s s' args i cond,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st calls asr asa) ->
+    forall stk f sp pc rs m res ml st asr asa e b f' s s' args i cond,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
       (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
       Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some b ->
       translate_condition cond args s = OK e s' i ->
@@ -724,8 +724,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma eval_cond_correct' :
-    forall e stk f sp pc rs m res ml st calls asr asa v f' s s' args i cond,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st calls asr asa) ->
+    forall e stk f sp pc rs m res ml st asr asa v f' s s' args i cond,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
       (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
       Values.Val.of_optbool None = v ->
       translate_condition cond args s = OK e s' i ->
@@ -737,8 +737,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma eval_correct_Oshrximm :
-    forall s sp rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st calls n,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st calls asr asa) ->
+    forall s sp rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st n,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop (Op.Oshrximm n) args res0 pc') ->
       Op.eval_operation ge sp (Op.Oshrximm n)
                         (List.map (fun r : BinNums.positive =>
@@ -802,8 +802,8 @@ Section CORRECTNESS.
   Admitted.
 
   Lemma eval_correct :
-    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st calls,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st calls asr asa) ->
+    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st ,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       Op.eval_operation ge sp op
                         (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
@@ -1022,10 +1022,10 @@ Section CORRECTNESS.
    *)
 
   Definition transl_instr_prop (instr : RTL.instruction) : Prop :=
-    forall m asr asa fin rtrn st calls stmt trans res,
+    forall m asr asa fin rtrn st stmt trans res,
       tr_instr fin rtrn st (m.(HTL.mod_stk)) instr stmt trans ->
       exists asr' asa',
-        HTL.step tge (HTL.State res m st calls asr asa) Events.E0 (HTL.State res m st calls asr' asa').
+        HTL.step tge (HTL.State res m st asr asa) Events.E0 (HTL.State res m st asr' asa').
 
   Opaque combine.
 

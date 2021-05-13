@@ -114,15 +114,12 @@ Definition find_module (i: ident) (ge : genv) : option fundef :=
    | Some b => Globalenvs.Genv.find_funct_ptr ge b
    end.
 
-Inductive active_call : Type :=
-  | ActiveCall (m : ident) (args : list value).
 
 Inductive stackframe : Type :=
   Stackframe :
     forall  (res : reg)
             (m : module)
             (st : node)
-            (forked_modules : list active_call)
             (reg_assoc : Verilog.assocmap_reg)
             (arr_assoc : Verilog.assocmap_arr),
       stackframe.
@@ -132,7 +129,6 @@ Inductive state : Type :=
     forall (stack : list stackframe)
            (m : module)
            (st : node)
-           (forked_modules : list active_call)
            (reg_assoc : Verilog.assocmap_reg)
            (arr_assoc : Verilog.assocmap_arr), state
 | Returnstate :
@@ -149,7 +145,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr asa
       basr1 basa1 nasr1 nasa1
       basr2 basa2 nasr2 nasa2
-      calls asr' asa'
+      asr' asa'
       f pstval,
       asr!(mod_reset m) = Some (ZToValue 0) ->
       asr!(mod_finish m) = Some (ZToValue 0) ->
@@ -173,26 +169,26 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asa' = Verilog.merge_arrs nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
       Z.pos pstval <= Integers.Int.max_unsigned ->
-      step g (State sf m st calls asr asa) Events.E0 (State sf m pstval calls asr' asa')
+      step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
 | step_finish :
-    forall g m st calls asr asa retval sf,
+    forall g m st asr asa retval sf,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->
     asr!(m.(mod_return)) = Some retval ->
-    step g (State sf m st calls asr asa) Events.E0 (Returnstate sf retval)
+    step g (State sf m st asr asa) Events.E0 (Returnstate sf retval)
 | step_call :
     forall g m args res,
       step g (Callstate res m args) Events.E0
-           (State res m m.(mod_entrypoint) nil
+           (State res m m.(mod_entrypoint)
              (AssocMap.set (mod_reset m) (ZToValue 0)
               (AssocMap.set (mod_finish m) (ZToValue 0)
                (AssocMap.set (mod_st m) (posToValue m.(mod_entrypoint))
                 (init_regs args m.(mod_params)))))
              (empty_stack m))
 | step_return :
-    forall g m calls asr asa i r sf pc mst,
+    forall g m asr asa i r sf pc mst,
       mst = mod_st m ->
-      step g (Returnstate (Stackframe r m pc calls asr asa :: sf) i) Events.E0
-           (State sf m pc calls ((asr # mst <- (posToValue pc)) # r <- i) asa).
+      step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
+           (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
