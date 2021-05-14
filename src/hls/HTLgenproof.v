@@ -24,6 +24,7 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Linking.
 Require Import compcert.common.Memory.
 Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
 
 Require Import vericert.common.IntegerExtra.
 Require Import vericert.common.Vericertlib.
@@ -98,9 +99,8 @@ Definition stack_bounds (sp : Values.val) (hi : Z) (m : mem) : Prop :=
     Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) = None /\
     Mem.storev AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) v = None.
 
-Inductive match_frames : list RTL.stackframe -> list HTL.stackframe -> Prop :=
-| match_frames_nil :
-    match_frames nil nil.
+Inductive match_frames (rtl : list RTL.stackframe) (htl : list HTL.stackframe) : Prop :=
+| match_frames_intro : match_frames rtl htl.
 
 Inductive match_constants : HTL.module -> assocmap -> Prop :=
   match_constant :
@@ -108,6 +108,11 @@ Inductive match_constants : HTL.module -> assocmap -> Prop :=
       asr!(HTL.mod_reset m) = Some (ZToValue 0) ->
       asr!(HTL.mod_finish m) = Some (ZToValue 0) ->
       match_constants m asr.
+
+Inductive match_externctrl (m : HTL.module) (asr : assocmap) : Prop :=
+  match_externctrl_intro :
+    (forall r, (exists o, (HTL.mod_externctrl m)!r = Some (o, HTL.ctrl_reset)) -> asr!r = Some (ZToValue 1)) ->
+    match_externctrl m asr.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem m st res
@@ -120,15 +125,15 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     (RSBP : reg_stack_based_pointers sp' rs)
     (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
     (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
-    (CONST : match_constants m asr),
+    (CONST : match_constants m asr)
+    (EXTERN : match_externctrl m asr),
     match_states (RTL.State sf f sp st rs mem)
                  (HTL.State res m st asr asa)
 | match_returnstate :
-    forall
-      v v' stack mem res
+    forall v v' stack mem res mid
       (MF : match_frames stack res),
       val_value_lessdef v v' ->
-      match_states (RTL.Returnstate stack v mem) (HTL.Returnstate res v')
+      match_states (RTL.Returnstate stack v mem) (HTL.Returnstate res mid v')
 | match_initial_call :
     forall f m m0
     (TF : tr_module f m),
@@ -308,7 +313,7 @@ Ltac inv_state :=
           Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _ _ _,
         H : Maps.PTree.get _ _ = Some _ |- _ =>
         apply TC in H; inversion H;
-        match goal with
+        try match goal with
           TI : context[tr_instr] |- _ =>
           inversion TI
         end
@@ -354,7 +359,6 @@ Section CORRECTNESS.
 
   Variable prog : RTL.program.
   Variable tprog : HTL.program.
-
 
   Hypothesis TRANSL : match_prog prog tprog.
 
@@ -592,6 +596,28 @@ Section CORRECTNESS.
                           ]
         end.
 
+  Ltac match_externctrl_tac :=
+    multimatch goal with
+    | [EXTERN : match_externctrl _ _ |- context[match_externctrl]] =>
+      inv EXTERN
+    end;
+    constructor; simplify;
+    repeat (rewrite AssocMap.gso); eauto;
+    repeat (
+        try multimatch goal with
+            | [_ : context[RTL.max_reg_function ?f] |- _ <> ?dst ] =>
+              assert (Ple dst (RTL.max_reg_function f))
+                by eauto using RTL.max_reg_function_def
+            | [_ : context[RTL.max_reg_function ?f] |- ?dst <> _ ] =>
+              assert (Ple dst (RTL.max_reg_function f))
+                by eauto using RTL.max_reg_function_def
+            end;
+        match goal with
+        | [H : forall r : positive, (exists x, _ ! r = Some x) -> (r > _ /\ _ > r)%positive |- _ ] =>
+          solve [exploit H; eauto; xomega]
+        end
+      ).
+
   Lemma eval_cond_correct :
     forall stk f sp pc rs m res ml st asr asa e b f' s s' args i cond,
       match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
@@ -750,10 +776,7 @@ Section CORRECTNESS.
     pose proof MSTATE as MSTATE_2. inv MSTATE.
     inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
     unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL.
-    (*repeat (simplify; eval_correct_tac; unfold valueToInt in * ).
-            destruct (Z_lt_ge_dec (Int.signed i0) 0).
-            econstructor.*)
-    (*unfold Values.Val.shrx in *.
+    unfold Values.Val.shrx in *.
     destruct v0; try discriminate.
     destruct (Int.ltu n (Int.repr 31)) eqn:?; try discriminate.
     inversion H1. clear H1.
@@ -798,8 +821,8 @@ Section CORRECTNESS.
       simplify. inv_lessdef. unfold valueToInt in *.
       rewrite H3 in H1. auto. inv H1. auto.
       rewrite H3 in H1. discriminate.
-      rewrite H3 in H2. discriminate.*)
-  Admitted.
+      rewrite H3 in H2. discriminate.
+  Qed.
 
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st ,
@@ -837,172 +860,170 @@ Section CORRECTNESS.
     - rewrite Heqb in Heqb0. discriminate.
     - rewrite H0 in Heqb. rewrite H1 in Heqb. discriminate.
     - rewrite Heqb in Heqb0. discriminate.
-    (* - unfold Int.ror. unfold Int.or. unfold Int.shru, Int.shl, Int.sub. unfold intToValue. unfold Int.modu, *)
-    (*   repeat (rewrite Int.unsigned_repr). auto. *)
-    (* - assert (Int.unsigned n <= 30). *)
-    (*   { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate. *)
-    (*     rewrite Int.unsigned_repr in l by (simplify; lia). *)
-    (*     replace 31 with (Z.succ 30) in l by auto. *)
-    (*     apply Zlt_succ_le in l. *)
-    (*     auto. *)
-    (*   } *)
-    (*   destruct (zlt (Int.signed i0) 0). *)
-    (*   + repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue; *)
-    (*     repeat (simplify; eval_correct_tac). *)
-    (*     rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_true; try lia. *)
-    (*     simplify. inv_lessdef. unfold valueToInt in *. *)
-    (*     rewrite Heqv0 in H0. auto. inv H0. auto. *)
-    (*     rewrite Heqv0 in H2. discriminate. *)
-    (*     unfold valueToInt in l. auto. *)
-    (*     inv_lessdef. unfold valueToInt in *. rewrite Heqv0 in H0. *)
-    (*     inv H0. *)
-    (*     unfold Int.lt in *. rewrite zlt_true in Heqb0. simplify. *)
-    (*     rewrite Int.unsigned_repr in Heqb0. discriminate. *)
-    (*     simplify; lia. *)
-    (*     unfold ZToValue. rewrite Int.signed_repr by (simplify; lia). *)
-    (*     auto. *)
-    (*     rewrite Heqv0 in H0; discriminate. *)
-    (*     rewrite Heqv0 in H2; discriminate. *)
-    (*   + eapply Verilog.erun_Vternary_false; repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue; *)
-    (*     repeat (simplify; eval_correct_tac). *)
-    (*     rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_false; try lia. *)
-    (*     simplify. inv_lessdef. unfold valueToInt in *. *)
-    (*     rewrite Heqv0 in H0. auto. inv H0. auto. *)
-    (*     rewrite Heqv0 in H2. discriminate. *)
-    (*     unfold valueToInt in *. auto. *)
-    (*     inv_lessdef. unfold valueToInt in *. *)
-    (*     rewrite Heqv0 in H0. *)
-    (*     inv H0. *)
-    (*     unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify. *)
-    (*     rewrite Int.unsigned_repr in Heqb0. lia. *)
-    (*     simplify; lia. *)
-    (*     unfold ZToValue. rewrite Int.signed_repr by (simplify; lia). *)
-    (*     auto. *)
-    (*     rewrite Heqv0 in H0; discriminate. *)
-    (*     rewrite Heqv0 in H2; discriminate. *)
-    (* - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2. *)
-    (*   + unfold translate_eff_addressing in *. repeat (unfold_match H1). *)
-    (*     destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac. *)
-    (*     pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue. *)
-    (*     apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. *)
-    (*     apply AGR. auto. rewrite H2 in H0. inv H0. unfold valueToPtr. unfold Ptrofs.of_int. *)
-    (*     rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*     apply Int.unsigned_range_2. *)
-    (*     rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*     apply Int.unsigned_range_2. *)
-    (*     replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*     apply Int.unsigned_range_2. *)
-    (*   + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1. *)
-    (*     inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac). *)
-    (*     all: repeat (unfold_match Heqv). *)
-    (*     * inv Heqv. unfold valueToInt in *. inv H2. inv H0. unfold valueToInt in *. trivial. *)
-    (*     * constructor. unfold valueToPtr, ZToValue in *. *)
-    (*       pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue. *)
-    (*       apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. *)
-    (*       apply AGR. auto. inv Heqv. rewrite Int.add_commut. *)
-    (*       apply AGR. auto. inv H1. inv H0. unfold valueToPtr. unfold Ptrofs.of_int. *)
-    (*       rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*       apply Int.unsigned_range_2. *)
-    (*       unfold Ptrofs.of_int. *)
-    (*       rewrite Ptrofs.unsigned_repr. inv H0. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*       apply Int.unsigned_range_2. *)
-    (*       rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*       apply Int.unsigned_range_2. *)
-    (*       apply Int.unsigned_range_2. *)
-    (*     * constructor. unfold valueToPtr, ZToValue in *. *)
-    (*       pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue. *)
-    (*       apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. *)
-    (*       apply AGR. auto. inv Heqv. *)
-    (*       apply AGR. auto. inv H0. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto. *)
-    (*       replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*       apply Int.unsigned_range_2. *)
-    (*       inv H1. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto. *)
-    (*       replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*       apply Int.unsigned_range_2. *)
-    (*       rewrite Ptrofs.unsigned_repr. auto. *)
-    (*       replace Ptrofs.max_unsigned with Int.max_unsigned by auto. *)
-    (*       apply Int.unsigned_range_2. apply Int.unsigned_range_2. *)
-    (*   + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1. *)
-    (*     inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac). *)
-    (*     all: repeat (unfold_match Heqv). *)
-    (*     * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv). inv Heqv. inv H3. *)
-    (*       unfold valueToInt, ZToValue. auto. *)
-    (*     * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv). *)
-    (*     * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv). *)
-    (*     * constructor. unfold valueToPtr, ZToValue. unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv). *)
-    (*   + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1. *)
-    (*     inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac). *)
-    (*     all: repeat (unfold_match Heqv). *)
-    (*     unfold valueToPtr, ZToValue. *)
-    (*     repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1. *)
-    (*     inv Heqv1. inv Heqv0. unfold valueToInt in *. *)
-    (*     assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto). *)
-    (*     apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H2. inv H2. auto. *)
-    (*     rewrite Heqv2 in H2. inv H2. *)
-    (*     rewrite Heqv2 in H3. discriminate. *)
-    (*     repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1. *)
-    (*     repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1. *)
-    (*     constructor. unfold valueToPtr, ZToValue. inv Heqv0. inv Heqv1. *)
-    (*     assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto). *)
-    (*     apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H3. inv H3. *)
+    - assert (Int.unsigned n <= 30).
+      { unfold Int.ltu in *. destruct (zlt (Int.unsigned n) (Int.unsigned (Int.repr 31))); try discriminate.
+        rewrite Int.unsigned_repr in l by (simplify; lia).
+        replace 31 with (Z.succ 30) in l by auto.
+        apply Zlt_succ_le in l.
+        auto.
+      }
+      destruct (zlt (Int.signed i0) 0).
+      + repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
+        repeat (simplify; eval_correct_tac).
+        rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_true; try lia.
+        simplify. inv_lessdef. unfold valueToInt in *.
+        rewrite Heqv0 in H0. auto. inv H0. auto.
+        rewrite Heqv0 in H2. discriminate.
+        unfold valueToInt in l. auto.
+        inv_lessdef. unfold valueToInt in *. rewrite Heqv0 in H0.
+        inv H0.
+        unfold Int.lt in *. rewrite zlt_true in Heqb0. simplify.
+        rewrite Int.unsigned_repr in Heqb0. discriminate.
+        simplify; lia.
+        unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
+        auto.
+        rewrite Heqv0 in H0; discriminate.
+        rewrite Heqv0 in H2; discriminate.
+      + eapply Verilog.erun_Vternary_false; repeat econstructor; unfold valueToBool, boolToValue, uvalueToZ, natToValue;
+        repeat (simplify; eval_correct_tac).
+        rewrite IntExtra.shrx_shrx_alt_equiv; auto. unfold IntExtra.shrx_alt. rewrite zlt_false; try lia.
+        simplify. inv_lessdef. unfold valueToInt in *.
+        rewrite Heqv0 in H0. auto. inv H0. auto.
+        rewrite Heqv0 in H2. discriminate.
+        unfold valueToInt in *. auto.
+        inv_lessdef. unfold valueToInt in *.
+        rewrite Heqv0 in H0.
+        inv H0.
+        unfold Int.lt in *. rewrite zlt_false in Heqb0. simplify.
+        rewrite Int.unsigned_repr in Heqb0. lia.
+        simplify; lia.
+        unfold ZToValue. rewrite Int.signed_repr by (simplify; lia).
+        auto.
+        rewrite Heqv0 in H0; discriminate.
+        rewrite Heqv0 in H2; discriminate.
+    - unfold Op.eval_addressing32 in *. repeat (unfold_match H2); inv H2.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1).
+        destruct v0; inv Heql; rewrite H2; inv H1; repeat eval_correct_tac.
+        pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+        apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+        apply AGR. auto. rewrite H2 in H0. inv H0. unfold valueToPtr. unfold Ptrofs.of_int.
+        rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+        apply Int.unsigned_range_2.
+        rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+        apply Int.unsigned_range_2.
+        replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+        apply Int.unsigned_range_2.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        * inv Heqv. unfold valueToInt in *. inv H2. inv H0. unfold valueToInt in *. trivial.
+        * constructor. unfold valueToPtr, ZToValue in *.
+          pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+          apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+          apply AGR. auto. inv Heqv. rewrite Int.add_commut.
+          apply AGR. auto. inv H1. inv H0. unfold valueToPtr. unfold Ptrofs.of_int.
+          rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          unfold Ptrofs.of_int.
+          rewrite Ptrofs.unsigned_repr. inv H0. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          rewrite Ptrofs.unsigned_repr. auto. replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          apply Int.unsigned_range_2.
+        * constructor. unfold valueToPtr, ZToValue in *.
+          pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+          apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+          apply AGR. auto. inv Heqv.
+          apply AGR. auto. inv H0. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto.
+          replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          inv H1. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto.
+          replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2.
+          rewrite Ptrofs.unsigned_repr. auto.
+          replace Ptrofs.max_unsigned with Int.max_unsigned by auto.
+          apply Int.unsigned_range_2. apply Int.unsigned_range_2.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv). inv Heqv. inv H3.
+          unfold valueToInt, ZToValue. auto.
+        * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv).
+        * unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv).
+        * constructor. unfold valueToPtr, ZToValue. unfold Values.Val.mul in Heqv. repeat (unfold_match Heqv).
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        unfold valueToPtr, ZToValue.
+        repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1.
+        inv Heqv1. inv Heqv0. unfold valueToInt in *.
+        assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+        apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H2. inv H2. auto.
+        rewrite Heqv2 in H2. inv H2.
+        rewrite Heqv2 in H3. discriminate.
+        repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1.
+        repeat unfold_match Heqv0. unfold Values.Val.mul in Heqv1. repeat unfold_match Heqv1.
+        constructor. unfold valueToPtr, ZToValue. inv Heqv0. inv Heqv1.
+        assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+        apply H in HPle1. inv HPle1. unfold valueToInt in *. rewrite Heqv2 in H3. inv H3.
 
-    (*     pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue. *)
-    (*     apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. *)
-    (*     apply AGR. auto. inv H2. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto. *)
-    (*     replace Ptrofs.max_unsigned with Int.max_unsigned by auto. apply Int.unsigned_range_2. *)
-    (*     apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2. apply Int.unsigned_range_2. *)
+        pose proof Integers.Ptrofs.agree32_add as AGR; unfold Integers.Ptrofs.agree32 in AGR. unfold ZToValue.
+        apply ptrofs_inj. unfold Ptrofs.of_int. rewrite Ptrofs.unsigned_repr.
+        apply AGR. auto. inv H2. unfold valueToPtr, Ptrofs.of_int. rewrite Ptrofs.unsigned_repr. auto.
+        replace Ptrofs.max_unsigned with Int.max_unsigned by auto. apply Int.unsigned_range_2.
+        apply Ptrofs.unsigned_repr. apply Int.unsigned_range_2. apply Int.unsigned_range_2.
 
-    (*     rewrite Heqv2 in H3. inv H3. *)
+        rewrite Heqv2 in H3. inv H3.
 
-    (*     rewrite Heqv2 in H4. inv H4. *)
-    (*   + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1. *)
-    (*     inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac). *)
-    (*     all: repeat (unfold_match Heqv). *)
-    (*     eexists. split. constructor. *)
-    (*     constructor. unfold valueToPtr, ZToValue. rewrite Ptrofs.add_zero_l. unfold Ptrofs.of_int. *)
-    (*     rewrite Int.unsigned_repr. symmetry. apply Ptrofs.repr_unsigned. *)
-    (*     unfold check_address_parameter_unsigned in *. apply Ptrofs.unsigned_range_2. *)
-    (* - destruct (Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m) eqn:EQ. *)
-    (*   + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. auto. *)
-    (*     intros. econstructor. econstructor. eassumption. unfold boolToValue, Values.Val.of_optbool. *)
-    (*     destruct b; constructor; auto. *)
-    (*   + eapply eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. auto. *)
-    (* - monadInv H1. *)
-    (*   destruct (Op.eval_condition c (map (fun r1 : positive => Registers.Regmap.get r1 rs) l0) m) eqn:EQN; *)
-    (*   simplify. destruct b eqn:B. *)
-    (*   + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. *)
-    (*     simplify; tauto. intros. *)
-    (*     econstructor. econstructor. eapply Verilog.erun_Vternary_true. eassumption. econstructor. auto. *)
-    (*     auto. unfold Values.Val.normalize. *)
-    (*     destruct (Registers.Regmap.get r rs) eqn:EQN2; constructor. *)
-    (*     * assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto). *)
-    (*       apply H in HPle1. inv HPle1. unfold valueToInt in H1. rewrite EQN2 in H1. inv H1. auto. *)
-    (*       rewrite EQN2 in H1. discriminate. rewrite EQN2 in H2. discriminate. *)
-    (*     * assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto). *)
-    (*       apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto. *)
-    (*       rewrite EQN2 in H2. discriminate. *)
-    (*   + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. *)
-    (*     simplify; tauto. intros. *)
-    (*     econstructor. econstructor. eapply Verilog.erun_Vternary_false. eassumption. econstructor. auto. *)
-    (*     auto. unfold Values.Val.normalize. *)
-    (*     destruct (Registers.Regmap.get r0 rs) eqn:EQN2; constructor. *)
-    (*     * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto). *)
-    (*       apply H in HPle1. inv HPle1. unfold valueToInt in H1. rewrite EQN2 in H1. inv H1. auto. *)
-    (*       rewrite EQN2 in H1. discriminate. rewrite EQN2 in H2. discriminate. *)
-    (*     * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto). *)
-    (*       apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto. *)
-    (*       rewrite EQN2 in H2. discriminate. *)
-    (*   + exploit eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. *)
-    (*     simplify; tauto. intros. inv H0. inv H1. destruct (Int.eq_dec x0 Int.zero). *)
-    (*     econstructor. econstructor. eapply Verilog.erun_Vternary_false. *)
-    (*     eassumption. econstructor. auto. subst. auto. constructor. *)
-    (*     econstructor. econstructor. eapply Verilog.erun_Vternary_true. *)
-    (*     eassumption. econstructor. auto. unfold valueToBool. pose proof n. apply Int.eq_false in n. *)
-    (*     unfold uvalueToZ. unfold Int.eq in n. unfold zeq in *. *)
-    (*     destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate. *)
-    (*     rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto. *)
-    (*     constructor. *)
-    Admitted.
+        rewrite Heqv2 in H4. inv H4.
+      + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
+        inv Heql. unfold boplitz. repeat (simplify; eval_correct_tac).
+        all: repeat (unfold_match Heqv).
+        eexists. split. constructor.
+        constructor. unfold valueToPtr, ZToValue. rewrite Ptrofs.add_zero_l. unfold Ptrofs.of_int.
+        rewrite Int.unsigned_repr. symmetry. apply Ptrofs.repr_unsigned.
+        unfold check_address_parameter_unsigned in *. apply Ptrofs.unsigned_range_2.
+    - destruct (Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m) eqn:EQ.
+      + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. auto.
+        intros. econstructor. econstructor. eassumption. unfold boolToValue, Values.Val.of_optbool.
+        destruct b; constructor; auto.
+      + eapply eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR. auto.
+    - monadInv H1.
+      destruct (Op.eval_condition c (map (fun r1 : positive => Registers.Regmap.get r1 rs) l0) m) eqn:EQN;
+      simplify. destruct b eqn:B.
+      + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_true. eassumption. econstructor. auto.
+        auto. unfold Values.Val.normalize.
+        destruct (Registers.Regmap.get r rs) eqn:EQN2; constructor.
+        * assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. unfold valueToInt in H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H1. discriminate. rewrite EQN2 in H2. discriminate.
+        * assert (HPle1 : Ple r (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H2. discriminate.
+      + exploit eval_cond_correct; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_false. eassumption. econstructor. auto.
+        auto. unfold Values.Val.normalize.
+        destruct (Registers.Regmap.get r0 rs) eqn:EQN2; constructor.
+        * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. unfold valueToInt in H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H1. discriminate. rewrite EQN2 in H2. discriminate.
+        * assert (HPle1 : Ple r0 (RTL.max_reg_function f)) by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+          apply H in HPle1. inv HPle1. rewrite EQN2 in H1. inv H1. rewrite EQN2 in H1. inv H1. auto.
+          rewrite EQN2 in H2. discriminate.
+      + exploit eval_cond_correct'; eauto. intros. eapply RTL.max_reg_function_use. apply INSTR.
+        simplify; tauto. intros. inv H0. inv H1. destruct (Int.eq_dec x0 Int.zero).
+        econstructor. econstructor. eapply Verilog.erun_Vternary_false.
+        eassumption. econstructor. auto. subst. auto. constructor.
+        econstructor. econstructor. eapply Verilog.erun_Vternary_true.
+        eassumption. econstructor. auto. unfold valueToBool. pose proof n. apply Int.eq_false in n.
+        unfold uvalueToZ. unfold Int.eq in n. unfold zeq in *.
+        destruct (Int.unsigned x0 ==Z Int.unsigned Int.zero); try discriminate.
+        rewrite <- Z.eqb_neq in n0. rewrite Int.unsigned_zero in n0. rewrite n0. auto.
+        constructor.
+  Qed.
 
   (** The proof of semantic preservation for the translation of instructions
       is a simulation argument based on diagrams of the following form:
@@ -1095,8 +1116,8 @@ Section CORRECTNESS.
       + repeat constructor.
       + big_tac.
     - inv CONST. inv MARR. simplify. big_tac.
-      constructor; rewrite AssocMap.gso; auto; simpl; lia.
-
+      + constructor; rewrite AssocMap.gso; crush.
+      + match_externctrl_tac.
     Unshelve. exact tt.
   Qed.
   Hint Resolve transl_inop_correct : htlproof.
@@ -1129,22 +1150,24 @@ Section CORRECTNESS.
 
       unfold Ple in HPle. lia.
     - big_tac.
-      apply regs_lessdef_add_match. assumption.
-      apply regs_lessdef_add_greater. unfold Plt; lia. assumption.
-      assert (HPle: Ple res0 (RTL.max_reg_function f))
+      + apply regs_lessdef_add_match. assumption.
+        apply regs_lessdef_add_greater. unfold Plt; lia. assumption.
+      + assert (HPle: Ple res0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-      unfold Ple in HPle; lia.
-      eapply op_stack_based; eauto.
-      inv CONST. constructor; simplify. rewrite AssocMap.gso. rewrite AssocMap.gso.
-      assumption. lia.
-      assert (HPle: Ple res0 (RTL.max_reg_function f))
-        by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-      unfold Ple in HPle. lia.
-      rewrite AssocMap.gso. rewrite AssocMap.gso.
-      assumption. lia.
-      assert (HPle: Ple res0 (RTL.max_reg_function f))
-        by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-      unfold Ple in HPle. lia.
+        unfold Ple in HPle; lia.
+      + eapply op_stack_based; eauto.
+      + inv CONST. constructor; simplify.
+        * rewrite AssocMap.gso. rewrite AssocMap.gso.
+          assumption. lia.
+          assert (HPle: Ple res0 (RTL.max_reg_function f))
+            by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+          unfold Ple in HPle. lia.
+        * rewrite AssocMap.gso. rewrite AssocMap.gso.
+          assumption. lia.
+          assert (HPle: Ple res0 (RTL.max_reg_function f))
+            by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
+          unfold Ple in HPle. lia.
+      + match_externctrl_tac.
       Unshelve. exact tt.
   Qed.
   Hint Resolve transl_iop_correct : htlproof.
@@ -1384,6 +1407,10 @@ Section CORRECTNESS.
       assert (HPle: Ple dst (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
       unfold Ple in HPle. lia.
+
+      (** Match externctrl *)
+      match_externctrl_tac.
+
     + (** Preamble *)
       invert MARR. inv CONST. crush.
 
@@ -1413,7 +1440,7 @@ Section CORRECTNESS.
       apply H11 in HPler1.
       invert HPler0; invert HPler1; try congruence.
       rewrite EQr0 in H13.
-      rewrite EQr1 in H21.
+      rewrite EQr1 in H22.
       invert H13. invert H14.
       clear H0. clear H8. clear H11.
 
@@ -1429,7 +1456,7 @@ Section CORRECTNESS.
       assert (Integers.Ptrofs.unsigned OFFSET mod 4 = 0) as MOD_PRESERVE.
       { apply Mem.load_valid_access in H1. unfold Mem.valid_access in *. simplify.
         apply Zdivide_mod. unfold valueToPtr in *. unfold uvalueToZ in *. unfold Ptrofs.of_int in *. unfold valueToInt in *.
-        inversion H21. subst. assumption. }
+        inversion H22. subst. assumption. }
 
       (** Read bounds proof *)
       assert (Integers.Ptrofs.unsigned OFFSET < f.(RTL.fn_stacksize)) as READ_BOUND_HIGH.
@@ -1482,14 +1509,14 @@ Section CORRECTNESS.
       1: {
         assert (HPle : Ple dst (RTL.max_reg_function f))
                by (eapply RTL.max_reg_function_def; eauto).
-        rewrite Pcompare_eq_Gt in H26.
+        rewrite Pcompare_eq_Gt in *.
         xomega.
       }
 
       2: {
         assert (HPle : Ple dst (RTL.max_reg_function f))
                by (eapply RTL.max_reg_function_def; eauto).
-        rewrite Pcompare_eq_Gt in H26.
+        rewrite Pcompare_eq_Gt in *.
         xomega.
       }
 
@@ -1510,26 +1537,28 @@ Section CORRECTNESS.
       | [ |- match_assocmaps _ _ _ ] => admit
       end.
 
-
       (** RSBP preservation *)
       unfold arr_stack_based_pointers in ASBP.
       specialize (ASBP (Integers.Ptrofs.unsigned
                           (Integers.Ptrofs.divu OFFSET (Integers.Ptrofs.repr 4)))).
       exploit ASBP; big_tac.
       rewrite NORMALISE in H14. rewrite HeqOFFSET in H14.
-      inversion H21. replace (asr # r1) in H14. rewrite H1 in H14. assumption.
+      inversion H22. replace (asr # r1) in *. rewrite H1 in *. assumption.
 
       rewrite Pcompare_eq_Gt in *.
       constructor; simplify. rewrite AssocMap.gso. rewrite AssocMap.gso.
       assumption. lia.
       assert (HPle: Ple dst (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto).
-      unfold Ple in HPle. lia.
+      xomega.
       rewrite AssocMap.gso. rewrite AssocMap.gso.
       assumption. lia.
       assert (HPle: Ple dst (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-      unfold Ple in HPle. lia.
+      xomega.
+
+      rewrite Pcompare_eq_Gt in *.
+      match_externctrl_tac.
 
     + invert MARR. inv CONST. crush.
 
@@ -1815,9 +1844,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H26; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H26; try lia.
-           rewrite ZLib.div_mul_undo in H26; try lia.
+           rewrite Z2Nat.id in *; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H27; try lia.
+           rewrite ZLib.div_mul_undo in *; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1881,8 +1910,8 @@ Section CORRECTNESS.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
            invert H11.
-           apply Zmult_lt_compat_r with (p := 4) in H21; try lia.
-           rewrite ZLib.div_mul_undo in H21; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H22; try lia.
+           rewrite ZLib.div_mul_undo in *; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -1923,6 +1952,9 @@ Section CORRECTNESS.
       rewrite AssocMap.gso.
       assumption. lia.
 
+      unfold Verilog.merge_regs. unfold_merge.
+      match_externctrl_tac.
+
     + (** Preamble *)
       invert MARR. inv CONST. crush.
 
@@ -1952,8 +1984,8 @@ Section CORRECTNESS.
       apply H11 in HPler1.
       invert HPler0; invert HPler1; try congruence.
       rewrite EQr0 in H13.
-      rewrite EQr1 in H21.
-      invert H13. invert H21.
+      rewrite EQr1 in H22.
+      invert H13. invert H22.
       clear H0. clear H8. clear H11.
 
       unfold check_address_parameter_signed in *;
@@ -2060,20 +2092,20 @@ Section CORRECTNESS.
       erewrite combine_lookup_second.
       simpl.
       assert (Ple src (RTL.max_reg_function f))
-        by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
-      apply H21 in H26.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H26; eauto.
+        by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
+      apply H22 in H27.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H27; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
       rewrite list_repeat_len. auto.
 
       assert (4 * ptr / 4 = Integers.Ptrofs.unsigned OFFSET / 4) by (f_equal; assumption).
-      rewrite Z.mul_comm in H26.
-      rewrite Z_div_mult in H26; try lia.
-      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H26 by reflexivity.
-      rewrite <- PtrofsExtra.divu_unsigned in H26; unfold_constants; try lia.
-      rewrite H26. rewrite <- offset_expr_ok_2.
+      rewrite Z.mul_comm in H27.
+      rewrite Z_div_mult in H27; try lia.
+      replace 4 with (Integers.Ptrofs.unsigned (Integers.Ptrofs.repr 4)) in H27 by reflexivity.
+      rewrite <- PtrofsExtra.divu_unsigned in H27; unfold_constants; try lia.
+      rewrite H27. rewrite <- offset_expr_ok_2.
       rewrite HeqOFFSET in *.
       rewrite array_get_error_set_bound.
       reflexivity.
@@ -2094,9 +2126,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           rewrite Z2Nat.id in H28; try lia.
-           apply Zmult_lt_compat_r with (p := 4) in H28; try lia.
-           rewrite ZLib.div_mul_undo in H28; try lia.
+           rewrite Z2Nat.id in *; try lia.
+           apply Zmult_lt_compat_r with (p := 4) in H29; try lia.
+           rewrite ZLib.div_mul_undo in H29; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -2121,7 +2153,7 @@ Section CORRECTNESS.
       unfold_constants.
       intro.
       rewrite HeqOFFSET in *.
-      apply Z2Nat.inj_iff in H26; try lia.
+      apply Z2Nat.inj_iff in H27; try lia.
       apply Z.div_pos; try lia.
       apply Integers.Ptrofs.unsigned_range.
       apply Integers.Ptrofs.unsigned_range_2.
@@ -2142,7 +2174,7 @@ Section CORRECTNESS.
       crush.
       destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; try constructor.
       destruct (Archi.ptr64); try discriminate.
-      pose proof (RSBP src). rewrite EQ_SRC in H21.
+      pose proof (RSBP src). rewrite EQ_SRC in H22.
       assumption.
 
       simpl.
@@ -2160,9 +2192,9 @@ Section CORRECTNESS.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           invert H21.
-           apply Zmult_lt_compat_r with (p := 4) in H27; try lia.
-           rewrite ZLib.div_mul_undo in H27; try lia.
+           invert H22.
+           apply Zmult_lt_compat_r with (p := 4) in H28; try lia.
+           rewrite ZLib.div_mul_undo in H28; try lia.
            split; try lia.
            apply Z.le_trans with (m := RTL.fn_stacksize f); crush; lia.
       }
@@ -2188,18 +2220,21 @@ Section CORRECTNESS.
                                (Integers.Ptrofs.unsigned
                                   (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                        (Integers.Ptrofs.repr ptr))) Writable).
-      { pose proof H1. eapply Mem.store_valid_access_2 in H21.
-        exact H21. eapply Mem.store_valid_access_3. eassumption. }
+      { pose proof H1. eapply Mem.store_valid_access_2 in H22.
+        exact H22. eapply Mem.store_valid_access_3. eassumption. }
       pose proof (Mem.valid_access_store m AST.Mint32 sp'
                                          (Integers.Ptrofs.unsigned
                                             (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                                  (Integers.Ptrofs.repr ptr))) v).
-      apply X in H21. invert H21. congruence.
+      apply X in H22. invert H22. congruence.
 
       constructor; simplify. unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
       unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
+
+      unfold Verilog.merge_regs. unfold_merge.
+      match_externctrl_tac.
 
     + invert MARR. inv CONST. crush.
 
@@ -2436,6 +2471,9 @@ Section CORRECTNESS.
       unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
 
+      unfold Verilog.merge_regs. unfold_merge.
+      match_externctrl_tac.
+
       Unshelve.
       all: try (exact tt); auto.
   Qed.
@@ -2457,7 +2495,9 @@ Section CORRECTNESS.
     inv_state.
     destruct b.
     - eexists. split. apply Smallstep.plus_one.
-      clear H34.
+      match goal with
+      | [H : Z.pos ifnot <= Int.max_unsigned |- _] => clear H
+      end.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
@@ -2465,7 +2505,7 @@ Section CORRECTNESS.
       constructor; trivial.
       eapply Verilog.erun_Vternary_true; simpl; eauto.
       eapply eval_cond_correct; eauto. intros.
-      intros. eapply RTL.max_reg_function_use. apply H22. auto.
+      intros. eapply RTL.max_reg_function_use. eauto. auto.
       econstructor. auto.
       simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
@@ -2473,8 +2513,13 @@ Section CORRECTNESS.
       inv MARR. inv CONST.
       big_tac.
       constructor; rewrite AssocMap.gso; simplify; try assumption; lia.
+
+      match_externctrl_tac.
+
     - eexists. split. apply Smallstep.plus_one.
-      clear H33.
+      match goal with
+      | [H : Z.pos ifso <= Int.max_unsigned |- _] => clear H
+      end.
       eapply HTL.step_module; eauto.
       inv CONST; assumption.
       inv CONST; assumption.
@@ -2482,7 +2527,7 @@ Section CORRECTNESS.
       constructor; trivial.
       eapply Verilog.erun_Vternary_false; simpl; eauto.
       eapply eval_cond_correct; eauto. intros.
-      intros. eapply RTL.max_reg_function_use. apply H22. auto.
+      intros. eapply RTL.max_reg_function_use. eauto. auto.
       econstructor. auto.
       simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
@@ -2490,6 +2535,8 @@ Section CORRECTNESS.
       inv MARR. inv CONST.
       big_tac.
       constructor; rewrite AssocMap.gso; simplify; try assumption; lia.
+
+      match_externctrl_tac.
 
       Unshelve. all: exact tt.
   Qed.
@@ -2510,6 +2557,21 @@ Section CORRECTNESS.
     intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE.
   
   Hint Resolve transl_ijumptable_correct : htlproof.*)
+
+  Lemma transl_icall_correct:
+    forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
+      (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
+      (RTL.fn_code f) ! pc = Some (RTL.Icall sig (inr fn) args dst pc') ->
+      RTL.find_function ge (inr fn) rs = Some fd ->
+      forall R1 : HTL.state,
+        match_states (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) pc rs m) R1 ->
+        exists R2 : HTL.state,
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
+          match_states (RTL.Callstate s fd rs##args m)%rtl R2.
+  Proof.
+    (* Michalis: Broken by resource sharing *)
+  Admitted.
+  Hint Resolve transl_icall_correct : htlproof.
 
   Lemma transl_ireturn_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
@@ -2645,9 +2707,9 @@ Section CORRECTNESS.
         Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
         match_states (RTL.State s f sp pc (Registers.Regmap.set res0 vres rs) m) R2.
   Proof.
-    intros res0 f sp pc rs s vres m R1 MSTATE.
-    inversion MSTATE. inversion MF.
-  Qed.
+    intros * MSTATE.
+    (* Michalis: Broken by resource sharing *)
+  Admitted.
   Hint Resolve transl_returnstate_correct : htlproof.
 
   Lemma option_inv :
@@ -2718,8 +2780,9 @@ Section CORRECTNESS.
       Smallstep.final_state (RTL.semantics prog) s1 r ->
       Smallstep.final_state (HTL.semantics tprog) s2 r.
   Proof.
-    intros. inv H0. inv H. inv H4. invert MF. constructor. reflexivity.
-  Qed.
+    intros. inv H0. inv H. inv H4. invert MF.
+    (* Needs to fix match_frames *)
+  Admitted.
   Hint Resolve transl_final_states : htlproof.
 
   Theorem transl_step_correct:

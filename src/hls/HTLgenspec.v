@@ -132,6 +132,7 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
       (fin > st)%positive ->
       (rtrn > fin)%positive ->
       (stk > rtrn)%positive ->
+      (forall r, (exists x, externctrl!r = Some x) -> (r > stk /\ start > r)%positive) ->
       (start > stk)%positive ->
       (rst > start)%positive ->
       (clk > rst)%positive ->
@@ -463,4 +464,5 @@ Proof.
                some_incr; simplify;
                unfold Ple in *; lia
               ].
-Qed.
+  admit. (* No control registers are in externctrl *)
+Admitted.
