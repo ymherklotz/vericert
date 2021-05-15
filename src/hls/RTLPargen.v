@@ -978,6 +978,62 @@ Proof.
   { eapply sem_update_store; eauto. }
 Qed.
 
+Lemma sem_update2_Op :
+  forall A ge sp st f r l o0 o m rs v,
+  @sem A ge sp st f (InstrState rs m) ->
+  Op.eval_operation ge sp o0 rs ## l m = Some v ->
+  sem ge sp st (update f (RBop o o0 l r)) (InstrState (Regmap.set r v rs) m).
+Proof.
+  intros. destruct st. constructor.
+  inv H. inv H6.
+  { constructor; intros. simplify.
+    destruct (Pos.eq_dec r x); subst.
+    { rewrite map2. econstructor. eauto.
+      apply gen_list_base. eauto.
+      rewrite Regmap.gss. auto. }
+    { rewrite genmap1; crush. rewrite Regmap.gso; auto.  } }
+  { simplify. rewrite genmap1; crush. inv H. eauto. }
+Qed.
+
+Lemma sem_update2_load :
+  forall A ge sp st f r o m a l m0 rs v a0,
+    @sem A ge sp st f (InstrState rs m0) ->
+    Op.eval_addressing ge sp a rs ## l = Some a0 ->
+    Mem.loadv m m0 a0 = Some v ->
+    sem ge sp st (update f (RBload o m a l r)) (InstrState (Regmap.set r v rs) m0).
+Proof.
+  intros. simplify. inv H. inv H7. constructor.
+  { constructor; intros. destruct (Pos.eq_dec r x); subst.
+    { rewrite map2. rewrite Regmap.gss. econstructor; eauto.
+      apply gen_list_base; eauto. }
+    { rewrite genmap1; crush. rewrite Regmap.gso; eauto. }
+  }
+  { simplify. rewrite genmap1; crush. }
+Qed.
+
+Lemma sem_update2_store :
+  forall A ge sp a0 m a l r o f st m' rs m0,
+    @sem A ge sp st f (InstrState rs m0) ->
+    Op.eval_addressing ge sp a rs ## l = Some a0 ->
+    Mem.storev m m0 a0 rs !! r = Some m' ->
+    sem ge sp st (update f (RBstore o m a l r)) (InstrState rs m').
+Proof.
+  intros. simplify. inv H. inv H7. constructor; simplify.
+  { econstructor; intros. rewrite genmap1; crush. }
+  { rewrite map2. econstructor; eauto. apply gen_list_base; eauto. }
+Qed.
+
+Lemma sem_update2 :
+  forall A ge sp st x st' st'' f,
+  sem ge sp st f st' ->
+  @step_instr A ge sp st' x st'' ->
+  sem ge sp st (update f x) st''.
+Proof.
+  intros.
+  destruct x; inv H0;
+  eauto using sem_update_RBnop, sem_update2_Op, sem_update2_load, sem_update2_store.
+Qed.
+
 Lemma rtlblock_trans_correct :
   forall bb ge sp st st',
     RTLBlock.step_instr_list ge sp st bb st' ->
@@ -996,13 +1052,6 @@ Proof.
     eauto. inv_simp. econstructor. split. apply H3.
     auto. }
 Qed.
-
-Lemma rtlpar_trans_correct :
-  forall ge sp bb sem_st' sem_st,
-  sem ge sp sem_st (abstract_sequence empty (concat (concat bb))) sem_st' ->
-  exists st', RTLPar.step_instr_block ge sp sem_st bb st'
-              /\ match_states sem_st' st'.
-Proof. Admitted.
 
 Lemma abstr_sem_val_mem :
   forall A B ge tge st tst sp a,
@@ -1203,6 +1252,50 @@ Proof.
        exploit IHbb; eauto; []; inv_simp); repeat econstructor; eauto.
 Qed.
 
+Lemma sem_update' :
+  forall A ge sp st a x st',
+  sem ge sp st (update (abstract_sequence empty a) x) st' ->
+  exists st'',
+  @step_instr A ge sp st'' x st' /\
+  sem ge sp st (abstract_sequence empty a) st''.
+Proof.
+  Admitted.
+
+Lemma sem_separate :
+  forall A (ge: @RTLBlockInstr.genv A) b a sp st st',
+    sem ge sp st (abstract_sequence empty (a ++ b)) st' ->
+    exists st'',
+         sem ge sp st (abstract_sequence empty a) st''
+      /\ sem ge sp st'' (abstract_sequence empty b) st'.
+Proof.
+  induction b using rev_ind; simplify.
+  { econstructor. simplify. rewrite app_nil_r in H. eauto. apply abstract_interp_empty. }
+  { simplify. rewrite app_assoc in H. rewrite abstract_seq in H.
+    exploit sem_update'; eauto; inv_simp.
+    exploit IHb; eauto; inv_simp.
+    econstructor; split; eauto.
+    rewrite abstract_seq.
+    eapply sem_update2; eauto.
+  }
+Qed.
+
+Lemma rtlpar_trans_correct :
+  forall bb ge sp sem_st' sem_st st,
+  sem ge sp sem_st (abstract_sequence empty (concat (concat bb))) sem_st' ->
+  match_states sem_st st ->
+  exists st', RTLPar.step_instr_block ge sp st bb st'
+              /\ match_states sem_st' st'.
+Proof.
+  induction bb using rev_ind.
+  { repeat econstructor. eapply abstract_interp_empty3 in H.
+    inv H. inv H0. constructor; congruence. }
+  { simplify. inv H0. repeat rewrite concat_app in H. simplify.
+    rewrite app_nil_r in H.
+    exploit sem_separate; eauto; inv_simp.
+    repeat econstructor. admit. admit.
+  }
+Admitted.
+
 Lemma abstract_execution_correct:
   forall bb bb' cfi ge tge sp st st' tst,
     RTLBlock.step_instr_list ge sp st bb st' ->
@@ -1219,7 +1312,7 @@ Proof.
   try solve [eassumption | apply state_lessdef_match_sem; eassumption].
   apply match_states_commut. eauto. inv_simp.
   exploit rtlpar_trans_correct; try eassumption; []; inv_simp.
-  exploit step_instr_block_matches; eauto; inv_simp.
+  exploit step_instr_block_matches; eauto. apply match_states_commut; eauto. inv_simp.
   repeat match goal with | H: match_states _ _ |- _ => inv H end.
   do 2 econstructor; eauto.
   econstructor; congruence.
