@@ -467,6 +467,13 @@ Inductive match_states : instr_state -> instr_state -> Prop :=
     m = m' ->
     match_states (InstrState rs m) (InstrState rs' m').
 
+Inductive match_states_ld : instr_state -> instr_state -> Prop :=
+| match_states_ld_intro:
+  forall rs rs' m m',
+    regs_lessdef rs rs' ->
+    Mem.extends m m' ->
+    match_states_ld (InstrState rs m) (InstrState rs' m').
+
 Lemma sems_det:
   forall A ge tge sp st f,
   ge_preserved ge tge ->
@@ -1317,6 +1324,17 @@ Proof.
   do 2 econstructor; eauto.
   econstructor; congruence.
 Qed.
+
+(*Lemma abstract_execution_correct_ld:
+  forall bb bb' cfi ge tge sp st st' tst,
+    RTLBlock.step_instr_list ge sp st bb st' ->
+    ge_preserved ge tge ->
+    schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
+    match_states_ld st tst ->
+    exists tst', RTLPar.step_instr_block tge sp tst bb' tst'
+                 /\ match_states st' tst'.
+Proof.
+  intros.*)
 
 (*|
 Top-level functions

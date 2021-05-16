@@ -44,26 +44,23 @@ Inductive match_stackframes: RTLBlock.stackframe -> RTLPar.stackframe -> Prop :=
 
 Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
 | match_state:
-    forall sf f sp pc rs rs' m m' sf' tf
+    forall sf f sp pc rs rs' m sf' tf
       (TRANSL: transl_function f = OK tf)
       (STACKS: list_forall2 match_stackframes sf sf')
-      (REG: forall x, rs !! x = rs' !! x)
-      (MEM: Mem.extends m m'),
+      (REG: forall x, rs !! x = rs' !! x),
       match_states (State sf f sp pc rs m)
-                   (State sf' tf sp pc rs' m')
+                   (State sf' tf sp pc rs' m)
 | match_returnstate:
-    forall stack stack' v m m'
-      (STACKS: list_forall2 match_stackframes stack stack')
-      (MEM: Mem.extends m m'),
+    forall stack stack' v m
+      (STACKS: list_forall2 match_stackframes stack stack'),
       match_states (Returnstate stack v m)
-                   (Returnstate stack' v m')
+                   (Returnstate stack' v m)
 | match_callstate:
-    forall stack stack' f tf args m m'
+    forall stack stack' f tf args m
       (TRANSL: transl_fundef f = OK tf)
-      (STACKS: list_forall2 match_stackframes stack stack')
-      (MEM: Mem.extends m m'),
+      (STACKS: list_forall2 match_stackframes stack stack'),
       match_states (Callstate stack f args m)
-                   (Callstate stack' tf args m').
+                   (Callstate stack' tf args m).
 
 Section CORRECTNESS.
 
@@ -266,7 +263,7 @@ Section CORRECTNESS.
       Events.eval_builtin_arg ge e2 sp m1 a v1.
 Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
-  Lemma eval_builtin_args_lessdef:
+  Lemma eval_builtin_args_eq:
     forall A ge e1 sp m1 e2 al vl1,
       (forall x, e1 x = e2 x) ->
       @Events.eval_builtin_args A ge e1 sp m1 al vl1 ->
@@ -293,14 +290,23 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     { (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
     (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
     (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
-    exploit Events.eval_builtin_args_lessdef.
+    eapply eval_builtin_args_eq. eapply REG.
+    eapply Events.eval_builtin_args_preserved. eapply symbols_preserved.
+    eauto.
+    (econstructor; eauto with rtlgp).
+    intros.
+    unfold regmap_setres. destruct res.
+    destruct (Pos.eq_dec x0 x); subst.
+    repeat rewrite Regmap.gss; auto.
+    repeat rewrite Regmap.gso; auto.
+    eapply REG. eapply REG.
     }
-    repeat (econstructor; eauto with rtlgp).
-    erewrite match_states_list; eauto.
-    repeat (econstructor; eauto with rtlgp).
+    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp). }
+    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp). }
+    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
+      unfold regmap_optget. destruct or. rewrite REG. constructor; eauto.
+      constructor; eauto.
     }
-    repeat (econstructor; eauto with rtlgp).
-    exploit find_function_translated. eauto.
   Qed.
 
   Theorem transl_step_correct :
