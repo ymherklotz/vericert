@@ -284,25 +284,19 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         match_states s r ->
         exists r', step_cf_instr tge r cfi t r' /\ match_states s' r'.
   Proof using TRANSL.
-    induction 1; repeat semantics_simpl.
-    { repeat (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp). }
-    { repeat (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp). }
-    { (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
-    (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
-    (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
-    eapply eval_builtin_args_eq. eapply REG.
-    eapply Events.eval_builtin_args_preserved. eapply symbols_preserved.
-    eauto.
-    (econstructor; eauto with rtlgp).
-    intros.
-    unfold regmap_setres. destruct res.
-    destruct (Pos.eq_dec x0 x); subst.
-    repeat rewrite Regmap.gss; auto.
-    repeat rewrite Regmap.gso; auto.
-    eapply REG. eapply REG.
+    induction 1; repeat semantics_simpl;
+    try solve [repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp)].
+    { do 3 (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
+      eapply eval_builtin_args_eq. eapply REG.
+      eapply Events.eval_builtin_args_preserved. eapply symbols_preserved.
+      eauto.
+      intros.
+      unfold regmap_setres. destruct res.
+      destruct (Pos.eq_dec x0 x); subst.
+      repeat rewrite Regmap.gss; auto.
+      repeat rewrite Regmap.gso; auto.
+      eapply REG. eapply REG.
     }
-    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp). }
-    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp). }
     { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
       unfold regmap_optget. destruct or. rewrite REG. constructor; eauto.
       constructor; eauto.
