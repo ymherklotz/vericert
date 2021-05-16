@@ -99,9 +99,6 @@ Definition stack_bounds (sp : Values.val) (hi : Z) (m : mem) : Prop :=
     Mem.loadv AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) = None /\
     Mem.storev AST.Mint32 m (Values.Val.offset_ptr sp (Integers.Ptrofs.repr ptr )) v = None.
 
-Inductive match_frames (rtl : list RTL.stackframe) (htl : list HTL.stackframe) : Prop :=
-| match_frames_intro : match_frames rtl htl.
-
 Inductive match_constants : HTL.module -> assocmap -> Prop :=
   match_constant :
     forall m asr,
@@ -113,6 +110,35 @@ Inductive match_externctrl (m : HTL.module) (asr : assocmap) : Prop :=
   match_externctrl_intro :
     (forall r, (exists o, (HTL.mod_externctrl m)!r = Some (o, HTL.ctrl_reset)) -> asr!r = Some (ZToValue 1)) ->
     match_externctrl m asr.
+
+(** The caller needs to have externctrl signals for the current module *)
+Definition has_externctrl (caller : HTL.module) (current_id : HTL.ident) (ret rst fin : HTL.reg) :=
+  (HTL.mod_externctrl caller)!ret = Some (current_id, HTL.ctrl_return) /\
+  (HTL.mod_externctrl caller)!rst = Some (current_id, HTL.ctrl_reset) /\
+  (HTL.mod_externctrl caller)!fin = Some (current_id, HTL.ctrl_finish).
+
+Inductive match_frames (current_id : HTL.ident)
+  : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
+| match_frames_nil :
+    match_frames current_id nil nil
+| match_frames_cons :
+    forall dst f sp sp' rs mem mid m pc st asr asa rtl_tl htl_tl ret rst fin
+      (MASSOC : match_assocmaps f rs asr)
+      (TF : tr_module f m)
+      (MARR : match_arrs m f sp mem asa)
+      (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
+      (RSBP : reg_stack_based_pointers sp' rs)
+      (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
+      (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
+      (CONST : match_constants m asr)
+      (EXTERN : match_externctrl m asr)
+      (EXTERN_CALLER : has_externctrl m current_id ret rst fin)
+      (JOIN_CTRL : (HTL.mod_controllogic m)!st = Some (state_wait (HTL.mod_st m) fin pc))
+      (JOIN_DATA : (HTL.mod_datapath m)!st = Some (join ret rst dst))
+      (TAILS : match_frames mid rtl_tl htl_tl),
+      match_frames current_id
+                   ((RTL.Stackframe dst f sp pc rs) :: rtl_tl)
+                   ((HTL.Stackframe mid m st asr asa) :: htl_tl).
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem mid m st res
