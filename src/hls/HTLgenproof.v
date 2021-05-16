@@ -55,8 +55,8 @@ Inductive match_assocmaps : RTL.function -> RTL.regset -> assocmap -> Prop :=
 Hint Constructors match_assocmaps : htlproof.
 
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
-  forall st asa asr res,
-  s = HTL.State res m st asa asr ->
+  forall mid st asa asr res,
+  s = HTL.State res mid m st asa asr ->
   asa!(m.(HTL.mod_st)) = Some (posToValue st).
 Hint Unfold state_st_wf : htlproof.
 
@@ -115,11 +115,11 @@ Inductive match_externctrl (m : HTL.module) (asr : assocmap) : Prop :=
     match_externctrl m asr.
 
 Inductive match_states : RTL.state -> HTL.state -> Prop :=
-| match_state : forall asa asr sf f sp sp' rs mem m st res
+| match_state : forall asa asr sf f sp sp' rs mem mid m st res
     (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module f m)
-    (WF : state_st_wf m (HTL.State res m st asr asa))
-    (MF : match_frames sf res)
+    (WF : state_st_wf m (HTL.State res mid m st asr asa))
+    (MF : match_frames mid sf res)
     (MARR : match_arrs m f sp mem asa)
     (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
     (RSBP : reg_stack_based_pointers sp' rs)
@@ -128,16 +128,18 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     (CONST : match_constants m asr)
     (EXTERN : match_externctrl m asr),
     match_states (RTL.State sf f sp st rs mem)
-                 (HTL.State res m st asr asa)
+                 (HTL.State res mid m st asr asa)
 | match_returnstate :
-    forall v v' stack mem res mid
-      (MF : match_frames stack res),
+    forall v v' rtl_stk htl_stk mem mid
+      (MF : match_frames mid rtl_stk htl_stk),
       val_value_lessdef v v' ->
-      match_states (RTL.Returnstate stack v mem) (HTL.Returnstate res mid v')
+      match_states (RTL.Returnstate rtl_stk v mem)
+                   (HTL.Returnstate htl_stk mid v')
 | match_initial_call :
-    forall f m m0
+    forall f mid m m0
     (TF : tr_module f m),
-      match_states (RTL.Callstate nil (AST.Internal f) nil m0) (HTL.Callstate nil m nil).
+      match_states (RTL.Callstate nil (AST.Internal f) nil m0)
+                   (HTL.Callstate nil mid m nil).
 Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
@@ -619,8 +621,8 @@ Section CORRECTNESS.
       ).
 
   Lemma eval_cond_correct :
-    forall stk f sp pc rs m res ml st asr asa e b f' s s' args i cond,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+    forall stk f sp pc rs mid m res ml st asr asa e b f' s s' args i cond,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
       Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some b ->
       translate_condition cond args s = OK e s' i ->
@@ -750,8 +752,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma eval_cond_correct' :
-    forall e stk f sp pc rs m res ml st asr asa v f' s s' args i cond,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+    forall e stk f sp pc rs m res mid ml st asr asa v f' s s' args i cond,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
       Values.Val.of_optbool None = v ->
       translate_condition cond args s = OK e s' i ->
@@ -763,8 +765,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma eval_correct_Oshrximm :
-    forall s sp rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st n,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+    forall s sp rs m v e asr asa f f' stk s' i pc res0 pc' args res mid ml st n,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop (Op.Oshrximm n) args res0 pc') ->
       Op.eval_operation ge sp (Op.Oshrximm n)
                         (List.map (fun r : BinNums.positive =>
@@ -825,8 +827,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma eval_correct :
-    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res ml st ,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res ml st asr asa) ->
+    forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res mid ml st ,
+      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       Op.eval_operation ge sp op
                         (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
@@ -1043,10 +1045,10 @@ Section CORRECTNESS.
    *)
 
   Definition transl_instr_prop (instr : RTL.instruction) : Prop :=
-    forall m asr asa fin rtrn st stmt trans res,
+    forall mid m asr asa fin rtrn st stmt trans res,
       tr_instr fin rtrn st (m.(HTL.mod_stk)) instr stmt trans ->
       exists asr' asa',
-        HTL.step tge (HTL.State res m st asr asa) Events.E0 (HTL.State res m st asr' asa').
+        HTL.step tge (HTL.State res mid m st asr asa) Events.E0 (HTL.State res mid m st asr' asa').
 
   Opaque combine.
 

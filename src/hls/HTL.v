@@ -119,32 +119,34 @@ Definition find_module (i: ident) (ge : genv) : option module :=
   end.
 
 Inductive stackframe : Type :=
-  Stackframe :
-    forall (m : module)
-            (st : node)
-            (reg_assoc : Verilog.assocmap_reg)
-            (arr_assoc : Verilog.assocmap_arr),
-      stackframe.
+  Stackframe : forall (mid : ident)
+                 (m : module)
+                 (st : node)
+                 (reg_assoc : Verilog.assocmap_reg)
+                 (arr_assoc : Verilog.assocmap_arr),
+    stackframe.
 
 Inductive state : Type :=
 | State :
     forall (stack : list stackframe)
+           (mid : ident)
            (m : module)
            (st : node)
            (reg_assoc : Verilog.assocmap_reg)
            (arr_assoc : Verilog.assocmap_arr), state
 | Returnstate :
     forall (res : list stackframe)
-           (mid : ident)
+           (mid : ident) (** Name of the callee *)
            (v : value), state
 | Callstate :
     forall (stack : list stackframe)
+           (mid : ident)
            (m : module)
            (args : list value), state.
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g m st sf ctrl_stmnt data_stmnt
+    forall g mid m st sf ctrl_stmnt data_stmnt
       asr asa
       basr1 basa1 nasr1 nasa1
       basr2 basa2 nasr2 nasa2
@@ -172,49 +174,60 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asa' = Verilog.merge_arrs nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
       Z.pos pstval <= Integers.Int.max_unsigned ->
-      step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
+      step g
+           (State sf mid m st     asr  asa) Events.E0
+           (State sf mid m pstval asr' asa')
 | step_finish :
     forall g m st asr asa retval sf mid,
     asr!(m.(mod_finish)) = Some (ZToValue 1) ->
     asr!(m.(mod_return)) = Some retval ->
 
-    (* FIXME: We need to check that mid actually matches the current module *)
-    step g (State sf m st asr asa) Events.E0 (Returnstate sf mid retval)
+    step g
+         (State sf mid m st asr asa) Events.E0
+         (Returnstate sf mid retval)
 | step_initcall :
-    forall g m st asr asa sf othermod_id othermod othermod_reset othermod_params othermod_param_vals,
-    find_module othermod_id g = Some othermod ->
+    forall g callerid caller st asr asa sf callee_id callee callee_reset callee_params callee_param_vals,
+    find_module callee_id g = Some callee ->
 
-    m.(mod_externctrl)!othermod_reset = Some (othermod_id, ctrl_reset) ->
-    (forall n param, nth_error othermod_params n = Some param ->
-          m.(mod_externctrl)!param = Some (othermod_id, ctrl_param n)) ->
+    caller.(mod_externctrl)!callee_reset = Some (callee_id, ctrl_reset) ->
+    (forall n param, nth_error callee_params n = Some param ->
+          caller.(mod_externctrl)!param = Some (callee_id, ctrl_param n)) ->
 
     (* The fact that this is the only condition on the current state to trigger
        a call introduces non-determinism into the semantics. The semantics
        permit initiating a call from any state where a reset has been set to 0.
      *)
-    asr!othermod_reset = Some (ZToValue 0) ->
-    othermod_param_vals = List.map (fun p => asr#p) othermod_params ->
+    asr!callee_reset = Some (ZToValue 0) ->
+    callee_param_vals = List.map (fun p => asr#p) callee_params ->
 
-    step g (State sf m st asr asa) Events.E0
-         (Callstate (Stackframe m st asr asa :: sf) othermod othermod_param_vals)
+    step g
+         (State sf callerid caller st asr asa) Events.E0
+         (Callstate (Stackframe callerid caller st asr asa :: sf)
+                    callee_id callee callee_param_vals)
+
 | step_call :
-    forall g m args res,
-      step g (Callstate res m args) Events.E0
-           (State res m m.(mod_entrypoint)
+    forall g mid m args res,
+      step g
+           (Callstate res mid m args) Events.E0
+           (State res mid m m.(mod_entrypoint)
              (AssocMap.set (mod_reset m) (ZToValue 0)
               (AssocMap.set (mod_finish m) (ZToValue 0)
                (AssocMap.set (mod_st m) (posToValue m.(mod_entrypoint))
                 (init_regs args m.(mod_params)))))
              (empty_stack m))
+
 | step_return :
-    forall g m asr asa othermod_id othermod_return othermod_finish i r sf pc mst,
-      mst = mod_st m ->
+    forall g callerid caller asr asa callee_id callee_return callee_finish i sf pc mst,
+      mst = mod_st caller ->
 
-      m.(mod_externctrl)!othermod_return = Some (othermod_id, ctrl_return) ->
-      m.(mod_externctrl)!othermod_finish = Some (othermod_id, ctrl_finish) ->
+      caller.(mod_externctrl)!callee_return = Some (callee_id, ctrl_return) ->
+      caller.(mod_externctrl)!callee_finish = Some (callee_id, ctrl_finish) ->
 
-      step g (Returnstate (Stackframe m pc asr asa :: sf) othermod_id i) Events.E0
-           (State sf m pc (asr # mst <- (posToValue pc) # othermod_finish <- (ZToValue 1) # r <- i) asa).
+      step g
+           (Returnstate (Stackframe callerid caller pc asr asa :: sf) callee_id i) Events.E0
+           (State sf callerid caller pc
+                  (asr # mst <- (posToValue pc) # callee_finish <- (ZToValue 1) # callee_return <- i)
+                  asa).
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -223,7 +236,7 @@ Inductive initial_state (p: program): state -> Prop :=
       Globalenvs.Genv.init_mem p = Some m0 ->
       Globalenvs.Genv.find_symbol ge p.(AST.prog_main) = Some b ->
       Globalenvs.Genv.find_funct_ptr ge b = Some (AST.Internal m) ->
-      initial_state p (Callstate nil m nil).
+      initial_state p (Callstate nil p.(AST.prog_main) m nil).
 
 Inductive final_state : state -> Integers.int -> Prop :=
 | final_state_intro : forall retval mid retvali,
