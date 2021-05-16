@@ -219,3 +219,11 @@ Lemma find_get_assocmap :
   assoc ! r = Some v ->
   assoc # r = v.
 Proof. intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H. trivial. Qed.
+
+Lemma fso : forall m v k1 k2, k1 <> k2 -> (m # k1 <- v) # k2 = m # k2.
+Proof.
+  unfold "_ # _".
+  unfold AssocMapExt.get_default.
+  intros.
+  destruct_match; rewrite AssocMap.gso in Heqo by auto; rewrite Heqo; auto.
+Qed.

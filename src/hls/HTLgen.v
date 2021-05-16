@@ -446,12 +446,16 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
+Fixpoint nonblock_all pairs :=
+  match pairs with
+  | (dst, src) :: pairs' => Vseq (nonblock dst (Vvar src)) (nonblock_all pairs')
+  | nil => Vskip
+  end.
+
 (** [fork] a datapath statement which sets up the execution of a function *)
 Definition fork (rst : reg) (params : list (reg * reg)) : datapath_stmnt :=
   let reset_mod := Vnonblock (Vvar rst) (posToLit 1) in
-  let assign_params :=
-      List.fold_left (fun acc (a : reg*reg) => let (dst, src) := a in Vseq (nonblock dst (Vvar src)) acc)
-                     params Vskip in
+  let assign_params := nonblock_all params in
   Vseq reset_mod assign_params.
 
 Definition join (fn_rtrn fn_rst fn_dst : reg) : datapath_stmnt :=
@@ -459,13 +463,15 @@ Definition join (fn_rtrn fn_rst fn_dst : reg) : datapath_stmnt :=
   let stop_reset := Vnonblock (Vvar fn_rst) (Vlit (ZToValue 0)) in
   Vseq stop_reset set_result.
 
-Definition return_val fin rtrn r :=
-  let retval :=
-      match r with
-      | Some r' => Vvar r'
-      | None => Vlit (ZToValue 0%Z)
-      end in
-  Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn retval).
+Definition return_val r :=
+  match r with
+  | Some r' => Vvar r'
+  | None => Vlit (ZToValue 0%Z)
+  end.
+
+Definition do_return fin rtrn r :=
+  Vseq (block fin (Vlit (ZToValue 1%Z)))
+       (block rtrn (return_val r)).
 
 Definition idle fin := nonblock fin (Vlit (ZToValue 0%Z)).
 
@@ -537,7 +543,7 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       error (Errors.msg "Ijumptable: Case statement not supported.")
     | Ireturn r =>
       do idle_state <- create_state;
-      do _ <- add_instr n idle_state (return_val fin rtrn r);
+      do _ <- add_instr n idle_state (do_return fin rtrn r);
       add_instr_skip idle_state (idle fin)
     end
   end.

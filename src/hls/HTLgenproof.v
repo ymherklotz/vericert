@@ -1143,12 +1143,11 @@ Section CORRECTNESS.
     - inv CONST. assumption.
     - inv CONST. assumption.
     - repeat econstructor.
-    - repeat econstructor. simpl. apply H5.
+    - repeat econstructor. intuition eauto.
     - big_tac.
-      assert (HPle: Ple res0 (RTL.max_reg_function f))
-        by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
-
-      unfold Ple in HPle. lia.
+      assert (Ple res0 (RTL.max_reg_function f))
+        by eauto using RTL.max_reg_function_def.
+      xomega.
     - big_tac.
       + apply regs_lessdef_add_match. assumption.
         apply regs_lessdef_add_greater. unfold Plt; lia. assumption.
@@ -1171,6 +1170,56 @@ Section CORRECTNESS.
       Unshelve. exact tt.
   Qed.
   Hint Resolve transl_iop_correct : htlproof.
+
+  Lemma return_val_exec_spec : forall f or asr asa,
+      Verilog.expr_runp f asr asa (return_val or)
+                        (match or with
+                         | Some r => asr#r
+                         | None => ZToValue 0
+                         end).
+  Proof. destruct or; repeat econstructor. Qed.
+
+  Lemma transl_ireturn_correct:
+    forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
+      (pc : positive) (rs : RTL.regset) (m : mem) (or : option Registers.reg)
+      (m' : mem),
+      (RTL.fn_code f) ! pc = Some (RTL.Ireturn or) ->
+      Mem.free m stk 0 (RTL.fn_stacksize f) = Some m' ->
+      forall R1 : HTL.state,
+        match_states (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) pc rs m) R1 ->
+        exists R2 : HTL.state,
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
+          match_states (RTL.Returnstate s (Registers.regmap_optget or Values.Vundef rs) m') R2.
+  Proof.
+    intros * H H0 * MSTATE.
+    inv_state.
+    inv CONST. simplify.
+    eexists. split.
+    - eapply Smallstep.plus_two.
+      + eapply HTL.step_module; eauto; try solve [ repeat econstructor ].
+        * repeat econstructor. apply return_val_exec_spec.
+        * big_tac.
+        * admit.
+      + simplify.
+        eapply HTL.step_finish.
+        * big_tac.
+        * big_tac.
+      + eauto with htlproof.
+   - constructor; eauto with htlproof.
+     destruct or.
+     + rewrite fso. (* Return value is not fin *)
+       * big_tac.
+         inv MASSOC.
+         apply H10.
+         eapply RTL.max_reg_function_use; eauto; crush.
+       * assert (Ple r (RTL.max_reg_function f))
+           by (eapply RTL.max_reg_function_use; eauto; crush).
+         xomega.
+     + eauto with htlproof.
+  Unshelve.
+  exact tt. eauto.
+  Admitted.
+  Hint Resolve transl_ireturn_correct : htlproof.
 
   Ltac tac :=
     repeat match goal with

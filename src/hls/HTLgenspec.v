@@ -107,7 +107,7 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node)  (stmnts : datapath) (trans : c
       c!pc = Some (RTL.Ireturn r) ->
 
       (exists pc2,
-          stmnts!pc = Some (return_val fin rtrn r) /\
+          stmnts!pc = Some (do_return fin rtrn r) /\
           trans!pc = Some (state_goto st pc2) /\
           stmnts!pc2 = Some (idle fin) /\
           trans!pc2 = Some Vskip) ->
