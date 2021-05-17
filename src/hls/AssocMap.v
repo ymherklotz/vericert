@@ -227,3 +227,11 @@ Proof.
   intros.
   destruct_match; rewrite AssocMap.gso in Heqo by auto; rewrite Heqo; auto.
 Qed.
+
+Lemma fss : forall m v k, (m # k <- v) # k = v.
+Proof.
+  unfold "_ # _".
+  unfold AssocMapExt.get_default.
+  intros.
+  destruct_match; rewrite AssocMap.gss in Heqo by auto; inv Heqo; crush.
+Qed.
