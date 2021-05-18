@@ -1695,10 +1695,6 @@ Section CORRECTNESS.
       assert (HPle: Ple dst (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
       unfold Ple in HPle. lia.
-
-      (** Match externctrl *)
-      match_externctrl_tac.
-
     + (** Preamble *)
       invert MARR. inv CONST. crush.
 
@@ -1844,9 +1840,6 @@ Section CORRECTNESS.
       assert (HPle: Ple dst (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
       xomega.
-
-      rewrite Pcompare_eq_Gt in *.
-      match_externctrl_tac.
 
     + invert MARR. inv CONST. crush.
 
@@ -2050,6 +2043,8 @@ Section CORRECTNESS.
       unfold_merge.
       apply AssocMap.gss.
 
+      match goal with |- context[match_frames] => admit end.
+
       (** Equality proof *)
 
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -2240,9 +2235,6 @@ Section CORRECTNESS.
       rewrite AssocMap.gso.
       assumption. lia.
 
-      unfold Verilog.merge_regs. unfold_merge.
-      match_externctrl_tac.
-
     + (** Preamble *)
       invert MARR. inv CONST. crush.
 
@@ -2332,6 +2324,8 @@ Section CORRECTNESS.
       unfold Verilog.merge_regs.
       unfold_merge.
       apply AssocMap.gss.
+
+      match goal with |- context[match_frames] => admit end.
 
       (** Equality proof *)
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -2521,9 +2515,6 @@ Section CORRECTNESS.
       unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
 
-      unfold Verilog.merge_regs. unfold_merge.
-      match_externctrl_tac.
-
     + invert MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
@@ -2583,6 +2574,8 @@ Section CORRECTNESS.
       unfold Verilog.merge_regs.
       unfold_merge.
       apply AssocMap.gss.
+
+      match goal with |- context[match_frames] => admit end.
 
       (** Equality proof *)
 
@@ -2759,12 +2752,9 @@ Section CORRECTNESS.
       unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
 
-      unfold Verilog.merge_regs. unfold_merge.
-      match_externctrl_tac.
-
       Unshelve.
       all: try (exact tt); auto.
-  Qed.
+  Admitted.
   Hint Resolve transl_istore_correct : htlproof.
 
   Lemma transl_icond_correct:
@@ -2802,8 +2792,6 @@ Section CORRECTNESS.
       big_tac.
       constructor; rewrite AssocMap.gso; simplify; try assumption; lia.
 
-      match_externctrl_tac.
-
     - eexists. split. apply Smallstep.plus_one.
       match goal with
       | [H : Z.pos ifso <= Int.max_unsigned |- _] => clear H
@@ -2823,8 +2811,6 @@ Section CORRECTNESS.
       inv MARR. inv CONST.
       big_tac.
       constructor; rewrite AssocMap.gso; simplify; try assumption; lia.
-
-      match_externctrl_tac.
 
       Unshelve. all: exact tt.
   Qed.
@@ -2863,6 +2849,9 @@ Section CORRECTNESS.
     trivial. symmetry; eapply Linking.match_program_main; eauto.
   Qed.
 
+  Hint Constructors list_forall2 : htlproof.
+  Hint Constructors match_frames : htlproof.
+
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
@@ -2870,12 +2859,16 @@ Section CORRECTNESS.
         Smallstep.initial_state (HTL.semantics tprog) s2 /\ match_states ge s1 s2.
   Proof.
     induction 1.
-    destruct TRANSL. unfold main_is_internal in H4.
-    repeat (unfold_match H4).
-    assert (f = AST.Internal f1). apply option_inv.
-    rewrite <- Heqo0. rewrite <- H1. replace b with b0.
-    auto. apply option_inv. rewrite <- H0. rewrite <- Heqo.
-    trivial.
+    destruct TRANSL.
+    unfold main_is_internal in H4. repeat (unfold_match H4).
+    assert (f = AST.Internal f1).
+    {
+      apply option_inv.
+      rewrite <- Heqo0. rewrite <- H1. replace b with b0.
+      auto. apply option_inv. rewrite <- H0. rewrite <- Heqo.
+      trivial.
+    }
+
     exploit function_ptr_translated; eauto.
     intros [tf [A B]].
     unfold transl_fundef, Errors.bind in B.
@@ -2886,18 +2879,17 @@ Section CORRECTNESS.
     apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
     inversion H5.
     econstructor; split. econstructor.
-    apply (Genv.init_mem_transf_partial TRANSL'); eauto.
-    replace (AST.prog_main tprog) with (AST.prog_main prog).
-    rewrite symbols_preserved; eauto.
-    symmetry; eapply Linking.match_program_main; eauto.
-    apply H6.
-
-    constructor.
-    apply transl_module_correct with (AST.prog_main prog).
-    assert (Some (AST.Internal x) = Some (AST.Internal m)).
-    replace (AST.fundef HTL.module) with (HTL.fundef).
-    rewrite <- H6. setoid_rewrite <- A. trivial.
-    trivial. inv H7. assumption.
+    - apply (Genv.init_mem_transf_partial TRANSL'); eauto.
+    - replace (AST.prog_main tprog) with (AST.prog_main prog)
+        by (symmetry; eapply Linking.match_program_main; eauto).
+      rewrite symbols_preserved; eauto.
+    - eauto.
+    - constructor; auto with htlproof.
+      apply transl_module_correct with (AST.prog_main prog).
+      assert (Some (AST.Internal x) = Some (AST.Internal m)) as Heqm.
+      { rewrite <- H6. setoid_rewrite <- A. trivial. }
+      inv Heqm.
+      assumption.
   Qed.
   Hint Resolve transl_initial_states : htlproof.
 
@@ -2909,9 +2901,10 @@ Section CORRECTNESS.
       Smallstep.final_state (RTL.semantics prog) s1 r ->
       Smallstep.final_state (HTL.semantics tprog) s2 r.
   Proof.
-    intros. inv H0. inv H. inv H4. invert MF.
-    (* Needs to fix match_frames *)
-  Admitted.
+    intros.
+    repeat match goal with [ H : _ |- _ ] => try inv H end.
+    repeat constructor; auto.
+  Qed.
   Hint Resolve transl_final_states : htlproof.
 
   Theorem transl_step_correct:
