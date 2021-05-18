@@ -428,30 +428,32 @@ Section CORRECTNESS.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
-  (** This is assumed to be guaranteed by a check before this stage which
-      inlines functions that perform any loads or stores. It should not be
-      provable within this section
-   *)
   Axiom no_pointer_return : forall (rs : RTL.regset) r s (f : RTL.function) sp pc rs mem f S,
       (RTL.fn_code f) ! pc = Some (RTL.Ireturn (Some r)) ->
       match_states ge (RTL.State s f sp pc rs mem) S ->
       (not_pointer rs !! r).
 
-  (** The following admitted lemmas should be provable *)
-  Axiom no_stack_functions : forall f sp rs mem st rtl_stk S,
-      match_states ge (RTL.State rtl_stk f sp st rs mem) S ->
-      (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+  (** The following are assumed to be guaranteed by an inlining pass previous to
+      this translation. [ only_main_stores ] should be a direct result of that
+      inlining.
 
-  (** The following admitted lemmas should be provable *)
-  Axiom no_stack_calls : forall f mem args rtl_stk S,
-      match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
-      (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
-
+      [ no_stack_functions ] and [ no_stack_calls ] might be provable as
+      corollaries of [ only_main_stores ]
+   *)
   Axiom only_main_stores : forall rtl_stk f sp pc pc' rs mem htl_stk mid m asr asa a b c d,
       match_states ge (RTL.State rtl_stk f sp pc rs mem) (HTL.State htl_stk mid m pc asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Istore a b c d pc') ->
       (rtl_stk = nil /\ htl_stk = nil).
 
+  Axiom no_stack_functions : forall f sp rs mem st rtl_stk S,
+      match_states ge (RTL.State rtl_stk f sp st rs mem) S ->
+      (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+
+  Axiom no_stack_calls : forall f mem args rtl_stk S,
+      match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
+      (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+
+  (** The following admitted lemmas should be provable *)
   Lemma mem_free_zero : forall mem blk, Mem.free mem blk 0 0 = Some mem.
   Admitted.
 
