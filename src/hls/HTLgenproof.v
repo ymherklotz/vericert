@@ -165,11 +165,13 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
       (NP : not_pointer v),
       match_states (RTL.Returnstate rtl_stk v mem)
                    (HTL.Returnstate htl_stk mid v')
-| match_initial_call :
-    forall f mid m m0
-    (TF : tr_module f m),
-      match_states (RTL.Callstate nil (AST.Internal f) nil m0)
-                   (HTL.Callstate nil mid m nil).
+| match_call :
+    forall f m rtl_args htl_args mid mem rtl_stk htl_stk
+    (TF : tr_module f m)
+    (MF : match_frames mid mem rtl_stk htl_stk)
+    (MARGS : list_forall2 val_value_lessdef rtl_args htl_args),
+      match_states (RTL.Callstate rtl_stk (AST.Internal f) rtl_args mem)
+                   (HTL.Callstate htl_stk mid m htl_args).
 Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
@@ -210,6 +212,15 @@ Proof.
   apply Linking.match_transform_partial_program; auto.
   assumption.
 Qed.
+
+Lemma regs_lessdef_empty : forall f, match_assocmaps f (Registers.Regmap.init Values.Vundef) empty_assocmap.
+Proof.
+  constructor. intros.
+  unfold Registers.Regmap.init, "_ !! _", "_ # _", empty_assocmap, AssocMapExt.get_default.
+  repeat rewrite PTree.gempty.
+  constructor.
+Qed.
+Hint Resolve regs_lessdef_empty : htlproof.
 
 Lemma regs_lessdef_add_greater :
   forall f rs1 rs2 n v,
@@ -367,6 +378,18 @@ Ltac unfold_func H :=
   | ?f _ _ _ _ = _ => unfold f in H; repeat (unfold_match H)
   end.
 
+Ltac not_control_reg :=
+  solve [
+      unfold Ple, Plt in *;
+      try multimatch goal with
+          | [ H : forall r,
+                (exists x, _ ! r = Some x) -> (r > _)%positive /\ (_ > r)%positive
+                |- context[?r']
+            ] => destruct (H r' ltac:(eauto))
+          end;
+      lia
+    ].
+
 Lemma init_reg_assoc_empty :
   forall f l,
     match_assocmaps f (RTL.init_regs nil l) (HTL.init_regs nil l).
@@ -409,9 +432,19 @@ Section CORRECTNESS.
       (not_pointer rs !! r).
 
   (** The following admitted lemmas should be provable *)
-  Lemma empty_stack_free : forall f sp rs mem res mid m blk st asr asa rtl_stk,
-      match_states (RTL.State rtl_stk f sp st rs mem) (HTL.State res mid m st asr asa) ->
-      Mem.free mem blk 0 (RTL.fn_stacksize f) = Some mem \/ rtl_stk = nil.
+  Axiom no_stack_functions : forall f sp rs mem st rtl_stk S,
+      match_states (RTL.State rtl_stk f sp st rs mem) S ->
+      (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+
+  (** The following admitted lemmas should be provable *)
+  Axiom no_stack_calls : forall f mem args rtl_stk S,
+      match_states (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
+      (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+
+  Lemma mem_free_zero : forall mem blk, Mem.free mem blk 0 0 = Some mem.
+  Admitted.
+
+  Lemma mem_alloc_zero : forall mem, exists blk, Mem.alloc mem 0 0 = (mem, blk).
   Admitted.
 
   Lemma match_arrs_empty : forall m f sp mem asa,
@@ -1204,6 +1237,62 @@ Section CORRECTNESS.
   Qed.
   Hint Resolve transl_iop_correct : htlproof.
 
+  Lemma match_args : forall rtl_args htl_args params f,
+      list_forall2 val_value_lessdef rtl_args htl_args ->
+      match_assocmaps f (RTL.init_regs rtl_args params) (HTL.init_regs htl_args params).
+  Proof.
+    induction rtl_args; intros * H; inv H.
+    - destruct params; eauto with htlproof.
+    - destruct params; eauto using regs_lessdef_add_match with htlproof.
+  Qed.
+
+  Lemma transl_callstate_correct:
+    forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
+      (m : mem) (m' : Mem.mem') (stk : Values.block),
+      Mem.alloc m 0 (RTL.fn_stacksize f) = (m', stk) ->
+      forall R1 : HTL.state,
+        match_states (RTL.Callstate s (AST.Internal f) args m) R1 ->
+        exists R2 : HTL.state,
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
+          match_states
+            (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) (RTL.fn_entrypoint f)
+                       (RTL.init_regs args (RTL.fn_params f)) m') R2.
+  Proof.
+    intros * ? * MSTATE.
+    inversion MSTATE.
+    inversion TF.
+    simplify.
+    eexists. split.
+    apply Smallstep.plus_one. constructor.
+
+    simplify.
+    econstructor; try solve [big_tac].
+    - repeat apply regs_lessdef_add_greater; try not_control_reg.
+      eauto using match_args.
+    - edestruct no_stack_calls; eauto.
+      + replace (RTL.fn_stacksize f) in *.
+        replace m' with m by
+            (destruct (mem_alloc_zero m); crush).
+        subst.
+        assumption.
+      + subst. inv MF. constructor.
+    - (* Stack pointer *)
+      admit.
+    - (* Stack based args *)
+      unfold reg_stack_based_pointers; intros.
+      admit.
+    - (* Stack based stack pointer *)
+      unfold arr_stack_based_pointers; intros.
+      admit.
+    - (* Stack bounds *)
+      admit.
+    - constructor; simplify.
+      + rewrite AssocMap.gss; crush.
+      + rewrite AssocMap.gso by not_control_reg.
+        rewrite AssocMap.gss. crush.
+  Admitted.
+  Hint Resolve transl_callstate_correct : htlproof.
+
   Lemma return_val_exec_spec : forall f or asr asa,
       Verilog.expr_runp f asr asa (return_val or)
                         (match or with
@@ -1267,18 +1356,6 @@ Section CORRECTNESS.
   Unshelve. try exact tt; eauto.
   Qed.
   Hint Resolve transl_ireturn_correct : htlproof.
-
-  Ltac not_control_reg :=
-    solve [
-        unfold Ple, Plt in *;
-        try multimatch goal with
-            | [ H : forall r,
-                  (exists x, _ ! r = Some x) -> (r > _)%positive /\ (_ > r)%positive
-                  |- context[?r']
-              ] => destruct (H r' ltac:(eauto))
-            end;
-        lia
-      ].
 
   Lemma stack_based_set : forall sp r v rs,
       stack_based v sp ->
@@ -2755,115 +2832,6 @@ Section CORRECTNESS.
     (* Michalis: Broken by resource sharing *)
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
-
-  Lemma transl_callstate_correct:
-    forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
-      (m : mem) (m' : Mem.mem') (stk : Values.block),
-      Mem.alloc m 0 (RTL.fn_stacksize f) = (m', stk) ->
-      forall R1 : HTL.state,
-        match_states (RTL.Callstate s (AST.Internal f) args m) R1 ->
-        exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states
-            (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) (RTL.fn_entrypoint f)
-                       (RTL.init_regs args (RTL.fn_params f)) m') R2.
-  Proof.
-    (* Michalis: Broken by resource sharing *)
-    (* intros s f args m m' stk H R1 MSTATE. *)
-
-    (* inversion MSTATE; subst. inversion TF; subst. *)
-    (* econstructor. split. apply Smallstep.plus_one. *)
-    (* eapply HTL.step_call. crush. *)
-
-    (* apply match_state with (sp' := stk); eauto. *)
-
-    (* all: big_tac. *)
-
-    (* apply regs_lessdef_add_greater. unfold Plt; lia. *)
-    (* apply regs_lessdef_add_greater. unfold Plt; lia. *)
-    (* apply regs_lessdef_add_greater. unfold Plt; lia. *)
-    (* apply init_reg_assoc_empty. *)
-
-    (* constructor. *)
-
-    (* destruct (Mem.load AST.Mint32 m' stk *)
-    (*                    (Integers.Ptrofs.unsigned (Integers.Ptrofs.add *)
-    (*                                                 Integers.Ptrofs.zero *)
-    (*                                                 (Integers.Ptrofs.repr (4 * ptr))))) eqn:LOAD. *)
-    (* pose proof Mem.load_alloc_same as LOAD_ALLOC. *)
-    (* pose proof H as ALLOC. *)
-    (* eapply LOAD_ALLOC in ALLOC. *)
-    (* 2: { exact LOAD. } *)
-    (* ptrofs. rewrite LOAD. *)
-    (* rewrite ALLOC. *)
-    (* repeat constructor. *)
-
-    (* ptrofs. rewrite LOAD. *)
-    (* repeat constructor. *)
-
-    (* unfold reg_stack_based_pointers. intros. *)
-    (* unfold RTL.init_regs; crush. *)
-    (* destruct (RTL.fn_params f); *)
-    (* rewrite Registers.Regmap.gi; constructor. *)
-
-    (* unfold arr_stack_based_pointers. intros. *)
-    (* crush. *)
-    (* destruct (Mem.load AST.Mint32 m' stk *)
-    (*                    (Integers.Ptrofs.unsigned (Integers.Ptrofs.add *)
-    (*                                                 Integers.Ptrofs.zero *)
-    (*                                                 (Integers.Ptrofs.repr (4 * ptr))))) eqn:LOAD. *)
-    (* pose proof Mem.load_alloc_same as LOAD_ALLOC. *)
-    (* pose proof H as ALLOC. *)
-    (* eapply LOAD_ALLOC in ALLOC. *)
-    (* 2: { exact LOAD. } *)
-    (* rewrite ALLOC. *)
-    (* repeat constructor. *)
-    (* constructor. *)
-
-    (* Transparent Mem.alloc. (* TODO: Since there are opaque there's probably a lemma. *) *)
-    (* Transparent Mem.load. *)
-    (* Transparent Mem.store. *)
-    (* unfold stack_bounds. *)
-    (* split. *)
-
-    (* unfold Mem.alloc in H. *)
-    (* invert H. *)
-    (* crush. *)
-    (* unfold Mem.load. *)
-    (* intros. *)
-    (* match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence. *)
-    (* invert v0. unfold Mem.range_perm in H4. *)
-    (* unfold Mem.perm in H4. crush. *)
-    (* unfold Mem.perm_order' in H4. *)
-    (* small_tac. *)
-    (* exploit (H4 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros. *)
-    (* rewrite Maps.PMap.gss in H8. *)
-    (* match goal with | H8 : context[if ?x then _ else _] |- _ => destruct x eqn:EQ end; try contradiction. *)
-    (* crush. *)
-    (* apply proj_sumbool_true in H10. lia. *)
-
-    (* unfold Mem.alloc in H. *)
-    (* invert H. *)
-    (* crush. *)
-    (* unfold Mem.store. *)
-    (* intros. *)
-    (* match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence. *)
-    (* invert v0. unfold Mem.range_perm in H4. *)
-    (* unfold Mem.perm in H4. crush. *)
-    (* unfold Mem.perm_order' in H4. *)
-    (* small_tac. *)
-    (* exploit (H4 ptr). rewrite Integers.Ptrofs.unsigned_repr; small_tac. intros. *)
-    (* rewrite Maps.PMap.gss in H8. *)
-    (* match goal with | H8 : context[if ?x then _ else _] |- _ => destruct x eqn:EQ end; try contradiction. *)
-    (* crush. *)
-    (* apply proj_sumbool_true in H10. lia. *)
-    (* constructor. simplify. rewrite AssocMap.gss. *)
-    (* simplify. rewrite AssocMap.gso. apply AssocMap.gss. simplify. lia. *)
-    (* Opaque Mem.alloc. *)
-    (* Opaque Mem.load. *)
-    (* Opaque Mem.store. *)
-  Admitted.
-  Hint Resolve transl_callstate_correct : htlproof.
 
   Lemma main_tprog_internal :
     forall b,
