@@ -120,14 +120,14 @@ Definition has_externctrl (caller : HTL.module) (current_id : HTL.ident) (ret rs
   (HTL.mod_externctrl caller)!rst = Some (current_id, HTL.ctrl_reset) /\
   (HTL.mod_externctrl caller)!fin = Some (current_id, HTL.ctrl_finish).
 
-Inductive match_frames (current_id : HTL.ident) (mem : Memory.mem)
+Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.mem)
   : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
 | match_frames_nil :
-    match_frames current_id mem nil nil
+    match_frames ge current_id mem nil nil
 | match_frames_cons :
     forall dst f sp sp' rs mid m pc st asr asa rtl_tl htl_tl ret rst fin
       (MASSOC : match_assocmaps f rs asr)
-      (TF : tr_module f m)
+      (TF : tr_module ge f m)
       (MARR : match_arrs m f sp mem asa)
       (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
       (RSBP : reg_stack_based_pointers sp' rs)
@@ -137,40 +137,43 @@ Inductive match_frames (current_id : HTL.ident) (mem : Memory.mem)
       (EXTERN_CALLER : has_externctrl m current_id ret rst fin)
       (JOIN_CTRL : (HTL.mod_controllogic m)!st = Some (state_wait (HTL.mod_st m) fin pc))
       (JOIN_DATA : (HTL.mod_datapath m)!st = Some (join ret rst dst))
-      (TAILS : match_frames mid mem rtl_tl htl_tl)
+      (TAILS : match_frames ge mid mem rtl_tl htl_tl)
       (DST : Ple dst (RTL.max_reg_function f))
       (PC : (Z.pos pc <= Int.max_unsigned)),
-      match_frames current_id mem
+      match_frames ge current_id mem
                    ((RTL.Stackframe dst f sp pc rs) :: rtl_tl)
                    ((HTL.Stackframe mid m st asr asa) :: htl_tl).
 
-Inductive match_states : RTL.state -> HTL.state -> Prop :=
+Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem mid m st res
     (MASSOC : match_assocmaps f rs asr)
-    (TF : tr_module f m)
+    (TF : tr_module ge f m)
     (WF : state_st_wf m (HTL.State res mid m st asr asa))
-    (MF : match_frames mid mem sf res)
+    (MF : match_frames ge mid mem sf res)
     (MARR : match_arrs m f sp mem asa)
     (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
     (RSBP : reg_stack_based_pointers sp' rs)
     (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
     (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
     (CONST : match_constants m asr),
-    match_states (RTL.State sf f sp st rs mem)
+    match_states ge
+                 (RTL.State sf f sp st rs mem)
                  (HTL.State res mid m st asr asa)
 | match_returnstate :
     forall v v' rtl_stk htl_stk mem mid
-      (MF : match_frames mid mem rtl_stk htl_stk)
+      (MF : match_frames ge mid mem rtl_stk htl_stk)
       (MV : val_value_lessdef v v')
       (NP : not_pointer v),
-      match_states (RTL.Returnstate rtl_stk v mem)
+      match_states ge
+                   (RTL.Returnstate rtl_stk v mem)
                    (HTL.Returnstate htl_stk mid v')
 | match_call :
     forall f m rtl_args htl_args mid mem rtl_stk htl_stk
-    (TF : tr_module f m)
-    (MF : match_frames mid mem rtl_stk htl_stk)
+    (TF : tr_module ge f m)
+    (MF : match_frames ge mid mem rtl_stk htl_stk)
     (MARGS : list_forall2 val_value_lessdef rtl_args htl_args),
-      match_states (RTL.Callstate rtl_stk (AST.Internal f) rtl_args mem)
+      match_states ge
+                   (RTL.Callstate rtl_stk (AST.Internal f) rtl_args mem)
                    (HTL.Callstate htl_stk mid m htl_args).
 Hint Constructors match_states : htlproof.
 
@@ -351,14 +354,14 @@ Proof. intros. inversion H. trivial. Qed.
 
 Ltac inv_state :=
   match goal with
-    MSTATE : match_states _ _ |- _ =>
+    MSTATE : match_states _ _ _ |- _ =>
     inversion MSTATE;
-    try match goal with
-      TF : tr_module _ _ |- _ =>
+    match goal with
+      TF : tr_module _ _ _ |- _ =>
       inversion TF;
       match goal with
         TC : forall _ _,
-          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _ _ _,
+          Maps.PTree.get _ _ = Some _ -> tr_code _ _ _ _ _ _ _ _ _ _ _,
         H : Maps.PTree.get _ _ = Some _ |- _ =>
         apply TC in H; inversion H;
         try match goal with
@@ -420,6 +423,9 @@ Section CORRECTNESS.
   Variable prog : RTL.program.
   Variable tprog : HTL.program.
 
+  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
+  Let tge : HTL.genv := Globalenvs.Genv.globalenv tprog.
+
   Hypothesis TRANSL : match_prog prog tprog.
 
   (** This is assumed to be guaranteed by a check before this stage which
@@ -428,17 +434,17 @@ Section CORRECTNESS.
    *)
   Axiom no_pointer_return : forall (rs : RTL.regset) r s (f : RTL.function) sp pc rs mem f S,
       (RTL.fn_code f) ! pc = Some (RTL.Ireturn (Some r)) ->
-      match_states (RTL.State s f sp pc rs mem) S ->
+      match_states ge (RTL.State s f sp pc rs mem) S ->
       (not_pointer rs !! r).
 
   (** The following admitted lemmas should be provable *)
   Axiom no_stack_functions : forall f sp rs mem st rtl_stk S,
-      match_states (RTL.State rtl_stk f sp st rs mem) S ->
+      match_states ge (RTL.State rtl_stk f sp st rs mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
 
   (** The following admitted lemmas should be provable *)
   Axiom no_stack_calls : forall f mem args rtl_stk S,
-      match_states (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
+      match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
 
   Lemma mem_free_zero : forall mem blk, Mem.free mem blk 0 0 = Some mem.
@@ -455,9 +461,6 @@ Section CORRECTNESS.
   Lemma TRANSL' :
     Linking.match_program (fun cu f tf => transl_fundef (AST.prog_main prog) f = Errors.OK tf) eq prog tprog.
   Proof. intros; apply match_prog_matches; assumption. Qed.
-
-  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
-  Let tge : HTL.genv := Globalenvs.Genv.globalenv tprog.
 
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
@@ -688,7 +691,7 @@ Section CORRECTNESS.
 
   Lemma eval_cond_correct :
     forall stk f sp pc rs mid m res ml st asr asa e b f' s s' args i cond,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
+      match_states ge (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
       Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some b ->
       translate_condition cond args s = OK e s' i ->
@@ -819,7 +822,7 @@ Section CORRECTNESS.
 
   Lemma eval_cond_correct' :
     forall e stk f sp pc rs m res mid ml st asr asa v f' s s' args i cond,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
+      match_states ge (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (forall v, In v args -> Ple v (RTL.max_reg_function f)) ->
       Values.Val.of_optbool None = v ->
       translate_condition cond args s = OK e s' i ->
@@ -832,7 +835,7 @@ Section CORRECTNESS.
 
   Lemma eval_correct_Oshrximm :
     forall s sp rs m v e asr asa f f' stk s' i pc res0 pc' args res mid ml st n,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
+      match_states ge (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop (Op.Oshrximm n) args res0 pc') ->
       Op.eval_operation ge sp (Op.Oshrximm n)
                         (List.map (fun r : BinNums.positive =>
@@ -894,7 +897,7 @@ Section CORRECTNESS.
 
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res mid ml st ,
-      match_states (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
+      match_states ge (RTL.State stk f sp pc rs m) (HTL.State res mid ml st asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       Op.eval_operation ge sp op
                         (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
@@ -1166,9 +1169,9 @@ Section CORRECTNESS.
       (rs : RTL.regset) (m : mem) (pc' : RTL.node),
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f sp pc rs m) R1 ->
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m) R2.
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states ge (RTL.State s f sp pc' rs m) R2.
   Proof.
     intros * H R1 MSTATE.
     inv_state.
@@ -1196,10 +1199,10 @@ Section CORRECTNESS.
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       Op.eval_operation ge sp op (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some v ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f sp pc rs m) R1 ->
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states (RTL.State s f sp pc' (Registers.Regmap.set res0 v rs) m) R2.
+          match_states ge (RTL.State s f sp pc' (Registers.Regmap.set res0 v rs) m) R2.
   Proof.
     intros * H H0 R1 MSTATE.
     inv_state. inv MARR.
@@ -1251,10 +1254,10 @@ Section CORRECTNESS.
       (m : mem) (m' : Mem.mem') (stk : Values.block),
       Mem.alloc m 0 (RTL.fn_stacksize f) = (m', stk) ->
       forall R1 : HTL.state,
-        match_states (RTL.Callstate s (AST.Internal f) args m) R1 ->
+        match_states ge (RTL.Callstate s (AST.Internal f) args m) R1 ->
         exists R2 : HTL.state,
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states
+          match_states ge
             (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) (RTL.fn_entrypoint f)
                        (RTL.init_regs args (RTL.fn_params f)) m') R2.
   Proof.
@@ -1293,6 +1296,17 @@ Section CORRECTNESS.
   Admitted.
   Hint Resolve transl_callstate_correct : htlproof.
 
+  Lemma only_internal_calls : forall fd fn rs,
+      RTL.find_function ge (inr fn) rs = Some fd ->
+      (exists f : RTL.function, rtl_find_func ge fn = Some (AST.Internal f)) ->
+      (exists f, fd = AST.Internal f).
+  Proof.
+    intros * ? [? ?].
+    unfold rtl_find_func in *.
+    unfold RTL.find_function in *.
+    destruct (Genv.find_symbol ge fn); try discriminate.
+    exists x. crush.
+  Qed.
   Lemma return_val_exec_spec : forall f or asr asa,
       Verilog.expr_runp f asr asa (return_val or)
                         (match or with
@@ -1308,10 +1322,10 @@ Section CORRECTNESS.
       (RTL.fn_code f) ! pc = Some (RTL.Ireturn or) ->
       Mem.free m stk 0 (RTL.fn_stacksize f) = Some m' ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) pc rs m) R1 ->
+        match_states ge (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) pc rs m) R1 ->
         exists R2 : HTL.state,
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states (RTL.Returnstate s (Registers.regmap_optget or Values.Vundef rs) m') R2.
+          match_states ge (RTL.Returnstate s (Registers.regmap_optget or Values.Vundef rs) m') R2.
   Proof.
     intros * H H0 * MSTATE.
     inv_state.
@@ -1371,10 +1385,10 @@ Section CORRECTNESS.
     forall (res0 : Registers.reg) (f : RTL.function) (sp : Values.val) (pc : RTL.node)
       (rs : RTL.regset) (s : list RTL.stackframe) (vres : Values.val) (m : mem)
       (R1 : HTL.state),
-      match_states (RTL.Returnstate (RTL.Stackframe res0 f sp pc rs :: s) vres m) R1 ->
+      match_states ge (RTL.Returnstate (RTL.Stackframe res0 f sp pc rs :: s) vres m) R1 ->
       exists R2 : HTL.state,
         Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-        match_states (RTL.State s f sp pc (Registers.Regmap.set res0 vres rs) m) R2.
+        match_states ge (RTL.State s f sp pc (Registers.Regmap.set res0 vres rs) m) R2.
   Proof.
     intros * MSTATE.
     inv MSTATE.
@@ -1527,10 +1541,10 @@ Section CORRECTNESS.
       Op.eval_addressing ge sp addr (map (fun r : positive => Registers.Regmap.get r rs) args) = Some a ->
       Mem.loadv chunk m a = Some v ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f sp pc rs m) R1 ->
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states (RTL.State s f sp pc' (Registers.Regmap.set dst v rs) m) R2.
+          match_states ge (RTL.State s f sp pc' (Registers.Regmap.set dst v rs) m) R2.
   Proof.
     intros s f sp pc rs m chunk addr args dst pc' a v H H0 H1 R1 MSTATE.
     inv_state.
@@ -1934,9 +1948,9 @@ Section CORRECTNESS.
       Op.eval_addressing ge sp addr (map (fun r : positive => Registers.Regmap.get r rs) args) = Some a ->
       Mem.storev chunk m a (Registers.Regmap.get src rs) = Some m' ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f sp pc rs m) R1 ->
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m') R2.
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states ge (RTL.State s f sp pc' rs m') R2.
   Proof.
     intros s f sp pc rs m chunk addr args src pc' a m' H H0 H1 R1 MSTATES.
     inv_state. inv_arr_access.
@@ -2744,9 +2758,9 @@ Section CORRECTNESS.
       Op.eval_condition cond (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some b ->
       pc' = (if b then ifso else ifnot) ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f sp pc rs m) R1 ->
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m) R2.
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states ge (RTL.State s f sp pc' rs m) R2.
   Proof.
     intros s f sp pc rs m cond args ifso ifnot b pc' H H0 H1 R1 MSTATE.
     inv_state.
@@ -2807,9 +2821,9 @@ Section CORRECTNESS.
       Registers.Regmap.get arg rs = Values.Vint n ->
       list_nth_z tbl (Integers.Int.unsigned n) = Some pc' ->
       forall R1 : HTL.state,
-        match_states (RTL.State s f sp pc rs m) R1 ->
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m) R2.
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states ge (RTL.State s f sp pc' rs m) R2.
   Proof.
     intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE.
   
@@ -2851,7 +2865,7 @@ Section CORRECTNESS.
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
       exists s2 : Smallstep.state (HTL.semantics tprog),
-        Smallstep.initial_state (HTL.semantics tprog) s2 /\ match_states s1 s2.
+        Smallstep.initial_state (HTL.semantics tprog) s2 /\ match_states ge s1 s2.
   Proof.
     induction 1.
     destruct TRANSL. unfold main_is_internal in H4.
@@ -2889,7 +2903,7 @@ Section CORRECTNESS.
     forall (s1 : Smallstep.state (RTL.semantics prog))
            (s2 : Smallstep.state (HTL.semantics tprog))
            (r : Integers.Int.int),
-      match_states s1 s2 ->
+      match_states ge s1 s2 ->
       Smallstep.final_state (RTL.semantics prog) s1 r ->
       Smallstep.final_state (HTL.semantics tprog) s2 r.
   Proof.
@@ -2902,8 +2916,8 @@ Section CORRECTNESS.
     forall (S1 : RTL.state) t S2,
       RTL.step ge S1 t S2 ->
       forall (R1 : HTL.state),
-        match_states S1 R1 ->
-        exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states S2 R2.
+        match_states ge S1 R1 ->
+        exists R2, Smallstep.plus HTL.step tge R1 t R2 /\ match_states ge S2 R2.
   Proof.
     induction 1; try (eauto with htlproof; intros; inv_state).
   Admitted.
