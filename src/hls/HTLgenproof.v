@@ -1328,14 +1328,13 @@ Section CORRECTNESS.
       + eapply HTL.step_finish; big_tac.
       + eauto with htlproof.
    - constructor; eauto with htlproof.
-     + edestruct empty_stack_free with (blk:=stk). eauto.
-       * enough (m' = m).
-         { subst. eauto. }
-         apply option_inv.
-         congruence.
-       * inv MF.
-         constructor.
-         discriminate.
+     + edestruct no_stack_functions; eauto.
+       * replace (RTL.fn_stacksize f) in *.
+         replace m' with m by
+             (pose proof (mem_free_zero m ltac:(auto)); crush).
+         subst.
+         assumption.
+       * subst. inv MF. constructor.
      + destruct or.
        * rewrite fso. (* Return value is not fin *)
          {
@@ -1350,9 +1349,7 @@ Section CORRECTNESS.
            by (eapply RTL.max_reg_function_use; eauto; crush).
          xomega.
        * simpl. eauto with htlproof.
-     + destruct or; simpl; crush.
-       eauto using no_pointer_return.
-
+     + destruct or; simpl; eauto using no_pointer_return.
   Unshelve. try exact tt; eauto.
   Qed.
   Hint Resolve transl_ireturn_correct : htlproof.
