@@ -1307,6 +1307,23 @@ Section CORRECTNESS.
     destruct (Genv.find_symbol ge fn); try discriminate.
     exists x. crush.
   Qed.
+
+  Require Import Registers.
+  Lemma transl_icall_correct:
+    forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
+      (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
+      (RTL.fn_code f) ! pc = Some (RTL.Icall sig fn args dst pc') ->
+      RTL.find_function ge fn rs = Some fd ->
+      forall R1 : HTL.state,
+        match_states ge (RTL.State s f sp pc rs m) R1 ->
+        exists R2 : HTL.state,
+          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
+          match_states ge (RTL.Callstate (RTL.Stackframe dst f sp pc' rs :: s) fd rs##args m) R2.
+  Proof.
+  Admitted.
+  Hint Resolve transl_icall_correct : htlproof.
+  Close Scope rtl.
+
   Lemma return_val_exec_spec : forall f or asr asa,
       Verilog.expr_runp f asr asa (return_val or)
                         (match or with
@@ -2828,21 +2845,6 @@ Section CORRECTNESS.
     intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE.
   
   Hint Resolve transl_ijumptable_correct : htlproof.*)
-
-  Lemma transl_icall_correct:
-    forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
-      (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
-      (RTL.fn_code f) ! pc = Some (RTL.Icall sig (inr fn) args dst pc') ->
-      RTL.find_function ge (inr fn) rs = Some fd ->
-      forall R1 : HTL.state,
-        match_states (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) pc rs m) R1 ->
-        exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states (RTL.Callstate s fd rs##args m)%rtl R2.
-  Proof.
-    (* Michalis: Broken by resource sharing *)
-  Admitted.
-  Hint Resolve transl_icall_correct : htlproof.
 
   Lemma main_tprog_internal :
     forall b,
