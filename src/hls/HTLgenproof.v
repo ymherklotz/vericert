@@ -160,9 +160,9 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
                  (HTL.State res mid m st asr asa)
 | match_returnstate :
     forall v v' rtl_stk htl_stk mem mid
-      (MF : match_frames mid mem rtl_stk htl_stk),
-      val_value_lessdef v v' ->
-      not_pointer v ->
+      (MF : match_frames mid mem rtl_stk htl_stk)
+      (MV : val_value_lessdef v v')
+      (NP : not_pointer v),
       match_states (RTL.Returnstate rtl_stk v mem)
                    (HTL.Returnstate htl_stk mid v')
 | match_initial_call :
@@ -2755,22 +2755,6 @@ Section CORRECTNESS.
     (* Michalis: Broken by resource sharing *)
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
-
-  Lemma transl_ireturn_correct:
-    forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
-      (pc : positive) (rs : RTL.regset) (m : mem) (or : option Registers.reg)
-      (m' : mem),
-      (RTL.fn_code f) ! pc = Some (RTL.Ireturn or) ->
-      Mem.free m stk 0 (RTL.fn_stacksize f) = Some m' ->
-      forall R1 : HTL.state,
-        match_states (RTL.State s f (Values.Vptr stk Integers.Ptrofs.zero) pc rs m) R1 ->
-        exists R2 : HTL.state,
-          Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states (RTL.Returnstate s (Registers.regmap_optget or Values.Vundef rs) m') R2.
-  Proof.
-    (* Michalis: Broken by resource sharing *)
-  Admitted.
-  Hint Resolve transl_ireturn_correct : htlproof.
 
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
