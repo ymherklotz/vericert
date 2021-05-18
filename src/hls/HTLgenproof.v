@@ -447,6 +447,11 @@ Section CORRECTNESS.
       match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
 
+  Axiom only_main_stores : forall rtl_stk f sp pc pc' rs mem htl_stk mid m asr asa a b c d,
+      match_states ge (RTL.State rtl_stk f sp pc rs mem) (HTL.State htl_stk mid m pc asr asa) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Istore a b c d pc') ->
+      (rtl_stk = nil /\ htl_stk = nil).
+
   Lemma mem_free_zero : forall mem blk, Mem.free mem blk 0 0 = Some mem.
   Admitted.
 
@@ -2043,7 +2048,7 @@ Section CORRECTNESS.
       unfold_merge.
       apply AssocMap.gss.
 
-      match goal with |- context[match_frames] => admit end.
+      edestruct only_main_stores; eauto; subst; constructor.
 
       (** Equality proof *)
 
@@ -2325,7 +2330,7 @@ Section CORRECTNESS.
       unfold_merge.
       apply AssocMap.gss.
 
-      match goal with |- context[match_frames] => admit end.
+      edestruct only_main_stores; eauto; subst; constructor.
 
       (** Equality proof *)
       assert (Integers.Ptrofs.repr 0 = Integers.Ptrofs.zero) as ZERO by reflexivity.
@@ -2575,7 +2580,8 @@ Section CORRECTNESS.
       unfold_merge.
       apply AssocMap.gss.
 
-      match goal with |- context[match_frames] => admit end.
+      (** Match frames *)
+      edestruct only_main_stores; eauto; subst; constructor.
 
       (** Equality proof *)
 
@@ -2754,7 +2760,7 @@ Section CORRECTNESS.
 
       Unshelve.
       all: try (exact tt); auto.
-  Admitted.
+  Qed.
   Hint Resolve transl_istore_correct : htlproof.
 
   Lemma transl_icond_correct:
