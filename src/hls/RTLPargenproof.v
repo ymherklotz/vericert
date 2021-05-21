@@ -314,7 +314,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     induction 1; repeat semantics_simpl.
 
     { destruct bb; destruct x.
-      assert (bb_exit = bb_exit0) by admit; subst.
+      assert (bb_exit = bb_exit0).
+      { unfold schedule_oracle in *. simplify.
+        unfold check_control_flow_instr in *.
+        destruct_match; crush.
+      }
+      subst.
 
       exploit abstract_execution_correct; try eassumption. eapply ge_preserved_lem.
       econstructor; eauto.
@@ -334,8 +339,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
     { inv STACKS. inv H2. repeat econstructor; eauto.
-      intros. admit.
+      intros. apply PTree_matches; eauto.
     }
-    Admitted.
+  Qed.
 
 End CORRECTNESS.
