@@ -1354,15 +1354,7 @@ Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :
   else
     Errors.Error (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
 
-Definition transl_function_temp (f: RTLBlock.function) : Errors.res RTLPar.function :=
-  let tfcode := fn_code (schedule f) in
-    Errors.OK (mkfunction f.(fn_sig)
-                          f.(fn_params)
-                          f.(fn_stacksize)
-                          tfcode
-                          f.(fn_entrypoint)).
-
-Definition transl_fundef := transf_partial_fundef transl_function_temp.
+Definition transl_fundef := transf_partial_fundef transl_function.
 
 Definition transl_program (p : RTLBlock.program) : Errors.res RTLPar.program :=
   transform_partial_program transl_fundef p.

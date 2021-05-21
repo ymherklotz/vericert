@@ -313,20 +313,29 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
     induction 1; repeat semantics_simpl.
 
-    { destruct bb as [bbc bbe]; destruct x as [bbc' bbe'].
-      assert (bbe = bbe') by admit.
-      rewrite H3 in H5.
-      exploit abstract_execution_correct. eauto. apply ge_preserved_lem.
-      eauto.
-      eapply abstract_execution_correct in H5; eauto with rtlgp.
-      repeat econstructor; eauto with rtlgp. simplify.
-      exploit step_cf_instr_correct. eauto.
-      econstructor; eauto with rtlgp.
+    { destruct bb; destruct x.
+      assert (bb_exit = bb_exit0) by admit; subst.
+
+      exploit abstract_execution_correct; try eassumption. eapply ge_preserved_lem.
+      econstructor; eauto.
+      inv_simp. destruct x. inv H7.
+
+      exploit step_cf_instr_correct; try eassumption. econstructor; eauto.
+      inv_simp.
+
+      econstructor. econstructor. eapply Smallstep.plus_one. econstructor.
+      eauto. eauto. simplify. eauto. eauto.
     }
-    { unfold bind in *. destruct_match; try discriminate. repeat semantics_simpl. inv TRANSL0.
-      repeat econstructor; eauto. }
+    { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
+      inv H2. unfold transl_function in Heqr. destruct_match; crush.
+      inv Heqr. 
+      repeat econstructor; eauto.
+      unfold bind in *. destruct_match; crush.
+    }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
-    { inv STACKS. inv H2. repeat econstructor; eauto. }
-  Qed.
+    { inv STACKS. inv H2. repeat econstructor; eauto.
+      intros. admit.
+    }
+    Admitted.
 
 End CORRECTNESS.
