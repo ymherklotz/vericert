@@ -343,4 +343,37 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     }
   Qed.
 
+  Lemma transl_initial_states:
+    forall S,
+      RTLBlock.initial_state prog S ->
+      exists R, RTLPar.initial_state tprog R /\ match_states S R.
+  Proof.
+    induction 1.
+    exploit function_ptr_translated; eauto. intros [tf [A B]].
+    econstructor; split.
+    econstructor. apply (Genv.init_mem_transf_partial TRANSL); eauto.
+    replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+    symmetry; eapply match_program_main; eauto.
+    eexact A.
+    rewrite <- H2. apply sig_transl_function; auto.
+    constructor. auto. constructor.
+  Qed.
+
+  Lemma transl_final_states:
+    forall S R r,
+      match_states S R -> RTLBlock.final_state S r -> RTLPar.final_state R r.
+  Proof.
+    intros. inv H0. inv H. inv STACKS. constructor.
+  Qed.
+
+  Theorem transf_program_correct:
+    Smallstep.forward_simulation (RTLBlock.semantics prog) (RTLPar.semantics tprog).
+  Proof.
+    eapply Smallstep.forward_simulation_plus.
+    apply senv_preserved.
+    eexact transl_initial_states.
+    eexact transl_final_states.
+    exact transl_step_correct.
+  Qed.
+
 End CORRECTNESS.
