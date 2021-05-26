@@ -106,7 +106,7 @@ Definition find_blocks_with_cond (c: code) : list (node * bblock) :=
 Definition if_convert_code (p: nat * code) (nb: node * bblock) :=
   let (n, bb) := nb in
   let (p', c) := p in
-  let nbb := if_convert_block c p' bb in
+  let nbb := if_convert_block c (Pos.of_nat p') bb in
   (S p', PTree.set n nbb c).
 
 Definition transf_function (f: function) : function :=
