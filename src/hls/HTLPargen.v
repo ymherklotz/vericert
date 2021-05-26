@@ -659,7 +659,7 @@ Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with
   | Pvar pred =>
-    Vrange preg (Vlit (natToValue pred)) (Vlit (natToValue pred))
+    Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
   | Pnot pred =>
     Vunop Vnot (pred_expr preg pred)
   | Pand p1 p2 =>
