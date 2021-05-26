@@ -44,6 +44,7 @@ Definition reg := positive.
 
 Inductive resource : Set :=
 | Reg : reg -> resource
+| Pred : reg -> resource
 | Mem : resource.
 
 (*|
@@ -53,7 +54,7 @@ optimised heavily if written manually, as their proofs are not needed.
 
 Lemma resource_eq : forall (r1 r2 : resource), {r1 = r2} + {r1 <> r2}.
 Proof.
-  decide equality. apply Pos.eq_dec.
+  decide equality; apply Pos.eq_dec.
 Defined.
 
 Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
@@ -181,7 +182,8 @@ Module R_indexed.
   Definition t := resource.
   Definition index (rs: resource) : positive :=
     match rs with
-    | Reg r => xO r
+    | Reg r => xO (xO r)
+    | Pred r => xI (xI r)
     | Mem => 1%positive
     end.
 
@@ -205,14 +207,171 @@ Then, to make recursion over expressions easier, expression_list is also defined
 that enables mutual recursive definitions over the datatypes.
 |*)
 
-Inductive expression : Set :=
+Definition unsat p := forall a, sat_predicate p a = false.
+Definition sat p := exists a, sat_predicate p a = true.
+
+Inductive expression : Type :=
 | Ebase : resource -> expression
 | Eop : Op.operation -> expression_list -> expression -> expression
 | Eload : AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Estore : expression -> AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
-with expression_list : Set :=
+| Esetpred : predicate -> Op.condition -> expression_list -> expression -> expression
+| Econd : expr_pred_list -> expression
+with expression_list : Type :=
 | Enil : expression_list
-| Econs : expression -> expression_list -> expression_list.
+| Econs : expression -> expression_list -> expression_list
+with expr_pred_list : Type :=
+| EPnil : expr_pred_list
+| EPcons : pred_op -> expression -> expr_pred_list -> expr_pred_list
+.
+
+Definition pred_list_wf l : Prop :=
+  forall a b, In a l -> In b l -> a <> b -> unsat (Pand a b).
+
+Fixpoint expr_pred_list_to_list e :=
+  match e with
+  | EPnil => nil
+  | EPcons p e l => (p, e) :: expr_pred_list_to_list l
+  end.
+
+Definition pred_list_wf_ep l : Prop :=
+  pred_list_wf (map fst (expr_pred_list_to_list l)).
+
+Lemma unsat_correct1 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate a c = true ->
+    sat_predicate b c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
+  auto.
+Qed.
+
+Lemma unsat_correct2 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate b c = true ->
+    sat_predicate a c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
+Qed.
+
+Lemma unsat_not a: unsat (Pand a (Pnot a)).
+Proof. unfold unsat; simplify; auto with bool. Qed.
+
+Lemma unsat_commut a b: unsat (Pand a b) -> unsat (Pand b a).
+Proof. unfold unsat; simplify; eauto with bool. Qed.
+
+Lemma sat_dec a n b: sat_pred n a = Some b -> {sat a} + {unsat a}.
+Proof.
+  unfold sat, unsat. destruct b.
+  intros. left. destruct s.
+  exists (Sat.interp_alist x). auto.
+  intros. tauto.
+Qed.
+
+Lemma sat_equiv :
+  forall a b,
+  unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) ->
+  forall c, sat_predicate a c = sat_predicate b c.
+Proof.
+  unfold unsat. intros. specialize (H c); simplify.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+(*Parameter op_le : Op.operation -> Op.operation -> bool.
+Parameter chunk_le : AST.memory_chunk -> AST.memory_chunk -> bool.
+Parameter addr_le : Op.addressing -> Op.addressing -> bool.
+Parameter cond_le : Op.condition -> Op.condition -> bool.
+
+Fixpoint pred_le (p1 p2: pred_op) : bool :=
+  match p1, p2 with
+  | Pvar i, Pvar j => (i <=? j)%positive
+  | Pnot p1, Pnot p2 => pred_le p1 p2
+  | Pand p1 p1', Pand p2 p2' => if pred_le p1 p2 then true else pred_le p1' p2'
+  | Por p1 p1', Por p2 p2' => if pred_le p1 p2 then true else pred_le p1' p2'
+  | Pvar _, _ => true
+  | Pnot _, Pvar _ => false
+  | Pnot _, _ => true
+  | Pand _ _, Pvar _ => false
+  | Pand _ _, Pnot _ => false
+  | Pand _ _, _ => true
+  | Por _ _, _ => false
+  end.
+
+Import Lia.
+
+Lemma pred_le_trans :
+  forall p1 p2 p3 b, pred_le p1 p2 = b -> pred_le p2 p3 = b -> pred_le p1 p3 = b.
+Proof.
+  induction p1; destruct p2; destruct p3; crush.
+  destruct b. rewrite Pos.leb_le in *. lia. rewrite Pos.leb_gt in *. lia.
+  firstorder.
+  destruct (pred_le p1_1 p2_1) eqn:?. subst. destruct (pred_le p2_1 p3_1) eqn:?.
+  apply IHp1_1 in Heqb. rewrite Heqb. auto. auto.
+
+
+Fixpoint expr_le (e1 e2: expression) {struct e2}: bool :=
+  match e1, e2 with
+  | Ebase r1, Ebase r2 => (R_indexed.index r1 <=? R_indexed.index r2)%positive
+  | Ebase _, _ => true
+  | Eop op1 elist1 m1, Eop op2 elist2 m2 =>
+    if op_le op1 op2 then true
+    else if elist_le elist1 elist2 then true
+         else expr_le m1 m2
+  | Eop _ _ _, Ebase _ => false
+  | Eop _ _ _, _ => true
+  | Eload chunk1 addr1 elist1 expr1, Eload chunk2 addr2 elist2 expr2 =>
+    if chunk_le chunk1 chunk2 then true
+    else if addr_le addr1 addr2 then true
+         else if elist_le elist1 elist2 then true
+              else expr_le expr1 expr2
+  | Eload _ _ _ _, Ebase _ => false
+  | Eload _ _ _ _, Eop _ _ _ => false
+  | Eload _ _ _ _, _ => true
+  | Estore m1 chunk1 addr1 elist1 expr1, Estore m2 chunk2 addr2 elist2 expr2 =>
+    if expr_le m1 m2 then true
+    else if chunk_le chunk1 chunk2 then true
+         else if addr_le addr1 addr2 then true
+              else if elist_le elist1 elist2 then true
+                   else expr_le expr1 expr2
+  | Estore _ _ _ _ _, Ebase _ => false
+  | Estore _ _ _ _ _, Eop _ _ _ => false
+  | Estore _ _ _ _ _, Eload _ _ _ _ => false
+  | Estore _ _ _ _ _, _ => true
+  | Esetpred p1 cond1 elist1 m1, Esetpred p2 cond2 elist2 m2 =>
+    if (p1 <=? p2)%positive then true
+    else if cond_le cond1 cond2 then true
+         else if elist_le elist1 elist2 then true
+              else expr_le m1 m2
+  | Esetpred _ _ _ _, Econd _ => true
+  | Esetpred _ _ _ _, _ => false
+  | Econd eplist1, Econd eplist2 => eplist_le eplist1 eplist2
+  | Econd eplist1, _ => false
+  end
+with elist_le (e1 e2: expression_list) : bool :=
+  match e1, e2 with
+  | Enil, Enil => true
+  | Econs a1 b1, Econs a2 b2 => if expr_le a1 a2 then true else elist_le b1 b2
+  | Enil, _ => true
+  | _, Enil => false
+  end
+with eplist_le (e1 e2: expr_pred_list) : bool :=
+  match e1, e2 with
+  | EPnil, EPnil => true
+  | EPcons p1 a1 b1, EPcons p2 a2 b2 =>
+    if pred_le p1 p2 then true
+    else if expr_le a1 a2 then true else eplist_le b1 b2
+  | EPnil, _ => true
+  | _, EPnil => false
+  end
+.*)
 
 (*|
 Using IMap we can create a map from resources to any other type, as resources can be uniquely
@@ -223,8 +382,6 @@ Module Rtree := ITree(R_indexed).
 
 Definition forest : Type := Rtree.t expression.
 
-Definition regset := Registers.Regmap.t val.
-
 Definition get_forest v f :=
   match Rtree.get v f with
   | None => Ebase v
@@ -233,6 +390,19 @@ Definition get_forest v f :=
 
 Notation "a # b" := (get_forest b a) (at level 1).
 Notation "a # b <- c" := (Rtree.set b c a) (at level 1, b at next level).
+
+Definition maybe {A: Type} (vo: A) (pr: predset) p (v: A) :=
+  match p with
+  | Some p' => if eval_predf pr p' then v else vo
+  | None => v
+  end.
+
+Definition get_pr i := match i with InstrState a b c => b end.
+
+Definition get_m i := match i with InstrState a b c => c end.
+
+Definition eval_predf_opt pr p :=
+  match p with Some p' => eval_predf pr p' | None => true end.
 
 (*|
 Finally we want to define the semantics of execution for the expressions with symbolic values, so
@@ -244,61 +414,100 @@ Section SEMANTICS.
 Context {A : Type} (genv : Genv.t A unit).
 
 Inductive sem_value :
-      val -> instr_state -> expression -> val -> Prop :=
-  | Sbase_reg:
-          forall sp rs r m,
-          sem_value sp (InstrState rs m) (Ebase (Reg r)) (rs !! r)
-  | Sop:
-          forall rs m op args v lv sp m' mem_exp,
-          sem_mem sp (InstrState rs m) mem_exp m' ->
-          sem_val_list sp (InstrState rs m) args lv ->
-          Op.eval_operation genv sp op lv m' = Some v ->
-          sem_value sp (InstrState rs m) (Eop op args mem_exp) v
-  | Sload :
-          forall st mem_exp addr chunk args a v m' lv sp,
-          sem_mem sp st mem_exp m' ->
-          sem_val_list sp st args lv ->
-          Op.eval_addressing genv sp addr lv = Some a ->
-          Memory.Mem.loadv chunk m' a = Some v ->
-          sem_value sp st (Eload chunk addr args mem_exp) v
+  val -> instr_state -> expression -> val -> Prop :=
+| Sbase_reg:
+    forall sp rs r m pr,
+    sem_value sp (InstrState rs pr m) (Ebase (Reg r)) (rs !! r)
+| Sop:
+    forall rs m op args v lv sp m' mem_exp pr,
+    sem_mem sp (InstrState rs pr m) mem_exp m' ->
+    sem_val_list sp (InstrState rs pr m) args lv ->
+    Op.eval_operation genv sp op lv m' = Some v ->
+    sem_value sp (InstrState rs pr m) (Eop op args mem_exp) v
+| Sload :
+    forall st mem_exp addr chunk args a v m' lv sp,
+    sem_mem sp st mem_exp m' ->
+    sem_val_list sp st args lv ->
+    Op.eval_addressing genv sp addr lv = Some a ->
+    Memory.Mem.loadv chunk m' a = Some v ->
+    sem_value sp st (Eload chunk addr args mem_exp) v
+| Scond :
+    forall sp st e v,
+    sem_val_ep_list sp st e v ->
+    sem_value sp st (Econd e) v
+with sem_pred :
+       val -> instr_state -> expression -> bool -> Prop :=
+| Spred:
+    forall st mem_exp args p c lv m m' v sp,
+    sem_mem sp st mem_exp m' ->
+    sem_val_list sp st args lv ->
+    Op.eval_condition c lv m = Some v ->
+    sem_pred sp st (Esetpred p c args mem_exp) v
+| Sbase_pred:
+    forall rs pr m p sp,
+    sem_pred sp (InstrState rs pr m) (Ebase (Pred p)) (PMap.get p pr)
 with sem_mem :
-          val -> instr_state -> expression -> Memory.mem -> Prop :=
-  | Sstore :
-          forall st mem_exp val_exp m'' addr v a m' chunk args lv sp,
-          sem_mem sp st mem_exp m' ->
-          sem_value sp st val_exp v ->
-          sem_val_list sp st args lv ->
-          Op.eval_addressing genv sp addr lv = Some a ->
-          Memory.Mem.storev chunk m' a v = Some m'' ->
-          sem_mem sp st (Estore mem_exp chunk addr args val_exp) m''
-    | Sbase_mem :
-            forall rs m sp,
-            sem_mem sp (InstrState rs m) (Ebase Mem) m
+       val -> instr_state -> expression -> Memory.mem -> Prop :=
+| Sstore :
+    forall st mem_exp val_exp m'' addr v a m' chunk args lv sp,
+    sem_mem sp st mem_exp m' ->
+    sem_value sp st val_exp v ->
+    sem_val_list sp st args lv ->
+    Op.eval_addressing genv sp addr lv = Some a ->
+    Memory.Mem.storev chunk m' a v = Some m'' ->
+    sem_mem sp st (Estore mem_exp chunk addr args val_exp) m''
+| Sbase_mem :
+    forall rs m sp pr,
+    sem_mem sp (InstrState rs pr m) (Ebase Mem) m
 with sem_val_list :
-          val -> instr_state -> expression_list -> list val -> Prop :=
-    | Snil :
-            forall st sp,
-            sem_val_list sp st Enil nil
-    | Scons :
-            forall st e v l lv sp,
-            sem_value sp st e v ->
-            sem_val_list sp st l lv ->
-            sem_val_list sp st (Econs e l) (v :: lv).
+       val -> instr_state -> expression_list -> list val -> Prop :=
+| Snil :
+    forall st sp,
+    sem_val_list sp st Enil nil
+| Scons :
+    forall st e v l lv sp,
+    sem_value sp st e v ->
+    sem_val_list sp st l lv ->
+    sem_val_list sp st (Econs e l) (v :: lv)
+with sem_val_ep_list :
+       val -> instr_state -> expr_pred_list -> val -> Prop :=
+| SPnil :
+    forall sp rs r m pr,
+    sem_val_ep_list sp (InstrState rs pr m) EPnil (rs !! r)
+| SPconsTrue :
+    forall pr p sp rs m e v el,
+    eval_predf pr p = true ->
+    sem_value sp (InstrState rs pr m) e v ->
+    sem_val_ep_list sp (InstrState rs pr m) (EPcons p e el) v
+| SPconsFalse :
+    forall pr p sp rs m e v el,
+    eval_predf pr p = false ->
+    sem_val_ep_list sp (InstrState rs pr m) el v ->
+    sem_val_ep_list sp (InstrState rs pr m) (EPcons p e el) v
+.
+
+Inductive sem_predset :
+  val -> instr_state -> forest -> predset -> Prop :=
+| Spredset:
+    forall st f sp rs',
+    (forall x, sem_pred sp st (f # (Pred x)) (PMap.get x rs')) ->
+    sem_predset sp st f rs'.
 
 Inductive sem_regset :
   val -> instr_state -> forest -> regset -> Prop :=
-  | Sregset:
-        forall st f sp rs',
-        (forall x, sem_value sp st (f # (Reg x)) (Registers.Regmap.get x rs')) ->
-        sem_regset sp st f rs'.
+| Sregset:
+    forall st f sp rs',
+    (forall x, sem_value sp st (f # (Reg x)) (rs' !! x)) ->
+    sem_regset sp st f rs'.
 
 Inductive sem :
   val -> instr_state -> forest -> instr_state -> Prop :=
-  | Sem:
-        forall st rs' m' f sp,
-        sem_regset sp st f rs' ->
-        sem_mem sp st (f # Mem) m' ->
-        sem sp st f (InstrState rs' m').
+| Sem:
+    forall st rs' m' f sp pr',
+    sem_regset sp st f rs' ->
+    sem_predset sp st f pr' ->
+    sem_mem sp st (f # Mem) m' ->
+    sem sp st f (InstrState rs' pr' m').
 
 End SEMANTICS.
 
@@ -306,20 +515,26 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
   match e1, e2 with
   | Ebase r1, Ebase r2 => if resource_eq r1 r2 then true else false
   | Eop op1 el1 exp1, Eop op2 el2 exp2 =>
-      if operation_eq op1 op2 then
-      if beq_expression exp1 exp2 then
-      beq_expression_list el1 el2 else false else false
+    if operation_eq op1 op2 then
+    if beq_expression exp1 exp2 then
+    beq_expression_list el1 el2 else false else false
   | Eload chk1 addr1 el1 e1, Eload chk2 addr2 el2 e2 =>
-      if memory_chunk_eq chk1 chk2
-      then if addressing_eq addr1 addr2
-      then if beq_expression_list el1 el2
-      then beq_expression e1 e2 else false else false else false
+    if memory_chunk_eq chk1 chk2
+    then if addressing_eq addr1 addr2
+         then if beq_expression_list el1 el2
+              then beq_expression e1 e2 else false else false else false
   | Estore m1 chk1 addr1 el1 e1, Estore m2 chk2 addr2 el2 e2=>
-      if memory_chunk_eq chk1 chk2
-      then if addressing_eq addr1 addr2
-      then if beq_expression_list el1 el2
-      then if beq_expression m1 m2
-      then beq_expression e1 e2 else false else false else false else false
+    if memory_chunk_eq chk1 chk2
+    then if addressing_eq addr1 addr2
+         then if beq_expression_list el1 el2
+              then if beq_expression m1 m2
+                   then beq_expression e1 e2 else false else false else false else false
+  | Esetpred p1 c1 el1 m1, Esetpred p2 c2 el2 m2 =>
+    if Pos.eqb p1 p2
+    then if condition_eq c1 c2
+         then if beq_expression_list el1 el2
+              then beq_expression m1 m2 else false else false else false
+  | Econd el1, Econd el2 => beq_expr_pred_list el1 el2
   | _, _ => false
   end
 with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
@@ -327,10 +542,19 @@ with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
   | Enil, Enil => true
   | Econs e1 t1, Econs e2 t2 => beq_expression e1 e2 && beq_expression_list t1 t2
   | _, _ => false
-  end.
+  end
+with beq_expr_pred_list (el1 el2: expr_pred_list) {struct el1} : bool :=
+  match el1, el2 with
+  | EPnil, EPnil => true
+  | EPcons p1 e1 el1', EPcons p2 e2 el2' => true
+  | _, _ => false
+  end
+.
 
 Scheme expression_ind2 := Induction for expression Sort Prop
-  with expression_list_ind2 := Induction for expression_list Sort Prop.
+  with expression_list_ind2 := Induction for expression_list Sort Prop
+  with expr_pred_list_ind2 := Induction for expr_pred_list Sort Prop
+.
 
 Lemma beq_expression_correct:
   forall e1 e2, beq_expression e1 e2 = true -> e1 = e2.
@@ -340,11 +564,14 @@ Proof.
       (P := fun (e1 : expression) =>
             forall e2, beq_expression e1 e2 = true -> e1 = e2)
       (P0 := fun (e1 : expression_list) =>
-             forall e2, beq_expression_list e1 e2 = true -> e1 = e2); simplify;
+             forall e2, beq_expression_list e1 e2 = true -> e1 = e2)
+      (P1 := fun (e1 : expr_pred_list) =>
+             forall e2, beq_expr_pred_list e1 e2 = true -> e1 = e2); simplify;
     repeat match goal with
            | [ H : context[match ?x with _ => _ end] |- _ ] => destruct x eqn:?
            | [ H : context[if ?x then _ else _] |- _ ] => destruct x eqn:?
            end; subst; f_equal; crush.
+  eauto using Peqb_true_eq.
 Qed.
 
 Definition empty : forest := Rtree.empty _.
