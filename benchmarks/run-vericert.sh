@@ -36,7 +36,7 @@ function run_benchmark() {
    else
       veriresult="$(tail -1 "$benchmark".tmp | cut -d' ' -f2)"
    fi
-   cycles="$(tail -4 "$benchmark".tmp | head -1 | tr -s ' ' | cut -d' ' -f3)"
+   cycles="$(sed -ne 's/cycles: //p' "$benchmark".tmp)"
    ctime="$(head -2 "$benchmark".comp | tail -1 | xargs | cut -d' ' -f2 | cut -d'm' -f2 | sed 's/s//g')"
    info "[$benchmark] Veri output: $veriresult"
 
