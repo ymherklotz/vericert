@@ -30,6 +30,7 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Array.
+Require Import vericert.common.Maps.
 Require vericert.hls.Verilog.
 
 (** The purpose of the hardware transfer language (HTL) is to create a more
@@ -246,3 +247,14 @@ Inductive final_state : state -> Integers.int -> Prop :=
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
+
+Lemma max_pc_wf :
+  forall T m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+            @map_well_formed T m.
+Proof.
+  unfold map_well_formed. intros.
+  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
+  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
+  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
+  simplify. transitivity (Z.pos (max_pc_map m)); eauto.
+Qed.

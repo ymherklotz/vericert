@@ -61,6 +61,7 @@ Require Import compcert.lib.Coqlib.
 Require vericert.hls.Verilog.
 Require vericert.hls.Veriloggen.
 Require vericert.hls.Veriloggenproof.
+Require vericert.hls.Renaming.
 Require vericert.hls.HTLgen.
 Require vericert.hls.RTLBlock.
 Require vericert.hls.RTLBlockgen.
@@ -191,7 +192,7 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
    @@ print (print_HTL 1)
-  @@@ HTLgen.renumber_program
+  @@@ Renaming.transf_program
    @@ print (print_HTL 2)
   @@@ Veriloggen.transl_program.
 

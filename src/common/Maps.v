@@ -93,6 +93,22 @@ Definition contains (A: Type) (i: positive) (m: t A) : bool :=
   | Some _ => true
   | None => false
   end.
-
-
 End PTree.
+
+Definition max_pc_map {A: Type} (m : Maps.PTree.t A) :=
+  PTree.fold (fun m pc i => Pos.max m pc) m 1%positive.
+
+Lemma max_pc_map_sound:
+  forall A m pc i, m!pc = Some i -> Ple pc (@max_pc_map A m).
+Proof.
+  intros until i. unfold max_pc_map.
+  apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
+  (* extensionality *)
+  intros. apply H0. rewrite H; auto.
+  (* base case *)
+  rewrite PTree.gempty. congruence.
+  (* inductive case *)
+  intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
+  inv H2. xomega.
+  apply Ple_trans with a. auto. xomega.
+Qed.
