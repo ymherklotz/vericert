@@ -61,6 +61,7 @@ Require Import compcert.lib.Coqlib.
 Require vericert.hls.Verilog.
 Require vericert.hls.Veriloggen.
 Require vericert.hls.Veriloggenproof.
+Require vericert.hls.ApplyExternctrl.
 Require vericert.hls.Renaming.
 Require vericert.hls.HTLgen.
 Require vericert.hls.RTLBlock.
@@ -194,6 +195,8 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_HTL 1)
   @@@ Renaming.transf_program
    @@ print (print_HTL 2)
+  @@@ ApplyExternctrl.transf_program
+   @@ print (print_HTL 3)
   @@@ Veriloggen.transl_program.
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
@@ -297,7 +300,7 @@ Proof.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
   rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
-  unfold transf_backend, time in T. simpl in T. rewrite ! compose_print_identity in T.
+  unfold transf_backend, time in T. rewrite ! compose_print_identity in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
   set (p9 := total_if Compopts.optim_constprop Constprop.transf_program p8) in *.

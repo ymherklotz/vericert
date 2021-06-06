@@ -105,6 +105,26 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
 Definition empty_stack (m : module) : Verilog.assocmap_arr :=
   (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty Verilog.arr)).
 
+
+Definition prog_modmap (p : HTL.program) :=
+  PTree_Properties.of_list (Option.map_option
+                               (fun a => match a with
+                                      | (ident, (AST.Gfun (AST.Internal f))) => Some (ident, f)
+                                      | _ => None
+                                      end)
+                               (AST.prog_defs p)).
+
+Lemma max_pc_wf :
+  forall T m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+            @map_well_formed T m.
+Proof.
+  unfold map_well_formed. intros.
+  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
+  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
+  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
+  simplify. transitivity (Z.pos (max_pc_map m)); eauto.
+Qed.
+
 (** * Operational Semantics *)
 
 Definition genv := Globalenvs.Genv.t fundef unit.
@@ -247,14 +267,3 @@ Inductive final_state : state -> Integers.int -> Prop :=
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
-
-Lemma max_pc_wf :
-  forall T m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
-            @map_well_formed T m.
-Proof.
-  unfold map_well_formed. intros.
-  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
-  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
-  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
-  simplify. transitivity (Z.pos (max_pc_map m)); eauto.
-Qed.
