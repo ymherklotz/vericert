@@ -257,6 +257,21 @@ Local Open Scope linking_scope.
 Definition verilog_transflink : TransfLink Veriloggenproof.match_prog.
 Admitted.
 
+Definition Renaming_match_prog : HTL.program -> HTL.program -> Prop.
+Admitted.
+Instance TransfLink_Renaming : TransfLink Renaming_match_prog.
+Admitted.
+Lemma Renaming_transf_program_match : forall p tp, Renaming.transf_program p = OK tp -> Renaming_match_prog p tp.
+Admitted.
+
+Definition ApplyExternctrl_match_prog : HTL.program -> HTL.program -> Prop :=
+  match_program (fun ctx f tf => ApplyExternctrl.transf_fundef ctx f = OK tf) eq.
+Instance TransfLink_ApplyExternctrl : TransfLink ApplyExternctrl_match_prog.
+Admitted.
+Lemma ApplyExternctrl_transf_program_match : forall p tp,
+  ApplyExternctrl.transf_program p = OK tp -> ApplyExternctrl_match_prog p tp.
+Admitted.
+
 Definition CompCert's_passes :=
       mkpass SimplExprproof.match_prog
   ::: mkpass SimplLocalsproof.match_prog
@@ -272,6 +287,8 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
+  ::: mkpass Renaming_match_prog
+  ::: mkpass ApplyExternctrl_match_prog
   ::: (@mkpass _ _ Veriloggenproof.match_prog verilog_transflink)
   ::: pass_nil _.
 
@@ -300,7 +317,7 @@ Proof.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
   rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
-  unfold transf_backend, time in T. rewrite ! compose_print_identity in T.
+  unfold transf_backend, time in T. simpl in T. rewrite ! compose_print_identity in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
   set (p9 := total_if Compopts.optim_constprop Constprop.transf_program p8) in *.
@@ -309,7 +326,10 @@ Proof.
   destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
-  destruct (Veriloggen.transl_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
+  destruct (Renaming.transf_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
+  destruct (ApplyExternctrl.transf_program p15) as [p16|e] eqn:P16; simpl in T; try discriminate.
+  destruct (Veriloggen.transl_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
+
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -325,7 +345,11 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  exists p15; split. (*apply Veriloggenproof.transf_program_match; auto.
+  exists p15; split. apply Renaming_transf_program_match; auto.
+  exists p16; split. apply ApplyExternctrl_transf_program_match; auto.
+  exists p17; split. apply Veriloggenproof.transf_program_match; auto.
+  inv T. reflexivity.
+(*apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.*)
 Admitted.
 
