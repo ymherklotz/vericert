@@ -195,15 +195,17 @@ Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mon reg :=
 
 Definition create_state : mon node :=
   fun s => let r := s.(st_freshstate) in
-        OK r (mkstate
-            s.(st_st)
-            (st_freshreg s)
-            (Pos.succ (st_freshstate s))
-            (st_scldecls s)
-            (st_arrdecls s)
-            (st_externctrl s)
-            (st_datapath s)
-            (st_controllogic s)) ltac:(st_tac).
+        if Z.leb (Z.pos s.(st_freshstate)) Integers.Int.max_unsigned
+        then OK r (mkstate
+                 s.(st_st)
+                 (st_freshreg s)
+                 (Pos.succ (st_freshstate s))
+                 (st_scldecls s)
+                 (st_arrdecls s)
+                 (st_externctrl s)
+                 (st_datapath s)
+                 (st_controllogic s)) ltac:(st_tac)
+        else Error (Errors.msg "HTL.create_state").
 
 Definition add_instr (n : node) (n' : node) (st : datapath_stmnt) : mon unit :=
   fun s => match check_empty_node_datapath s n, check_empty_node_controllogic s n with

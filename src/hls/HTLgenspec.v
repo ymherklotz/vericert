@@ -103,7 +103,7 @@ Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datap
           (forall n arg, List.nth_error args n = Some arg ->
                     exists r, In (r, arg) (List.combine fn_params args) /\
                          externctrl ! r = Some (fn, ctrl_param n)) /\
-
+          Z.pos pc2 <= Int.max_unsigned /\
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
           trans!pc = Some (state_goto st pc2) /\
           stmnts!pc2 = Some (join fn_return fn_rst dst) /\
@@ -393,6 +393,7 @@ Proof.
       * intros.
         destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 ltac:(eauto)) as [param [? ?]].
         exists param; crush; trans_step s3 s'.
+      * monadInv EQ2. crush.
     + (* Icond *) tr_code_simple_tac.
     + (* Ireturn *)
       inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
