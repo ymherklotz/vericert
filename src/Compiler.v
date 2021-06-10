@@ -180,12 +180,12 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_RTL 1)
    @@ Renumber.transf_program
    @@ print (print_RTL 2)
+  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
+   @@ print (print_RTL 5)
    @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
    @@ print (print_RTL 3)
    @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
    @@ print (print_RTL 4)
-  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
-   @@ print (print_RTL 5)
   @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
    @@ print (print_RTL 6)
   @@@ time "Unused globals" Unusedglob.transform_program
@@ -263,9 +263,9 @@ Definition CompCert's_passes :=
   ::: mkpass RTLgenproof.match_prog
   ::: mkpass Inliningproof.match_prog
   ::: mkpass Renumberproof.match_prog
+  ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_constprop Constpropproof.match_prog)
   ::: mkpass (match_if Compopts.optim_constprop Renumberproof.match_prog)
-  ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
@@ -301,9 +301,9 @@ Proof.
   unfold transf_backend, time in T. simpl in T. rewrite ! compose_print_identity in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
-  set (p9 := total_if Compopts.optim_constprop Constprop.transf_program p8) in *.
-  set (p10 := total_if Compopts.optim_constprop Renumber.transf_program p9) in *.
-  destruct (partial_if Compopts.optim_CSE CSE.transf_program p10) as [p11|e] eqn:P11; simpl in T; try discriminate.
+  destruct (partial_if Compopts.optim_CSE CSE.transf_program p8) as [p9|e] eqn:P9; simpl in T; try discriminate.
+  set (p10 := total_if Compopts.optim_constprop Constprop.transf_program p9) in *.
+  set (p11 := total_if Compopts.optim_constprop Renumber.transf_program p10) in *.
   destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
@@ -318,9 +318,9 @@ Proof.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply Inliningproof.transf_program_match; auto.
   exists p8; split. apply Renumberproof.transf_program_match; auto.
-  exists p9; split. apply total_if_match. apply Constpropproof.transf_program_match.
-  exists p10; split. apply total_if_match. apply Renumberproof.transf_program_match.
-  exists p11; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
+  exists p9; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
+  exists p10; split. apply total_if_match. apply Constpropproof.transf_program_match.
+  exists p11; split. apply total_if_match. apply Renumberproof.transf_program_match.
   exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
@@ -362,11 +362,11 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply Renumberproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. exact CSEproof.transf_program_correct.
+  eapply compose_forward_simulations.
   eapply match_if_simulation. eassumption. exact Constpropproof.transf_program_correct.
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption. exact Renumberproof.transf_program_correct.
-  eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact CSEproof.transf_program_correct.
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption. exact Deadcodeproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
