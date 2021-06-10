@@ -85,14 +85,17 @@ Ltac solve_by_invert := solve_by_inverts 1.
 Ltac invert x := inversion x; subst; clear x.
 
 (** For a hypothesis of a forall-type, instantiate every variable to a fresh existential *)
+Ltac insterU1 H :=
+  match type of H with
+  | forall x : ?T, _ =>
+    let x := fresh "x" in
+    evar (x : T);
+    let x' := eval unfold x in x in
+        clear x; specialize (H x')
+  end.
+
 Ltac insterU H :=
-  repeat match type of H with
-         | forall x : ?T, _ =>
-           let x := fresh "x" in
-           evar (x : T);
-           let x' := eval unfold x in x in
-               clear x; specialize (H x')
-         end.
+  repeat (insterU1 H).
 
 Ltac destruct_match :=
   match goal with

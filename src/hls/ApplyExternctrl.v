@@ -178,3 +178,19 @@ End APPLY_EXTERNCTRL.
 
 Definition transf_fundef (prog : HTL.program) := transf_partial_fundef (module_apply_externctrl prog).
 Definition transf_program (prog : HTL.program) := transform_partial_program (transf_fundef prog) prog.
+
+(* Semantics *)
+
+Definition match_prog : HTL.program -> HTL.program -> Prop :=
+  Linking.match_program (fun ctx f tf => ApplyExternctrl.transf_fundef ctx f = OK tf) eq.
+
+Lemma transf_program_match : forall p tp,
+  ApplyExternctrl.transf_program p = OK tp -> match_prog p tp.
+Admitted.
+
+Lemma transf_program_correct : forall p tp,
+  match_prog p tp -> Smallstep.forward_simulation (HTL.semantics p) (HTL.semantics tp).
+Admitted.
+
+Instance TransfLink : Linking.TransfLink match_prog.
+Admitted.

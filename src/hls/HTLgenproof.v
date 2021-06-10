@@ -171,6 +171,7 @@ Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
     forall f m rtl_args htl_args mid mem rtl_stk htl_stk
     (TF : tr_module ge f m)
     (MF : match_frames ge mid mem rtl_stk htl_stk)
+    (NP : Forall not_pointer rtl_args)
     (MARGS : list_forall2 val_value_lessdef rtl_args htl_args),
       match_states ge
                    (RTL.Callstate rtl_stk (AST.Internal f) rtl_args mem)
@@ -1256,6 +1257,39 @@ Section CORRECTNESS.
     - destruct params; eauto using regs_lessdef_add_match with htlproof.
   Qed.
 
+  Lemma stack_based_set : forall sp r v rs,
+      stack_based v sp ->
+      reg_stack_based_pointers sp rs ->
+      reg_stack_based_pointers sp (Registers.Regmap.set r v rs).
+  Proof.
+    unfold reg_stack_based_pointers, Registers.Regmap.set, "_ !! _".
+    intros * ? ? r0.
+    simpl.
+    destruct (peq r r0); subst.
+    - rewrite AssocMap.gss; auto.
+    - rewrite AssocMap.gso; auto.
+  Qed.
+
+  Lemma stack_based_non_pointers : forall args params stk,
+      Forall not_pointer args ->
+      reg_stack_based_pointers stk (RTL.init_regs args params).
+  Proof.
+    unfold reg_stack_based_pointers.
+    induction args; intros * NP *.
+    + destruct params;
+      simpl;
+      unfold "_ !! _";
+      rewrite PTree.gempty;
+      crush.
+    + destruct params; simpl.
+      * unfold "_ !! _". rewrite PTree.gempty. crush.
+      * inv NP.
+        apply stack_based_set;
+        [ destruct a; crush
+        | unfold reg_stack_based_pointers; auto
+        ].
+  Qed.
+
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
       (m : mem) (m' : Mem.mem') (stk : Values.block),
@@ -1280,17 +1314,15 @@ Section CORRECTNESS.
     - repeat apply regs_lessdef_add_greater; try not_control_reg.
       eauto using match_args.
     - edestruct no_stack_calls; eauto.
-      + replace (RTL.fn_stacksize f) in *.
-        replace m' with m by
-            (destruct (mem_alloc_zero m); crush).
-        subst.
+      + replace (RTL.fn_stacksize f) with 0 in *
+          by assumption.
+        replace m' with m
+          by (destruct (mem_alloc_zero m); crush).
         assumption.
       + subst. inv MF. constructor.
-    - (* Stack pointer *)
+    - big_tac.
       admit.
-    - (* Stack based args *)
-      unfold reg_stack_based_pointers; intros.
-      admit.
+    - eauto using stack_based_non_pointers.
     - (* Stack based stack pointer *)
       unfold arr_stack_based_pointers; intros.
       admit.
@@ -1315,7 +1347,76 @@ Section CORRECTNESS.
     exists x. crush.
   Qed.
 
-  Require Import Registers.
+  Fixpoint assign_all acc (rs : list reg) (vals : list value) :=
+    match rs, vals with
+    | r::rs', val::vals' => assign_all (acc # r <- val) rs' vals'
+    | _, _ => acc
+    end.
+
+  Notation "a ## b '<-' c" := (assign_all a b c) (at level 1, b at next level) : assocmap.
+
+  Lemma assign_all_nil : forall a rs, a ## rs <- nil = a.
+  Proof. destruct rs; crush. Qed.
+
+  Lemma assign_all_out : forall rs vs a r, (forall v, ~ In (r, v) (List.combine rs vs)) -> (a ## rs <- vs) ! r = a ! r.
+  Proof.
+    induction rs; intros * H.
+    - trivial.
+    - destruct vs.
+      + rewrite assign_all_nil.
+        trivial.
+      + simpl.
+        rewrite IHrs.
+        rewrite AssocMap.gso.
+        crush.
+        * simpl (List.combine _ _) in *.
+          specialize (H v).
+          rewrite not_in_cons in H.
+          inv H.
+          crush.
+        * intros v0.
+          specialize (H v0).
+          simpl (List.combine _ _) in *.
+          rewrite not_in_cons in H.
+          crush.
+  Qed.
+
+  Lemma nonblock_all_exec : forall from_regs to_regs f basr nasr basa nasa,
+      Verilog.stmnt_runp
+        f
+        {| Verilog.assoc_blocking := basr; Verilog.assoc_nonblocking := nasr |}
+        {| Verilog.assoc_blocking := basa; Verilog.assoc_nonblocking := nasa |}
+        (nonblock_all (List.combine to_regs from_regs))
+        {| Verilog.assoc_blocking := basr; Verilog.assoc_nonblocking := nasr ## to_regs <- (basr##from_regs) |}
+        {| Verilog.assoc_blocking := basa; Verilog.assoc_nonblocking := nasa |}.
+  Proof.
+    induction from_regs; intros.
+    - rewrite combine_nil, assign_all_nil.
+      constructor.
+    - destruct to_regs; try solve [ constructor ].
+      simpl.
+      econstructor.
+      + repeat econstructor.
+      + eapply IHfrom_regs.
+  Qed.
+
+  Lemma fork_exec : forall f basr nasr basa nasa rst to_regs from_regs,
+      Verilog.stmnt_runp
+        f
+        {| Verilog.assoc_blocking := basr; Verilog.assoc_nonblocking := nasr |}
+        {| Verilog.assoc_blocking := basa; Verilog.assoc_nonblocking := nasa |}
+        (fork rst (List.combine to_regs from_regs))
+        {| Verilog.assoc_blocking := basr; Verilog.assoc_nonblocking := (nasr # rst <- (ZToValue 1)) ## to_regs <- (basr##from_regs) |}
+        {| Verilog.assoc_blocking := basa; Verilog.assoc_nonblocking := nasa |}.
+  Proof.
+    intros.
+    unfold fork.
+    econstructor.
+    - repeat econstructor.
+    - unfold Verilog.nonblock_reg; simpl.
+      eapply nonblock_all_exec.
+  Qed.
+
   Lemma transl_icall_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
       (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
@@ -1325,8 +1426,96 @@ Section CORRECTNESS.
         match_states ge (RTL.State s f sp pc rs m) R1 ->
         exists R2 : HTL.state,
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\
-          match_states ge (RTL.Callstate (RTL.Stackframe dst f sp pc' rs :: s) fd rs##args m) R2.
+          match_states ge (RTL.Callstate (RTL.Stackframe dst f sp pc' rs :: s) fd
+                                         (List.map (fun r => Registers.Regmap.get r rs) args) m)
+                       R2.
   Proof.
+    intros * H Hfunc * MSTATE.
+    inv_state.
+    edestruct (only_internal_calls fd); eauto; subst fd.
+    simpl in *.
+    eexists. split.
+    - inv CONST.
+      simplify.
+      eapply Smallstep.plus_three; simpl in *.
+      + eapply HTL.step_module; simpl.
+        * repeat econstructor; auto.
+        * repeat econstructor; auto.
+        * repeat econstructor; eauto.
+        * repeat econstructor; eauto.
+        * repeat econstructor; eauto.
+        * repeat econstructor; auto.
+        * repeat econstructor; eauto.
+        * eapply fork_exec.
+        * trivial.
+        * trivial.
+        * eapply AssocMapExt.merge_correct_1.
+          rewrite assign_all_out.
+          big_tac.
+          -- not_control_reg.
+          -- simpl.
+             insterU H6.
+             simplify.
+             admit.
+        * admit.
+      + eapply HTL.step_module; trivial.
+        * simpl.
+          apply AssocMapExt.merge_correct_2; auto.
+          rewrite assign_all_out by admit.
+          rewrite AssocMap.gso by not_control_reg.
+          rewrite AssocMap.gso by lia.
+          apply AssocMap.gempty.
+        * simpl.
+          apply AssocMapExt.merge_correct_2; auto.
+          rewrite assign_all_out by admit.
+          rewrite AssocMap.gso by not_control_reg.
+          rewrite AssocMap.gso by lia.
+          apply AssocMap.gempty.
+        * simpl.
+          apply AssocMapExt.merge_correct_1; auto.
+          rewrite assign_all_out by admit.
+          rewrite AssocMap.gso by not_control_reg.
+          apply AssocMap.gss.
+        * eauto.
+        * eauto.
+        * unfold state_wait.
+          eapply Verilog.stmnt_runp_Vcond_false.
+          -- simpl. econstructor; econstructor; simpl.
+             replace (Verilog.merge_regs ((empty_assocmap # st1 <- (posToValue x0)) # x1 <- (ZToValue 1)) ## x4 <- (asr ## args) asr) # x3
+               with (ZToValue 0) by admit.
+             trivial.
+          -- auto.
+          -- econstructor.
+        * simpl.
+          apply AssocMapExt.merge_correct_1; auto.
+          rewrite assign_all_out by admit.
+          rewrite AssocMap.gso by not_control_reg.
+          apply AssocMap.gss.
+        * repeat econstructor.
+        * simpl.
+          apply AssocMapExt.merge_correct_2.
+          big_tac.
+          apply AssocMap.gempty.
+          not_control_reg.
+          assert (Ple dst (RTL.max_reg_function f))
+                 by eauto using RTL.max_reg_function_def.
+          xomega.
+          apply AssocMapExt.merge_correct_1.
+          rewrite assign_all_out by admit.
+          rewrite AssocMap.gso by not_control_reg.
+          apply AssocMap.gss.
+        * admit.
+      + eapply HTL.step_initcall.
+        * (* find called module *) admit.
+        * (* callee reset mapped *) admit.
+        * (* params mapped *) admit.
+        * (* callee reset unset *) admit.
+        * (* params set *) admit.
+      + eauto with htlproof.
+    - econstructor; try solve [repeat econstructor; eauto with htlproof ].
+      + (* Called module is translated *) admit.
+      + (* Match stackframes *) admit.
+      + (* Argument values match *) admit.
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
   Close Scope rtl.
@@ -1391,19 +1580,6 @@ Section CORRECTNESS.
   Unshelve. try exact tt; eauto.
   Qed.
   Hint Resolve transl_ireturn_correct : htlproof.
-
-  Lemma stack_based_set : forall sp r v rs,
-      stack_based v sp ->
-      reg_stack_based_pointers sp rs ->
-      reg_stack_based_pointers sp (Registers.Regmap.set r v rs).
-  Proof.
-    unfold reg_stack_based_pointers, Registers.Regmap.set, "_ !! _".
-    intros * ? ? r0.
-    simpl.
-    destruct (Pos.eq_dec r r0); subst.
-    - rewrite AssocMap.gss; auto.
-    - rewrite AssocMap.gso; auto.
-  Qed.
 
   Lemma transl_returnstate_correct:
     forall (res0 : Registers.reg) (f : RTL.function) (sp : Values.val) (pc : RTL.node)

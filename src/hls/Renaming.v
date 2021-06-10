@@ -216,3 +216,16 @@ Definition transf_program (p : HTL.program) : Errors.res HTL.program :=
                               (fun _ f => renumber_fundef f)
                               (mk_renumber_state 1%positive (PTree.empty reg))
                               p.
+
+Definition match_prog : HTL.program -> HTL.program -> Prop := fun _ _ => True.
+
+Instance TransfRenamingLink : Linking.TransfLink match_prog.
+Admitted.
+
+Lemma transf_program_match : forall p tp,
+  Renaming.transf_program p = Errors.OK tp -> match_prog p tp.
+Admitted.
+
+Lemma transf_program_correct : forall p tp,
+  match_prog p tp -> Smallstep.forward_simulation (HTL.semantics p) (HTL.semantics tp).
+Admitted.

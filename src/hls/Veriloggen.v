@@ -63,9 +63,9 @@ Section TRANSLATE.
     end.
 
   (* FIXME Remove the fuel parameter (recursion limit)*)
-  Fixpoint transf_module (fuel : nat) (prog : HTL.program) (externclk : option reg) (m : HTL.module) : res Verilog.module :=
+  Fixpoint transl_module (fuel : nat) (prog : HTL.program) (externclk : option reg) (m : HTL.module) : res Verilog.module :=
     match fuel with
-    | O => Error (msg "Veriloggen: transf_module recursion too deep")
+    | O => Error (msg "Veriloggen: transl_module recursion too deep")
     | S fuel' =>
       let clk := match externclk with
                  | None => HTL.mod_clk m
@@ -77,7 +77,7 @@ Section TRANSLATE.
       let htl_modules := PTree.filter
                        (fun m _ => List.existsb (Pos.eqb m) inline_names)
                        modmap in
-      do translated_modules <- PTree.traverse (fun _ => transf_module fuel' prog (Some clk)) htl_modules;
+      do translated_modules <- PTree.traverse (fun _ => transl_module fuel' prog (Some clk)) htl_modules;
       let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl clk)))
                                         translated_modules in
 
@@ -125,7 +125,7 @@ Section TRANSLATE.
                (HTL.mod_entrypoint m))
     end.
 
-  Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transf_module 10 prog None).
+  Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transl_module 10 prog None).
   Definition transl_program (prog : HTL.program) := transform_partial_program (transl_fundef prog) prog.
 
 End TRANSLATE.

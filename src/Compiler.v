@@ -254,24 +254,6 @@ Finally, the top-level definition for all the passes is defined, which combines 
 
 Local Open Scope linking_scope.
 
-Definition verilog_transflink : TransfLink Veriloggenproof.match_prog.
-Admitted.
-
-Definition Renaming_match_prog : HTL.program -> HTL.program -> Prop.
-Admitted.
-Instance TransfLink_Renaming : TransfLink Renaming_match_prog.
-Admitted.
-Lemma Renaming_transf_program_match : forall p tp, Renaming.transf_program p = OK tp -> Renaming_match_prog p tp.
-Admitted.
-
-Definition ApplyExternctrl_match_prog : HTL.program -> HTL.program -> Prop :=
-  match_program (fun ctx f tf => ApplyExternctrl.transf_fundef ctx f = OK tf) eq.
-Instance TransfLink_ApplyExternctrl : TransfLink ApplyExternctrl_match_prog.
-Admitted.
-Lemma ApplyExternctrl_transf_program_match : forall p tp,
-  ApplyExternctrl.transf_program p = OK tp -> ApplyExternctrl_match_prog p tp.
-Admitted.
-
 Definition CompCert's_passes :=
       mkpass SimplExprproof.match_prog
   ::: mkpass SimplLocalsproof.match_prog
@@ -287,9 +269,9 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
-  ::: mkpass Renaming_match_prog
-  ::: mkpass ApplyExternctrl_match_prog
-  ::: (@mkpass _ _ Veriloggenproof.match_prog verilog_transflink)
+  ::: mkpass Renaming.match_prog
+  ::: mkpass ApplyExternctrl.match_prog
+  ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
 (*|
@@ -317,7 +299,7 @@ Proof.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
   rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
-  unfold transf_backend, time in T. simpl in T. rewrite ! compose_print_identity in T.
+  unfold transf_backend, time in T. rewrite ! compose_print_identity in T. simpl in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
   set (p9 := total_if Compopts.optim_constprop Constprop.transf_program p8) in *.
@@ -345,13 +327,11 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  exists p15; split. apply Renaming_transf_program_match; auto.
-  exists p16; split. apply ApplyExternctrl_transf_program_match; auto.
+  exists p15; split. apply Renaming.transf_program_match; auto.
+  exists p16; split. apply ApplyExternctrl.transf_program_match; auto.
   exists p17; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
-(*apply Veriloggenproof.transf_program_match; auto.
-  inv T. reflexivity.*)
-Admitted.
+Qed.
 
 Theorem cstrategy_semantic_preservation:
   forall p tp,
@@ -361,14 +341,14 @@ Theorem cstrategy_semantic_preservation:
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 
-Ltac DestructM :=
-  match goal with
+  repeat match goal with
     [ H: exists p, _ /\ _ |- _ ] =>
       let p := fresh "p" in let M := fresh "M" in let MM := fresh "MM" in
       destruct H as (p & M & MM); clear H
   end.
-  repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p15)).
+  subst tp.
+
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p17)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -397,16 +377,21 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
-    eapply HTLgenproof.transf_program_correct. eassumption.
-  (* eapply Veriloggenproof.transf_program_correct; eassumption. *)
-  admit.
+    eapply HTLgenproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply Renaming.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply ApplyExternctrl.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply Veriloggenproof.transf_program_correct; eassumption.
+  eapply forward_simulation_identity.
   }
   split. auto.
   apply forward_to_backward_simulation.
   apply factor_forward_simulation. auto. eapply sd_traces. eapply Verilog.semantics_determinate.
   apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
   apply Verilog.semantics_determinate.
-Admitted.
+Qed.
 
 (*|
 Backward Simulation
