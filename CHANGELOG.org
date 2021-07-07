@@ -10,6 +10,7 @@
   RTL.
 - Add *RTLPar*, which can execute groups of instructions in parallel.
 - Add scheduling pass to go from RTLBlock to RTLPar.
+- Proper RAM inference support.
 
 ** v1.1.0 - 2020-12-17
 
