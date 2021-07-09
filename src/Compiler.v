@@ -214,6 +214,8 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
 .. coq:: none
 |*)
 
+(* This is an unverified version of transf_hls with some experimental additions such as scheduling
+that aren't completed yet. *)
 Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   OK p
   @@@ SimplExpr.transl_program
