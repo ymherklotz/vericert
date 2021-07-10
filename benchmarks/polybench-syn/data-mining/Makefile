@@ -1,3 +1,3 @@
-all: covariance
+TARGETS := covariance
 
 include ../common.mk

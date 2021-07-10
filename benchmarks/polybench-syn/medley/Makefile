@@ -1,3 +1,3 @@
-all: floyd-warshall nussinov
+TARGETS := floyd-warshall nussinov
 
 include ../common.mk

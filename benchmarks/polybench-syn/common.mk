@@ -4,6 +4,8 @@ VERICERT_OPTS ?= -DSYNTHESIS
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
+TARGETS ?=
+
 %.v: %.c
 	$(VERICERT) $(VERICERT_OPTS) $< -o $@
 
@@ -16,11 +18,14 @@ IVERILOG_OPTS ?=
 %: %.iver %.gcc
 	cp $< $@
 
+all: $(TARGETS)
+
 clean:
 	rm -f *.iver
 	rm -f *.v
 	rm -f *.gcc
+	rm -f $(TARGETS)
 
-.PRECIOUS: %.v
+.PRECIOUS: %.v %.gcc %.iver
 .PHONY: all clean
 .SUFFIXES:

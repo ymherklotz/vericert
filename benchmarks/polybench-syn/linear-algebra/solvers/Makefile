@@ -1,3 +1,3 @@
-all: cholesky durbin lu ludcmp trisolv
+TARGETS := cholesky durbin lu ludcmp trisolv
 
 include ../common.mk
