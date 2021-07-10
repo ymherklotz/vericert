@@ -58,13 +58,13 @@ void kernel_adi(int tsteps, int n,
 
   B1 = 2;
   B2 = 1;
-  mul1 = divider(B1 * n * n, tsteps);
-  mul2 = divider(B2 * n * n, tsteps);
+  mul1 = ((B1 * n * n) / tsteps);
+  mul2 = ((B2 * n * n) /tsteps);
 
-  a = -(sdivider(mul1,2));
+  a = -((mul1 / 2));
   b = 1+mul1;
   c = a;
-  d = -(sdivider(mul2,2));
+  d = -((mul2 / 2));
   e = 1+mul2;
   f = d;
   int ZERO = 0;
@@ -76,8 +76,8 @@ void kernel_adi(int tsteps, int n,
       p[i][ZERO] = 0;
       q[i][ZERO] = v[ZERO][i];
       for (j=1; j<n-1; j++) {
-        p[i][j] = -sdivider(c, (a*p[i][j-1]+b));
-        q[i][j] = -sdivider((-d*u[j][i-1]+(1+2*d)*u[j][i] - f*u[j][i+1]-a*q[i][j-1]),(a*p[i][j-1]+b));
+        p[i][j] = -(c / (a*p[i][j-1]+b));
+        q[i][j] = -((-d*u[j][i-1]+(1+2*d)*u[j][i] - f*u[j][i+1]-a*q[i][j-1]) / (a*p[i][j-1]+b));
       }
 
       v[n-1][i] = 1;
@@ -91,8 +91,8 @@ void kernel_adi(int tsteps, int n,
       p[i][ZERO] = 0;
       q[i][ZERO] = u[i][ZERO];
       for (j=1; j<n-1; j++) {
-        p[i][j] = -sdivider(f, (d*p[i][j-1]+e));
-        q[i][j] = sdivider((-a*v[i-1][j]+(1+2*a)*v[i][j] - c*v[i+1][j]-d*q[i][j-1]),(d*p[i][j-1]+e));
+        p[i][j] = -(f / (d*p[i][j-1]+e));
+        q[i][j] = ((-a*v[i-1][j]+(1+2*a)*v[i][j] - c*v[i+1][j]-d*q[i][j-1]) / (d*p[i][j-1]+e));
       }
       u[i][n-1] = 1;
       for (j=n-2; j>=1; j--) {

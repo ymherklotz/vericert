@@ -23,9 +23,9 @@ void init_array (int n,
 
   for (i = 0; i < n; plus(i))
     for (j = 0; j < n; plus(j)) {
-      path[i][j] = i*(j % 7)+ONE;
+      path[i][j] = i*(j % (ONE+6))+ONE;
       //if (((i+j)%13 == ZERO || (i+j)%7== ZERO || (i+j)%11 == ZERO ) != 0 )
-      if(((((i+j) % 13) == (int)0 || ((i+j) % 7) == (int)0)!=0 || ((i+j) % 11) == (int)0 ) != 0)
+      if(((((i+j) % (12+ONE)) == (int)0 || ((i+j) % (ONE+6)) == (int)0)!=0 || ((i+j) % (10+ONE)) == (int)0 ) != 0)
          path[i][j] = 999;
     }
 }

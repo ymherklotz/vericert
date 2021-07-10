@@ -1,20 +1,18 @@
-#! /bin/bash 
+#!/usr/bin/env bash
+
+rm exec.csv
 
 top=$(pwd)
  #set up
 while read benchmark ; do
    echo "Running "$benchmark
-   clang -Wall -Werror -fsanitize=undefined $benchmark.c -o $benchmark.o
-   ./$benchmark.o > $benchmark.clog
+   ./$benchmark.gcc > $benchmark.clog
    cresult=$(cat $benchmark.clog | cut -d' ' -f2)
    echo "C output: "$cresult
-   { time ../../bin/vericert -DSYNTHESIS -finline -fschedule --debug-hls $benchmark.c -o $benchmark.v ; } 2> $benchmark.comp
-   iverilog -o $benchmark.iver -- $benchmark.v
    ./$benchmark.iver > $benchmark.tmp
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
    cycles=$(tail -2 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f2)
-   ctime=$(cat $benchmark.comp | head -2 | tail -1 | xargs | cut -d' ' -f2 | cut -d'm' -f2 | sed 's/s//g')
-   echo "Veri output: "$veriresult
+   echo "Verilog output: "$veriresult
   
    #Undefined checks
    if test -z $veriresult 
@@ -39,5 +37,5 @@ while read benchmark ; do
    echo "PASS"
    fi
    name=$(echo $benchmark | awk -v FS="/" '{print $NF}')
-   echo $name","$cycles","$ctime >> exec.csv 
+   echo $name","$cycles >> exec.csv
 done < benchmark-list-master

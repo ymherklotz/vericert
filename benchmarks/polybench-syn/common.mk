@@ -10,7 +10,7 @@ TARGETS ?=
 	$(VERICERT) $(VERICERT_OPTS) $< -o $@
 
 %.iver: %.v
-	$(IVERILOG) $(IVERILOG_OPTS) $< -o $@
+	$(IVERILOG) -o $@ $(IVERILOG_OPTS) $<
 
 %.gcc: %.c
 	$(CC) $(CFLAGS) $< -o $@
@@ -24,6 +24,8 @@ clean:
 	rm -f *.iver
 	rm -f *.v
 	rm -f *.gcc
+	rm -f *.clog
+	rm -f *.tmp
 	rm -f $(TARGETS)
 
 .PRECIOUS: %.v %.gcc %.iver

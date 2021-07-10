@@ -33,7 +33,7 @@ cd /vericert
 nix-shell
 #+end_src
 
-Then, any commands can be run in this shell to run ~vericert~, which has already been compiled and can be found in the ~/vericert/bin~ directory.  For a quick test that it is working, a few very simple examples in the ~/vericert/test~ directory can be run using:
+Then, any commands can be run in this shell to run ~vericert~, which has already been compiled and can be found in the ~/vericert/bin~ directory.  For a quick test that it is working, a few very simple examples in the ~/vericert/test~ directory can be run by using the following inside of the ~/vericert~ directory:
 
 #+begin_src shell
 make test
@@ -64,7 +64,10 @@ This should print out the return value from the main function in addition to the
 
 ** Getting cycle counts for Vericert
 
-There are two benchmark sets for which the results are given in the paper.
+There are two benchmark sets for which the results are given in the paper:
+
+- ~/vericert/benchmarks
+
 To get the cycle counts for Vericert from the benchmarks
 
 * Footnotes
