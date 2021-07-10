@@ -1,3 +1,3 @@
 TARGETS := 2mm 3mm atas bicg doitgen mvt
 
-include ../common.mk
+include ../../common.mk
