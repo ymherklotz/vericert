@@ -47,7 +47,35 @@ This section describes the detailed instructions to get the results for the diff
 
 ** Directory structure of Vericert
 
+The main directory structure of Vericert is the following:
 
+- ~/src~ :: Contains all the Coq and OCaml source files used for Vericert.  The whole proof of correctness is therefore in this directory.
+- ~/lib~ :: This directory contains CompCert, on which Vericert is built upon.  Vericert tries to separate CompCert and uses it only as a library, redefining a different top-level.
+- ~/benchmarks~ :: Contains the PolyBench/C benchmarks used as an evaluation in the paper, which are stored under ~polybench-syn~ for the benchmarks without dividers, and ~polybench-syn-div~ for the benchmarks with dividers.
+- ~/docs~ :: Contains a website and an ~org-mode~ file with some light documentation of the tool.
+- ~/example~ :: Contains some interesting observations that were made during the development, which are not directly relevant to Vericert.
+- ~/include~ :: Contains the divider implementation which can be imported and used in C files to get the better performance out of Vericert, instead of using native division.
+- ~/ip~ :: Contains hardware divider implementations which will be used in the future instead of the software implementation that is currently used in ~/include~.
+- ~/scripts~ :: Contains some miscellaneous scripts and the ~Dockerfile~ which has been added for this artifcat.
+- ~/test~ :: Contains some very light test cases which are some minimal examples for working constructs.
+
+** Description of the proof
+
+The proof is mostly located in ~/src/hls~, which contains the proof of correctness of the 3AC to HTL transformation, as well as the transformation from HTL to Verilog.  Any other files in the ~/src/hls~ directory that are not mentioned below are there for future optimisations such as scheduling, which are not used.
+
+- ~/src/Compiler.v~ :: The very top-level of the proof is located here and it contains the main proof of the compiler, which is the proof that the ~transf_hls~ function is correct, which takes C and outputs Verilog.  The main proof of correctness is in the Theorem called ~transf_c_program_correct~, which says that if the ~transf_hls~ function succeeded, that the backward simulation should hold between C and Verilog.
+- ~/src/common~ :: This directory contains some common library extensions and proofs that are used in other parts of Vericert.  This includes the proof of correctness of Section 2.2.3, which is located in ~/src/common/IntegerExtra.v~ under the Theorem ~shrx_shrx_alt_equiv~.
+- ~/src/hls/Verilog.v~ :: This file contains the whole Verilog semantics, together with the proof that the Verilog semantics are deterministic.  This implements Section 3 from the paper.
+- ~src/hls/Veriloggen.v~ :: This file contains the generation of Verilog from HTL.
+- ~src/hls/Veriloggenproof.v~ :: This file contains the correctness proof of the generation of Verilog from HTL.
+- ~/src/hls/HTL.v~ :: This file contains the definition of the HTL intermediate language, together with its semantics.
+- ~/src/hls/HTLgen.v~ :: This file contains the generation of HTL from 3AC, which is the first step in the HLS transformation.
+- ~/src/hls/HTLgenspec.v~ :: This file contains the high-level specification of the translation from 3AC into HTL, together with a proof of correctness of the specification.
+- ~/src/hls/HTLgenproof.v~ :: This file contains the proof of correctness of the HTL generation from 3AC, where the main parts of the proof are the generation of Verilog operations, as well as the change in the memory model (load and store instructions).
+- ~/src/hls/Memorygen.v~ :: This file contains the definition and proof of the transformation which replaces naïve loads and stores into a proper RAM, which is described in Section 2.2.2.
+- ~/src/hls/ValueInt.v~ :: Contains our definition of values that are used in the Verilog semantics, and differ from the values used by CompCert, as they don't have a pointer type anymore.
+- ~/src/hls/Array.v~ :: Contains our definition of the memory model, which is a dependently typed array, which encodes its length.  This is much more concrete than CompCert's abstract memory model, and closer to how it is actually modelled in hardware.
+- ~/src/hls/AssocMap.v~ :: Definition of association maps, which is the type that is used for $\Gamma$ and $\Delta$ in Section 3.
 
 ** How to manually compile using Vericert
 
@@ -70,11 +98,40 @@ This should print out the return value from the main function in addition to the
 
 There are two benchmark sets for which the results are given in the paper:
 
-- ~/vericert/benchmarks
+- ~/vericert/benchmarks/polybench-syn~ :: Contains the PolyBench/C benchmark without any dividers, and instead the dividers are replaced by calls to ~sdivider~ and ~smodulo~ in ~/vericert/include/hls.h~.
+- ~/vericert/benchmarks/polybench-syn-div~ :: Contains the PolyBench/C benchmark with dividers.
 
-To get the cycle counts for Vericert from the benchmarks
+To get the cycle counts for Vericert from the benchmarks, the benchmarks can be compiled using the following:
+
+#+begin_src shell
+cd /vericert/benchmarks/polybench-syn
+#+end_src
+
+or
+
+#+begin_src shell
+cd /vericert/benchmarks/polybench-syn-div
+#+end_src
+
+depending on which benchmark should be run, and then running:
+
+#+begin_src shell
+make
+#+end_src
+
+This will generate all the binaries for the simulation and execution of the C code.  The cycle counts of the hardware can then be gotten by running:
+
+#+begin_src shell
+./run-vericert.sh
+#+end_src
+
+This can take a while to complete, as simulation of hardware is quite slow.  After around 30 minutes, there should be a ~exec.csv~ file which contains the cycle counts for each of the 27 benchmarks.
 
 ** Getting the cycle counts for LegUp
+
+Unfortunately, the benchmarks cannot be compiled from C to Verilog using LegUp, as it could not be included in the artifact, and does not seem to be freely available anymore.
+
+However, our compiled Verilog designs from LegUp have been included for all the optimisation options that were tested for in the paper in Section 5.
 
 ** Rebuilding the Docker image
 

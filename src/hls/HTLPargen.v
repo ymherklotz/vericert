@@ -641,7 +641,7 @@ Definition add_control_instr_force_state_incr :
        s.(st_arrdecls)
        s.(st_datapath)
        (AssocMap.set n st s.(st_controllogic))).
-Admitted.
+Abort.
 
 Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
   fun s =>
