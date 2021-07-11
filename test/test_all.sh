@@ -21,6 +21,7 @@ test_command() {
 
 test_command iverilog
 test_command gcc
+test_command vericert
 
 echo "--------------------------------------------------"
 
@@ -30,13 +31,13 @@ for cfile in $test_dir/*.c; do
     gcc -o $outbase.gcc $cfile >/dev/null 2>&1
     $outbase.gcc
     expected=$?
-    ./bin/vericert -fschedule -drtl -o $outbase.v $cfile >/dev/null 2>&1
+    vericert -fschedule -drtl -o $outbase.v $cfile >/dev/null 2>&1
     if [[ ! -f $outbase.v ]]; then
         echo "ERROR"
         continue
     fi
     iverilog -o $outbase.iverilog $outbase.v
-    actual=$($outbase.iverilog | sed -E -e 's/[^0-9]+([0-9]+)/\1/')
+    actual=$($outbase.iverilog | tail -n1 | sed -E -e 's/[^0-9]+([0-9]+)/\1/')
     if [[ $expected = $actual ]]; then
         echo "OK"
     else

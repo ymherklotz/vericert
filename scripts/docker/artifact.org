@@ -45,6 +45,10 @@ If this finishes without errors, it means that Vericert is working correctly.
 
 This section describes the detailed instructions to get the results for the different sections of the paper, first describing the structure of the proof and how to execute Vericert manually, to finally running Vericert on the benchmarks and get the cycle counts for the Vericert designs as well as the precompiled LegUp designs.
 
+** Directory structure of Vericert
+
+
+
 ** How to manually compile using Vericert
 
 To compile arbitrary C files, the following command can be used:
@@ -70,8 +74,28 @@ There are two benchmark sets for which the results are given in the paper:
 
 To get the cycle counts for Vericert from the benchmarks
 
+** Getting the cycle counts for LegUp
+
+** Rebuilding the Docker image
+
+The docker image can be completely rebuilt from scratch as well, by using the Dockerfile that is located in the Vericert repository at ~/vericert/scripts/docker/Dockerfile~, which also contains this document.
+
+To rebuild the docker image, one first needs to download the legup results for the benchmarks without divider[fn:4] and with divider[fn:5], and the tar files should be placed in the same directory as the ~Dockerfile~.  Then, in the ~docker~ directory, the following will build the docker image, which might take around 20 minutes:
+
+#+begin_src shell
+docker build .
+#+end_src
+
+Then, using the hash it can be run in the same way as the docker container that was linked to this artifact:
+
+#+begin_src shell
+docker run -it <hash> sh
+#+end_src
+
 * Footnotes
 
+[fn:5] https://imperialcollegelondon.box.com/s/94clcbjowla3987opf3icjz087ozoi1o
+[fn:4] https://imperialcollegelondon.box.com/s/ril1utuk2n88fhoq3375oxiqcgw42b8a
 [fn:3] https://www.xilinx.com/support/download.html
 [fn:2] https://legup.eecg.utoronto.ca
 [fn:1] https://www.microsemi.com/product-directory/fpga-design-tools/5590-hls#software-download
