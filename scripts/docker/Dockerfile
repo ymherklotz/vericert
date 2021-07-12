@@ -13,7 +13,7 @@ RUN git clone --recursive https://github.com/ymherklotz/vericert
 
 WORKDIR /vericert
 RUN git checkout -b oopsla21
-#RUN nix-shell --run "make -j7"
-#RUN nix-shell --run "make install"
-#
+RUN nix-shell --run "make -j7"
+RUN nix-shell --run "make install"
+
 RUN echo "export PATH=/vericert/bin:$PATH" >>/root/.bashrc
