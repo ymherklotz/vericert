@@ -133,11 +133,77 @@ Unfortunately, the benchmarks cannot be compiled from C to Verilog using LegUp, 
 
 However, our compiled Verilog designs from LegUp have been included for all the optimisation options that were tested for in the paper in Section 5.
 
+To get the cycle counts, it suffices to go into an arbitrary directory, and run the following script, where the command line arguments select which set of cycle counts to generate:
+
+#+begin_src shell
+/vericert/scripts/run-legup.sh [syn|syn-div] \
+                               [opt|no_opt|no_chain|no_opt_no_chain]
+#+end_src
+
+For example, to run the LegUp benchmarks with no LLVM optimisations and no operation chaining, on the PolyBench/C benchmark with no dividers, one can run the following command:
+
+#+begin_src shell
+/vericert/scripts/run-legup.sh syn no_opt_no_chain
+#+end_src
+
+This will take some 30 minutes to run as well, and will generate an ~exec_legup.csv~ file, with the name of the benchmark and it's cycle count.
+
+** Comparing the results
+
+To compare the results to the results presented in the paper, the main comparison that is supported by this artifact is to compare the cycle counts to the ones used to generate the graphs in the evaluation section of the paper.
+
+The ~/data/data~ directory contains all the raw data which was used to generate the graphs in Section 5.  This data can therefore be used to examine the cycle counts used to draw the graphs.  This raw data can be examined better in ~/data/data/results.org~, which includes the tables in a nicer format.
+
+The ~legup-*~ csv files contain the raw size, timing and cycle count for the various LegUp configurations on the different benchmarks.  ~vericert-*~ is the equivalent but for Vericert.  Then, to draw the graphs, the actual csv files that are used are:
+
+- ~rel-size-*~ :: This contains the relative size of each run (denoted by slice in the csv files) compared to fully optimised LegUp.  This is obtained by taking the slice value of the tool being considered (LegUp with some optimisation turned off, or Vericert), and dividing that by the number of slices present in fully optimised LegUp.
+
+\[\frac{\text{slice}_t}{\text{slice}_{\text{legup\_opt}}}\]
+
+- ~rel-time-*~ :: This performs the same computation as for the size comparison, comparing to LegUp with all optimisations turned on, but instead compares the following values: cycles $\times$ delay:
+
+\[\frac{\text{cycles}_t \times \text{delay}_t}{\text{cycles}_{\text{legup\_opt}} \times \text{delay}_{\text{legup\_opt}}}\]
+
+Where $t$ is the tool being considered.
+
+*** Compiling the graph
+
+A tex file is included in the ~/data/data~ directory, which unfortunately can only be compiled outside of the docker file, but will recreate the graphs from the paper using the csv files in the directory.  This can be achieved using the following commands:
+
+#+begin_src shell
+docker create ymherklotz/vericert:v1.0 # returns container ID
+docker cp $container_id:/data/data .
+docker rm $container_id
+cd data
+pdflatex graphs
+#+end_src
+
+** Running with Vivado
+
+Finally, for the adventurous that downloaded Vivado, there are some short instructions for running it on single examples.  Running synthesis on a benchmark will normally take around 20 minutes to an hour depending on the benchmark, so it might take a long time to complete.
+
+First, create a new directory and copy the synthesis script into it, as well as the Verilog file that should be synthesisd.  For example, once ~make~ was run in the benchmarks folder, one of the benchmarks can be selected for Vericert, such as ~jacobi-1d~:
+
+#+begin_src shell
+mkdir synthesis
+cd synthesis
+cp /vericert/scripts/synth.tcl .
+cp /vericert/benchmarks/polybench-syn/stencils/jacobi-1d.v main.v
+#+end_src
+
+Then Vivado can be run in batch mode in that directory to generate the report:
+
+#+begin_src shell
+vivado -mode batch -source synth.tcl
+#+end_src
+
+Once this completes, the important results of the synthesis should be available in ~encode_report.xml~, where each field will also be present in the relevant CSV file, which is this case is ~/data/data/vericert-nodiv.csv~.
+
 ** Rebuilding the Docker image
 
 The docker image can be completely rebuilt from scratch as well, by using the Dockerfile that is located in the Vericert repository at ~/vericert/scripts/docker/Dockerfile~, which also contains this document.
 
-To rebuild the docker image, one first needs to download the legup results for the benchmarks without divider[fn:4] and with divider[fn:5], and the tar files should be placed in the same directory as the ~Dockerfile~.  Then, in the ~docker~ directory, the following will build the docker image, which might take around 20 minutes:
+To rebuild the docker image, one first needs to download the LegUp results for the benchmarks without divider[fn:4] and with divider[fn:5], as well as the csv folder with all the raw results[fn:6]. The tar files should be placed into the same directory as the ~Dockerfile~.  Then, in the ~docker~ directory, the following will build the docker image, which might take around 20 minutes:
 
 #+begin_src shell
 docker build .
@@ -151,6 +217,8 @@ docker run -it <hash> sh
 
 * Footnotes
 
+
+[fn:6] https://imperialcollegelondon.box.com/s/nqoaquk7j5mj70db16s6bdbhg44zjn52
 [fn:5] https://imperialcollegelondon.box.com/s/94clcbjowla3987opf3icjz087ozoi1o
 [fn:4] https://imperialcollegelondon.box.com/s/ril1utuk2n88fhoq3375oxiqcgw42b8a
 [fn:3] https://www.xilinx.com/support/download.html
