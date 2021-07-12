@@ -22,14 +22,13 @@ In addition to that, the Vivado synthesis tool by Xilinx[fn:3] is also commercia
 First, the docker image needs to be downloaded and run, which contains the git repository:
 
 #+begin_src shell
-docker pull ymherklotz/vericert
-docker run -it ymherklotz/vericert sh
+docker pull ymherklotz/vericert:1.0
+docker run -it ymherklotz/vericert:1.0 sh
 #+end_src
 
-Then, one just has to go into the directory which contains the git repository and open a ~nix-shell~, which will load a shell with all the correct dependencies loaded:
+Then, one just has to go into the directory which contains the git repository (~/vericert~) and open a ~nix-shell~, which will load a shell with all the correct dependencies loaded:
 
 #+begin_src shell
-cd /vericert
 nix-shell
 #+end_src
 

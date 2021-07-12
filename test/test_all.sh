@@ -31,7 +31,7 @@ for cfile in $test_dir/*.c; do
     gcc -o $outbase.gcc $cfile >/dev/null 2>&1
     $outbase.gcc
     expected=$?
-    vericert -fschedule -drtl -o $outbase.v $cfile >/dev/null 2>&1
+    vericert -drtl -o $outbase.v $cfile >/dev/null 2>&1
     if [[ ! -f $outbase.v ]]; then
         echo "ERROR"
         continue

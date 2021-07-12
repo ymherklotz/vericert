@@ -12,7 +12,7 @@ ADD data.tar.gz /data
 RUN git clone --recursive https://github.com/ymherklotz/vericert
 
 WORKDIR /vericert
-RUN git checkout -b oopsla21
+RUN git checkout oopsla21
 RUN nix-shell --run "make -j7"
 RUN nix-shell --run "make install"
 
