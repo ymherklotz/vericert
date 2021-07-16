@@ -198,8 +198,9 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
      end
    end); split; intros; simpl in *; auto.
   - inv H. inv H0; auto.
-  - admit.
-  - admit.
+  - split; auto. destruct (a p') eqn:?; crush.
+  - inv H. inv H0. unfold satLit in H. simplify. rewrite H. auto.
+    crush.
   - apply satFormula_concat.
     apply andb_prop in H. inv H. apply i in H0. auto.
     apply andb_prop in H. inv H. apply i0 in H1. auto.
@@ -211,7 +212,7 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
   - apply orb_true_intro.
     apply satFormula_mult2 in H. inv H. apply i in H0. auto.
     apply i0 in H0. auto.
-Admitted.
+Qed.
 
 Definition sat_pred (bound: nat) (p: pred_op) :
   option ({al : alist | sat_predicate p (interp_alist al) = true}
