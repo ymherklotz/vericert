@@ -193,14 +193,34 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
         Some (exist _ (mult p1' p2') _)
       | _, _ => None
       end
-     | Pnot (Pvar p') => Some (exist _ (((false, Pos.to_nat p') :: nil) :: nil) _)
-     | _ => None
+     | Pnot (Pvar p') => Some (exist _ (((false, p') :: nil) :: nil) _)
+     | Pnot (Pnot p') =>
+       match trans_pred n p' with
+       | Some (exist p1' _) => Some (exist _ p1' _)
+       | None => None
+       end
+     | Pnot (Pand p1 p2) =>
+       match trans_pred n (Por (Pnot p1) (Pnot p2)) with
+       | Some (exist p1' _) => Some (exist _ p1' _)
+       | None => None
+       end
+     | Pnot (Por p1 p2) =>
+       match trans_pred n (Pand (Pnot p1) (Pnot p2)) with
+       | Some (exist p1' _) => Some (exist _ p1' _)
+       | None => None
+       end
      end
    end); split; intros; simpl in *; auto.
   - inv H. inv H0; auto.
   - split; auto. destruct (a p') eqn:?; crush.
   - inv H. inv H0. unfold satLit in H. simplify. rewrite H. auto.
     crush.
+  - rewrite negb_involutive in H. apply i in H. auto.
+  - rewrite negb_involutive. apply i; auto.
+  - rewrite negb_andb in H. apply i. auto.
+  - rewrite negb_andb. apply i. auto.
+  - rewrite negb_orb in H. apply i. auto.
+  - rewrite negb_orb. apply i. auto.
   - apply satFormula_concat.
     apply andb_prop in H. inv H. apply i in H0. auto.
     apply andb_prop in H. inv H. apply i0 in H1. auto.
