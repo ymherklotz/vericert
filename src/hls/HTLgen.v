@@ -488,7 +488,7 @@ Fixpoint xmap_externctrl_params (n : nat) (fn : ident) (l : list reg) :=
 
 Definition map_externctrl_params := xmap_externctrl_params 0.
 
-Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
+Definition transf_instr (funmap : PTree.t RTL.fundef) (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -515,22 +515,25 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       else error (Errors.msg "State is larger than 2^32.")
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
-      if Z.leb (Z.pos n') Integers.Int.max_unsigned then
-        do params <- map_externctrl_params fn args;
+      if Z.leb (Z.pos n') Integers.Int.max_unsigned
+      then match funmap ! fn with
+           | Some (AST.Internal _) =>
+             do params <- map_externctrl_params fn args;
 
-        do _ <- declare_reg None dst 32;
-        do join_state <- create_state;
+             do _ <- declare_reg None dst 32;
+             do join_state <- create_state;
 
-        do finish_reg <- map_externctrl fn ctrl_finish;
-        do reset_reg <- map_externctrl fn ctrl_reset;
-        do return_reg <- map_externctrl fn ctrl_return;
+             do finish_reg <- map_externctrl fn ctrl_finish;
+             do reset_reg <- map_externctrl fn ctrl_reset;
+             do return_reg <- map_externctrl fn ctrl_return;
 
-        let fork_instr := fork reset_reg params in
-        let join_instr := join return_reg reset_reg dst in
+             let fork_instr := fork reset_reg params in
+             let join_instr := join return_reg reset_reg dst in
 
-        do _ <- add_instr n join_state fork_instr;
-        add_instr_wait finish_reg join_state n' join_instr
-
+             do _ <- add_instr n join_state fork_instr;
+             add_instr_wait finish_reg join_state n' join_instr
+           | _ => error (Errors.msg "Call to non-internal function")
+           end
       else error (Errors.msg "State is larger than 2^32.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
     | Ibuiltin _ _ _ _ => error (Errors.msg "Builtin functions not implemented.")
@@ -565,12 +568,12 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
 
-Definition transf_module (main : ident) (f: function) : mon HTL.module :=
+Definition transf_module (funmap : PTree.t RTL.fundef) (main : ident) (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+    do _ <- collectlist (transf_instr funmap fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
@@ -611,10 +614,12 @@ Definition max_state (f: function) : state :=
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
-Definition transl_module main (f : function) : Errors.res HTL.module :=
-  run_mon (max_state f) (transf_module main f).
+Definition prog_funmap (prog : RTL.program) : (PTree.t ) :=
 
-Definition transl_fundef main := transf_partial_fundef (transl_module main).
+Definition transl_module (prog : RTL.program) (f : function) : Errors.res HTL.module :=
+  run_mon (max_state f) (transf_module  f).
+
+Definition transl_fundef prog := transf_partial_fundef (transl_module prog).
 
 (* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
 
@@ -646,5 +651,5 @@ Definition main_is_internal (p : RTL.program) : bool :=
 
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
   if main_is_internal p
-  then transform_partial_program (transl_fundef p.(prog_main)) p
+  then transform_partial_program (transl_fundef p) p
   else Errors.Error (Errors.msg "Main function is not Internal.").

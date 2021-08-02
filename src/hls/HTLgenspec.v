@@ -75,12 +75,6 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
-Definition rtl_find_func (ge : RTL.genv) (symb : AST.ident) :=
-  match Globalenvs.Genv.find_symbol ge symb with
-  | None => None
-  | Some b => Globalenvs.Genv.find_funct_ptr ge b
-  end.
-
 Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datapath) (trans : controllogic)
           (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : RTL.instruction -> Prop :=
 | tr_code_single :
