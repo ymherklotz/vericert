@@ -36,7 +36,7 @@ for cfile in $test_dir/*.c; do
         continue
     fi
     iverilog -o $outbase.iverilog $outbase.v
-    actual=$($outbase.iverilog | sed -E -e 's/[^0-9]+([0-9]+)/\1/')
+    actual=$($outbase.iverilog | sed -nEe 's/finished: ([0-9]+)/\1/p')
     if [[ $expected = $actual ]]; then
         echo "OK"
     else
