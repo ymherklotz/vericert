@@ -179,7 +179,7 @@ Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
 Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
-  Linking.match_program (fun cu f tf => transl_fundef (AST.prog_main p) f = Errors.OK tf) eq p tp /\
+  Linking.match_program (fun cu f tf => transl_fundef p f = Errors.OK tf) eq p tp /\
   main_is_internal p = true.
 
 Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
@@ -201,7 +201,7 @@ Proof.
 Qed.
 
 Definition match_prog' (p: RTL.program) (tp: HTL.program) :=
-  Linking.match_program (fun cu f tf => transl_fundef (AST.prog_main p) f = Errors.OK tf) eq p tp.
+  Linking.match_program (fun cu f tf => transl_fundef p f = Errors.OK tf) eq p tp.
 
 Lemma match_prog_matches :
   forall p tp, match_prog p tp -> match_prog' p tp.
@@ -386,9 +386,8 @@ Ltac not_control_reg :=
   solve [
       unfold Ple, Plt in *;
       try multimatch goal with
-          | [ H : forall r,
-                (exists x, _ ! r = Some x) -> (r > _)%positive /\ (_ > r)%positive
-                |- context[?r']
+          | [ H : forall r, (exists x, _ ! r = Some x) -> (_ < r < _)%positive
+                       |- context[?r']
             ] => destruct (H r' ltac:(eauto))
           end;
       lia
@@ -467,7 +466,7 @@ Section CORRECTNESS.
   Admitted.
 
   Lemma TRANSL' :
-    Linking.match_program (fun cu f tf => transl_fundef (AST.prog_main prog) f = Errors.OK tf) eq prog tprog.
+    Linking.match_program (fun cu f tf => transl_fundef prog f = Errors.OK tf) eq prog tprog.
   Proof. intros; apply match_prog_matches; assumption. Qed.
 
   Lemma symbols_preserved:
@@ -478,7 +477,7 @@ Section CORRECTNESS.
     forall (b: Values.block) (f: RTL.fundef),
       Genv.find_funct_ptr ge b = Some f ->
       exists tf,
-        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef (AST.prog_main prog) f = Errors.OK tf.
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef prog f = Errors.OK tf.
   Proof.
     intros. exploit (Genv.find_funct_ptr_match TRANSL'); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
@@ -488,7 +487,7 @@ Section CORRECTNESS.
     forall (v: Values.val) (f: RTL.fundef),
       Genv.find_funct ge v = Some f ->
       exists tf,
-        Genv.find_funct tge v = Some tf /\ transl_fundef (AST.prog_main prog) f = Errors.OK tf.
+        Genv.find_funct tge v = Some tf /\ transl_fundef prog f = Errors.OK tf.
   Proof.
     intros. exploit (Genv.find_funct_match TRANSL'); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
@@ -3069,7 +3068,7 @@ Section CORRECTNESS.
       rewrite symbols_preserved; eauto.
     - eauto.
     - constructor; auto with htlproof.
-      apply transl_module_correct with (AST.prog_main prog).
+      apply transl_module_correct.
       assert (Some (AST.Internal x) = Some (AST.Internal m)) as Heqm.
       { rewrite <- H6. setoid_rewrite <- A. trivial. }
       inv Heqm.

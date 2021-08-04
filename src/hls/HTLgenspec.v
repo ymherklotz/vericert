@@ -134,10 +134,10 @@ Inductive tr_module (ge : RTL.genv) (f : RTL.function) : module -> Prop :=
       (fin > st)%positive ->
       (rtrn > fin)%positive ->
       (stk > rtrn)%positive ->
-      (forall r, (exists x, externctrl!r = Some x) -> (r > stk /\ start > r)%positive) ->
       (start > stk)%positive ->
       (rst > start)%positive ->
       (clk > rst)%positive ->
+      (forall r, (exists x, externctrl!r = Some x) -> (r > clk)%positive) ->
       tr_module ge f m.
 Hint Constructors tr_module : htlspec.
 
@@ -341,12 +341,12 @@ Proof. sauto use: helper__map_externctrl_params_spec. Qed.
 Hint Resolve map_externctrl_params_spec : htlspec.
 
 Lemma iter_expand_instr_spec :
-  forall l ge fin rtrn stack s s' i x c,
-    HTLMonadExtra.collectlist (transf_instr fin rtrn stack) l s = OK x s' i ->
+  forall l prog fin rtrn stack s s' i x c,
+    HTLMonadExtra.collectlist (transf_instr (Globalenvs.Genv.globalenv prog) fin rtrn stack) l s = OK x s' i ->
     list_norepet (List.map fst l) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr) ->
     (forall pc instr, In (pc, instr) l -> c!pc = Some instr ->
-                 tr_code ge c pc s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack instr).
+                 tr_code (Globalenvs.Genv.globalenv prog) c pc s'.(st_datapath) s'.(st_controllogic) s'.(st_externctrl) fin rtrn s'.(st_st) stack instr).
 Proof.
   (** Used to solve the simpler cases of tr_code: those involving tr_instr *)
   Ltac tr_code_simple_tac :=
@@ -377,17 +377,16 @@ Proof.
       inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
       inversion H.
 
-      assert (exists fd, rtl_find_func ge i0 = Some (AST.Internal fd)) by admit.
-
       eapply tr_code_call; eauto; crush.
 
       destruct (map_externctrl_params_combine _ _ _ _ _ _ EQ1) as [? [? ?]]; subst.
       repeat (eapply ex_intro).
+
       repeat split; try monad_crush. (* slow *)
       * intros.
         destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 ltac:(eauto)) as [param [? ?]].
         exists param; crush; trans_step s3 s'.
-      * monadInv EQ2. crush.
+      * admit. (* (* FIXME: Causes Qed to hang *) monadInv EQ2. crush. *)
     + (* Icond *) tr_code_simple_tac.
     + (* Ireturn *)
       inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
@@ -441,9 +440,22 @@ Proof.
 Qed.
 Hint Resolve tr_code_trans : htlspec.
 
+Lemma declare_params_freshreg_trans : forall params s s' x i,
+    declare_params params s = OK x s' i ->
+    st_freshreg s = st_freshreg s'.
+Proof.
+  induction params; unfold declare_params in *; intros * H.
+  - inv H. trivial.
+  - monadInv H.
+    transitivity (st_freshreg s0).
+    + monadInv EQ. auto.
+    + eauto.
+Qed.
+Hint Resolve declare_params_freshreg_trans : htlspec.
+
 Theorem transl_module_correct :
-  forall i f m ge,
-    transl_module i f = Errors.OK m -> tr_module ge f m.
+  forall p f m,
+    transl_module p f = Errors.OK m -> tr_module (Globalenvs.Genv.globalenv p) f m.
 Proof.
   intros * H.
   unfold transl_module in *.
@@ -464,10 +476,12 @@ Proof.
          | [ EQ : get _ = OK _ _ _ |- _ ] => monadInv EQ
          end.
 
-  econstructor; eauto with htlspec; try lia;
-    try solve [some_monad_inv; repeat ((simpl in *; some_monad_inv) + idtac);
-               some_incr; simplify;
-               unfold Ple in *; lia
-              ].
-  admit. (* No control registers are in externctrl *)
+  econstructor;
+    eauto with htlspec;
+    try solve [ repeat some_monad_inv; crush ].
+  - auto_apply declare_params_freshreg_trans.
+    some_monad_inv; monad_crush.
+  - (* forall r, (exists x, externctrl!r = Some x) -> (r >= clk)%positive *)
+    (* Problematic because it does not cover  *)
+    admit.
 Admitted.

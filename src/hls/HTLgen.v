@@ -488,7 +488,13 @@ Fixpoint xmap_externctrl_params (n : nat) (fn : ident) (l : list reg) :=
 
 Definition map_externctrl_params := xmap_externctrl_params 0.
 
-Definition transf_instr (funmap : PTree.t RTL.fundef) (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
+Definition rtl_find_func (ge : RTL.genv) (symb : AST.ident) :=
+  match Globalenvs.Genv.find_symbol ge symb with
+  | None => None
+  | Some b => Globalenvs.Genv.find_funct_ptr ge b
+  end.
+
+Definition transf_instr (ge : RTL.genv) (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
     match i with
@@ -516,7 +522,7 @@ Definition transf_instr (funmap : PTree.t RTL.fundef) (fin rtrn stack: reg) (ni:
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned
-      then match funmap ! fn with
+      then match rtl_find_func ge fn with
            | Some (AST.Internal _) =>
              do params <- map_externctrl_params fn args;
 
@@ -526,6 +532,7 @@ Definition transf_instr (funmap : PTree.t RTL.fundef) (fin rtrn stack: reg) (ni:
              do finish_reg <- map_externctrl fn ctrl_finish;
              do reset_reg <- map_externctrl fn ctrl_reset;
              do return_reg <- map_externctrl fn ctrl_return;
+             do _ <- map_externctrl fn ctrl_clk;
 
              let fork_instr := fork reset_reg params in
              let join_instr := join return_reg reset_reg dst in
@@ -568,16 +575,18 @@ Definition create_arr (i : option io) (sz : nat) (ln : nat) : mon (reg * nat) :=
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
 
-Definition transf_module (funmap : PTree.t RTL.fundef) (main : ident) (f: function) : mon HTL.module :=
+Definition declare_params params := collectlist (fun r => declare_reg (Some Vinput) r 32) params.
+
+Definition transf_module (ge : RTL.genv) (main : ident) (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
+    do _ <- declare_params (RTL.fn_params f);
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_instr funmap fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
-    do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
-    do clk <- map_externctrl main ctrl_clk;
+    do clk <- create_reg (Some Vinput) 1;
+    do _ <- collectlist (transf_instr ge fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
@@ -614,10 +623,17 @@ Definition max_state (f: function) : state :=
           (st_datapath (init_state st))
           (st_controllogic (init_state st)).
 
-Definition prog_funmap (prog : RTL.program) : (PTree.t ) :=
+Definition prog_funmap (prog : RTL.program) : (PTree.t RTL.fundef) :=
+  AssocMap_Properties.of_list (
+    Option.map_option (fun '(ident, def) => match def with
+                                         | AST.Gfun f => Some (ident, f)
+                                         | _ => None
+                                         end)
+                      (AST.prog_defs prog)
+  ).
 
 Definition transl_module (prog : RTL.program) (f : function) : Errors.res HTL.module :=
-  run_mon (max_state f) (transf_module  f).
+  run_mon (max_state f) (transf_module (Globalenvs.Genv.globalenv prog) (AST.prog_main prog) f).
 
 Definition transl_fundef prog := transf_partial_fundef (transl_module prog).
 
