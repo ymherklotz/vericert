@@ -386,9 +386,9 @@ Ltac not_control_reg :=
   solve [
       unfold Ple, Plt in *;
       try multimatch goal with
-          | [ H : forall r, (exists x, _ ! r = Some x) -> (_ < r < _)%positive
+          | [ H : forall r, (exists x, _ ! r = Some x) -> (r > _)%positive
                        |- context[?r']
-            ] => destruct (H r' ltac:(eauto))
+            ] => pose proof (H r' ltac:(eauto))
           end;
       lia
     ].
@@ -467,7 +467,7 @@ Section CORRECTNESS.
 
   Lemma TRANSL' :
     Linking.match_program (fun cu f tf => transl_fundef prog f = Errors.OK tf) eq prog tprog.
-  Proof. intros; apply match_prog_matches; assumption. Qed.
+  Proof. pose proof match_prog_matches as H. unfold match_prog' in H. auto. Qed.
 
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
