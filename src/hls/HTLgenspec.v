@@ -137,7 +137,7 @@ Inductive tr_module (ge : RTL.genv) (f : RTL.function) : module -> Prop :=
       (start > stk)%positive ->
       (rst > start)%positive ->
       (clk > rst)%positive ->
-      (forall r, (exists x, externctrl!r = Some x) -> (r > clk)%positive) ->
+      (forall n, (exists x, externctrl!n = Some x) -> (n > clk)%positive) ->
       tr_module ge f m.
 Hint Constructors tr_module : htlspec.
 
@@ -265,7 +265,6 @@ Ltac trans_step s1 s2 :=
 
 (* Try to prove a goal about a state by first proving it for an earlier state and then transfering it to the final. *)
 Ltac monad_crush :=
-  crush;
   match goal with
   | [ finalstate : st, prevstate : st |- _] =>
     match goal with
@@ -284,12 +283,18 @@ Ltac monad_crush :=
 
 Ltac full_split := repeat match goal with [ |- _ /\ _ ] => split end.
 
-Ltac some_monad_inv :=
+Ltac relevant_monad_inv :=
   multimatch goal with
   | [ EQ : _ ?s = OK ?x _ _ |- context[?x] ] => monadInv EQ
   | [ EQ : _ ?s = OK (?x, _) _ _ |- context[?x] ] => monadInv EQ
   | [ EQ : _ ?s = OK (_, ?x) _ _ |- context[?x] ] => monadInv EQ
   | [ EQ : _ ?s = OK (_, ?x) _ _ |- context[?x] ] => monadInv EQ
+  end.
+
+Ltac any_monad_inv :=
+  relevant_monad_inv +
+  multimatch goal with
+  | [ EQ : _ ?s = OK _ _ _ |- _ ] => monadInv EQ
   end.
 
 Ltac some_incr :=
@@ -327,7 +332,7 @@ Proof.
   induction args.
   - sauto use: nth_error_nil.
   - destruct n; intros * ? * H; monadInv H.
-    + eexists. monad_crush.
+    + eexists. crush. monad_crush.
     + sauto.
 Qed.
 
@@ -382,19 +387,26 @@ Proof.
       destruct (map_externctrl_params_combine _ _ _ _ _ _ EQ1) as [? [? ?]]; subst.
       repeat (eapply ex_intro).
 
-      repeat split; try monad_crush. (* slow *)
+      repeat split; try crush; try monad_crush; eauto with htlspec. (* slow *)
       * intros.
         destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 ltac:(eauto)) as [param [? ?]].
-        exists param; crush; trans_step s3 s'.
-      * admit. (* (* FIXME: Causes Qed to hang *) monadInv EQ2. crush. *)
+        exists param; simplify; eauto; trans_step s3 s'.
+      * eapply create_state_max; eassumption.
+      * replace x5 with (st_freshreg s6) in * by intro_step.
+        monad_crush.
+      * replace x6 with (st_freshreg s7) in * by intro_step.
+        replace x5 with (st_freshreg s6) in * by intro_step.
+        monad_crush.
+      * replace x4 with (st_freshreg s5) in * by intro_step.
+        monad_crush.
     + (* Icond *) tr_code_simple_tac.
     + (* Ireturn *)
       inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
       inversion H.
-      eapply tr_code_return; crush; eexists; monad_crush.
+      eapply tr_code_return; crush; eexists; simplify; monad_crush.
   - eapply IHl; eauto.
     intuition crush.
-Admitted.
+Qed.
 Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma map_incr_some : forall {A} map (s s' : st) idx (x : A),
@@ -415,10 +427,12 @@ Proof.
     * trans_step s s'.
     * inversion Htrans.
       destruct H6 with pc. crush.
-      rewrite H11. eauto.
+      replace ((st_datapath s') ! pc).
+      eassumption.
     * inversion Htrans.
       destruct H7 with pc. crush.
-      rewrite H11. eauto.
+      replace ((st_controllogic s') ! pc).
+      eassumption.
     * inversion Htrans. crush.
   + eapply tr_code_call; eauto with htlspec.
     simplify.
@@ -453,6 +467,19 @@ Proof.
 Qed.
 Hint Resolve declare_params_freshreg_trans : htlspec.
 
+Lemma declare_params_externctrl_trans : forall params s s' x i,
+    declare_params params s = OK x s' i ->
+    st_externctrl s = st_externctrl s'.
+Proof.
+  induction params; unfold declare_params in *; intros * H.
+  - inv H. trivial.
+  - monadInv H.
+    transitivity (st_externctrl s0).
+    + monadInv EQ. auto.
+    + eauto.
+Qed.
+Hint Resolve declare_params_freshreg_trans : htlspec.
+
 Theorem transl_module_correct :
   forall p f m,
     transl_module p f = Errors.OK m -> tr_module (Globalenvs.Genv.globalenv p) f m.
@@ -478,10 +505,32 @@ Proof.
 
   econstructor;
     eauto with htlspec;
-    try solve [ repeat some_monad_inv; crush ].
+    try solve [ repeat relevant_monad_inv; crush ].
   - auto_apply declare_params_freshreg_trans.
-    some_monad_inv; monad_crush.
-  - (* forall r, (exists x, externctrl!r = Some x) -> (r >= clk)%positive *)
-    (* Problematic because it does not cover  *)
-    admit.
-Admitted.
+    replace (st_st s').
+    monadInv EQ1.
+    inversion INCR.
+    repeat match goal with
+           | [ H : context[st_freshreg (max_state _)] |- _ ] => unfold max_state in H; simpl in H
+           end.
+    crush.
+  - assert (forall n, (st_externctrl (max_state f)) ! n = None) by (simplify; eauto using AssocMap.gempty).
+    assert (forall n, (st_externctrl s0) ! n = None) by (erewrite <- (declare_params_externctrl_trans); eauto).
+    assert (forall n, (st_externctrl s1) ! n = None) by (any_monad_inv; simplify; auto).
+    assert (forall n, (st_externctrl s2) ! n = None) by (any_monad_inv; simplify; auto).
+    assert (forall n, (st_externctrl s3) ! n = None) by (any_monad_inv; simplify; auto).
+    assert (forall n, (st_externctrl s4) ! n = None) by (any_monad_inv; simplify; auto).
+    assert (forall n, (st_externctrl s5) ! n = None) by (any_monad_inv; simplify; auto).
+
+    assert (forall n, (st_externctrl s6) ! n = None) by (any_monad_inv; simplify; auto).
+    assert ((st_freshreg s6) > x6)%positive by (relevant_monad_inv; simplify; crush).
+
+    intros.
+    repeat match goal with
+           | [ H: forall (_ : positive), _ |- _ ] => specialize (H r)
+           end.
+
+    enough (n >= st_freshreg s6)%positive by lia.
+    inversion INCR13.
+    auto.
+Qed.

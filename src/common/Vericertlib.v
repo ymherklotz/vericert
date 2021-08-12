@@ -218,7 +218,9 @@ Ltac liapp :=
          | _ => idtac
          end.
 
-Ltac crush := simplify; try discriminate; try congruence; try lia; liapp;
+Ltac plia := solve [ unfold Ple in *; lia ].
+
+Ltac crush := simplify; try discriminate; try congruence; try plia; liapp;
               try assumption; try (solve [auto]).
 
 Ltac crush_trans :=
