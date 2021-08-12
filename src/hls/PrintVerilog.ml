@@ -75,7 +75,7 @@ let pprint_binop l r =
 
 let unop = function
   | Vneg -> " - "
-  | Vnot -> " ! "
+  | Vnot -> " ~ "
 
 let register a =
   match PMap.find_opt a !name_map with
