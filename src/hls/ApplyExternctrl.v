@@ -19,6 +19,12 @@ Section APPLY_EXTERNCTRL.
 
   Let modmap := prog_modmap prog.
 
+  Definition global_clk :=
+    match modmap ! (AST.prog_main prog) with
+    | None => Error (msg "ApplyExternctrl: No main")
+    | Some main => OK (HTL.mod_clk main)
+    end.
+
   Definition get_mod_signal (othermod : HTL.module) (signal : HTL.controlsignal) :=
     match signal with
     | ctrl_finish => OK (HTL.mod_finish othermod)
@@ -139,7 +145,7 @@ Section APPLY_EXTERNCTRL.
   Definition module_apply_externctrl : res HTL.module :=
     do mod_start' <- reg_apply_externctrl (HTL.mod_start m);
     do mod_reset' <- reg_apply_externctrl (HTL.mod_reset m);
-    do mod_clk' <- reg_apply_externctrl (HTL.mod_clk m);
+    do mod_clk' <- global_clk;
     do mod_finish' <- reg_apply_externctrl (HTL.mod_finish m);
     do mod_return' <- reg_apply_externctrl (HTL.mod_return m);
     do mod_st' <- reg_apply_externctrl (HTL.mod_st m);

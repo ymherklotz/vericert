@@ -532,7 +532,6 @@ Definition transf_instr (ge : RTL.genv) (fin rtrn stack: reg) (ni: node * instru
              do finish_reg <- map_externctrl fn ctrl_finish;
              do reset_reg <- map_externctrl fn ctrl_reset;
              do return_reg <- map_externctrl fn ctrl_return;
-             do _ <- map_externctrl fn ctrl_clk;
 
              let fork_instr := fork reset_reg params in
              let join_instr := join return_reg reset_reg dst in
