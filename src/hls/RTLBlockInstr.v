@@ -194,12 +194,33 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
       | _, _ => None
       end
      | Pnot (Pvar p') => Some (exist _ (((false, p') :: nil) :: nil) _)
-     | _ => None
+     | Pnot (Pnot p') =>
+       match trans_pred n p' with
+       | Some (exist p1' _) => Some (exist _ p1' _)
+       | None => None
+       end
+     | Pnot (Pand p1 p2) =>
+       match trans_pred n (Por (Pnot p1) (Pnot p2)) with
+       | Some (exist p1' _) => Some (exist _ p1' _)
+       | None => None
+       end
+     | Pnot (Por p1 p2) =>
+       match trans_pred n (Pand (Pnot p1) (Pnot p2)) with
+       | Some (exist p1' _) => Some (exist _ p1' _)
+       | None => None
+       end
      end
    end); split; intros; simpl in *; auto.
   - inv H. inv H0; auto.
-  - admit.
-  - admit.
+  - split; auto. destruct (a p') eqn:?; crush.
+  - inv H. inv H0. unfold satLit in H. simplify. rewrite H. auto.
+    crush.
+  - rewrite negb_involutive in H. apply i in H. auto.
+  - rewrite negb_involutive. apply i; auto.
+  - rewrite negb_andb in H. apply i. auto.
+  - rewrite negb_andb. apply i. auto.
+  - rewrite negb_orb in H. apply i. auto.
+  - rewrite negb_orb. apply i. auto.
   - apply satFormula_concat.
     apply andb_prop in H. inv H. apply i in H0. auto.
     apply andb_prop in H. inv H. apply i0 in H1. auto.
@@ -211,9 +232,9 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
   - apply orb_true_intro.
     apply satFormula_mult2 in H. inv H. apply i in H0. auto.
     apply i0 in H0. auto.
-Abort.
+Qed.
 
-(*Definition sat_pred (bound: nat) (p: pred_op) :
+Definition sat_pred (bound: nat) (p: pred_op) :
   option ({al : alist | sat_predicate p (interp_alist al) = true}
           + {forall a : asgn, sat_predicate p a = false}).
   refine
@@ -243,7 +264,7 @@ Definition sat_pred_temp (bound: nat) (p: pred_op) :=
   match trans_pred_temp bound p with
   | Some fm => boundedSatSimple bound fm
   | None => None
-  end.*)
+  end.
 
 Inductive instr : Type :=
 | RBnop : instr
