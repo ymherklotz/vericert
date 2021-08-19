@@ -1336,11 +1336,11 @@ Section CORRECTNESS.
 
   Lemma only_internal_calls : forall fd fn rs,
       RTL.find_function ge (inr fn) rs = Some fd ->
-      (exists f : RTL.function, rtl_find_func ge fn = Some (AST.Internal f)) ->
+      (exists f : RTL.function, HTL.find_func ge fn = Some (AST.Internal f)) ->
       (exists f, fd = AST.Internal f).
   Proof.
     intros * ? [? ?].
-    unfold rtl_find_func in *.
+    unfold HTL.find_func in *.
     unfold RTL.find_function in *.
     destruct (Genv.find_symbol ge fn); try discriminate.
     exists x. crush.
@@ -1416,6 +1416,23 @@ Section CORRECTNESS.
       eapply nonblock_all_exec.
   Qed.
 
+  Lemma transl_find : forall fn f,
+      HTL.find_func ge fn = Some (AST.Internal f) ->
+      match_prog prog tprog ->
+      (exists f', HTL.find_func tge fn = Some (AST.Internal f')).
+  Proof.
+    intros.
+    unfold HTL.find_func in *.
+    rewrite symbols_preserved.
+    destruct (Genv.find_symbol ge fn); try discriminate.
+    destruct (function_ptr_translated _ _ H) as [? [? ?]].
+    replace (Genv.find_funct_ptr tge b).
+    inversion H2.
+    destruct (transl_module prog f); try discriminate.
+    inversion H4.
+    exists m. crush.
+  Qed.
+
   Lemma transl_icall_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
       (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
@@ -1432,11 +1449,11 @@ Section CORRECTNESS.
     intros * H Hfunc * MSTATE.
     inv_state.
     edestruct (only_internal_calls fd); eauto; subst fd.
-    simpl in *.
+    inv CONST.
+    simplify.
+    destruct (transl_find _ _ ltac:(eauto) TRANSL).
     eexists. split.
-    - inv CONST.
-      simplify.
-      eapply Smallstep.plus_three; simpl in *.
+    - eapply Smallstep.plus_three; simpl in *.
       + eapply HTL.step_module; simpl.
         * repeat econstructor; auto.
         * repeat econstructor; auto.
@@ -1504,15 +1521,18 @@ Section CORRECTNESS.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gss.
         * admit.
-      + eapply HTL.step_initcall.
-        * (* find called module *) admit.
-        * (* callee reset mapped *) admit.
-        * (* params mapped *) admit.
-        * (* callee reset unset *) admit.
-        * (* params set *) admit.
+      + eapply HTL.step_initcall; simplify.
+        * eassumption.
+        * eassumption.
+        * (* params mapped *) admit. (** TODO: We might have to change the statement of step_initcall *)
+        * big_tac.
+          assert (dst <= (RTL.max_reg_function f))%positive
+            by (eapply RTL.max_reg_function_def; eauto).
+          not_control_reg.
+        * admit.
       + eauto with htlproof.
     - econstructor; try solve [repeat econstructor; eauto with htlproof ].
-      + (* Called module is translated *) admit.
+      + admit.
       + (* Match stackframes *) admit.
       + (* Argument values match *) admit.
   Admitted.

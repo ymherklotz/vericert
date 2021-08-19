@@ -129,14 +129,10 @@ Qed.
 
 Definition genv := Globalenvs.Genv.t fundef unit.
 
-Definition find_module (i: ident) (ge : genv) : option module :=
-  match Globalenvs.Genv.find_symbol ge i with
+Definition find_func {F V} (ge : Globalenvs.Genv.t F V) (symb : AST.ident) : option F :=
+  match Globalenvs.Genv.find_symbol ge symb with
   | None => None
-  | Some b =>
-    match Globalenvs.Genv.find_funct_ptr ge b with
-    | Some (AST.Internal f) => Some f
-    | _ => None
-    end
+  | Some b => Globalenvs.Genv.find_funct_ptr ge b
   end.
 
 Inductive stackframe : Type :=
@@ -208,7 +204,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
          (Returnstate sf mid retval)
 | step_initcall :
     forall g callerid caller st asr asa sf callee_id callee callee_reset callee_params callee_param_vals,
-    find_module callee_id g = Some callee ->
+    find_func g callee_id = Some (AST.Internal callee) ->
 
     caller.(mod_externctrl)!callee_reset = Some (callee_id, ctrl_reset) ->
     (forall n param, nth_error callee_params n = Some param ->

@@ -518,12 +518,6 @@ Fixpoint xmap_externctrl_params (n : nat) (fn : ident) (l : list reg) :=
 
 Definition map_externctrl_params := xmap_externctrl_params 0.
 
-Definition rtl_find_func (ge : RTL.genv) (symb : AST.ident) :=
-  match Globalenvs.Genv.find_symbol ge symb with
-  | None => None
-  | Some b => Globalenvs.Genv.find_funct_ptr ge b
-  end.
-
 Definition transf_instr (ge : RTL.genv) (fin rtrn stack: reg) (ni: node * instruction) : mon unit :=
   match ni with
     (n, i) =>
@@ -552,7 +546,7 @@ Definition transf_instr (ge : RTL.genv) (fin rtrn stack: reg) (ni: node * instru
     | Icall sig (inl fn) args dst n' => error (Errors.msg "Indirect calls are not implemented.")
     | Icall sig (inr fn) args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned
-      then match rtl_find_func ge fn with
+      then match find_func ge fn with
            | Some (AST.Internal _) =>
              do params <- map_externctrl_params fn args;
 
