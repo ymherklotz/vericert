@@ -1306,7 +1306,8 @@ Section CORRECTNESS.
     inversion TF.
     simplify.
     eexists. split.
-    apply Smallstep.plus_one. constructor.
+    apply Smallstep.plus_one.
+    solve [constructor].
 
     simplify.
     econstructor; try solve [big_tac].
@@ -1455,25 +1456,27 @@ Section CORRECTNESS.
     eexists. split.
     - eapply Smallstep.plus_three; simpl in *.
       + eapply HTL.step_module; simpl.
-        * repeat econstructor; auto.
-        * repeat econstructor; auto.
+        * auto.
+        * auto.
+        * eauto.
+        * eauto.
+        * eauto.
         * repeat econstructor; eauto.
-        * repeat econstructor; eauto.
-        * repeat econstructor; eauto.
-        * repeat econstructor; auto.
         * repeat econstructor; eauto.
         * eapply fork_exec.
         * trivial.
         * trivial.
         * eapply AssocMapExt.merge_correct_1.
           rewrite assign_all_out.
-          big_tac.
-          -- not_control_reg.
-          -- simpl.
+          -- big_tac.
+             not_control_reg.
+          -- intros ? Hneg.
+             apply List.in_combine_l in Hneg.
              insterU H6.
-             simplify.
+             insterU H19.
+             (* All of x4 are in externctrl (by H6), but st1 is not because it is a control register *)
              admit.
-        * admit.
+        * eauto.
       + eapply HTL.step_module; trivial.
         * simpl.
           apply AssocMapExt.merge_correct_2; auto.
@@ -1578,7 +1581,6 @@ Section CORRECTNESS.
        * replace (RTL.fn_stacksize f) in *.
          replace m' with m by
              (pose proof (mem_free_zero m ltac:(auto)); crush).
-         subst.
          assumption.
        * subst. inv MF. constructor.
      + destruct or.
@@ -1631,7 +1633,7 @@ Section CORRECTNESS.
         * big_tac; inv TF; simplify; not_control_reg.
         * repeat econstructor.
         * big_tac; inv TF; simplify; not_control_reg.
-      + eauto with htlproof.
+      + trivial.
     - simpl.
       eapply match_state; simpl; eauto.
       + big_tac.
@@ -2245,7 +2247,7 @@ Section CORRECTNESS.
       unfold_merge.
       apply AssocMap.gss.
 
-      edestruct only_main_stores; eauto; subst; constructor.
+      edestruct only_main_stores; eauto. subst; constructor.
 
       (** Equality proof *)
 
