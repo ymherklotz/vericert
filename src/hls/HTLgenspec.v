@@ -95,7 +95,7 @@ Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datap
           externctrl ! fn_return = Some (fn, ctrl_return) /\
           externctrl ! fn_finish = Some (fn, ctrl_finish) /\
           (forall n arg, List.nth_error args n = Some arg ->
-                    exists r, In (r, arg) (List.combine fn_params args) /\
+                    exists r, List.nth_error fn_params n = Some r /\
                          externctrl ! r = Some (fn, ctrl_param n)) /\
           Z.pos pc2 <= Int.max_unsigned /\
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
@@ -324,23 +324,28 @@ Hint Resolve map_externctrl_params_combine : htlspec.
 Lemma helper__map_externctrl_params_spec :
   forall args n arg,
     List.nth_error args n = Some arg ->
-    forall k fn s param_pairs s' i,
-      xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-      exists r, (In (r, arg) param_pairs) /\
+    forall k fn params s s' i,
+      xmap_externctrl_params k fn args s = OK (List.combine params args) s' i ->
+      exists r, (List.nth_error params n = Some r) /\
            (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
 Proof.
   induction args.
   - sauto use: nth_error_nil.
   - destruct n; intros * ? * H; monadInv H.
-    + eexists. crush. monad_crush.
+    + destruct params; try discriminate.
+      simpl.
+      eexists.
+      crush.
+      enough (r = x) by monad_crush.
+      crush.
     + sauto.
 Qed.
 
 Lemma map_externctrl_params_spec :
-  forall args n arg fn s param_pairs s' i,
-    map_externctrl_params fn args s = OK param_pairs s' i ->
+  forall n arg fn s params args s' i,
+    map_externctrl_params fn args s = OK (List.combine params args) s' i ->
     List.nth_error args n = Some arg ->
-    exists r, (In (r, arg) param_pairs) /\
+    exists r, (List.nth_error params n = Some r) /\
          (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
 Proof. sauto use: helper__map_externctrl_params_spec. Qed.
 Hint Resolve map_externctrl_params_spec : htlspec.
@@ -387,7 +392,7 @@ Proof.
       destruct (map_externctrl_params_combine _ _ _ _ _ _ EQ1) as [? [? ?]]; subst.
       repeat (eapply ex_intro).
 
-      repeat split; try crush; try monad_crush; eauto with htlspec. (* slow *)
+      repeat split; try solve [ crush ]; try monad_crush; eauto with htlspec. (* slow *)
       * intros.
         destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 ltac:(eauto)) as [param [? ?]].
         exists param; simplify; eauto; trans_step s3 s'.
