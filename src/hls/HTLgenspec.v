@@ -27,6 +27,7 @@ Require Import compcert.lib.Maps.
 Require compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
+Require Import vericert.common.ListExtra.
 Require Import vericert.hls.Verilog.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.HTL.
@@ -344,27 +345,6 @@ Lemma map_externctrl_params_spec : forall args n param_pairs fn s s' i,
          (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
 Proof. sauto use: helper__map_externctrl_params_spec. Qed.
 Hint Resolve map_externctrl_params_spec : htlspec.
-
-Lemma nth_error_length : forall {A} (l : list A) n x,
-    nth_error l n = Some x -> (n < length l)%nat.
-Proof.
-  induction l; intros; simpl in *.
-  - destruct n; crush.
-  - destruct n; crush.
-    edestruct IHl; eauto with arith.
-Qed.
-
-Lemma length_nth_error : forall {A} (l : list A) n,
-    (n < length l)%nat -> exists x, nth_error l n = Some x.
-Proof.
-  induction l; intros; simpl in *.
-  - lia.
-  - destruct n; crush; eauto with arith.
-Qed.
-
-Lemma combine_split : forall {A B} (l : list (A * B)),
-    List.combine (fst (List.split l)) (snd (List.split l)) = l.
-Proof. hfcrush use: split_combine unfold: fst, snd inv: prod. Qed.
 
 Lemma iter_expand_instr_spec :
   forall l prog fin rtrn stack s s' i x c,
