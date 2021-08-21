@@ -29,6 +29,7 @@ Require Import compcert.lib.Maps.
 Require Import vericert.common.IntegerExtra.
 Require Import vericert.common.Vericertlib.
 Require Import vericert.common.ZExtra.
+Require Import vericert.common.ListExtra.
 Require Import vericert.hls.Array.
 Require Import vericert.hls.AssocMap.
 Require vericert.hls.HTL.
@@ -1434,6 +1435,29 @@ Section CORRECTNESS.
     exists m. crush.
   Qed.
 
+  Lemma param_mapping_correct :
+    forall fn (args : list reg) fn_params (externctrl : AssocMap.t (HTL.ident * HTL.controlsignal)),
+      length args = length fn_params ->
+      (forall n arg, nth_error args n = Some arg ->
+                exists r, List.nth_error fn_params n = Some r /\
+                     externctrl ! r = Some (fn, HTL.ctrl_param n)) ->
+      (forall n param, nth_error fn_params n = Some param ->
+                  externctrl!param = Some (fn, HTL.ctrl_param n)).
+  Proof.
+    intros * Hlen Htr * Hfn_params.
+
+    assert (H : exists arg, nth_error args n = Some arg). {
+      apply length_nth_error.
+      apply nth_error_length in Hfn_params.
+      lia.
+    }
+    destruct H as [ arg H ].
+    edestruct (Htr _ _ H) as [? [? ?]].
+
+    enough (Some x = Some param) by crush.
+    congruence.
+  Qed.
+
   Lemma transl_icall_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
       (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
@@ -1524,15 +1548,15 @@ Section CORRECTNESS.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gss.
         * admit.
-      + eapply HTL.step_initcall; simplify.
+      + eapply HTL.step_initcall.
         * eassumption.
         * eassumption.
-        * (* params mapped *) admit. (** TODO: We might have to change the statement of step_initcall *)
+        * eauto using param_mapping_correct.
         * big_tac.
           assert (dst <= (RTL.max_reg_function f))%positive
             by (eapply RTL.max_reg_function_def; eauto).
           not_control_reg.
-        * admit.
+        * simpl; trivial.
       + eauto with htlproof.
     - econstructor; try solve [repeat econstructor; eauto with htlproof ].
       + admit.
