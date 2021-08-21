@@ -94,6 +94,7 @@ Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datap
           externctrl ! fn_rst = Some (fn, ctrl_reset) /\
           externctrl ! fn_return = Some (fn, ctrl_return) /\
           externctrl ! fn_finish = Some (fn, ctrl_finish) /\
+          length args = length fn_params /\
           (forall n arg, List.nth_error args n = Some arg ->
                     exists r, List.nth_error fn_params n = Some r /\
                          externctrl ! r = Some (fn, ctrl_param n)) /\
@@ -303,52 +304,67 @@ Ltac some_incr :=
   | [ INCR : st_prop _ _ |- _ ] => inversion INCR
   end.
 
-
-Lemma xmap_externctrl_params_combine : forall args k fn s param_pairs s' i,
+Lemma helper__map_externctrl_params_args : forall args param_pairs fn s s' k i,
     xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-    exists params, param_pairs = List.combine params args /\ length params = length args.
+    snd (List.split param_pairs) = args.
 Proof.
-  induction args; intros; monadInv H.
-  - exists nil. auto.
-  - unshelve (edestruct IHargs with (k:=S k) (s:=s0) (s':=s')); auto.
-    subst. exists (x::x1); crush.
+  induction args.
+  - sauto.
+  - intros. monadInv H. sauto.
 Qed.
-Hint Resolve xmap_externctrl_params_combine : htlspec.
 
-Lemma map_externctrl_params_combine : forall args fn s param_pairs s' i,
+Lemma map_externctrl_params_args : forall args param_pairs fn s s' i,
     map_externctrl_params fn args s = OK param_pairs s' i ->
-    exists params, param_pairs = List.combine params args /\ length params = length args.
-Proof. unfold map_externctrl_params. eauto using xmap_externctrl_params_combine. Qed.
-Hint Resolve map_externctrl_params_combine : htlspec.
+    snd (List.split param_pairs) = args.
+Proof. sauto use: helper__map_externctrl_params_args. Qed.
 
-Lemma helper__map_externctrl_params_spec :
-  forall args n arg,
-    List.nth_error args n = Some arg ->
-    forall k fn params s s' i,
-      xmap_externctrl_params k fn args s = OK (List.combine params args) s' i ->
-      exists r, (List.nth_error params n = Some r) /\
-           (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
+Lemma helper__map_externctrl_params_spec : forall args n param_pairs k fn s s' i,
+    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+    (n < length args)%nat ->
+    exists r, (List.nth_error (fst (List.split param_pairs)) n = Some r) /\
+         (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
 Proof.
   induction args.
   - sauto use: nth_error_nil.
-  - destruct n; intros * ? * H; monadInv H.
-    + destruct params; try discriminate.
-      simpl.
-      eexists.
-      crush.
-      enough (r = x) by monad_crush.
-      crush.
-    + sauto.
-Qed.
+  - intros.
+    monadInv H.
+    destruct n; simplify.
+    + destruct (split x0). simpl.
+      exists x. crush. monad_crush.
+    + destruct (IHargs n _ _ _ _ _ _ EQ1 ltac:(lia)).
+      destruct (split _). simpl in *.
+      eexists. replace (S (n + k))%nat with (n + S k)%nat by lia.
+      eassumption.
+    Qed.
 
-Lemma map_externctrl_params_spec :
-  forall n arg fn s params args s' i,
-    map_externctrl_params fn args s = OK (List.combine params args) s' i ->
-    List.nth_error args n = Some arg ->
-    exists r, (List.nth_error params n = Some r) /\
+Lemma map_externctrl_params_spec : forall args n param_pairs fn s s' i,
+    map_externctrl_params fn args s = OK param_pairs s' i ->
+    (n < length args)%nat ->
+    exists r, (List.nth_error (fst (List.split param_pairs)) n = Some r) /\
          (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
 Proof. sauto use: helper__map_externctrl_params_spec. Qed.
 Hint Resolve map_externctrl_params_spec : htlspec.
+
+Lemma nth_error_length : forall {A} (l : list A) n x,
+    nth_error l n = Some x -> (n < length l)%nat.
+Proof.
+  induction l; intros; simpl in *.
+  - destruct n; crush.
+  - destruct n; crush.
+    edestruct IHl; eauto with arith.
+Qed.
+
+Lemma length_nth_error : forall {A} (l : list A) n,
+    (n < length l)%nat -> exists x, nth_error l n = Some x.
+Proof.
+  induction l; intros; simpl in *.
+  - lia.
+  - destruct n; crush; eauto with arith.
+Qed.
+
+Lemma combine_split : forall {A B} (l : list (A * B)),
+    List.combine (fst (List.split l)) (snd (List.split l)) = l.
+Proof. hfcrush use: split_combine unfold: fst, snd inv: prod. Qed.
 
 Lemma iter_expand_instr_spec :
   forall l prog fin rtrn stack s s' i x c,
@@ -389,16 +405,29 @@ Proof.
 
       eapply tr_code_call; eauto; crush.
 
-      destruct (map_externctrl_params_combine _ _ _ _ _ _ EQ1) as [? [? ?]]; subst.
       repeat (eapply ex_intro).
 
-      repeat split; try solve [ crush ]; try monad_crush; eauto with htlspec. (* slow *)
+      repeat (apply conj).
+      * monad_crush.
+      * monad_crush.
+      * monad_crush.
+      * transitivity (length x1).
+        replace l0 with (snd (List.split x1)).
+        apply split_length_r.
+        eapply map_externctrl_params_args; eassumption.
+        auto using split_length_l.
       * intros.
-        destruct (map_externctrl_params_spec _ _ _ _ _ _ _ _ EQ1 ltac:(eauto)) as [param [? ?]].
-        exists param; simplify; eauto; trans_step s3 s'.
+        destruct (map_externctrl_params_args _ _ _ _ _ _ EQ1); eauto using nth_error_length.
+        destruct (map_externctrl_params_spec _ n0 _ _ _ _ _ EQ1); eauto using nth_error_length.
+        exists x8. simplify; eauto.
+        monad_crush.
       * eapply create_state_max; eassumption.
       * replace x5 with (st_freshreg s6) in * by intro_step.
+        replace l0 with (snd (split x1)) by
+            eauto using map_externctrl_params_args.
+        rewrite combine_split.
         monad_crush.
+      * monad_crush.
       * replace x6 with (st_freshreg s7) in * by intro_step.
         replace x5 with (st_freshreg s6) in * by intro_step.
         monad_crush.
@@ -444,17 +473,24 @@ Proof.
     inversion Htrans.
     replace (st_st s').
     repeat (eapply ex_intro).
-    repeat split; try (eapply map_incr_some; inversion Htrans; eauto with htlspec); try eauto with htlspec.
-    intros.
-    insterU H5.
-    destruct H5 as [r [? ?]].
-    eexists. split; eauto with htlspec.
+    repeat (apply conj).
+    * eapply map_incr_some; inversion Htrans; eauto with htlspec.
+    * eapply map_incr_some; inversion Htrans; eauto with htlspec.
+    * eapply map_incr_some; inversion Htrans; eauto with htlspec.
+    * eassumption.
+    * intros.
+      destruct (H6 n0 ltac:(auto) ltac:(auto)) as [r [? ?]].
+      eexists. split; eauto with htlspec.
+    * eauto with htlspec.
+    * eauto with htlspec.
+    * eauto with htlspec.
+    * eauto with htlspec.
+    * eauto with htlspec.
   + eapply tr_code_return; eauto with htlspec.
     inversion Htrans.
     simplify. eexists.
     replace (st_st s').
     repeat split; eauto with htlspec.
-
   Unshelve. all: eauto.
 Qed.
 Hint Resolve tr_code_trans : htlspec.
