@@ -49,6 +49,8 @@ while read -r benchmark ; do
   cells=$(grep -A4 "Report Instance Areas:" "$logfile" | tail -1 | cut -d '|' -f5 | tr -d [:space:])
   slack=$(sed -n -e 's/\s\+slack\s\+\(-\?[0-9.]\+\)/\1ns/p' "$timingfile" | tr -d [:space:])
 
+  cd ..
+
   echo "$benchmark,$slack,$luts,$brams,$dsps" >> results
 done < syn-list
 
