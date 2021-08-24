@@ -18,7 +18,9 @@ linear-algebra/blas/gesummv
 linear-algebra/blas/gemm
 linear-algebra/blas/trmm
 linear-algebra/blas/syr2k
+linear-algebra/solvers/cholesky
 linear-algebra/solvers/trisolv
+linear-algebra/solvers/lu
 linear-algebra/solvers/ludcmp
 linear-algebra/solvers/durbin
 data-mining/covariance
