@@ -21,7 +21,7 @@ function run_benchmark() {
    [ -f "$benchmark.c" ] || { error "$benchmark.c does not exist"; return; }
 
    info "[$benchmark] Running"
-   clang -Wall -Werror -fsanitize=undefined "$benchmark".c -o "$benchmark".o
+   clang -Wall -fsanitize=undefined "$benchmark".c -o "$benchmark".o
    ./"$benchmark".o > "$benchmark".clog
    cresult=$(cut -d' ' -f2 "$benchmark.clog")
    info "[$benchmark] C output: $cresult"
