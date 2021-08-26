@@ -23,19 +23,22 @@ Require Import vericert.common.Vericertlib.
 
 Inductive funct_unit: Type :=
 | SignedDiv (size: positive) (numer denom quot rem: reg): funct_unit
-| UnsignedDiv (size: positive) (numer denom quot rem: reg): funct_unit.
+| UnsignedDiv (size: positive) (numer denom quot rem: reg): funct_unit
+| Ram (size: positive) (addr d_in d_out wr_en: reg): funct_unit.
 
 Record funct_units := mk_avail_funct_units {
     avail_sdiv: option positive;
     avail_udiv: option positive;
+    avail_ram: option positive;
     avail_units: PTree.t funct_unit;
   }.
 
 Definition initial_funct_units :=
-  mk_avail_funct_units None None (PTree.empty funct_unit).
+  mk_avail_funct_units None None None (PTree.empty funct_unit).
 
 Definition funct_unit_stages (f: funct_unit) : positive :=
   match f with
   | SignedDiv s _ _ _ _ => s
   | UnsignedDiv s _ _ _ _ => s
+  | _ => 1
   end.

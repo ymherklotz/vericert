@@ -65,7 +65,6 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintClight.destination option_dclight ".light.c";
   set_dest Vericert.PrintCminor.destination option_dcminor ".cm";
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
-  set_dest Vericert.PrintRTLBlock.destination option_drtlblock ".rtlblock";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
@@ -93,7 +92,7 @@ let compile_c_file sourcename ifile ofile =
   end else begin
     let verilog =
       let translation = if !option_hls_schedule
-                        then Vericert.Compiler0.transf_hls_temp
+                        then Vericert.Compiler0.transf_hls
                         else Vericert.Compiler0.transf_hls
       in
       match translation csyntax with
@@ -238,7 +237,8 @@ Processing options:
   -finline       Perform inlining of functions [on]
   -finline-functions-called-once Integrate functions only required by their
                  single caller [on]
-  -fif-conversion Perform if-conversion (generation of conditional moves) [on]
+  -fif-conversion Perform if-conversion (generation of conditional moves) [off]
+  -fram          Generate Verilog that is fit for ram inference [on]
 Code generation options: (use -fno-<opt> to turn off -f<opt>)
   -ffpu          Use FP registers for some integer operations [on]
   -fsmall-data <n>  Set maximal size <n> for allocation in small data area
@@ -436,6 +436,7 @@ let cmdline_actions =
   @ f_opt "sse" option_ffpu (* backward compatibility *)
   @ f_opt "schedule" option_hls_schedule
   @ f_opt "if-conv" option_fif_conv
+  @ f_opt "ram" option_fram
   @ [
 (* Catch options that are not handled *)
   Prefix "-", Self (fun s ->

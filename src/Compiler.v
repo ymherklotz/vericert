@@ -71,6 +71,7 @@ Require vericert.hls.HTLPargen.
 Require vericert.hls.Pipeline.
 Require vericert.hls.IfConversion.
 Require vericert.HLSOpts.
+Require vericert.hls.Memorygen.
 
 Require Import vericert.hls.HTLgenproof.
 
@@ -197,7 +198,12 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_HTL 2)
   @@@ ApplyExternctrl.transf_program
    @@ print (print_HTL 3)
-  @@@ Veriloggen.transl_program.
+   @@ total_if HLSOpts.optim_ram Memorygen.transf_program
+   @@ Veriloggen.transl_program.
+
+(*|
+The transformation functions from RTL to Verilog are then added to the backend of the CompCert transformations from Clight to RTL.
+|*)
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   OK p
@@ -214,7 +220,9 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
 .. coq:: none
 |*)
 
-Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
+(* This is an unverified version of transf_hls with some experimental additions such as scheduling
+that aren't completed yet. *)
+(*Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   OK p
   @@@ SimplExpr.transl_program
   @@@ SimplLocals.transf_program
@@ -242,8 +250,8 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTLBlock 2)
   @@@ RTLPargen.transl_program
   @@@ HTLPargen.transl_program
-   @@ print (print_HTL 1)
-  @@@ Veriloggen.transl_program.
+   @@ print print_HTL
+   @@ Veriloggen.transl_program.*)
 
 (*|
 Correctness Proof
@@ -271,6 +279,7 @@ Definition CompCert's_passes :=
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
   ::: mkpass Renaming.match_prog
   ::: mkpass ApplyExternctrl.match_prog
+  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
@@ -346,9 +355,8 @@ Proof.
       let p := fresh "p" in let M := fresh "M" in let MM := fresh "MM" in
       destruct H as (p & M & MM); clear H
   end.
-  subst tp.
-
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p17)).
+  repeat DestructM. subst tp.
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p16)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.

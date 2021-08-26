@@ -211,9 +211,9 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
   - apply orb_true_intro.
     apply satFormula_mult2 in H. inv H. apply i in H0. auto.
     apply i0 in H0. auto.
-Admitted.
+Abort.
 
-Definition sat_pred (bound: nat) (p: pred_op) :
+(*Definition sat_pred (bound: nat) (p: pred_op) :
   option ({al : alist | sat_predicate p (interp_alist al) = true}
           + {forall a : asgn, sat_predicate p a = false}).
   refine
@@ -243,7 +243,7 @@ Definition sat_pred_temp (bound: nat) (p: pred_op) :=
   match trans_pred_temp bound p with
   | Some fm => boundedSatSimple bound fm
   | None => None
-  end.
+  end.*)
 
 Inductive instr : Type :=
 | RBnop : instr

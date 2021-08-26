@@ -17,26 +17,32 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-From Coq Require Import
-  Structures.OrderedTypeEx
-  FSets.FMapPositive
-  Program.Basics
-  PeanoNat
-  ZArith
-  Lists.List
-  Program.
+Set Implicit Arguments.
 
-Require Import Lia.
+Require Import Coq.Structures.OrderedTypeEx.
+Require Import Coq.FSets.FMapPositive.
+Require Import Coq.Program.Basics.
+Require Import Coq.Arith.PeanoNat.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.Lists.List.
+Require Import Coq.Program.Program.
+Require Import Coq.micromega.Lia.
+
+Require compcert.common.Events.
+Require Import compcert.lib.Integers.
+Require Import compcert.common.Errors.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Globalenvs.
+
+Require Import vericert.common.Vericertlib.
+Require Import vericert.common.Show.
+Require Import vericert.hls.ValueInt.
+Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.Array.
 
 Import ListNotations.
 
-From vericert Require Import Vericertlib Show ValueInt AssocMap Array.
-From compcert Require Events.
-From compcert Require Import Integers Errors Smallstep Globalenvs.
-
 Local Open Scope assocmap.
-
-Set Implicit Arguments.
 
 Definition reg : Type := positive.
 Definition node : Type := positive.
@@ -75,6 +81,39 @@ Definition merge_arr (new : option arr) (old : option arr) : option arr :=
 
 Definition merge_arrs (new : assocmap_arr) (old : assocmap_arr) : assocmap_arr :=
   AssocMap.combine merge_arr new old.
+
+Lemma merge_arr_empty':
+  forall l,
+  merge_arr (Some (arr_repeat None (length l))) (Some (make_array l)) = Some (make_array l).
+Proof.
+  induction l; auto.
+  unfold merge_arr.
+  unfold combine, make_array. simplify. rewrite H0.
+  rewrite list_repeat_cons. simplify.
+  rewrite H0; auto.
+Qed.
+
+Lemma merge_arr_empty:
+  forall v l,
+  v = Some (make_array l) ->
+  merge_arr (Some (arr_repeat None (length l))) v = v.
+Proof. intros. rewrite H. apply merge_arr_empty'. Qed.
+
+Lemma merge_arr_empty2:
+  forall v l v',
+  v = Some v' ->
+  l = arr_length v' ->
+  merge_arr (Some (arr_repeat None l)) v = v.
+Proof.
+  intros. subst. destruct v'. simplify.
+  generalize dependent arr_wf. generalize dependent arr_length.
+  induction arr_contents.
+  - simplify; subst; auto.
+  - unfold combine, make_array in *; simplify; subst.
+    rewrite list_repeat_cons; simplify.
+    specialize (IHarr_contents (Datatypes.length arr_contents) eq_refl).
+    inv IHarr_contents. rewrite H0. rewrite H0. auto.
+Qed.
 
 Definition arr_assocmap_lookup (a : assocmap_arr) (r : reg) (i : nat) : option value :=
   match a ! r with
@@ -174,9 +213,12 @@ Inductive stmnt : Type :=
 | Vskip : stmnt
 | Vseq : stmnt -> stmnt -> stmnt
 | Vcond : expr -> stmnt -> stmnt -> stmnt
-| Vcase : expr -> list (expr * stmnt) -> option stmnt -> stmnt
+| Vcase : expr -> stmnt_expr_list -> option stmnt -> stmnt
 | Vblock : expr -> expr -> stmnt
-| Vnonblock : expr -> expr -> stmnt.
+| Vnonblock : expr -> expr -> stmnt
+with stmnt_expr_list : Type :=
+| Stmntnil : stmnt_expr_list
+| Stmntcons : expr -> stmnt -> stmnt_expr_list -> stmnt_expr_list.
 
 (** ** Edges
 
@@ -404,40 +446,6 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
-(*Definition access_fext (f : fext) (r : reg) : res value :=
-  match AssocMap.get r f with
-  | Some v => OK v
-  | _ => OK (ZToValue 0)
-  end.*)
-
-(* TODO FIX Vvar case without default *)
-(*Fixpoint expr_run (assoc : assocmap) (e : expr)
-         {struct e} : res value :=
-  match e with
-  | Vlit v => OK v
-  | Vvar r => match s with
-              | State _ assoc _ _ _ => handle_def (ZToValue 32 0) assoc!r
-              | _ => Error (msg "Verilog: Wrong state")
-              end
-  | Vvari _ _ => Error (msg "Verilog: variable indexing not modelled")
-  | Vinputvar r => access_fext s r
-  | Vbinop op l r =>
-    let lv := expr_run s l in
-    let rv := expr_run s r in
-    let oper := binop_run op in
-    do lv' <- lv;
-    do rv' <- rv;
-    handle_opt (msg "Verilog: sizes are not equal")
-               (eq_to_opt lv' rv' (oper lv' rv'))
-  | Vunop op e =>
-    let oper := unop_run op in
-    do ev <- expr_run s e;
-    OK (oper ev)
-  | Vternary c te fe =>
-    do cv <- expr_run s c;
-    if valueToBool cv then expr_run s te else expr_run s fe
-  end.*)
-
 (** Return the location of the lhs of an assignment. *)
 
 Inductive location : Type :=
@@ -449,80 +457,6 @@ Inductive location_is : fext -> assocmap -> assocmap_arr -> expr -> location -> 
 | Indexed : forall f asr asa r iexp iv,
   expr_runp f asr asa iexp iv ->
   location_is f asr asa (Vvari r iexp) (LocArray r (valueToNat iv)).
-
-(* Definition assign_name (f : fext) (asr: assocmap) (asa : assocmap_l)  (e : expr) : res reg := *)
-(*   match e with *)
-(*   | Vvar r => OK r *)
-(*   | _ => Error (msg "Verilog: expression not supported on lhs of assignment") *)
-(*   end. *)
-
-(*Fixpoint stmnt_height (st : stmnt) {struct st} : nat :=
-  match st with
-  | Vseq s1 s2 => S (stmnt_height s1 + stmnt_height s2)
-  | Vcond _ s1 s2 => S (Nat.max (stmnt_height s1) (stmnt_height s2))
-  | Vcase _ ls (Some st) =>
-    S (fold_right (fun t acc => Nat.max acc (stmnt_height (snd t))) 0%nat ls)
-  | _ => 1
-  end.
-
-Fixpoint find_case_stmnt (s : state) (v : value) (cl : list (expr * stmnt))
-         {struct cl} : option (res stmnt) :=
-  match cl with
-  | (e, st)::xs =>
-    match expr_run s e with
-    | OK v' =>
-      match eq_to_opt v v' (veq v v') with
-      | Some eq => if valueToBool eq then Some (OK st) else find_case_stmnt s v xs
-      | None => Some (Error (msg "Verilog: equality check sizes not equal"))
-      end
-    | Error msg => Some (Error msg)
-    end
-  | _ => None
-  end.
-
-Fixpoint stmnt_run' (n : nat) (s : state) (st : stmnt) {struct n} : res state :=
-  match n with
-  | S n' =>
-    match st with
-    | Vskip => OK s
-    | Vseq s1 s2 =>
-      do s' <- stmnt_run' n' s s1;
-      stmnt_run' n' s' s2
-    | Vcond c st sf =>
-      do cv <- expr_run s c;
-      if valueToBool cv
-      then stmnt_run' n' s st
-      else stmnt_run' n' s sf
-    | Vcase e cl defst =>
-      do v <- expr_run s e;
-      match find_case_stmnt s v cl with
-      | Some (OK st') => stmnt_run' n' s st'
-      | Some (Error msg) => Error msg
-      | None => do s' <- handle_opt (msg "Verilog: no case was matched")
-                                    (option_map (stmnt_run' n' s) defst); s'
-      end
-    | Vblock lhs rhs =>
-      match s with
-      | State m assoc nbassoc f c =>
-        do name <- assign_name lhs;
-        do rhse <- expr_run s rhs;
-        OK (State m (PositiveMap.add name rhse assoc) nbassoc f c)
-      | _ => Error (msg "Verilog: Wrong state")
-      end
-    | Vnonblock lhs rhs =>
-      match s with
-      | State m assoc nbassoc f c =>
-        do name <- assign_name lhs;
-        do rhse <- expr_run s rhs;
-        OK (State m assoc (PositiveMap.add name rhse nbassoc) f c)
-      | _ => Error (msg "Verilog: Wrong state")
-      end
-    end
-  | _ => OK s
-  end.
-
-Definition stmnt_run (s : state) (st : stmnt) : res state :=
-  stmnt_run' (stmnt_height st) s st. *)
 
 Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
                       stmnt -> reg_associations -> arr_associations -> Prop :=
@@ -551,19 +485,19 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve ->
     mve <> ve ->
     stmnt_runp f asr0 asa0 (Vcase e cs def) asr1 asa1 ->
-    stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
+    stmnt_runp f asr0 asa0 (Vcase e (Stmntcons me sc cs) def) asr1 asa1
 | stmnt_runp_Vcase_match:
     forall e ve asr0 asa0 f asr1 asa1 me mve sc cs def,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) me mve ->
     mve = ve ->
     stmnt_runp f asr0 asa0 sc asr1 asa1 ->
-    stmnt_runp f asr0 asa0 (Vcase e ((me, sc)::cs) def) asr1 asa1
+    stmnt_runp f asr0 asa0 (Vcase e (Stmntcons me sc cs) def) asr1 asa1
 | stmnt_runp_Vcase_default:
     forall asr0 asa0 asr1 asa1 f st e ve,
     expr_runp f asr0.(assoc_blocking) asa0.(assoc_blocking) e ve ->
     stmnt_runp f asr0 asa0 st asr1 asa1 ->
-    stmnt_runp f asr0 asa0 (Vcase e nil (Some st)) asr1 asa1
+    stmnt_runp f asr0 asa0 (Vcase e Stmntnil (Some st)) asr1 asa1
 | stmnt_runp_Vblock_reg:
     forall lhs r rhs rhsval asr asa f,
     location_is f asr.(assoc_blocking) asa.(assoc_blocking) lhs (LocReg r) ->
@@ -594,37 +528,32 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
                  asr (nonblock_arr r i asa rhsval).
 Hint Constructors stmnt_runp : verilog.
 
-(*Fixpoint mi_step (s : state) (m : list module_item) {struct m} : res state :=
-  let run := fun st ls =>
-              do s' <- stmnt_run s st;
-              mi_step s' ls
-  in
-  match m with
-  | (Valways _ st)::ls => run st ls
-  | (Valways_ff _ st)::ls => run st ls
-  | (Valways_comb _ st)::ls => run st ls
-  | (Vdecl _ _)::ls => mi_step s ls
-  | (Vdeclarr _ _ _)::ls => mi_step s ls
-  | nil => OK s
-  end.*)
-
 Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
                      module_item -> reg_associations -> arr_associations -> Prop :=
 | mi_stepp_Valways :
     forall f sr0 sa0 st sr1 sa1 c,
     stmnt_runp f sr0 sa0 st sr1 sa1 ->
-    mi_stepp f sr0 sa0 (Valways c st) sr1 sa1
-| mi_stepp_Valways_ff :
-    forall f sr0 sa0 st sr1 sa1 c,
-    stmnt_runp f sr0 sa0 st sr1 sa1 ->
-    mi_stepp f sr0 sa0 (Valways_ff c st) sr1 sa1
-| mi_stepp_Valways_comb :
-    forall f sr0 sa0 st sr1 sa1 c,
-    stmnt_runp f sr0 sa0 st sr1 sa1 ->
-    mi_stepp f sr0 sa0 (Valways_comb c st) sr1 sa1
+    mi_stepp f sr0 sa0 (Valways (Vposedge c) st) sr1 sa1
+| mi_stepp_Valways_ne :
+    forall f sr0 sa0 c st,
+    mi_stepp f sr0 sa0 (Valways (Vnegedge c) st) sr0 sa0
 | mi_stepp_Vdecl :
-    forall f sr sa d,
-    mi_stepp f sr sa (Vdeclaration d) sr sa.
+    forall f sr0 sa0 d,
+    mi_stepp f sr0 sa0 (Vdeclaration d) sr0 sa0.
+Hint Constructors mi_stepp : verilog.
+
+Inductive mi_stepp_negedge : fext -> reg_associations -> arr_associations ->
+                             module_item -> reg_associations -> arr_associations -> Prop :=
+| mi_stepp_negedge_Valways :
+    forall f sr0 sa0 st sr1 sa1 c,
+    stmnt_runp f sr0 sa0 st sr1 sa1 ->
+    mi_stepp_negedge f sr0 sa0 (Valways (Vnegedge c) st) sr1 sa1
+| mi_stepp_negedge_Valways_ne :
+    forall f sr0 sa0 c st,
+    mi_stepp_negedge f sr0 sa0 (Valways (Vposedge c) st) sr0 sa0
+| mi_stepp_negedge_Vdecl :
+    forall f sr0 sa0 d,
+    mi_stepp_negedge f sr0 sa0 (Vdeclaration d) sr0 sa0.
 Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
@@ -639,79 +568,19 @@ Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
     mis_stepp f sr sa nil sr sa.
 Hint Constructors mis_stepp : verilog.
 
-(*Definition mi_step_commit (s : state) (m : list module_item) : res state :=
-  match mi_step s m with
-  | OK (State m assoc nbassoc f c) =>
-    OK (State m (merge_assocmap nbassoc assoc) empty_assocmap f c)
-  | Error msg => Error msg
-  | _ => Error (msg "Verilog: Wrong state")
-  end.
-
-Fixpoint mi_run (f : fextclk) (assoc : assocmap) (m : list module_item) (n : nat)
-         {struct n} : res assocmap :=
-  match n with
-  | S n' =>
-    do assoc' <- mi_run f assoc m n';
-    match mi_step_commit (State assoc' empty_assocmap f (Pos.of_nat n')) m with
-    | OK (State assoc _ _ _) => OK assoc
-    | Error m => Error m
-    end
-  | O => OK assoc
-  end.*)
-
-(** Resets the module into a known state, so that it can be executed.  This is
-assumed to be the starting state of the module, and may have to be changed if
-other arguments to the module are also to be supported. *)
-
-(*Definition initial_fextclk (m : module) : fextclk :=
-  fun x => match x with
-           | S O => (AssocMap.set (mod_reset m) (ZToValue 1) empty_assocmap)
-           | _ => (AssocMap.set (mod_reset m) (ZToValue 0) empty_assocmap)
-           end.*)
-
-(*Definition module_run (n : nat) (m : module) : res assocmap :=
-  mi_run (initial_fextclk m) empty_assocmap (mod_body m) n.*)
+Inductive mis_stepp_negedge : fext -> reg_associations -> arr_associations ->
+                      list module_item -> reg_associations -> arr_associations -> Prop :=
+| mis_stepp_negedge_Cons :
+    forall f mi mis sr0 sa0 sr1 sa1 sr2 sa2,
+    mi_stepp_negedge f sr0 sa0 mi sr1 sa1 ->
+    mis_stepp_negedge f sr1 sa1 mis sr2 sa2 ->
+    mis_stepp_negedge f sr0 sa0 (mi :: mis) sr2 sa2
+| mis_stepp_negedge_Nil :
+    forall f sr sa,
+    mis_stepp_negedge f sr sa nil sr sa.
+Hint Constructors mis_stepp : verilog.
 
 Local Close Scope error_monad_scope.
-
-(*Theorem value_eq_size_if_eq:
-  forall lv rv EQ,
-  vsize lv = vsize rv -> value_eq_size lv rv = left EQ.
-Proof. intros. unfold value_eq_size.
-
-Theorem expr_run_same:
-  forall assoc e v, expr_run assoc e = OK v <-> expr_runp assoc e v.
-Proof.
-  split; generalize dependent v; generalize dependent assoc.
-  - induction e.
-    + intros. inversion H. constructor.
-    + intros. inversion H. constructor. assumption.
-    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (expr_run assoc e2) eqn:?.
-      unfold eq_to_opt in H1. destruct (value_eq_size v0 v1) eqn:?. inversion H1.
-      constructor. apply IHe1. assumption. apply IHe2. assumption. reflexivity. discriminate. discriminate.
-      discriminate.
-    + intros. inversion H. destruct (expr_run assoc e) eqn:?. unfold option_map in H1.
-      inversion H1. constructor. apply IHe. assumption. reflexivity. discriminate.
-    + intros. inversion H. destruct (expr_run assoc e1) eqn:?. destruct (valueToBool v0) eqn:?.
-      eapply erun_Vternary_true. apply IHe1. eassumption. apply IHe2. eassumption. assumption.
-      eapply erun_Vternary_false. apply IHe1. eassumption. apply IHe3. eassumption. assumption.
-      discriminate.
-  - induction e.
-    + intros. inversion H. reflexivity.
-    + intros. inversion H. subst. simpl. assumption.
-    + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4.
-      apply IHe2 in H6. rewrite H6. unfold eq_to_opt. assert (vsize lv = vsize rv).
-      apply EQ. apply (value_eq_size_if_eq lv rv EQ) in H0. rewrite H0. reflexivity.
-    + intros. inversion H. subst. simpl. destruct (expr_run assoc e) eqn:?. simpl.
-      apply IHe in H3. rewrite Heqo in H3.
-      inversion H3. subst. reflexivity. apply IHe in H3. rewrite Heqo in H3. discriminate.
-    + intros. inversion H. subst. simpl. apply IHe1 in H4. rewrite H4. rewrite H7.
-      apply IHe2 in H6. rewrite H6. reflexivity.
-      subst. simpl. apply IHe1 in H4. rewrite H4. rewrite H7. apply IHe3.
-      assumption.
-Qed.
-
- *)
 
 Fixpoint init_params (vl : list value) (rl : list reg) {struct rl} :=
   match rl, vl with
@@ -725,18 +594,24 @@ Definition empty_stack (m : module) : assocmap_arr :=
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
   | step_module :
-      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 f stval pstval m sf st g ist,
+      forall asr asa asr' asa' basr1 nasr1 basa1 nasa1 basr2 nasr2
+             basa2 nasa2 f stval pstval m sf st g ist,
       asr!(m.(mod_reset)) = Some (ZToValue 0) ->
       asr!(m.(mod_finish)) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some ist ->
       valueToPos ist = st ->
       mis_stepp f (mkassociations asr empty_assocmap)
                   (mkassociations asa (empty_stack m))
-                  m.(mod_body)
+                  (mod_body m)
                   (mkassociations basr1 nasr1)
-                  (mkassociations basa1 nasa1)->
-      asr' = merge_regs nasr1 basr1 ->
-      asa' = merge_arrs nasa1 basa1 ->
+                  (mkassociations basa1 nasa1) ->
+      mis_stepp_negedge f (mkassociations (merge_regs nasr1 basr1) empty_assocmap)
+                        (mkassociations (merge_arrs nasa1 basa1) (empty_stack m))
+                        (mod_body m)
+                        (mkassociations basr2 nasr2)
+                        (mkassociations basa2 nasa2) ->
+      asr' = merge_regs nasr2 basr2 ->
+      asa' = merge_arrs nasa2 basa2 ->
       asr'!(m.(mod_st)) = Some stval ->
       valueToPos stval = pstval ->
       step g (State sf m st asr asa) Events.E0 (State sf m pstval asr' asa')
@@ -777,6 +652,18 @@ Inductive final_state : state -> Integers.int -> Prop :=
 Definition semantics (m : program) :=
   Smallstep.Semantics step (initial_state m) final_state
                       (Globalenvs.Genv.globalenv m).
+
+Fixpoint list_to_stmnt st :=
+  match st with
+  | (e, s) :: r => Stmntcons e s (list_to_stmnt r)
+  | nil => Stmntnil
+  end.
+
+Fixpoint stmnt_to_list st :=
+  match st with
+  | Stmntcons e s r => (e, s) :: stmnt_to_list r
+  | Stmntnil => nil
+  end.
 
 Lemma expr_runp_determinate :
   forall f e asr asa v,
@@ -838,8 +725,8 @@ Lemma stmnt_runp_determinate :
              | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => invert H
              | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => invert H
              | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ (_ :: _) _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ []  _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vcase _ Stmntnil  _) _ _ |- _ ] => invert H
 
              | [ H1 : expr_runp _ ?asr ?asa ?e _,
                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
@@ -861,6 +748,22 @@ Lemma mi_stepp_determinate :
   mi_stepp f asr0 asa0 m asr1 asa1 ->
   forall asr1' asa1',
   mi_stepp f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  intros. destruct m; invert H; invert H0;
+
+  repeat (try match goal with
+              | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
+                  H2 : stmnt_runp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (stmnt_runp_determinate H1 H2)
+              end; crush).
+Qed.
+
+Lemma mi_stepp_negedge_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mi_stepp_negedge f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mi_stepp_negedge f asr0 asa0 m asr1' asa1' ->
   asr1' = asr1 /\ asa1' = asa1.
 Proof.
   intros. destruct m; invert H; invert H0;
@@ -895,16 +798,77 @@ Proof.
               end; crush).
 Qed.
 
+Lemma mis_stepp_negedge_determinate :
+  forall f asr0 asa0 m asr1 asa1,
+  mis_stepp_negedge f asr0 asa0 m asr1 asa1 ->
+  forall asr1' asa1',
+  mis_stepp_negedge f asr0 asa0 m asr1' asa1' ->
+  asr1' = asr1 /\ asa1' = asa1.
+Proof.
+  induction 1; intros;
+
+  repeat (try match goal with
+              | [ H : mis_stepp_negedge _ _ _ [] _ _ |- _ ] => invert H
+              | [ H : mis_stepp_negedge _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+
+              | [ H1 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _,
+                  H2 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
+                learn (mi_stepp_negedge_determinate H1 H2)
+
+             | [ H1 : forall asr1 asa1, mis_stepp_negedge _ ?asr0 ?asa0 ?m asr1 asa1 -> _,
+                 H2 : mis_stepp_negedge _ ?asr0 ?asa0 ?m _ _ |- _ ] =>
+               learn (H1 _ _ H2)
+              end; crush).
+Qed.
+
 Lemma semantics_determinate :
   forall (p: program), Smallstep.determinate (semantics p).
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
   - invert H; invert H0; constructor. (* Traces are always empty *)
   - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
-    pose proof (mis_stepp_determinate H5 H15).
+    pose proof (mis_stepp_determinate H5 H15). simplify. inv H0. inv H4.
+    pose proof (mis_stepp_negedge_determinate H6 H17).
     crush.
   - constructor. invert H; crush.
   - invert H; invert H0; unfold ge0, ge1 in *; crush.
   - red; simplify; intro; invert H0; invert H; crush.
   - invert H; invert H0; crush.
 Qed.
+
+Local Open Scope positive.
+
+Fixpoint max_reg_expr (e: expr) :=
+  match e with
+  | Vlit _ => 1
+  | Vvar r => r
+  | Vvari r e => Pos.max r (max_reg_expr e)
+  | Vrange r e1 e2 => Pos.max r (Pos.max (max_reg_expr e1) (max_reg_expr e2))
+  | Vinputvar r => r
+  | Vbinop _ e1 e2 => Pos.max (max_reg_expr e1) (max_reg_expr e2)
+  | Vunop _ e => max_reg_expr e
+  | Vternary e1 e2 e3 => Pos.max (max_reg_expr e1) (Pos.max (max_reg_expr e2) (max_reg_expr e3))
+  end.
+
+Fixpoint max_reg_stmnt (st: stmnt) :=
+  match st with
+  | Vskip => 1
+  | Vseq s1 s2 => Pos.max (max_reg_stmnt s1) (max_reg_stmnt s2)
+  | Vcond e s1 s2 =>
+    Pos.max (max_reg_expr e)
+            (Pos.max (max_reg_stmnt s1) (max_reg_stmnt s2))
+  | Vcase e stl None => Pos.max (max_reg_expr e) (max_reg_stmnt_expr_list stl)
+  | Vcase e stl (Some s) =>
+    Pos.max (max_reg_stmnt s)
+            (Pos.max (max_reg_expr e) (max_reg_stmnt_expr_list stl))
+  | Vblock e1 e2 => Pos.max (max_reg_expr e1) (max_reg_expr e2)
+  | Vnonblock e1 e2 => Pos.max (max_reg_expr e1) (max_reg_expr e2)
+  end
+with max_reg_stmnt_expr_list (stl: stmnt_expr_list) :=
+  match stl with
+  | Stmntnil => 1
+  | Stmntcons e s stl' =>
+    Pos.max (max_reg_expr e)
+            (Pos.max (max_reg_stmnt s)
+                     (max_reg_stmnt_expr_list stl'))
+  end.

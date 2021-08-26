@@ -17,3 +17,5 @@
  *)
 
 Parameter optim_if_conversion: unit -> bool.
+
+Parameter optim_ram: unit -> bool.

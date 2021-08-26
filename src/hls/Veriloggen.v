@@ -62,6 +62,9 @@ Section TRANSLATE.
     | _ => Some it
     end.
 
+  Definition mod_body (m : HTL.module) :=
+
+
   (* FIXME Remove the fuel parameter (recursion limit)*)
   Fixpoint transl_module (fuel : nat) (prog : HTL.program) (externclk : option reg) (m : HTL.module) : res Verilog.module :=
     match fuel with
@@ -99,17 +102,33 @@ Section TRANSLATE.
       let local_scldecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_scldecls m) in
       let scl_decls := scl_to_Vdecls (AssocMap.elements local_scldecls) in
 
-      let body : list Verilog.module_item:=
-          Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
-                                                    (Vseq
-                                                      (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
-                                                      (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
-                                                    (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
-                  :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                  :: arr_decls
-                  ++ scl_decls
-                  ++ maybe_clk_decl
-                  ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules)) in
+      let body : list Verilog.module_item :=
+          match (HTL.mod_ram m) with
+          | Some ram =>
+            Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                          (Vseq
+                                         (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                         (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
+                                          (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
+                    :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
+                    :: inst_ram m.(HTL.mod_clk) ram
+                    :: arr_decls
+                    ++ scl_decls
+                    ++ maybe_clk_decl
+                    ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules))
+          | Nothing =>
+            Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                          (Vseq
+                                         (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                         (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
+                                          (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
+                    :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
+                    :: arr_decls
+                    ++ scl_decls
+                    ++ maybe_clk_decl
+                    ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules))
+          end
+      in
 
       OK (Verilog.mkmodule
                (HTL.mod_start m)

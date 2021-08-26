@@ -118,7 +118,9 @@ let rec pprint_stmnt i =
                                   indent i; "end\n"
                                 ]
   | Vcase (e, es, d) -> concat [ indent i; "case ("; pprint_expr e; ")\n";
-                                 fold_map pprint_case (List.sort compare_expr es |> List.rev);
+                                 fold_map pprint_case (stmnt_to_list es
+                                                       |> List.sort compare_expr
+                                                       |> List.rev);
                                  indent (i+1); "default:;\n";
                                  indent i; "endcase\n"
                                ]
@@ -137,22 +139,22 @@ let pprint_edge_top i = function
   | Valledge -> "@*"
   | Voredge (e1, e2) -> concat ["@("; pprint_edge e1; " or "; pprint_edge e2; ")"]
 
-let declare t =
+let declare (t, i) =
   function (r, sz) ->
     concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
-             register r; ";\n" ]
+             register r; if i then " = 0;\n" else ";\n" ]
 
-let declarearr t =
+let declarearr (t, _) =
   function (r, sz, ln) ->
     concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r;
              " ["; sprintf "%d" (Nat.to_int ln - 1); ":0];\n" ]
 
 let print_io = function
-  | Some Vinput -> "input"
-  | Some Voutput -> "output reg"
-  | Some Vinout -> "inout"
-  | None -> "reg"
+  | Some Vinput -> "input", false
+  | Some Voutput -> "output reg", true
+  | Some Vinout -> "inout", false
+  | None -> "reg", true
 
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
@@ -162,11 +164,14 @@ let decl i = function
 let pprint_module_item i = function
   | Vdeclaration d -> decl i d
   | Valways (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
+    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
+            pprint_stmnt (i+1) s; indent i; "end\n"]
   | Valways_ff (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
+    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
+            pprint_stmnt (i+1) s; indent i; "end\n"]
   | Valways_comb (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; "\n"; pprint_stmnt (i+1) s]
+    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
+            pprint_stmnt (i+1) s; indent i; "end\n"]
 
 let rec intersperse c = function
   | [] -> []
@@ -245,7 +250,7 @@ let pprint_module debug i n m =
         ];
     concat [ indent i; "module "; (extern_atom n);
              "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-             fold_map (pprint_module_item (i+1)) m.mod_body;
+             fold_map (pprint_module_item (i+1)) (List.rev m.mod_body);
              if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
              if debug then debug_always_verbose i m.mod_clk m.mod_st else "";
              indent i; "endmodule\n\n"

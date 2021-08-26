@@ -641,9 +641,9 @@ Definition add_control_instr_force_state_incr :
        s.(st_arrdecls)
        s.(st_datapath)
        (AssocMap.set n st s.(st_controllogic))).
-Admitted.
+Abort.
 
-Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
+(*Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
   fun s =>
     OK tt (mkstate
       s.(st_st)
@@ -707,7 +707,7 @@ Lemma create_new_state_state_incr:
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
-Admitted.
+Abort.
 
 Definition create_new_state (p: node): mon node :=
   fun s => OK s.(st_freshstate)
@@ -757,7 +757,7 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
     ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
   | RBjumptable r tbl =>
     do s <- get;
-    ret (Vskip, Vcase (Vvar r) (tbl_to_case_expr s.(st_st) tbl) (Some Vskip))
+    ret (Vskip, Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr s.(st_st) tbl)) (Some Vskip))
   | RBcall sig ri rl r n =>
     error (Errors.msg "HTLPargen: RPcall not supported.")
   | RBtailcall sig ri lr =>
@@ -785,7 +785,19 @@ Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
   | _ => translate_cfi fin rtrn stack preg (nstate, bb.(bb_exit))
   end.
 
-Definition transf_module (f: function) : mon HTL.module :=
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
+                          && (d <? e) && (e <? f) && (f <? g))%positive true with
+          | left t => left _
+          | _ => _
+          end); auto.
+  simplify; repeat match goal with
+                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
+                   end; unfold module_ordering; auto.
+Defined.
+
+Definition transf_module (f: function) : mon HTL.module.
+  refine (
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
@@ -800,9 +812,14 @@ Definition transf_module (f: function) : mon HTL.module :=
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
     do current_state <- get;
-    match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
-    | left LEDATA, left LECTRL =>
+    match zle (Z.pos (max_pc_map current_state.(st_datapath)))
+              Integers.Int.max_unsigned,
+          zle (Z.pos (max_pc_map current_state.(st_controllogic)))
+              Integers.Int.max_unsigned,
+          decide_order (st_st current_state) fin rtrn stack start rst clk,
+          max_list_dec (fn_params f) (st_st current_state)
+    with
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
         ret (HTL.mkmodule
            f.(fn_params)
            current_state.(st_datapath)
@@ -818,11 +835,15 @@ Definition transf_module (f: function) : mon HTL.module :=
            clk
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
-           (AssocMap.empty (ident * controlsignal))
-           (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA)))
-    | _, _ => error (Errors.msg "More than 2^32 states.")
+           None
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
+           MORD
+           _
+           WFPARAMS)
+    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
-  else error (Errors.msg "Stack size misalignment.").
+  else error (Errors.msg "Stack size misalignment.")); discriminate.
+Defined.
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
@@ -854,3 +875,4 @@ Definition transl_program (p : RTLBlockInstr.program) : Errors.res HTL.program :
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").
+*)

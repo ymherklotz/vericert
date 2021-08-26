@@ -600,7 +600,45 @@ Definition stack_correct (sz : Z) : bool :=
 
 Definition declare_params params := collectlist (fun r => declare_reg (Some Vinput) r 32) params.
 
-Definition transf_module (ge : RTL.genv) (main : ident) (f: function) : mon HTL.module :=
+Lemma max_pc_map_sound:
+  forall m pc i, m!pc = Some i -> Ple pc (max_pc_map m).
+Proof.
+  intros until i. unfold max_pc_function.
+  apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
+  (* extensionality *)
+  intros. apply H0. rewrite H; auto.
+  (* base case *)
+  rewrite PTree.gempty. congruence.
+  (* inductive case *)
+  intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
+  inv H2. unfold Ple; lia.
+  apply Ple_trans with a. auto. unfold Ple; lia.
+Qed.
+
+Lemma max_pc_wf :
+  forall m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+            map_well_formed m.
+Proof.
+  unfold map_well_formed. intros.
+  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
+  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
+  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
+  simplify. transitivity (Z.pos (max_pc_map m)); eauto.
+Qed.
+
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
+                          && (d <? e) && (e <? f) && (f <? g))%positive true with
+          | left t => left _
+          | _ => _
+          end); auto.
+  simplify; repeat match goal with
+                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
+                   end; unfold module_ordering; auto.
+Defined.
+
+Definition transf_module (f: function) : mon HTL.module.
+  refine (
   if stack_correct f.(fn_stacksize) then
     do _ <- declare_params (RTL.fn_params f);
     do fin <- create_reg (Some Voutput) 1;
@@ -612,8 +650,11 @@ Definition transf_module (ge : RTL.genv) (main : ident) (f: function) : mon HTL.
     do _ <- collectlist (transf_instr ge fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned with
-    | left LEDATA, left LECTRL =>
+          zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned,
+          decide_order (st_st current_state) fin rtrn stack start rst clk,
+          max_list_dec (RTL.fn_params f) (st_st current_state)
+    with
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
         ret (HTL.mkmodule
            f.(RTL.fn_params)
            current_state.(st_datapath)
@@ -630,16 +671,21 @@ Definition transf_module (ge : RTL.genv) (main : ident) (f: function) : mon HTL.
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            current_state.(st_externctrl)
-           (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA)))
-    | _, _ => error (Errors.msg "More than 2^32 states.")
+           None
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
+           MORD
+           _
+           WFPARAMS)
+    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
-  else error (Errors.msg "Stack size misalignment.").
+  else error (Errors.msg "Stack size misalignment.")); discriminate.
+Defined.
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
   mkstate st
           (Pos.succ st)
-          (Pos.succ (max_pc_function f))
+          (Pos.succ (RTL.max_pc_function f))
           (AssocMap.set st (None, VScalar 32) (st_scldecls (init_state st)))
           (st_arrdecls (init_state st))
           (st_externctrl (init_state st))
@@ -659,23 +705,6 @@ Definition transl_module (prog : RTL.program) (f : function) : Errors.res HTL.mo
   run_mon (max_state f) (transf_module (Globalenvs.Genv.globalenv prog) (AST.prog_main prog) f).
 
 Definition transl_fundef prog := transf_partial_fundef (transl_module prog).
-
-(* Definition transl_program (p : RTL.program) := transform_partial_program transl_fundef p. *)
-
-(*Definition transl_main_fundef f : Errors.res HTL.fundef :=
-  match f with
-  | Internal f => transl_fundef (Internal f)
-  | External f => Errors.Error (Errors.msg "Could not find internal main function")
-  end.
-
-(** Translation of a whole program. *)
-
-Definition transl_program (p: RTL.program) : Errors.res HTL.program :=
-  transform_partial_program2 (fun i f => if Pos.eqb p.(AST.prog_main) i
-                                         then transl_fundef f
-                                         else transl_main_fundef f)
-                             (fun i v => Errors.OK v) p.
-*)
 
 Definition main_is_internal (p : RTL.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in

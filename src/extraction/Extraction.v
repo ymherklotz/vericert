@@ -134,6 +134,8 @@ Extract Constant Compopts.debug =>
 
 Extract Constant HLSOpts.optim_if_conversion =>
   "fun _ -> !VericertClflags.option_fif_conv".
+Extract Constant HLSOpts.optim_ram =>
+  "fun _ -> !VericertClflags.option_fram".
 
 (* Compiler *)
 Extract Constant Compiler.print_Clight => "PrintClight.print_if".
@@ -177,7 +179,7 @@ Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
 Extract Constant Pipeline.pipeline => "SoftwarePipelining.pipeline".
 Extract Constant RTLBlockgen.partition => "Partition.partition".
-Extract Constant RTLPargen.schedule => "Schedule.schedule_fn".
+(*Extract Constant RTLPargen.schedule => "Schedule.schedule_fn".*)
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
@@ -185,11 +187,12 @@ Set Extraction AccessOpaque.
 Cd "src/extraction".
 Separate Extraction
          Verilog.module vericert.Compiler.transf_hls
-         vericert.Compiler.transf_hls_temp
-         RTLBlockgen.transl_program RTLBlockInstr.successors_instr
+(*         vericert.Compiler.transf_hls_temp*)
+(*         RTLBlockgen.transl_program RTLBlockInstr.successors_instr*)
          HTLgen.tbl_to_case_expr
          Pipeline.pipeline
-         RTLBlockInstr.sat_pred_temp
+(*         RTLBlockInstr.sat_pred_temp*)
+         Verilog.stmnt_to_list
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

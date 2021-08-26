@@ -1,4 +1,4 @@
- (*
+(*
  * Vericert: Verified high-level synthesis.
  * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
  *               2020 James Pollard <j@mes.dev>
@@ -1131,6 +1131,7 @@ Section CORRECTNESS.
 
   Ltac tac0 :=
     match goal with
+    | [ |- HTL.exec_ram _ _ _ _ _ ] => constructor
     | [ |- context[Verilog.merge_arrs _ _] ] => unfold Verilog.merge_arrs
     | [ |- context[Verilog.merge_arr] ] => unfold Verilog.merge_arr
     | [ |- context[Verilog.merge_regs _ _] ] => unfold Verilog.merge_regs; crush; unfold_merge
@@ -2248,7 +2249,7 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: crush.
+      all: try constructor; crush.
 
       (** State Lookup *)
       unfold Verilog.merge_regs.
@@ -2284,14 +2285,35 @@ Section CORRECTNESS.
       crush.
       unfold Verilog.merge_arrs.
 
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
+      erewrite Verilog.merge_arr_empty2.
       unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
+      setoid_rewrite H7.
+      reflexivity.
+
+      rewrite AssocMap.gcombine by reflexivity.
+      unfold Verilog.merge_arr.
+      unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       setoid_rewrite H7.
       reflexivity.
+
+      rewrite combine_length.
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      symmetry.
+      apply list_repeat_len.
+
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      rewrite H4.
+      apply list_repeat_len.
 
       rewrite combine_length.
       rewrite <- array_set_len.
@@ -2300,8 +2322,8 @@ Section CORRECTNESS.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
-      rewrite list_repeat_len.
-      rewrite H4. reflexivity.
+      rewrite H4.
+      apply list_repeat_len.
 
       remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int (Integers.Int.repr z))) as OFFSET.
@@ -2530,7 +2552,7 @@ Section CORRECTNESS.
       econstructor. econstructor. econstructor. econstructor.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: crush.
+      all: try constructor; crush.
 
       (** State Lookup *)
       unfold Verilog.merge_regs.
@@ -2565,14 +2587,35 @@ Section CORRECTNESS.
       crush.
       unfold Verilog.merge_arrs.
 
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
+      erewrite Verilog.merge_arr_empty2.
       unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
+      setoid_rewrite H7.
+      reflexivity.
+
+      rewrite AssocMap.gcombine by reflexivity.
+      unfold Verilog.merge_arr.
+      unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       setoid_rewrite H7.
       reflexivity.
+
+      rewrite combine_length.
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      symmetry.
+      apply list_repeat_len.
+
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      rewrite H4.
+      apply list_repeat_len.
 
       rewrite combine_length.
       rewrite <- array_set_len.
@@ -2581,8 +2624,8 @@ Section CORRECTNESS.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
-      rewrite list_repeat_len.
-      rewrite H4. reflexivity.
+      rewrite H4.
+      apply list_repeat_len.
 
       remember (Integers.Ptrofs.add (Integers.Ptrofs.repr (uvalueToZ asr # r0))
                                     (Integers.Ptrofs.of_int
@@ -2780,7 +2823,7 @@ Section CORRECTNESS.
       eapply Verilog.stmnt_runp_Vnonblock_arr. crush.
       econstructor. econstructor. econstructor. econstructor.
 
-      all: crush.
+      all: try constructor; crush.
 
       (** State Lookup *)
       unfold Verilog.merge_regs.
@@ -2817,14 +2860,35 @@ Section CORRECTNESS.
       crush.
       unfold Verilog.merge_arrs.
 
-      rewrite AssocMap.gcombine.
-      2: { reflexivity. }
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
+      erewrite Verilog.merge_arr_empty2.
       unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gcombine by reflexivity.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       unfold Verilog.merge_arr.
+      setoid_rewrite H7.
+      reflexivity.
+
+      rewrite AssocMap.gcombine by reflexivity.
+      unfold Verilog.merge_arr.
+      unfold Verilog.arr_assocmap_set.
+      rewrite AssocMap.gss.
       rewrite AssocMap.gss.
       setoid_rewrite H7.
       reflexivity.
+
+      rewrite combine_length.
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      symmetry.
+      apply list_repeat_len.
+
+      rewrite <- array_set_len.
+      unfold arr_repeat. crush.
+      rewrite H4.
+      apply list_repeat_len.
 
       rewrite combine_length.
       rewrite <- array_set_len.
@@ -2833,8 +2897,8 @@ Section CORRECTNESS.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
-      rewrite list_repeat_len.
-      rewrite H4. reflexivity.
+      rewrite H4.
+      apply list_repeat_len.
 
       remember i as OFFSET.
       destruct (4 * ptr ==Z Integers.Ptrofs.unsigned OFFSET).
@@ -3014,7 +3078,7 @@ Section CORRECTNESS.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. eauto. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl. econstructor. constructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.
@@ -3034,7 +3098,7 @@ Section CORRECTNESS.
       eapply eval_cond_correct; eauto. intros.
       intros. eapply RTL.max_reg_function_use. eauto. auto.
       econstructor. auto.
-      simpl. econstructor. unfold Verilog.merge_regs. unfold_merge. simpl.
+      simpl. econstructor. constructor. unfold Verilog.merge_regs. unfold_merge. simpl.
       apply AssocMap.gss.
 
       inv MARR. inv CONST.

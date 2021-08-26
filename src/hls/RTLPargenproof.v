@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import compcert.backend.Registers.
+(*Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Linking.
@@ -286,3 +286,4 @@ Section CORRECTNESS.
   Qed.*)
 
 End CORRECTNESS.
+*)
