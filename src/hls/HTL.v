@@ -110,7 +110,6 @@ Record module: Type :=
     (** Map from registers in this module to control registers in other modules.
         These will be mapped to the same verilog register. *)
     mod_externctrl : AssocMap.t (ident * controlsignal);
-    mod_wf : (map_well_formed mod_controllogic /\ map_well_formed mod_datapath);
     mod_ram : option ram;
     mod_wf : map_well_formed mod_controllogic /\ map_well_formed mod_datapath;
     mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk;
@@ -141,7 +140,7 @@ Definition prog_modmap (p : HTL.program) :=
                                (AST.prog_defs p)).
 
 Lemma max_pc_wf :
-  forall T m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+  forall T m, (Z.pos (max_pc_map m) <= Integers.Int.max_unsigned)%Z ->
             @map_well_formed T m.
 Proof.
   unfold map_well_formed. intros.
@@ -257,7 +256,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       asr' = Verilog.merge_regs nasr3 basr3 ->
       asa' = Verilog.merge_arrs nasa3 basa3 ->
       asr'!(m.(mod_st)) = Some (posToValue pstval) ->
-      Z.pos pstval <= Integers.Int.max_unsigned ->
+      (Z.pos pstval <= Integers.Int.max_unsigned)%Z ->
       step g
            (State sf mid m st     asr  asa) Events.E0
            (State sf mid m pstval asr' asa')
@@ -437,3 +436,14 @@ Definition max_list_dec (l: list reg) (st: reg) : {Forall (Pos.gt st) l} + {True
     ); auto.
   apply max_list_correct. apply Pos.ltb_lt in e. lia.
 Qed.
+
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
+                          && (d <? e) && (e <? f) && (f <? g))%positive true with
+          | left t => left _
+          | _ => _
+          end); auto.
+  simplify; repeat match goal with
+                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
+                   end; unfold module_ordering; auto.
+Defined.

@@ -102,12 +102,12 @@ Fixpoint renumber_stmnt (stmnt : Verilog.stmnt) :=
     ret (Vcond e' s1' s2')
   | Vcase e cs def =>
     do e' <- renumber_expr e;
-    do cs' <- sequence (map
-                      (fun (c : (Verilog.expr * Verilog.stmnt)) =>
-                    let (c_expr, c_stmnt) := c in
+    do cs_list' <- sequence (map
+                      (fun '(c_expr, c_stmnt) =>
                     do expr' <- renumber_expr c_expr;
                     do stmnt' <- renumber_stmnt c_stmnt;
-                    ret (expr', stmnt')) cs);
+                    ret (expr', stmnt')) (stmnt_to_list cs));
+    let cs' := list_to_stmnt cs_list' in
     do def' <- match def with
               | None => ret None
               | Some d => do def' <- renumber_stmnt d; ret (Some def')

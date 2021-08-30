@@ -62,8 +62,16 @@ Section TRANSLATE.
     | _ => Some it
     end.
 
-  Definition mod_body (m : HTL.module) :=
-
+  Definition inst_ram clk ram :=
+    Valways (Vnegedge clk)
+            (Vcond (Vbinop Vne (Vvar (ram_u_en ram)) (Vvar (ram_en ram)))
+                   (Vseq (Vcond (Vvar (ram_wr_en ram))
+                                (Vnonblock (Vvari (ram_mem ram) (Vvar (ram_addr ram)))
+                                           (Vvar (ram_d_in ram)))
+                                (Vnonblock (Vvar (ram_d_out ram))
+                                           (Vvari (ram_mem ram) (Vvar (ram_addr ram)))))
+                         (Vnonblock (Vvar (ram_en ram)) (Vvar (ram_u_en ram))))
+                   Vskip).
 
   (* FIXME Remove the fuel parameter (recursion limit)*)
   Fixpoint transl_module (fuel : nat) (prog : HTL.program) (externclk : option reg) (m : HTL.module) : res Verilog.module :=
@@ -85,8 +93,8 @@ Section TRANSLATE.
                                         translated_modules in
 
 
-      let case_el_ctrl := transl_states (PTree.elements (HTL.mod_controllogic m)) in
-      let case_el_data := transl_states (PTree.elements (HTL.mod_datapath m)) in
+      let case_el_ctrl := list_to_stmnt (transl_states (PTree.elements (HTL.mod_controllogic m))) in
+      let case_el_data := list_to_stmnt (transl_states (PTree.elements (HTL.mod_datapath m))) in
 
       let externctrl := HTL.mod_externctrl m in
 

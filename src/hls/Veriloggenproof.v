@@ -264,114 +264,114 @@ Admitted.
 (* Qed. *)
 (* Hint Resolve mis_stepp_decl : verilogproof. *)
 
-Lemma mis_stepp_negedge_decl :
-  forall l asr asa f,
-    mis_stepp_negedge f asr asa (map Vdeclaration l) asr asa.
-Proof.
-  induction l.
-  - intros. constructor.
-  - intros. simplify. econstructor. constructor. auto.
-Qed.
-Hint Resolve mis_stepp_negedge_decl : verilogproof.
+(* Lemma mis_stepp_negedge_decl : *)
+(*   forall l asr asa f, *)
+(*     mis_stepp_negedge f asr asa (map Vdeclaration l) asr asa. *)
+(* Proof. *)
+(*   induction l. *)
+(*   - intros. constructor. *)
+(*   - intros. simplify. econstructor. constructor. auto. *)
+(* Qed. *)
+(* Hint Resolve mis_stepp_negedge_decl : verilogproof. *)
 
-Lemma mod_entrypoint_equiv m : mod_entrypoint (transl_module m) = HTL.mod_entrypoint m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_entrypoint_equiv m : mod_entrypoint (transl_module m) = HTL.mod_entrypoint m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_st_equiv m : mod_st (transl_module m) = HTL.mod_st m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_st_equiv m : mod_st (transl_module m) = HTL.mod_st m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_stk_equiv m : mod_stk (transl_module m) = HTL.mod_stk m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_stk_equiv m : mod_stk (transl_module m) = HTL.mod_stk m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_stk_len_equiv m : mod_stk_len (transl_module m) = HTL.mod_stk_len m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_stk_len_equiv m : mod_stk_len (transl_module m) = HTL.mod_stk_len m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_finish_equiv m : mod_finish (transl_module m) = HTL.mod_finish m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_finish_equiv m : mod_finish (transl_module m) = HTL.mod_finish m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_reset_equiv m : mod_reset (transl_module m) = HTL.mod_reset m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_reset_equiv m : mod_reset (transl_module m) = HTL.mod_reset m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_clk_equiv m : mod_clk (transl_module m) = HTL.mod_clk m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_clk_equiv m : mod_clk (transl_module m) = HTL.mod_clk m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_return_equiv m : mod_return (transl_module m) = HTL.mod_return m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_return_equiv m : mod_return (transl_module m) = HTL.mod_return m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma mod_params_equiv m : mod_args (transl_module m) = HTL.mod_params m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma mod_params_equiv m : mod_args (transl_module m) = HTL.mod_params m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Lemma empty_stack_equiv m : empty_stack (transl_module m) = HTL.empty_stack m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+(* Lemma empty_stack_equiv m : empty_stack (transl_module m) = HTL.empty_stack m. *)
+(* Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed. *)
 
-Ltac rewrite_eq := rewrite mod_return_equiv
-                   || rewrite mod_clk_equiv
-                   || rewrite mod_reset_equiv
-                   || rewrite mod_finish_equiv
-                   || rewrite mod_stk_len_equiv
-                   || rewrite mod_stk_equiv
-                   || rewrite mod_st_equiv
-                   || rewrite mod_entrypoint_equiv
-                   || rewrite mod_params_equiv
-                   || rewrite empty_stack_equiv.
+(* Ltac rewrite_eq := rewrite mod_return_equiv *)
+(*                    || rewrite mod_clk_equiv *)
+(*                    || rewrite mod_reset_equiv *)
+(*                    || rewrite mod_finish_equiv *)
+(*                    || rewrite mod_stk_len_equiv *)
+(*                    || rewrite mod_stk_equiv *)
+(*                    || rewrite mod_st_equiv *)
+(*                    || rewrite mod_entrypoint_equiv *)
+(*                    || rewrite mod_params_equiv *)
+(*                    || rewrite empty_stack_equiv. *)
 
-Lemma find_assocmap_get r i v : r ! i = Some v -> r # i = v.
-Proof.
-  intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H. auto.
-Qed.
+(* Lemma find_assocmap_get r i v : r ! i = Some v -> r # i = v. *)
+(* Proof. *)
+(*   intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H. auto. *)
+(* Qed. *)
 
-Lemma ram_exec_match :
-  forall f asr asa asr' asa' r clk,
-    HTL.exec_ram asr asa (Some r) asr' asa' ->
-    mi_stepp_negedge f asr asa (inst_ram clk r) asr' asa'.
-Proof.
-  inversion 1; subst; simplify.
-  { unfold inst_ram. econstructor.
-    eapply stmnt_runp_Vcond_false.
-    econstructor. econstructor. econstructor. auto.
-    econstructor. auto.
-    simplify.
-    unfold boolToValue, natToValue, valueToBool.
-    rewrite Int.eq_sym. rewrite H3. simplify.
-    auto. constructor. }
-  { unfold inst_ram. econstructor. econstructor. econstructor.
-    econstructor. econstructor. auto.
-    econstructor. auto.
-    simplify.
-    unfold boolToValue, natToValue, valueToBool.
-    pose proof H4 as X. apply find_assocmap_get in X.
-    rewrite X. rewrite Int.eq_sym. rewrite H1. auto.
-    econstructor. econstructor. econstructor. econstructor.
-    pose proof H5 as X. apply find_assocmap_get in X.
-    rewrite X.
-    unfold valueToBool. unfold ZToValue in *.
-    unfold Int.eq in H2.
-    unfold uvalueToZ.
-    assert (Int.unsigned wr_en =? 0 = false).
-    apply Z.eqb_neq. rewrite Int.unsigned_repr in H2 by (simplify; lia).
-    destruct (zeq (Int.unsigned wr_en) 0); crush.
-    rewrite H0. auto.
-    apply stmnt_runp_Vnonblock_arr. econstructor. econstructor. auto.
-    econstructor. econstructor.
-    apply find_assocmap_get in H9. rewrite H9.
-    apply find_assocmap_get in H6. rewrite H6.
-    repeat econstructor. apply find_assocmap_get; auto.
-  }
-  { econstructor. econstructor. econstructor. econstructor. auto.
-    econstructor. auto.
-    econstructor.
-    unfold boolToValue, natToValue, valueToBool.
-    apply find_assocmap_get in H3. rewrite H3.
-    rewrite Int.eq_sym. rewrite H1. auto.
-    econstructor.
-    eapply stmnt_runp_Vcond_false. econstructor. auto.
-    simplify. apply find_assocmap_get in H4. rewrite H4.
-    auto.
-    repeat (econstructor; auto). apply find_assocmap_get in H5.
-    rewrite H5. eassumption.
-    repeat econstructor. simplify. apply find_assocmap_get; auto.
-  }
-Qed.
+(* Lemma ram_exec_match : *)
+(*   forall f asr asa asr' asa' r clk, *)
+(*     HTL.exec_ram asr asa (Some r) asr' asa' -> *)
+(*     mi_stepp_negedge f asr asa (inst_ram clk r) asr' asa'. *)
+(* Proof. *)
+(*   inversion 1; subst; simplify. *)
+(*   { unfold inst_ram. econstructor. *)
+(*     eapply stmnt_runp_Vcond_false. *)
+(*     econstructor. econstructor. econstructor. auto. *)
+(*     econstructor. auto. *)
+(*     simplify. *)
+(*     unfold boolToValue, natToValue, valueToBool. *)
+(*     rewrite Int.eq_sym. rewrite H3. simplify. *)
+(*     auto. constructor. } *)
+(*   { unfold inst_ram. econstructor. econstructor. econstructor. *)
+(*     econstructor. econstructor. auto. *)
+(*     econstructor. auto. *)
+(*     simplify. *)
+(*     unfold boolToValue, natToValue, valueToBool. *)
+(*     pose proof H4 as X. apply find_assocmap_get in X. *)
+(*     rewrite X. rewrite Int.eq_sym. rewrite H1. auto. *)
+(*     econstructor. econstructor. econstructor. econstructor. *)
+(*     pose proof H5 as X. apply find_assocmap_get in X. *)
+(*     rewrite X. *)
+(*     unfold valueToBool. unfold ZToValue in *. *)
+(*     unfold Int.eq in H2. *)
+(*     unfold uvalueToZ. *)
+(*     assert (Int.unsigned wr_en =? 0 = false). *)
+(*     apply Z.eqb_neq. rewrite Int.unsigned_repr in H2 by (simplify; lia). *)
+(*     destruct (zeq (Int.unsigned wr_en) 0); crush. *)
+(*     rewrite H0. auto. *)
+(*     apply stmnt_runp_Vnonblock_arr. econstructor. econstructor. auto. *)
+(*     econstructor. econstructor. *)
+(*     apply find_assocmap_get in H9. rewrite H9. *)
+(*     apply find_assocmap_get in H6. rewrite H6. *)
+(*     repeat econstructor. apply find_assocmap_get; auto. *)
+(*   } *)
+(*   { econstructor. econstructor. econstructor. econstructor. auto. *)
+(*     econstructor. auto. *)
+(*     econstructor. *)
+(*     unfold boolToValue, natToValue, valueToBool. *)
+(*     apply find_assocmap_get in H3. rewrite H3. *)
+(*     rewrite Int.eq_sym. rewrite H1. auto. *)
+(*     econstructor. *)
+(*     eapply stmnt_runp_Vcond_false. econstructor. auto. *)
+(*     simplify. apply find_assocmap_get in H4. rewrite H4. *)
+(*     auto. *)
+(*     repeat (econstructor; auto). apply find_assocmap_get in H5. *)
+(*     rewrite H5. eassumption. *)
+(*     repeat econstructor. simplify. apply find_assocmap_get; auto. *)
+(*   } *)
+(* Qed. *)
 
 
 Section CORRECTNESS.

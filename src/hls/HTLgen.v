@@ -626,17 +626,6 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
-  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
-                          && (d <? e) && (e <? f) && (f <? g))%positive true with
-          | left t => left _
-          | _ => _
-          end); auto.
-  simplify; repeat match goal with
-                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
-                   end; unfold module_ordering; auto.
-Defined.
-
 Definition transf_module (f: function) : mon HTL.module.
   refine (
   if stack_correct f.(fn_stacksize) then
