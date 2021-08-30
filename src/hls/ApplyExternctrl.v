@@ -142,11 +142,19 @@ Section APPLY_EXTERNCTRL.
     do l <- xassocmap_apply_externctrl (AssocMap.elements regmap);
     OK (AssocMap_Properties.of_list l).
 
-
-  Definition decide_ram_wf (clk : reg) (mr : option HTL.ram) :
+  Definition option_ram_wf (clk : reg) (mr : option HTL.ram) :
     option (forall r' : ram, mr = Some r' -> (clk < ram_addr r')%positive).
-  destruct mr.
-  - intros.
+    refine (
+    match mr with
+    | Some r =>
+      match (plt clk (ram_addr r)) with
+      | left LE => Some _
+      | _ => None
+      end
+    | None => None
+    end).
+    crush.
+  Defined.
 
   Definition module_apply_externctrl : res HTL.module :=
     do mod_start' <- reg_apply_externctrl (HTL.mod_start m);
@@ -168,8 +176,8 @@ Section APPLY_EXTERNCTRL.
           zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned,
           decide_order mod_st' mod_finish' mod_return' mod_stk' mod_start' mod_reset' mod_clk',
           max_list_dec mod_params' mod_st',
-          decide_ram_wf mod_clk' (HTL.mod_ram m) with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
+          option_ram_wf mod_clk' (HTL.mod_ram m) with
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, Some WFRAM =>
       OK (HTL.mkmodule
           mod_params'
           mod_datapath'
@@ -189,9 +197,9 @@ Section APPLY_EXTERNCTRL.
           (HTL.mod_ram m)
           (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA))
           MORD
-          (HTL.mod_ram_wf m)
+          WFRAM
           WFPARAMS)
-    | _, _, _, _ => Error (Errors.msg "ApplyExternctrl")
+    | _, _, _, _, _ => Error (Errors.msg "ApplyExternctrl")
     end.
 End APPLY_EXTERNCTRL.
 
