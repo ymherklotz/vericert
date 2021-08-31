@@ -600,8 +600,8 @@ Definition stack_correct (sz : Z) : bool :=
 
 Definition declare_params params := collectlist (fun r => declare_reg (Some Vinput) r 32) params.
 
-Lemma max_pc_map_sound:
-  forall m pc i, m!pc = Some i -> Ple pc (max_pc_map m).
+Lemma max_pc_map_sound {A} :
+  forall (m : PTree.t A) pc i, m!pc = Some i -> Ple pc (max_pc_map m).
 Proof.
   intros until i. unfold max_pc_function.
   apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
@@ -615,18 +615,18 @@ Proof.
   apply Ple_trans with a. auto. unfold Ple; lia.
 Qed.
 
-Lemma max_pc_wf :
-  forall m, Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
-            map_well_formed m.
+Lemma max_pc_wf {A} :
+  forall (m : PTree.t A), Z.pos (max_pc_map m) <= Integers.Int.max_unsigned ->
+                     map_well_formed m.
 Proof.
   unfold map_well_formed. intros.
-  exploit list_in_map_inv. eassumption. intros [x [A B]]. destruct x.
-  apply Maps.PTree.elements_complete in B. apply max_pc_map_sound in B.
-  unfold Ple in B. apply Pos2Z.pos_le_pos in B. subst.
+  exploit list_in_map_inv. eassumption. intros [x [H1 H2]]. destruct x.
+  apply Maps.PTree.elements_complete in H2. apply max_pc_map_sound in H2.
+  unfold Ple in H2. apply Pos2Z.pos_le_pos in H2. subst.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition transf_module (f: function) : mon HTL.module.
+Definition transf_module (ge : RTL.genv) (main : ident) (f: function) : mon HTL.module.
   refine (
   if stack_correct f.(fn_stacksize) then
     do _ <- declare_params (RTL.fn_params f);
