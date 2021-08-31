@@ -1194,6 +1194,7 @@ Section CORRECTNESS.
       + inv CONST; assumption.
       + repeat constructor.
       + repeat constructor.
+      + constructor.
       + big_tac.
     - inv CONST. inv MARR. simplify. big_tac.
       constructor; rewrite AssocMap.gso; crush.
@@ -1223,6 +1224,7 @@ Section CORRECTNESS.
     - inv CONST. assumption.
     - repeat econstructor.
     - repeat econstructor. intuition eauto.
+    - constructor.
     - big_tac.
       assert (Ple res0 (RTL.max_reg_function f))
         by eauto using RTL.max_reg_function_def.
@@ -1489,9 +1491,11 @@ Section CORRECTNESS.
         * repeat econstructor; eauto.
         * repeat econstructor; eauto.
         * eapply fork_exec.
+        * constructor.
         * trivial.
         * trivial.
-        * eapply AssocMapExt.merge_correct_1.
+        * big_tac.
+          eapply AssocMapExt.merge_correct_1.
           rewrite assign_all_out.
           -- big_tac.
              not_control_reg.
@@ -1536,6 +1540,7 @@ Section CORRECTNESS.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gss.
         * repeat econstructor.
+        * constructor.
         * simpl.
           apply AssocMapExt.merge_correct_2.
           big_tac.
@@ -1595,7 +1600,7 @@ Section CORRECTNESS.
       + eapply HTL.step_module; try solve [ repeat econstructor; eauto ].
         * repeat econstructor. apply return_val_exec_spec.
         * big_tac.
-        * inversion wf.
+        * inversion wf1.
           eapply H10.
           eapply AssocMapExt.elements_iff.
           eauto.
@@ -1657,6 +1662,8 @@ Section CORRECTNESS.
           rewrite fss. crush.
         * big_tac; inv TF; simplify; not_control_reg.
         * repeat econstructor.
+        * replace (HTL.mod_ram m0) with (@None HTL.ram) by (inv TF; trivial).
+          constructor.
         * big_tac; inv TF; simplify; not_control_reg.
       + trivial.
     - simpl.
