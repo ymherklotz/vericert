@@ -88,6 +88,17 @@ Fixpoint renumber_expr (expr : Verilog.expr) :=
     ret (Vrange r e1' e2')
   end.
 
+  Definition renumber_cases_ (renumber_stmnt_ : Verilog.stmnt -> mon Verilog.stmnt) :=
+    fix renumber_cases (cs : stmnt_expr_list) :=
+      match cs with
+      | Stmntnil  => ret Stmntnil
+      | Stmntcons c_e c_s tl =>
+        do c_e' <- renumber_expr c_e;
+        do c_s' <- renumber_stmnt_ c_s;
+        do tl' <- renumber_cases tl;
+        ret (Stmntcons c_e' c_s' tl')
+      end.
+
 Fixpoint renumber_stmnt (stmnt : Verilog.stmnt) :=
   match stmnt with
   | Vskip => ret Vskip
@@ -102,12 +113,7 @@ Fixpoint renumber_stmnt (stmnt : Verilog.stmnt) :=
     ret (Vcond e' s1' s2')
   | Vcase e cs def =>
     do e' <- renumber_expr e;
-    do cs_list' <- sequence (map
-                      (fun '(c_expr, c_stmnt) =>
-                    do expr' <- renumber_expr c_expr;
-                    do stmnt' <- renumber_stmnt c_stmnt;
-                    ret (expr', stmnt')) (stmnt_to_list cs));
-    let cs' := list_to_stmnt cs_list' in
+    do cs' <- renumber_cases_ renumber_stmnt cs;
     do def' <- match def with
               | None => ret None
               | Some d => do def' <- renumber_stmnt d; ret (Some def')
@@ -155,8 +161,11 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
     do _ <- clear_regmap;
 
     match zle (Z.pos (max_pc_map mod_datapath')) Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned with
-    | left LEDATA, left LECTRL =>
+          zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned,
+          decide_order mod_st' mod_finish' mod_return' mod_stk' mod_start' mod_reset' mod_clk',
+          max_list_dec mod_params' mod_st',
+          option_ram_wf mod_clk' (HTL.mod_ram m) with
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, Some WFRAM =>
       ret (HTL.mkmodule
           mod_params'
           mod_datapath'
@@ -173,8 +182,12 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
           mod_scldecls'
           mod_arrdecls'
           mod_externctrl'
-          (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA)))
-    | _, _ => error (Errors.msg "More than 2^32 states.")
+          (HTL.mod_ram m)
+          (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA))
+          MORD
+          WFRAM
+          WFPARAMS)
+    | _, _, _, _, _ => error (Errors.msg "More than 2^32 states.")
     end.
 
 Definition renumber_fundef (fundef : HTL.fundef) : mon HTL.fundef :=

@@ -447,3 +447,17 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
                    | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
                    end; unfold module_ordering; auto.
 Defined.
+
+Definition option_ram_wf (clk : reg) (mr : option HTL.ram) :
+  option (forall r' : ram, mr = Some r' -> (clk < ram_addr r')%positive).
+  refine (
+      match mr with
+      | Some r =>
+        match (plt clk (ram_addr r)) with
+        | left LE => Some _
+        | _ => None
+        end
+      | None => None
+      end).
+  crush.
+Defined.
