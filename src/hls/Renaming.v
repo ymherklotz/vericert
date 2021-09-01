@@ -143,14 +143,16 @@ Definition renumber_reg_assocmap {A} (regmap : AssocMap.t A) : mon (AssocMap.t A
   ret (AssocMap_Properties.of_list l).
 
 Definition renumber_module (m : HTL.module) : mon HTL.module :=
+    do mod_params' <- traverselist renumber_reg (HTL.mod_params m);
+
+    do mod_st' <- renumber_reg (HTL.mod_st m);
+    do mod_finish' <- renumber_reg (HTL.mod_finish m);
+    do mod_return' <- renumber_reg (HTL.mod_return m);
+    do mod_stk' <- renumber_reg (HTL.mod_stk m);
     do mod_start' <- renumber_reg (HTL.mod_start m);
     do mod_reset' <- renumber_reg (HTL.mod_reset m);
     do mod_clk' <- renumber_reg (HTL.mod_clk m);
-    do mod_finish' <- renumber_reg (HTL.mod_finish m);
-    do mod_return' <- renumber_reg (HTL.mod_return m);
-    do mod_st' <- renumber_reg (HTL.mod_st m);
-    do mod_stk' <- renumber_reg (HTL.mod_stk m);
-    do mod_params' <- traverselist renumber_reg (HTL.mod_params m);
+
     do mod_controllogic' <- traverse_ptree1 renumber_stmnt (HTL.mod_controllogic m);
     do mod_datapath' <- traverse_ptree1 renumber_stmnt (HTL.mod_datapath m);
 
