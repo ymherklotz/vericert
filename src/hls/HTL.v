@@ -448,16 +448,16 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
                    end; unfold module_ordering; auto.
 Defined.
 
-Definition option_ram_wf (clk : reg) (mr : option HTL.ram) :
-  option (forall r' : ram, mr = Some r' -> (clk < ram_addr r')%positive).
+Definition decide_ram_wf (clk : reg) (mr : option HTL.ram) :
+  {forall r' : ram, mr = Some r' -> (clk < ram_addr r')%positive} + {True}.
   refine (
       match mr with
       | Some r =>
         match (plt clk (ram_addr r)) with
-        | left LE => Some _
-        | _ => None
+        | left LE => left _
+        | _ => right I
         end
-      | None => None
+      | None => left _
       end).
-  crush.
+  all: crush.
 Defined.

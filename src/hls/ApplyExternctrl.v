@@ -162,8 +162,8 @@ Section APPLY_EXTERNCTRL.
           zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned,
           decide_order mod_st' mod_finish' mod_return' mod_stk' mod_start' mod_reset' mod_clk',
           max_list_dec mod_params' mod_st',
-          option_ram_wf mod_clk' (HTL.mod_ram m) with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, Some WFRAM =>
+          decide_ram_wf mod_clk' (HTL.mod_ram m) with
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, left WFRAM =>
       OK (HTL.mkmodule
           mod_params'
           mod_datapath'
@@ -189,7 +189,7 @@ Section APPLY_EXTERNCTRL.
     | _, right _, _, _, _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 controlpath states")
     | _, _, right _, _, _ => Error (Errors.msg "ApplyExternctrl: Incorrect ordering of control registers")
     | _, _, _, right _, _ => Error (Errors.msg "ApplyExternctrl: Parameter registers conflict with control registers")
-    | _, _, _, _, None    => Error (Errors.msg "ApplyExternctrl: Ram address register conflicts with control registers")
+    | _, _, _, _, right _ => Error (Errors.msg "ApplyExternctrl: Ram address register conflicts with control registers")
     end.
 End APPLY_EXTERNCTRL.
 

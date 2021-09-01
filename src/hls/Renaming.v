@@ -166,8 +166,8 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
           zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned,
           decide_order mod_st' mod_finish' mod_return' mod_stk' mod_start' mod_reset' mod_clk',
           max_list_dec mod_params' mod_st',
-          option_ram_wf mod_clk' (HTL.mod_ram m) with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, Some WFRAM =>
+          decide_ram_wf mod_clk' (HTL.mod_ram m) with
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, left WFRAM =>
       ret (HTL.mkmodule
           mod_params'
           mod_datapath'
@@ -193,7 +193,7 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
     | _, right _, _, _, _ => error (Errors.msg "Renaming: More than 2^32 controlpath states")
     | _, _, right _, _, _ => error (Errors.msg "Renaming: Incorrect ordering of control registers")
     | _, _, _, right _, _ => error (Errors.msg "Renaming: Parameter registers conflict with control registers")
-    | _, _, _, _, None    => error (Errors.msg "Renaming: Ram address register conflicts with control registers")
+    | _, _, _, _, right _ => error (Errors.msg "Renaming: Ram address register conflicts with control registers")
     end.
 
 Definition renumber_fundef (fundef : HTL.fundef) : mon HTL.fundef :=
