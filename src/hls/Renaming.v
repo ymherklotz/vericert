@@ -187,7 +187,11 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
           MORD
           WFRAM
           WFPARAMS)
-    | _, _, _, _, _ => error (Errors.msg "More than 2^32 states.")
+    | right _, _, _, _, _ => error (Errors.msg "Renaming: More than 2^32 datapath states")
+    | _, right _, _, _, _ => error (Errors.msg "Renaming: More than 2^32 controlpath states")
+    | _, _, right _, _, _ => error (Errors.msg "Renaming: Incorrect ordering of control registers")
+    | _, _, _, right _, _ => error (Errors.msg "Renaming: Parameter registers conflict with control registers")
+    | _, _, _, _, None    => error (Errors.msg "Renaming: Ram address register conflicts with control registers")
     end.
 
 Definition renumber_fundef (fundef : HTL.fundef) : mon HTL.fundef :=
