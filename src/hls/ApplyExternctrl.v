@@ -185,7 +185,11 @@ Section APPLY_EXTERNCTRL.
           MORD
           WFRAM
           WFPARAMS)
-    | _, _, _, _, _ => Error (Errors.msg "ApplyExternctrl")
+    | right _, _, _, _, _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 datapath states")
+    | _, right _, _, _, _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 controlpath states")
+    | _, _, right _, _, _ => Error (Errors.msg "ApplyExternctrl: Incorrect ordering of control registers")
+    | _, _, _, right _, _ => Error (Errors.msg "ApplyExternctrl: Parameter registers conflict with control registers")
+    | _, _, _, _, None    => Error (Errors.msg "ApplyExternctrl: Ram address register conflicts with control registers")
     end.
 End APPLY_EXTERNCTRL.
 
