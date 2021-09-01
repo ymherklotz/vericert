@@ -199,7 +199,7 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@@ ApplyExternctrl.transf_program
    @@ print (print_HTL 3)
    @@ total_if HLSOpts.optim_ram Memorygen.transf_program
-   @@ Veriloggen.transl_program.
+  @@@ Veriloggen.transl_program.
 
 (*|
 The transformation functions from RTL to Verilog are then added to the backend of the CompCert transformations from Clight to RTL.
@@ -319,7 +319,8 @@ Proof.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
   destruct (Renaming.transf_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
   destruct (ApplyExternctrl.transf_program p15) as [p16|e] eqn:P16; simpl in T; try discriminate.
-  destruct (Veriloggen.transl_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
+  set (p17 := total_if HLSOpts.optim_ram Memorygen.transf_program p16) in *.
+  destruct (Veriloggen.transl_program p17) as [p18|e] eqn:P17; simpl in T; try discriminate.
 
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
@@ -338,7 +339,8 @@ Proof.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
   exists p15; split. apply Renaming.transf_program_match; auto.
   exists p16; split. apply ApplyExternctrl.transf_program_match; auto.
-  exists p17; split. apply Veriloggenproof.transf_program_match; auto.
+  exists p17; split. apply total_if_match. apply Memorygen.transf_program_match.
+  exists p18; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
 
@@ -349,14 +351,14 @@ Theorem cstrategy_semantic_preservation:
   /\ backward_simulation (atomic (Cstrategy.semantics p)) (Verilog.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
-
-  repeat match goal with
-    [ H: exists p, _ /\ _ |- _ ] =>
-      let p := fresh "p" in let M := fresh "M" in let MM := fresh "MM" in
-      destruct H as (p & M & MM); clear H
-  end.
+  Ltac DestructM :=
+    match goal with
+      [ H: exists p, _ /\ _ |- _ ] =>
+        let p := fresh "p" in let M := fresh "M" in let MM := fresh "MM" in
+        destruct H as (p & M & MM); clear H
+    end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p16)).
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p18)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -391,8 +393,8 @@ Proof.
   eapply compose_forward_simulations.
     eapply ApplyExternctrl.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
-    eapply Veriloggenproof.transf_program_correct; eassumption.
-  eapply forward_simulation_identity.
+    eapply match_if_simulation. eassumption. exact Memorygen.transf_program_correct; eassumption.
+  eapply Veriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.
   apply forward_to_backward_simulation.
