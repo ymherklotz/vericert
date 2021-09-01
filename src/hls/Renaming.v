@@ -233,7 +233,7 @@ End TRANSF_PROGRAM_STATEFUL.
 Definition transf_program (p : HTL.program) : Errors.res HTL.program :=
   transform_stateful_program _ _ _
                               (fun _ f => renumber_fundef f)
-                              (mk_renumber_state 1%positive (PTree.empty reg))
+                              (mk_renumber_state 2%positive (PTree.empty reg))
                               p.
 
 Definition match_prog : HTL.program -> HTL.program -> Prop := fun _ _ => True.
