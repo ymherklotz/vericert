@@ -143,53 +143,37 @@ Section APPLY_EXTERNCTRL.
     OK (AssocMap_Properties.of_list l).
 
   Definition module_apply_externctrl : res HTL.module :=
-    do mod_start' <- reg_apply_externctrl (HTL.mod_start m);
-    do mod_reset' <- reg_apply_externctrl (HTL.mod_reset m);
-    do mod_clk' <- global_clk;
-    do mod_finish' <- reg_apply_externctrl (HTL.mod_finish m);
-    do mod_return' <- reg_apply_externctrl (HTL.mod_return m);
-    do mod_st' <- reg_apply_externctrl (HTL.mod_st m);
-    do mod_stk' <- reg_apply_externctrl (HTL.mod_stk m);
-    do mod_params' <- mmap reg_apply_externctrl (HTL.mod_params m);
     do mod_controllogic' <- PTree.traverse1 stmnt_apply_externctrl (HTL.mod_controllogic m);
     do mod_datapath' <- PTree.traverse1 stmnt_apply_externctrl (HTL.mod_datapath m);
-
-    do mod_scldecls' <- assocmap_apply_externctrl (HTL.mod_scldecls m);
-    do mod_arrdecls' <- assocmap_apply_externctrl (HTL.mod_arrdecls m);
     do mod_externctrl' <- assocmap_apply_externctrl (HTL.mod_externctrl m);
 
     match zle (Z.pos (max_pc_map mod_datapath')) Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned,
-          decide_order mod_st' mod_finish' mod_return' mod_stk' mod_start' mod_reset' mod_clk',
-          max_list_dec mod_params' mod_st',
-          decide_ram_wf mod_clk' (HTL.mod_ram m) with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, left WFRAM =>
+          zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned
+    with
+    | left LEDATA, left LECTRL =>
       OK (HTL.mkmodule
-          mod_params'
+          (HTL.mod_params m)
           mod_datapath'
           mod_controllogic'
           (HTL.mod_entrypoint m)
-          mod_st'
-          mod_stk'
+          (HTL.mod_st m)
+          (HTL.mod_stk m)
           (HTL.mod_stk_len m)
-          mod_finish'
-          mod_return'
-          mod_start'
-          mod_reset'
-          mod_clk'
-          mod_scldecls'
-          mod_arrdecls'
+          (HTL.mod_finish m)
+          (HTL.mod_return m)
+          (HTL.mod_start m)
+          (HTL.mod_reset m)
+          (HTL.mod_clk m)
+          (HTL.mod_scldecls m)
+          (HTL.mod_arrdecls m)
           mod_externctrl'
           (HTL.mod_ram m)
           (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA))
-          MORD
-          WFRAM
-          WFPARAMS)
-    | right _, _, _, _, _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 datapath states")
-    | _, right _, _, _, _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 controlpath states")
-    | _, _, right _, _, _ => Error (Errors.msg "ApplyExternctrl: Incorrect ordering of control registers")
-    | _, _, _, right _, _ => Error (Errors.msg "ApplyExternctrl: Parameter registers conflict with control registers")
-    | _, _, _, _, right _ => Error (Errors.msg "ApplyExternctrl: Ram address register conflicts with control registers")
+          (HTL.mod_ordering_wf m)
+          (HTL.mod_ram_wf m)
+          (HTL.mod_params_wf m))
+    | right _, _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 datapath states")
+    | _, right _ => Error (Errors.msg "ApplyExternctrl: More than 2^32 controlpath states")
     end.
 End APPLY_EXTERNCTRL.
 
