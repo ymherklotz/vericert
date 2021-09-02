@@ -98,12 +98,6 @@ Section TRANSLATE.
 
       let externctrl := HTL.mod_externctrl m in
 
-      (* Only declare the clock if this is the top-level module, i.e. there is no inherited clock *)
-      let maybe_clk_decl := match externclk with
-                            | None => scl_to_Vdecls [(clk, (Some Vinput, VScalar 1))]
-                            | Some _ => []
-                            end in
-
       let local_arrdecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_arrdecls m) in
       let arr_decls := arr_to_Vdeclarrs (AssocMap.elements local_arrdecls) in
 
@@ -119,10 +113,9 @@ Section TRANSLATE.
                                          (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
                                           (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
                     :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                    :: inst_ram m.(HTL.mod_clk) ram
+                    :: inst_ram clk ram
                     :: arr_decls
                     ++ scl_decls
-                    ++ maybe_clk_decl
                     ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules))
           | Nothing =>
             Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
@@ -133,7 +126,6 @@ Section TRANSLATE.
                     :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
                     :: arr_decls
                     ++ scl_decls
-                    ++ maybe_clk_decl
                     ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules))
           end
       in
@@ -141,7 +133,7 @@ Section TRANSLATE.
       OK (Verilog.mkmodule
                (HTL.mod_start m)
                (HTL.mod_reset m)
-               (HTL.mod_clk m)
+               clk
                (HTL.mod_finish m)
                (HTL.mod_return m)
                (HTL.mod_st m)
