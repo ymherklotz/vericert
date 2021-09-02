@@ -204,7 +204,7 @@ Definition map_externctrl (othermod : ident) (ctrl : controlsignal) : mon reg.
   fun s => match check_unmapped_externctrl s (st_freshreg s) with
         | left CTRL => OK (st_freshreg s) (mkstate
                           (st_st s)
-                          (st_freshreg s)
+                          (Pos.succ (st_freshreg s))
                           (st_freshstate s)
                           (st_scldecls s)
                           (st_arrdecls s)
