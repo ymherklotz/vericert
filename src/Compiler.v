@@ -194,11 +194,12 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
    @@ print (print_HTL 1)
-  @@@ Renaming.transf_program
-   @@ print (print_HTL 2)
-  @@@ ApplyExternctrl.transf_program
-   @@ print (print_HTL 3)
    @@ total_if HLSOpts.optim_ram Memorygen.transf_program
+   @@ print (print_HTL 2)
+  @@@ Renaming.transf_program
+   @@ print (print_HTL 3)
+  @@@ ApplyExternctrl.transf_program
+   @@ print (print_HTL 4)
   @@@ Veriloggen.transl_program.
 
 (*|
@@ -277,9 +278,9 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
+  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
   ::: mkpass Renaming.match_prog
   ::: mkpass ApplyExternctrl.match_prog
-  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
@@ -317,10 +318,10 @@ Proof.
   destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
-  destruct (Renaming.transf_program p14) as [p15|e] eqn:P15; simpl in T; try discriminate.
-  destruct (ApplyExternctrl.transf_program p15) as [p16|e] eqn:P16; simpl in T; try discriminate.
-  set (p17 := total_if HLSOpts.optim_ram Memorygen.transf_program p16) in *.
-  destruct (Veriloggen.transl_program p17) as [p18|e] eqn:P17; simpl in T; try discriminate.
+  set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.
+  destruct (Renaming.transf_program p15) as [p16|e] eqn:P16; simpl in T; try discriminate.
+  destruct (ApplyExternctrl.transf_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
+  destruct (Veriloggen.transl_program p17) as [p18|e] eqn:P18; simpl in T; try discriminate.
 
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
@@ -337,9 +338,9 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  exists p15; split. apply Renaming.transf_program_match; auto.
-  exists p16; split. apply ApplyExternctrl.transf_program_match; auto.
-  exists p17; split. apply total_if_match. apply Memorygen.transf_program_match.
+  exists p15; split. apply total_if_match. apply Memorygen.transf_program_match.
+  exists p16; split. apply Renaming.transf_program_match; auto.
+  exists p17; split. apply ApplyExternctrl.transf_program_match; auto.
   exists p18; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
@@ -389,11 +390,11 @@ Proof.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption. exact Memorygen.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
     eapply Renaming.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply ApplyExternctrl.transf_program_correct; eassumption.
-  eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact Memorygen.transf_program_correct; eassumption.
   eapply Veriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.
