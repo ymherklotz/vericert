@@ -199,10 +199,8 @@ Lemma transf_code_wf :
     map_well_formed c' /\ map_well_formed d'.
 Proof. eauto using transf_code_wf'. Qed.
 
-Lemma ram_wf :
-  forall x,
-    x + 1 < x + 2 /\ x + 2 < x + 3 /\ x + 3 < x + 4 /\ x + 4 < x + 5 /\ x + 5 < x + 6.
-Proof. lia. Qed.
+Lemma ram_wf : forall x, ram_ordering (x + 1) (x + 2) (x + 3) (x + 4) (x + 5) (x + 6).
+Proof. unfold ram_ordering. lia. Qed.
 
 Lemma module_ram_wf' :
   forall m addr,
@@ -1091,7 +1089,7 @@ Lemma transf_module_code :
                    ram_d_in := max_reg_module m + 3;
                    ram_d_out := max_reg_module m + 4;
                    ram_u_en := max_reg_module m + 6;
-                   ram_ordering := ram_wf (max_reg_module m) |}
+                   ram_ordering_wf := ram_wf (max_reg_module m) |}
                 (mod_datapath m) (mod_controllogic m)
     = ((mod_datapath (transf_module m)), mod_controllogic (transf_module m)).
 Proof. unfold transf_module; intros; repeat destruct_match; crush.
@@ -2930,11 +2928,11 @@ Proof.
   - unfold merge_regs. rewrite H12. unfold_merge.
     unfold find_assocmap, AssocMapExt.get_default in *.
     rewrite AssocMap.gss; auto. rewrite AssocMap.gso; auto. setoid_rewrite H4. apply Int.eq_true.
-    pose proof (ram_ordering r); lia.
+    pose proof (ram_ordering_wf r); unfold ram_ordering in *; lia.
   - unfold merge_regs. rewrite H11. unfold_merge.
     unfold find_assocmap, AssocMapExt.get_default in *.
     rewrite AssocMap.gss; auto.
-    repeat rewrite AssocMap.gso by (pose proof (ram_ordering r); lia).
+    repeat rewrite AssocMap.gso by (pose proof (ram_ordering_wf r); unfold ram_ordering in *; lia).
     setoid_rewrite H3. apply Int.eq_true.
 Qed.
 

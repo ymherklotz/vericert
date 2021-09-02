@@ -58,6 +58,8 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
     In p0 (map fst (Maps.PTree.elements m)) ->
     (Z.pos p0 <= Integers.Int.max_unsigned)%Z.
 
+Definition ram_ordering a b c d e f := a < b < c /\ c < d < e /\ e < f.
+
 Record ram := mk_ram {
   ram_size: nat;
   ram_mem: reg;
@@ -67,11 +69,7 @@ Record ram := mk_ram {
   ram_wr_en: reg;
   ram_d_in: reg;
   ram_d_out: reg;
-  ram_ordering: (ram_addr < ram_en
-                 /\ ram_en < ram_d_in
-                 /\ ram_d_in < ram_d_out
-                 /\ ram_d_out < ram_wr_en
-                 /\ ram_wr_en < ram_u_en)
+  ram_ordering_wf: ram_ordering ram_addr ram_en ram_d_in ram_d_out ram_wr_en ram_u_en
 }.
 
 Definition module_ordering a b c d e f g := a < b < c /\ c < d < e /\ e < f < g.
@@ -446,6 +444,17 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
   simplify; repeat match goal with
                    | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
                    end; unfold module_ordering; auto.
+Defined.
+
+Definition decide_ram_ordering a b c d e f : {ram_ordering a b c d e f} + {True}.
+  refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
+                          && (d <? e) && (e <? f))%positive true with
+          | left t => left _
+          | _ => _
+          end); auto.
+  simplify; repeat match goal with
+                   | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
+                   end; unfold ram_ordering; auto.
 Defined.
 
 Definition decide_ram_wf (clk : reg) (mr : option HTL.ram) :

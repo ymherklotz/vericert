@@ -129,6 +129,22 @@ Fixpoint renumber_stmnt (stmnt : Verilog.stmnt) :=
     ret (Vnonblock e1' e2')
   end.
 
+Program Definition renumber_ram (mr : option HTL.ram) : mon (option HTL.ram) :=
+  match mr with
+  | None => ret None
+  | Some r =>
+    do ram_addr' <- renumber_reg (ram_addr r);
+    do ram_en' <- renumber_reg (ram_en r);
+    do ram_d_in' <- renumber_reg (ram_d_in r);
+    do ram_d_out' <- renumber_reg (ram_d_out r);
+    do ram_wr_en' <- renumber_reg (ram_wr_en r);
+    do ram_u_en' <- renumber_reg (ram_u_en r);
+    match decide_ram_ordering ram_addr' ram_en' ram_d_in' ram_d_out' ram_wr_en' ram_u_en' with
+    | left wf => ret (Some (mk_ram (ram_size r) (ram_mem r) ram_en' ram_u_en' ram_addr' ram_wr_en' ram_d_in' ram_d_out' wf))
+    | right _ => error (Errors.msg "Renaming: Incorrect ordering of RAM registers")
+    end
+  end.
+
 Fixpoint xrenumber_reg_assocmap {A} (regmap : list (reg * A)) : mon (list (reg * A)) :=
   match regmap with
   | nil => ret nil
@@ -153,6 +169,8 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
     do mod_reset' <- renumber_reg (HTL.mod_reset m);
     do mod_clk' <- renumber_reg (HTL.mod_clk m);
 
+    do mod_ram' <- renumber_ram (HTL.mod_ram m);
+
     do mod_controllogic' <- traverse_ptree1 renumber_stmnt (HTL.mod_controllogic m);
     do mod_datapath' <- traverse_ptree1 renumber_stmnt (HTL.mod_datapath m);
 
@@ -166,7 +184,7 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
           zle (Z.pos (max_pc_map mod_controllogic')) Integers.Int.max_unsigned,
           decide_order mod_st' mod_finish' mod_return' mod_stk' mod_start' mod_reset' mod_clk',
           max_list_dec mod_params' mod_st',
-          decide_ram_wf mod_clk' (HTL.mod_ram m) with
+          decide_ram_wf mod_clk' mod_ram' with
     | left LEDATA, left LECTRL, left MORD, left WFPARAMS, left WFRAM =>
       ret (HTL.mkmodule
           mod_params'
@@ -184,7 +202,7 @@ Definition renumber_module (m : HTL.module) : mon HTL.module :=
           mod_scldecls'
           mod_arrdecls'
           mod_externctrl'
-          (HTL.mod_ram m)
+          mod_ram'
           (conj (max_pc_wf _ _ LECTRL) (max_pc_wf _ _ LEDATA))
           MORD
           WFRAM
