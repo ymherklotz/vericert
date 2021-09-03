@@ -133,6 +133,7 @@ Program Definition renumber_ram (mr : option HTL.ram) : mon (option HTL.ram) :=
   match mr with
   | None => ret None
   | Some r =>
+    do ram_mem' <- renumber_reg (ram_mem r);
     do ram_addr' <- renumber_reg (ram_addr r);
     do ram_en' <- renumber_reg (ram_en r);
     do ram_d_in' <- renumber_reg (ram_d_in r);
@@ -140,7 +141,7 @@ Program Definition renumber_ram (mr : option HTL.ram) : mon (option HTL.ram) :=
     do ram_wr_en' <- renumber_reg (ram_wr_en r);
     do ram_u_en' <- renumber_reg (ram_u_en r);
     match decide_ram_ordering ram_addr' ram_en' ram_d_in' ram_d_out' ram_wr_en' ram_u_en' with
-    | left wf => ret (Some (mk_ram (ram_size r) (ram_mem r) ram_en' ram_u_en' ram_addr' ram_wr_en' ram_d_in' ram_d_out' wf))
+    | left wf => ret (Some (mk_ram (ram_size r) ram_mem' ram_en' ram_u_en' ram_addr' ram_wr_en' ram_d_in' ram_d_out' wf))
     | right _ => error (Errors.msg "Renaming: Incorrect ordering of RAM registers")
     end
   end.
