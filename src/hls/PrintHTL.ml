@@ -61,12 +61,29 @@ let ptree_to_list ptree =
       (fun (pc, i) -> (P.to_int pc, i))
       (PTree.elements ptree))
 
+let print_ram pp opt_ram =
+  match opt_ram with
+  | Some ram ->
+    fprintf pp "ram {\n";
+    fprintf pp "   size: %d\n" (Nat.to_int ram.ram_size);
+    fprintf pp "    mem: %s\n" (register ram.ram_mem);
+    fprintf pp "     en: %s\n" (register ram.ram_en);
+    fprintf pp "   u_en: %s\n" (register ram.ram_u_en);
+    fprintf pp "   addr: %s\n" (register ram.ram_addr);
+    fprintf pp "  wr_en: %s\n" (register ram.ram_wr_en);
+    fprintf pp "   d_in: %s\n" (register ram.ram_d_in);
+    fprintf pp "  d_out: %s\n" (register ram.ram_d_out);
+    fprintf pp "}\n\n"
+  | None -> ()
+
 let print_module pp id f =
   fprintf pp "%s(%s) {\n" (extern_atom id) (registers f.mod_params);
 
   let externctrl = PTree.elements f.mod_externctrl in
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
+
+  print_ram pp f.mod_ram;
 
   fprintf pp "externctrl {\n";
   List.iter (print_externctrl pp) externctrl;
