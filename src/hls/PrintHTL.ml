@@ -76,12 +76,25 @@ let print_ram pp opt_ram =
     fprintf pp "}\n\n"
   | None -> ()
 
+let print_control pp f =
+  fprintf pp "control {\n";
+  fprintf pp "     st: %s\n" (register f.mod_st);
+  fprintf pp "    stk: %s\n" (register f.mod_stk);
+  fprintf pp " finish: %s\n" (register f.mod_finish);
+  fprintf pp " return: %s\n" (register f.mod_return);
+  fprintf pp "  start: %s\n" (register f.mod_start);
+  fprintf pp "  reset: %s\n" (register f.mod_reset);
+  fprintf pp "    clk: %s\n" (register f.mod_clk);
+  fprintf pp "}\n\n"
+
 let print_module pp id f =
   fprintf pp "%s(%s) {\n" (extern_atom id) (registers f.mod_params);
 
   let externctrl = PTree.elements f.mod_externctrl in
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
+
+  print_control pp f;
 
   print_ram pp f.mod_ram;
 
