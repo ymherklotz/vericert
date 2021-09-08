@@ -41,15 +41,6 @@ Section TRANSLATE.
   Definition arr_to_Vdeclarrs :=
     map (fun '(r, (io, Verilog.VArray sz l)) => Vdeclaration (Vdeclarr io r sz l)).
 
-  Definition called_functions (main_name : ident) (m : HTL.module) : list ident :=
-    (* remove duplicates *)
-    List.nodup Pos.eq_dec
-               (* Take just the module name *)
-               (List.map (Basics.compose fst snd)
-                         (* Remove the main module if it's referenced *)
-                         (List.filter (fun it => negb (Pos.eqb (fst (snd it)) main_name))
-                                      (PTree.elements (HTL.mod_externctrl m)))).
-
   (** Clean up declarations for an inlined module. Make IO decls into reg, and remove the clk declaration *)
   Definition clean_up_decl (clk : reg) (it : Verilog.module_item) :=
     match it with
@@ -73,78 +64,104 @@ Section TRANSLATE.
                          (Vnonblock (Vvar (ram_en ram)) (Vvar (ram_u_en ram))))
                    Vskip).
 
+  Definition transl_module (externclk : option reg) (m : HTL.module) : Verilog.module :=
+    let clk := match externclk with
+               | None => HTL.mod_clk m
+               | Some c => c
+               end in
+
+    let case_el_ctrl := list_to_stmnt (transl_states (PTree.elements (HTL.mod_controllogic m))) in
+    let case_el_data := list_to_stmnt (transl_states (PTree.elements (HTL.mod_datapath m))) in
+
+    let externctrl := HTL.mod_externctrl m in
+
+    let local_arrdecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_arrdecls m) in
+    let arr_decls := arr_to_Vdeclarrs (AssocMap.elements local_arrdecls) in
+
+    let local_scldecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_scldecls m) in
+    let scl_decls := scl_to_Vdecls (AssocMap.elements local_scldecls) in
+
+    let body : list Verilog.module_item :=
+        match (HTL.mod_ram m) with
+        | Some ram =>
+          Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                        (Vseq
+                                       (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                       (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
+                                        (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
+                  :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
+                  :: inst_ram clk ram
+                  :: arr_decls
+                  ++ scl_decls
+        | Nothing =>
+          Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                        (Vseq
+                                       (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                       (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
+                                        (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
+                  :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
+                  :: arr_decls
+                  ++ scl_decls
+        end
+    in
+
+    Verilog.mkmodule
+      (HTL.mod_start m)
+      (HTL.mod_reset m)
+      clk
+      (HTL.mod_finish m)
+      (HTL.mod_return m)
+      (HTL.mod_st m)
+      (HTL.mod_stk m)
+      (HTL.mod_stk_len m)
+      (HTL.mod_params m)
+      body
+      (HTL.mod_entrypoint m).
+
+    (*   let htl_modules := PTree.filter *)
+    (*                    (fun m _ => List.existsb (Pos.eqb m) inline_names) *)
+    (*                    modmap in *)
+    (*   do translated_modules <- PTree.traverse (fun _ => transl_module fuel' prog (Some clk)) htl_modules; *)
+    (*   let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl clk))) *)
+    (*                                     translated_modules in *)
+
+    (*                 ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules)) *)
+
   (* FIXME Remove the fuel parameter (recursion limit)*)
-  Fixpoint transl_module (fuel : nat) (prog : HTL.program) (externclk : option reg) (m : HTL.module) : res Verilog.module :=
+  Fixpoint referenced_module_names (fuel : nat) (prog : HTL.program) (m : HTL.module) : res (list ident) :=
     match fuel with
-    | O => Error (msg "Veriloggen: transl_module recursion too deep")
+    | O => Error (msg "Veriloggen: recursion too deep")
     | S fuel' =>
-      let clk := match externclk with
-                 | None => HTL.mod_clk m
-                 | Some c => c
-                 end in
-
-      let inline_names := called_functions (AST.prog_main prog) m in
       let modmap := prog_modmap prog in
-      let htl_modules := PTree.filter
-                       (fun m _ => List.existsb (Pos.eqb m) inline_names)
-                       modmap in
-      do translated_modules <- PTree.traverse (fun _ => transl_module fuel' prog (Some clk)) htl_modules;
-      let cleaned_modules := PTree.map1 (map_body (Option.map_option (clean_up_decl clk)))
-                                        translated_modules in
+      let directly_referenced_names : list ident :=
+                     (* Take just the module name *)
+                     (List.map (fun '(_, (othermod_name, _)) => othermod_name)
+                               (PTree.elements (HTL.mod_externctrl m))) in
+      do indirectly_referenced_namess <-
+         mmap (fun '(_, m) => referenced_module_names fuel' prog m)
+                  (List.filter (fun '(n, m) => in_dec Pos.eq_dec n directly_referenced_names)
+                               (PTree.elements modmap));
 
-
-      let case_el_ctrl := list_to_stmnt (transl_states (PTree.elements (HTL.mod_controllogic m))) in
-      let case_el_data := list_to_stmnt (transl_states (PTree.elements (HTL.mod_datapath m))) in
-
-      let externctrl := HTL.mod_externctrl m in
-
-      let local_arrdecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_arrdecls m) in
-      let arr_decls := arr_to_Vdeclarrs (AssocMap.elements local_arrdecls) in
-
-      let local_scldecls := PTree.filter (fun r _ => negb (PTree.contains r externctrl)) (HTL.mod_scldecls m) in
-      let scl_decls := scl_to_Vdecls (AssocMap.elements local_scldecls) in
-
-      let body : list Verilog.module_item :=
-          match (HTL.mod_ram m) with
-          | Some ram =>
-            Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
-                                          (Vseq
-                                         (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
-                                         (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
-                                          (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
-                    :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                    :: inst_ram clk ram
-                    :: arr_decls
-                    ++ scl_decls
-                    ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules))
-          | Nothing =>
-            Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
-                                          (Vseq
-                                         (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
-                                         (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
-                                          (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
-                    :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                    :: arr_decls
-                    ++ scl_decls
-                    ++ List.flat_map Verilog.mod_body (List.map snd (PTree.elements cleaned_modules))
-          end
-      in
-
-      OK (Verilog.mkmodule
-               (HTL.mod_start m)
-               (HTL.mod_reset m)
-               clk
-               (HTL.mod_finish m)
-               (HTL.mod_return m)
-               (HTL.mod_st m)
-               (HTL.mod_stk m)
-               (HTL.mod_stk_len m)
-               (HTL.mod_params m)
-               body
-               (HTL.mod_entrypoint m))
+      let indirectly_referenced_names := List.concat indirectly_referenced_namess in
+      OK (List.nodup Pos.eq_dec (directly_referenced_names ++ indirectly_referenced_names))
     end.
 
-  Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transl_module 10 prog None).
+  Definition transl_top_module (prog : HTL.program) (m : HTL.module) : res Verilog.module :=
+    let tm := transl_module None m in
+
+    let modmap := prog_modmap prog in
+    do referenced_names <- referenced_module_names 100 prog m;
+    do referenced_modules <- mmap (fun n => match modmap!n with
+                                         | Some m => OK m
+                                         | None => Error (msg "Veriloggen: Could not find module")
+                                         end) referenced_names;
+    let translated_modules := List.map (transl_module (Some (mod_clk tm))) referenced_modules in
+    let cleaned_modules := List.map (map_body (Option.map_option (clean_up_decl (mod_clk tm)))) translated_modules in
+    let referenced_module_bodies := List.flat_map Verilog.mod_body cleaned_modules in
+
+    OK (map_body (app referenced_module_bodies) tm).
+
+  Definition transl_fundef (prog : HTL.program) := transf_partial_fundef (transl_top_module prog).
   Definition transl_program (prog : HTL.program) := transform_partial_program (transl_fundef prog) prog.
 
 End TRANSLATE.
