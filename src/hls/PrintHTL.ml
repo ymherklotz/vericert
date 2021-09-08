@@ -87,14 +87,30 @@ let print_control pp f =
   fprintf pp "    clk: %s\n" (register f.mod_clk);
   fprintf pp "}\n\n"
 
+let print_scldecl pp (r, (io, sz)) =
+  fprintf pp "  %s [%d:0]%s\n" (fst (print_io io)) (Nat.to_int sz - 1) (register (P.of_int r))
+
+let print_arrdecl pp (r, (io, Verilog.VArray(sz, ln))) =
+  fprintf pp "  %s [%d:0]%s[%d:0]\n" (fst (print_io io)) (Nat.to_int sz - 1) (register (P.of_int r)) (Nat.to_int ln - 1)
+
 let print_module pp id f =
   fprintf pp "%s(%s) {\n" (extern_atom id) (registers f.mod_params);
 
   let externctrl = PTree.elements f.mod_externctrl in
   let datapath = ptree_to_list f.mod_datapath in
   let controllogic = ptree_to_list f.mod_controllogic in
+  let scldecls = ptree_to_list f.mod_scldecls in
+  let arrdecls = ptree_to_list f.mod_arrdecls in
 
   print_control pp f;
+
+  fprintf pp "scldecls {\n";
+  List.iter (print_scldecl pp) scldecls;
+  fprintf pp "  }\n\n";
+
+  fprintf pp "arrdecls {\n";
+  List.iter (print_arrdecl pp) arrdecls;
+  fprintf pp "  }\n\n";
 
   print_ram pp f.mod_ram;
 
