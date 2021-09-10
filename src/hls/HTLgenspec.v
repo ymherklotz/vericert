@@ -102,7 +102,7 @@ Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datap
           Z.pos pc2 <= Int.max_unsigned /\
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
           trans!pc = Some (state_goto st pc2) /\
-          stmnts!pc2 = Some (join fn_return fn_rst dst) /\
+          stmnts!pc2 = Some (join fn_finish fn_rst fn_return dst) /\
           trans!pc2 = Some (state_wait st fn_finish n)) ->
 
       tr_code ge c pc stmnts trans externctrl fin rtrn st stk (RTL.Icall sig (inr fn) args dst n)
@@ -410,6 +410,7 @@ Proof.
       * monad_crush.
       * replace x6 with (st_freshreg s7) in * by intro_step.
         replace x5 with (st_freshreg s6) in * by intro_step.
+        replace x4 with (st_freshreg s5) in * by intro_step.
         monad_crush.
       * replace x4 with (st_freshreg s5) in * by intro_step.
         monad_crush.

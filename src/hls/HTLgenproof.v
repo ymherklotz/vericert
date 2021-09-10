@@ -139,7 +139,7 @@ Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.me
       (CONST : match_constants m asr)
       (EXTERN_CALLER : has_externctrl m current_id ret rst fin)
       (JOIN_CTRL : (HTL.mod_controllogic m)!st = Some (state_wait (HTL.mod_st m) fin pc))
-      (JOIN_DATA : (HTL.mod_datapath m)!st = Some (join ret rst dst))
+      (JOIN_DATA : (HTL.mod_datapath m)!st = Some (join fin rst ret dst))
       (TAILS : match_frames ge mid mem rtl_tl htl_tl)
       (DST : Ple dst (RTL.max_reg_function f))
       (PC : (Z.pos pc <= Int.max_unsigned)),
@@ -1566,7 +1566,13 @@ Section CORRECTNESS.
           rewrite assign_all_out by admit.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gss.
-        * repeat econstructor.
+        * unfold join.
+          econstructor.
+          -- repeat econstructor.
+          -- eapply Verilog.stmnt_runp_Vcond_false.
+             ++ repeat econstructor.
+             ++ big_tac. admit. (* TODO: Externctrl finish is false *)
+             ++ repeat econstructor.
         * constructor.
         * simpl.
           apply AssocMapExt.merge_correct_2.

@@ -490,8 +490,9 @@ Definition fork (rst : reg) (params : list (reg * reg)) : datapath_stmnt :=
   let assign_params := nonblock_all params in
   Vseq reset_mod assign_params.
 
-Definition join (fn_rtrn fn_rst fn_dst : reg) : datapath_stmnt :=
-  let set_result := Vnonblock (Vvar fn_dst) (Vvar fn_rtrn) in
+Definition join (fn_fin fn_rst fn_rtrn fn_dst : reg) : datapath_stmnt :=
+  let set_result := Vcond (boplitz Veq fn_fin 1)
+                          (Vnonblock (Vvar fn_dst) (Vvar fn_rtrn)) Vskip in
   let stop_reset := Vnonblock (Vvar fn_rst) (Vlit (ZToValue 0)) in
   Vseq stop_reset set_result.
 
@@ -558,7 +559,7 @@ Definition transf_instr (ge : RTL.genv) (fin rtrn stack: reg) (ni: node * instru
              do return_reg <- map_externctrl fn ctrl_return;
 
              let fork_instr := fork reset_reg params in
-             let join_instr := join return_reg reset_reg dst in
+             let join_instr := join finish_reg reset_reg return_reg dst in
 
              do _ <- add_instr n join_state fork_instr;
              add_instr_wait finish_reg join_state n' join_instr
