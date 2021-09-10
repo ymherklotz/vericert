@@ -45,6 +45,7 @@ Local Open Scope assocmap.
 Hint Resolve Smallstep.forward_simulation_plus : htlproof.
 Hint Resolve AssocMap.gss : htlproof.
 Hint Resolve AssocMap.gso : htlproof.
+Hint Resolve RTL.max_reg_function_def : htlproof.
 
 Hint Unfold find_assocmap AssocMapExt.get_default : htlproof.
 
@@ -120,6 +121,7 @@ Definition has_externctrl (caller : HTL.module) (current_id : HTL.ident) (ret rs
   (HTL.mod_externctrl caller)!ret = Some (current_id, HTL.ctrl_return) /\
   (HTL.mod_externctrl caller)!rst = Some (current_id, HTL.ctrl_reset) /\
   (HTL.mod_externctrl caller)!fin = Some (current_id, HTL.ctrl_finish).
+Hint Unfold has_externctrl : htlproof.
 
 Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.mem)
   : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
@@ -144,6 +146,7 @@ Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.me
       match_frames ge current_id mem
                    ((RTL.Stackframe dst f sp pc rs) :: rtl_tl)
                    ((HTL.Stackframe mid m st asr asa) :: htl_tl).
+Hint Constructors match_frames : htlproof.
 
 Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
 | match_state : forall asa asr sf f sp sp' rs mem mid m st res
@@ -1590,7 +1593,11 @@ Section CORRECTNESS.
       + eauto with htlproof.
     - constructor; try solve [repeat econstructor; eauto with htlproof ].
       + eauto using match_find_function.
-      + (* Match stackframes *) admit.
+      + econstructor; eauto with htlproof.
+        * (* match_assocmaps *) big_tac. admit.
+        * (* Match arrays *) big_tac; admit.
+        * (* Match constants *) big_tac. admit.
+      + (* Non-pointers *) admit.
       + (* Argument values match *) admit.
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
