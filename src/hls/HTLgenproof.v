@@ -508,6 +508,30 @@ Section CORRECTNESS.
     rewrite H. auto.
   Qed.
 
+  Lemma match_find_function : forall fn rs f m,
+      RTL.find_function ge (inr fn) rs = Some (AST.Internal f) ->
+      HTL.find_func tge fn = Some (AST.Internal m) ->
+      tr_module ge f m.
+  Proof.
+    intros * Hrtl Hhtl.
+    destruct TRANSL as [MATCH _].
+
+    unfold RTL.find_function in *. unfold_match Hrtl.
+    unfold HTL.find_func in *. unfold_match Hhtl.
+    replace b0 with b in *. clear b0.
+
+    destruct (function_ptr_translated _ _ Hrtl) as [tf [? ?]].
+    replace tf with (AST.Internal m) in *. clear tf.
+
+    - apply transl_module_correct.
+      simpl in *.
+      destruct (transl_module prog f) eqn:E; crush.
+    - assert (Some (AST.Internal m) = Some tf) by
+          hauto lq: on unfold: HTL.program, Genv.find_funct_ptr.
+      sauto.
+    - scongruence use: symbols_preserved.
+  Qed.
+
   Lemma op_stack_based :
     forall F V sp v m args rs op ge pc' res0 pc f e fin rtrn st stk,
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
@@ -1564,8 +1588,8 @@ Section CORRECTNESS.
           not_control_reg.
         * simpl; trivial.
       + eauto with htlproof.
-    - econstructor; try solve [repeat econstructor; eauto with htlproof ].
-      + admit.
+    - constructor; try solve [repeat econstructor; eauto with htlproof ].
+      + eauto using match_find_function.
       + (* Match stackframes *) admit.
       + (* Argument values match *) admit.
   Admitted.
