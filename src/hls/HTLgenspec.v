@@ -76,6 +76,13 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> datapath_stmnt -
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
 Hint Constructors tr_instr : htlspec.
 
+Definition externctrl_params_mapped (args params : list reg) externctrl (fn : ident) :=
+  length args = length params /\
+  forall n arg, List.nth_error args n = Some arg ->
+           exists r, List.nth_error params n = Some r /\
+                externctrl ! r = Some (fn, ctrl_param n).
+Hint Transparent externctrl_params_mapped : htlspec.
+
 Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datapath) (trans : controllogic)
           (externctrl : AssocMap.t (ident * controlsignal)) (fin rtrn st stk : reg) : RTL.instruction -> Prop :=
 | tr_code_single :
@@ -95,10 +102,7 @@ Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datap
           externctrl ! fn_rst = Some (fn, ctrl_reset) /\
           externctrl ! fn_return = Some (fn, ctrl_return) /\
           externctrl ! fn_finish = Some (fn, ctrl_finish) /\
-          length args = length fn_params /\
-          (forall n arg, List.nth_error args n = Some arg ->
-                    exists r, List.nth_error fn_params n = Some r /\
-                         externctrl ! r = Some (fn, ctrl_param n)) /\
+          externctrl_params_mapped args fn_params externctrl fn /\
           Z.pos pc2 <= Int.max_unsigned /\
           stmnts!pc = Some (fork fn_rst (List.combine fn_params args)) /\
           trans!pc = Some (state_goto st pc2) /\
@@ -118,6 +122,9 @@ Inductive tr_code (ge : RTL.genv) (c : RTL.code) (pc : RTL.node) (stmnts : datap
 
       tr_code ge c pc stmnts trans externctrl fin rtrn st stk (RTL.Ireturn r).
 Hint Constructors tr_code : htlspec.
+
+Definition externctrl_ordering (externctrl : AssocMap.t (ident * controlsignal)) clk :=
+  forall n, (exists x, externctrl!n = Some x) -> (n > clk)%positive.
 
 Inductive tr_module (ge : RTL.genv) (f : RTL.function) : module -> Prop :=
   tr_module_intro :
@@ -139,7 +146,7 @@ Inductive tr_module (ge : RTL.genv) (f : RTL.function) : module -> Prop :=
       (start > stk)%positive ->
       (rst > start)%positive ->
       (clk > rst)%positive ->
-      (forall n, (exists x, externctrl!n = Some x) -> (n > clk)%positive) ->
+      externctrl_ordering externctrl clk ->
       tr_module ge f m.
 Hint Constructors tr_module : htlspec.
 
@@ -458,9 +465,10 @@ Proof.
     * eapply map_incr_some; inversion Htrans; eauto with htlspec.
     * eapply map_incr_some; inversion Htrans; eauto with htlspec.
     * eapply map_incr_some; inversion Htrans; eauto with htlspec.
-    * eassumption.
+    * inv H5. eassumption.
     * intros.
-      destruct (H6 n0 ltac:(auto) ltac:(auto)) as [r [? ?]].
+      destruct H5.
+      destruct (H21 n0 ltac:(auto) ltac:(auto)) as [r [? ?]].
       eexists. split; eauto with htlspec.
     * eauto with htlspec.
     * eauto with htlspec.
@@ -547,12 +555,11 @@ Proof.
     assert (forall n, (st_externctrl s6) ! n = None) by (any_monad_inv; simplify; auto).
     assert ((st_freshreg s6) > x6)%positive by (relevant_monad_inv; simplify; crush).
 
-    intros.
+    unfold externctrl_ordering. intros.
     repeat match goal with
-           | [ H: forall (_ : positive), _ |- _ ] => specialize (H r)
+           | [ H: forall (_ : positive), _ |- _ ] => specialize (H n)
            end.
 
     enough (n >= st_freshreg s6)%positive by lia.
-    inversion INCR13.
-    auto.
+    solve [ some_incr; auto ].
 Qed.
