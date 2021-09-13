@@ -40,6 +40,9 @@ Require vericert.hls.Verilog.
 
 Require Import Lia.
 
+From Hammer Require Import Tactics .
+Set Nested Proofs Allowed.
+
 Local Open Scope assocmap.
 
 Hint Resolve Smallstep.forward_simulation_plus : htlproof.
