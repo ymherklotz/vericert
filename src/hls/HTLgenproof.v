@@ -386,9 +386,11 @@ Ltac unfold_func H :=
   | ?f _ _ _ _ = _ => unfold f in H; repeat (unfold_match H)
   end.
 
+(* FIXME: Rename this to something more descriptive. It can also discriminate
+          control registers between each other. *)
 Ltac not_control_reg :=
   solve [
-      unfold Ple, Plt in *;
+      unfold Ple, Plt, externctrl_ordering in *;
       try multimatch goal with
           | [ H : forall r, (exists x, _ ! r = Some x) -> (r > _)%positive
                        |- context[?r']
@@ -1466,15 +1468,12 @@ Section CORRECTNESS.
   Qed.
 
   Lemma param_mapping_correct :
-    forall fn (args : list reg) fn_params (externctrl : AssocMap.t (HTL.ident * HTL.controlsignal)),
-      length args = length fn_params ->
-      (forall n arg, nth_error args n = Some arg ->
-                exists r, List.nth_error fn_params n = Some r /\
-                     externctrl ! r = Some (fn, HTL.ctrl_param n)) ->
+    forall fn args fn_params externctrl,
+      externctrl_params_mapped args fn_params externctrl fn ->
       (forall n param, nth_error fn_params n = Some param ->
                   externctrl!param = Some (fn, HTL.ctrl_param n)).
   Proof.
-    intros * Hlen Htr * Hfn_params.
+    intros * [Hlen Htr] * Hfn_params.
 
     assert (H : exists arg, nth_error args n = Some arg). {
       apply length_nth_error.
@@ -1486,6 +1485,47 @@ Section CORRECTNESS.
 
     enough (Some x = Some param) by crush.
     congruence.
+  Qed.
+
+  Lemma find_merge_right : forall m1 m2 r,
+      m1 ! r = None ->
+      (AssocMapExt.merge value m1 m2) # r = m2 # r.
+  Proof.
+    unfold "_ # _", AssocMapExt.get_default.
+    intros.
+    destruct (m2 ! r) eqn:?.
+    - erewrite AssocMapExt.merge_correct_2; auto.
+    - erewrite AssocMapExt.merge_correct_3; auto.
+  Qed.
+
+  Lemma nth_error_same_length :
+    forall {A} (l1 l2 : list A) n x1,
+      length l1 = length l2 ->
+      nth_error l1 n = Some x1 ->
+      exists x2, nth_error l2 n = Some x2.
+  Proof.
+    intros * Hlength Hnth.
+    apply length_nth_error.
+    apply nth_error_length in Hnth.
+    lia.
+  Qed.
+
+  Lemma not_in_params : forall r params args externctrl clk argvals fn,
+      externctrl_ordering externctrl clk ->
+      externctrl_params_mapped args params externctrl fn ->
+      (r < clk)%positive ->
+      forall v : value, ~ In (r, v) (List.combine params argvals).
+  Proof.
+    unfold "~".
+    intros * Hordering [Hlen Hmapped] Hclk * contra.
+    apply in_combine_l in contra.
+    apply In_nth_error in contra.
+    destruct contra as [? ?].
+    edestruct (nth_error_same_length params args); eauto.
+    unfold externctrl_ordering in *.
+    exploit (Hordering r).
+    exploit (Hmapped x x0).
+    all: qauto; lia.
   Qed.
 
   Lemma transl_icall_correct:
@@ -1501,6 +1541,21 @@ Section CORRECTNESS.
                                          (List.map (fun r => Registers.Regmap.get r rs) args) m)
                        R2.
   Proof.
+    Lemma merge_st : forall st n x args args' asr,
+      (Verilog.merge_regs ((empty_assocmap # st <- n) #     x <- (ZToValue 1))
+                                                     ## args <- (asr ## args')
+                          asr) ! st = Some n.
+      big_tac.
+      eapply AssocMapExt.merge_correct_1.
+      rewrite assign_all_out.
+      -- big_tac.
+         admit. (* st <> x *)
+      -- intros ? Hneg.
+         apply List.in_combine_l in Hneg.
+         (* All of x4 are in externctrl (by H6), but st1 is not because it is a control register *)
+         admit. (* ~ In st args *)
+    Admitted.
+
     intros * H Hfunc * MSTATE.
     inv_state.
     edestruct (only_internal_calls fd); eauto; subst fd.
@@ -1521,17 +1576,8 @@ Section CORRECTNESS.
         * constructor.
         * trivial.
         * trivial.
-        * big_tac.
-          eapply AssocMapExt.merge_correct_1.
-          rewrite assign_all_out.
-          -- big_tac.
-             not_control_reg.
-          -- intros ? Hneg.
-             apply List.in_combine_l in Hneg.
-             insterU H6.
-             insterU H19.
-             (* All of x4 are in externctrl (by H6), but st1 is not because it is a control register *)
-             admit.
+        * simpl in *.
+          apply merge_st.
         * eauto.
       + eapply HTL.step_module; trivial.
         * simpl.
@@ -1553,7 +1599,8 @@ Section CORRECTNESS.
           apply AssocMap.gss.
         * eauto.
         * eauto.
-        * unfold state_wait.
+        *
+          unfold state_wait.
           eapply Verilog.stmnt_runp_Vcond_false.
           -- simpl. econstructor; econstructor; simpl.
              replace (Verilog.merge_regs ((empty_assocmap # st1 <- (posToValue x0)) # x1 <- (ZToValue 1)) ## x4 <- (asr ## args) asr) # x3
@@ -1576,31 +1623,31 @@ Section CORRECTNESS.
         * constructor.
         * simpl.
           apply AssocMapExt.merge_correct_2.
-          big_tac.
-          apply AssocMap.gempty.
-          not_control_reg.
-          assert (Ple dst (RTL.max_reg_function f))
-                 by eauto using RTL.max_reg_function_def.
-          xomega.
-          apply AssocMapExt.merge_correct_1.
-          rewrite assign_all_out by admit.
-          rewrite AssocMap.gso by not_control_reg.
-          apply AssocMap.gss.
-        * admit.
+          big_tac; [ apply AssocMap.gempty | not_control_reg].
+          apply merge_st.
+        * auto.
       + eapply HTL.step_initcall.
         * eassumption.
         * eassumption.
         * eauto using param_mapping_correct.
         * big_tac.
-          assert (dst <= (RTL.max_reg_function f))%positive
-            by (eapply RTL.max_reg_function_def; eauto).
-          not_control_reg.
         * simpl; trivial.
       + eauto with htlproof.
     - constructor; try solve [repeat econstructor; eauto with htlproof ].
       + eauto using match_find_function.
       + econstructor; eauto with htlproof.
-        * (* match_assocmaps *) big_tac. admit.
+        * (* match_assocmaps *) big_tac.
+          apply regs_lessdef_add_greater. not_control_reg.
+          constructor; intros.
+
+          rewrite find_merge_right.
+          hauto drew: off inv: match_assocmaps.
+
+          rewrite assign_all_out by
+              (eapply not_in_params; try eassumption; not_control_reg).
+          rewrite AssocMap.gso by not_control_reg.
+          rewrite AssocMap.gso by not_control_reg.
+          apply AssocMap.gempty.
         * (* Match arrays *) big_tac; admit.
         * (* Match constants *) big_tac. admit.
       + (* Non-pointers *) admit.
@@ -1698,7 +1745,10 @@ Section CORRECTNESS.
           rewrite fso by crush.
           rewrite fss. crush.
         * big_tac; inv TF; simplify; not_control_reg.
-        * repeat econstructor.
+        * repeat econstructor. simpl.
+          rewrite AssocMap.fso by crush.
+          rewrite AssocMap.fss.
+          auto.
         * replace (HTL.mod_ram m0) with (@None HTL.ram) by (inv TF; trivial).
           constructor.
         * big_tac; inv TF; simplify; not_control_reg.
