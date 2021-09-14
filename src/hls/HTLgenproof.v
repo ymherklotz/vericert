@@ -427,6 +427,44 @@ Proof.
 Qed.
 Hint Resolve arr_lookup_some : htlproof.
 
+Lemma mem_free_zero_load : forall mem mem' blk chunk sp ptr,
+    Mem.free mem blk 0 0 = Some mem' ->
+    Mem.load chunk mem sp ptr = Mem.load chunk mem' sp ptr.
+Proof.
+  intros.
+  destruct (Mem.load chunk mem' sp ptr) eqn:E.
+  - eauto using Mem.load_free_2.
+  - erewrite <- Mem.load_free; try eassumption; crush.
+Qed.
+
+Lemma mem_free_zero_loadv : forall mem mem' blk chunk ptr,
+    Mem.free mem blk 0 0 = Some mem' ->
+    Mem.loadv chunk mem ptr = Mem.loadv chunk mem' ptr.
+Proof.
+  intros.
+  destruct ptr; crush.
+  eauto using mem_free_zero_load.
+Qed.
+
+Lemma mem_free_zero_store : forall mem mem' blk chunk sp ofs v,
+    Mem.free mem blk 0 0 = Some mem' ->
+    Mem.store chunk mem sp ofs v = None ->
+    Mem.store chunk mem' sp ofs v = None.
+Proof.
+  Transparent Mem.store.
+  intros.
+  unfold Mem.store in *.
+  destruct (Mem.valid_access_dec mem chunk sp ofs Writable), (Mem.valid_access_dec mem' chunk sp ofs Writable); crush.
+  exfalso.
+  srun eauto use: Mem.valid_access_free_inv_1.
+Qed.
+
+Lemma mem_free_zero_storev : forall mem mem' blk chunk ptr v,
+    Mem.free mem blk 0 0 = Some mem' ->
+    Mem.storev chunk mem ptr v = None ->
+    Mem.storev chunk mem' ptr v = None.
+Proof. destruct ptr; simpl in *; eauto using mem_free_zero_store. Qed.
+
 Section CORRECTNESS.
 
   Variable prog : RTL.program.
@@ -462,9 +500,53 @@ Section CORRECTNESS.
       match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
 
-  (** The following admitted lemmas should be provable *)
-  Lemma mem_free_zero : forall mem blk, Mem.free mem blk 0 0 = Some mem.
-  Admitted.
+  Lemma mem_free_stack_match : forall rtl_stk htl_stk mem mem' blk id,
+      Mem.free mem blk 0 0 = Some mem' ->
+      match_frames ge id mem rtl_stk htl_stk ->
+      match_frames ge id mem' rtl_stk htl_stk.
+  Proof.
+    Lemma mem_free_match_arrs : forall m f sp blk mem mem' asa,
+      Mem.free mem blk 0 0 = Some mem' ->
+      match_arrs m f (Values.Vptr sp (Ptrofs.repr 0)) mem asa ->
+      match_arrs m f (Values.Vptr sp (Ptrofs.repr 0)) mem' asa.
+    Proof.
+      intros * Hfree Hmatch.
+      inv Hmatch.
+      apply match_arr with (stack:=stack); crush.
+      intros.
+      erewrite <- (mem_free_zero_load mem mem'); eauto.
+    Qed.
+    Hint Resolve mem_free_match_arrs : htlproof.
+
+    Lemma mem_free_stack_based_pointers : forall mem mem' blk sp sz,
+        Mem.free mem blk 0 0 = Some mem' ->
+        arr_stack_based_pointers sp mem sz (Values.Vptr sp (Ptrofs.repr 0)) ->
+        arr_stack_based_pointers sp mem' sz (Values.Vptr sp (Ptrofs.repr 0)).
+    Proof.
+      intros * Hfree Hstk.
+      unfold arr_stack_based_pointers in *.
+      intros.
+      erewrite <- (mem_free_zero_loadv mem mem'); eauto.
+    Qed.
+    Hint Resolve mem_free_stack_based_pointers : htlproof.
+
+    Lemma mem_free_stack_bounds : forall mem mem' blk ptr sz,
+        Mem.free mem blk 0 0 = Some mem' ->
+        stack_bounds ptr sz mem ->
+        stack_bounds ptr sz mem'.
+    Proof.
+      unfold stack_bounds.
+      intros * Hfree Hbounds **.
+      exploit Hbounds; eauto.
+      intros [Hload Hstore].
+      split.
+      - erewrite <- (mem_free_zero_loadv mem mem'); eauto.
+      - eauto using mem_free_zero_storev.
+    Qed.
+    Hint Resolve mem_free_stack_bounds : htlproof.
+
+    induction rtl_stk; intros * Hmem Hstk; inv Hstk; eauto 6 with htlproof.
+  Qed.
 
   Lemma mem_alloc_zero : forall mem, exists blk, Mem.alloc mem 0 0 = (mem, blk).
   Admitted.
@@ -1696,9 +1778,7 @@ Section CORRECTNESS.
    - constructor; eauto with htlproof.
      + edestruct no_stack_functions; eauto.
        * replace (RTL.fn_stacksize f) in *.
-         replace m' with m by
-             (pose proof (mem_free_zero m ltac:(auto)); crush).
-         assumption.
+         eauto using mem_free_stack_match.
        * subst. inv MF. constructor.
      + destruct or.
        * rewrite fso. (* Return value is not fin *)
