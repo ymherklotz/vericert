@@ -34,7 +34,7 @@ preferred-citation:
   - family-names: "Wickerson"
     given-names: "John"
     orcid: "https://orcid.org/0000-0001-6735-5533"
-  doi: "10.0000/00000"
+  doi: "10.1145/3485494"
   journal: "Proc. ACM Program. Lang."
   month: 11
   numpages: 30
