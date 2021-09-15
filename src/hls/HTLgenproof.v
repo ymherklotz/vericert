@@ -1514,19 +1514,22 @@ Section CORRECTNESS.
     - repeat apply regs_lessdef_add_greater; try not_control_reg.
       eauto using match_args.
     - edestruct no_stack_calls; eauto.
-      + replace (RTL.fn_stacksize f) with 0 in *
-          by assumption.
-        replace m' with m
-          by (destruct (mem_alloc_zero m); crush).
-        assumption.
+      + replace (RTL.fn_stacksize f) in *.
+        eauto using mem_alloc_zero_match_frames.
       + subst. inv MF. constructor.
     - big_tac.
-      admit.
+      destruct (Mem.load AST.Mint32 m' stk (Ptrofs.unsigned (Ptrofs.repr (4 * ptr)))) eqn:eq_load; repeat constructor.
+      erewrite (Mem.load_alloc_same m _ _ m' _ _ _ _ v); eauto; repeat econstructor.
     - eauto using stack_based_non_pointers.
     - (* Stack based stack pointer *)
       unfold arr_stack_based_pointers; intros.
-      admit.
-    - (* Stack bounds *)
+      destruct (Mem.loadv AST.Mint32 m'
+                          (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:eq_load.
+      + simpl.
+        unfold Mem.loadv in *; simplify.
+        erewrite (Mem.load_alloc_same m _ _ m' _ _ _ _ v); eauto; repeat econstructor.
+      + crush.
+    - constructor; unfold Mem.loadv, Mem.storev; big_tac.
       admit.
     - constructor; simplify.
       + rewrite AssocMap.gss; crush.
