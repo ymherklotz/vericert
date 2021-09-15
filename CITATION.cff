@@ -1,0 +1,46 @@
+# -*- mode: yaml -*-
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Herklotz"
+  given-names: "Yann"
+  orcid: "https://orcid.org/0000-0002-2329-1029"
+- family-names: "Pollard"
+  given-names: "James D."
+  orcid: "https://orcid.org/0000-0003-1404-1527"
+- family-names: "Ramanathan"
+  given-names: "Nadesh"
+  orcid: "https://orcid.org/0000-0001-9083-8349"
+- family-names: "Wickerson"
+  given-names: "John"
+  orcid: "https://orcid.org/0000-0001-6735-5533"
+title: "Vericert"
+version: 1.2.1
+doi: 10.5281/zenodo.5093839
+date-released: 2021-07-12
+url: "https://github.com/ymherklotz/vericert"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Herklotz"
+    given-names: "Yann"
+    orcid: "https://orcid.org/0000-0002-2329-1029"
+  - family-names: "Pollard"
+    given-names: "James D."
+    orcid: "https://orcid.org/0000-0003-1404-1527"
+  - family-names: "Ramanathan"
+    given-names: "Nadesh"
+    orcid: "https://orcid.org/0000-0001-9083-8349"
+  - family-names: "Wickerson"
+    given-names: "John"
+    orcid: "https://orcid.org/0000-0001-6735-5533"
+  doi: "10.0000/00000"
+  journal: "Proc. ACM Program. Lang."
+  month: 11
+  numpages: 30
+  title: "Formal Verification of High-Level Synthesis"
+  volume: 5
+  year: 2021
+  number: OOPSLA
+  publisher: Association for Computing Machinery
+  address: New York, NY, USA
