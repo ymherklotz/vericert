@@ -110,7 +110,7 @@ following:
 
 ** Citation
 
-If you use Vericert in any ways, please cite it using our [[https://yannherklotz.com/papers/fvhls_oopsla21.pdf][OOPSLA'21 paper]]:
+If you use Vericert in any way, please cite it using our [[https://yannherklotz.com/papers/fvhls_oopsla21.pdf][OOPSLA'21 paper]]:
 
 #+begin_src bibtex
 @inproceedings{herklotz21_fvhls,
