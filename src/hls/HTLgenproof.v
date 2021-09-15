@@ -537,7 +537,7 @@ Section CORRECTNESS.
       match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
 
-  Lemma mem_free_match_frames : forall rtl_stk htl_stk mem mem' blk id,
+  Lemma mem_free_zero_match_frames : forall rtl_stk htl_stk mem mem' blk id,
       Mem.free mem blk 0 0 = Some mem' ->
       match_frames ge id mem rtl_stk htl_stk ->
       match_frames ge id mem' rtl_stk htl_stk.
@@ -1581,6 +1581,16 @@ Section CORRECTNESS.
           crush.
   Qed.
 
+  Lemma get_all_assign_out : forall rs a r v,
+      (~ In r rs) ->
+      (a # r <- v) ## rs = a ## rs.
+  Proof.
+    induction rs; crush.
+    f_equal.
+    - rewrite fso; crush.
+    - apply IHrs; crush.
+  Qed.
+
   Lemma nonblock_all_exec : forall from_regs to_regs f basr nasr basa nasa,
       Verilog.stmnt_runp
         f
@@ -1695,6 +1705,59 @@ Section CORRECTNESS.
     all: qauto; lia.
   Qed.
 
+  Lemma match_arg_vals : forall args f rs asr,
+      Forall (fun r => Ple r (RTL.max_reg_function f)) args ->
+      match_assocmaps f rs asr ->
+      list_forall2 val_value_lessdef (map (fun r : positive => rs !! r) args) asr ## args.
+  Proof.
+    induction args; intros * Harg Hmatch; constructor.
+    - inv Harg. inv Hmatch. eauto.
+    - inv Harg. unfold map in IHargs. eauto.
+  Qed.
+
+  Lemma call_args_maxreg : forall args f pc pc' sig fn dst,
+      (RTL.fn_code f) ! pc = Some (RTL.Icall sig fn args dst pc') ->
+      Forall (fun r : positive => Ple r (RTL.max_reg_function f)) args.
+  Proof.
+    intros.
+    apply Forall_forall.
+    intros r Hin.
+    eapply RTL.max_reg_function_use with (r:=r); eauto.
+    destruct fn; crush.
+  Qed.
+
+  Lemma merge_correct_all_1 : forall ks vs m1 m2,
+      length ks = length vs ->
+      NoDup ks ->
+      (AssocMapExt.merge value (m1 ## ks <- vs) m2) ## ks = vs.
+  Proof.
+    induction ks; destruct vs; intros * Hlen Hnodup; crush.
+    f_equal.
+    - unfold "_ # _", AssocMapExt.get_default.
+      erewrite AssocMapExt.merge_correct_1; trivial.
+      rewrite assign_all_out by sauto inv: NoDup use: in_combine_l.
+      big_tac.
+    - sauto.
+  Qed.
+
+  Lemma get_all_length : forall ks m, length (m ## ks) = length ks.
+  Proof. induction ks; crush. Qed.
+
+  Lemma separate_params_reset : forall r args params externctrl fn,
+      externctrl_params_mapped args params externctrl fn ->
+      externctrl ! r = Some (fn, HTL.ctrl_reset) ->
+      (~ In r params).
+  Proof.
+    intros * Hmapped Hrst contra.
+    inv Hmapped.
+    edestruct (In_nth_error _ _ contra) as [n ?].
+    edestruct (nth_error_same_length params args); crush; eauto.
+    edestruct H0 as [? [? ?]]; eauto.
+    replace x0 with r in *; crush.
+    apply option_inv.
+    transitivity (nth_error params n); crush.
+  Qed.
+
   Lemma transl_icall_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
       (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
@@ -1709,6 +1772,8 @@ Section CORRECTNESS.
                        R2.
   Proof.
     Lemma merge_st : forall st n x args args' asr,
+      ~ In st args ->
+      st <> x ->
       (Verilog.merge_regs ((empty_assocmap # st <- n) #     x <- (ZToValue 1))
                                                      ## args <- (asr ## args')
                           asr) ! st = Some n.
@@ -1716,12 +1781,10 @@ Section CORRECTNESS.
       eapply AssocMapExt.merge_correct_1.
       rewrite assign_all_out.
       -- big_tac.
-         admit. (* st <> x *)
       -- intros ? Hneg.
          apply List.in_combine_l in Hneg.
-         (* All of x4 are in externctrl (by H6), but st1 is not because it is a control register *)
-         admit. (* ~ In st args *)
-    Admitted.
+         contradiction.
+    Qed.
 
     intros * H Hfunc * MSTATE.
     inv_state.
@@ -1743,8 +1806,9 @@ Section CORRECTNESS.
         * constructor.
         * trivial.
         * trivial.
-        * simpl in *.
-          apply merge_st.
+        * apply merge_st.
+          -- admit.
+          -- not_control_reg.
         * eauto.
       + eapply HTL.step_module; trivial.
         * simpl.
@@ -1766,8 +1830,7 @@ Section CORRECTNESS.
           apply AssocMap.gss.
         * eauto.
         * eauto.
-        *
-          unfold state_wait.
+        * unfold state_wait.
           eapply Verilog.stmnt_runp_Vcond_false.
           -- simpl. econstructor; econstructor; simpl.
              replace (Verilog.merge_regs ((empty_assocmap # st1 <- (posToValue x0)) # x1 <- (ZToValue 1)) ## x4 <- (asr ## args) asr) # x3
@@ -1792,6 +1855,8 @@ Section CORRECTNESS.
           apply AssocMapExt.merge_correct_2.
           big_tac; [ apply AssocMap.gempty | not_control_reg].
           apply merge_st.
+          -- admit.
+          -- not_control_reg.
         * auto.
       + eapply HTL.step_initcall.
         * eassumption.
@@ -1815,10 +1880,37 @@ Section CORRECTNESS.
           rewrite AssocMap.gso by not_control_reg.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gempty.
-        * (* Match arrays *) big_tac; admit.
-        * (* Match constants *) big_tac. admit.
+        * (* Match arrays *) inv MARR. big_tac.
+        * (* Match constants *)
+          constructor; big_tac.
+          -- apply AssocMapExt.merge_correct_2; crush.
+             rewrite assign_all_out by admit.
+             rewrite AssocMap.gso by not_control_reg.
+             rewrite AssocMap.gso by not_control_reg.
+             apply AssocMap.gempty.
+          -- not_control_reg.
+          -- apply AssocMapExt.merge_correct_2; crush.
+             rewrite assign_all_out by admit.
+             rewrite AssocMap.gso by not_control_reg.
+             rewrite AssocMap.gso by not_control_reg.
+             apply AssocMap.gempty.
+          -- not_control_reg.
       + (* Non-pointers *) admit.
-      + (* Argument values match *) admit.
+      + (* Argument values match *)
+        big_tac.
+        replace (((AssocMapExt.merge value
+                                     ((empty_assocmap # st1 <- (posToValue x0)) # x1 <- (ZToValue 1)) ## x4 <- (asr ## args)
+                                     asr) # x1 <- (ZToValue 0)) ## x4)
+                with (asr ## args).
+
+        * eauto using match_arg_vals, call_args_maxreg.
+        * rewrite get_all_assign_out.
+          rewrite merge_correct_all_1; crush.
+          -- rewrite get_all_length.
+             inv H6.
+             crush.
+          -- admit. (* TODO: NoDup parameters *)
+          -- eauto using separate_params_reset.
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
   Close Scope rtl.
@@ -1860,7 +1952,7 @@ Section CORRECTNESS.
    - constructor; eauto with htlproof.
      + edestruct no_stack_functions; eauto.
        * replace (RTL.fn_stacksize f) in *.
-         eauto using mem_free_stack_match.
+         eauto using mem_free_zero_match_frames.
        * subst. inv MF. constructor.
      + destruct or.
        * rewrite fso. (* Return value is not fin *)
@@ -1868,9 +1960,7 @@ Section CORRECTNESS.
            big_tac.
            inv MASSOC.
            apply H10.
-           eapply RTL.max_reg_function_use.
-           simpl; eauto.
-           simpl; eauto.
+           eapply RTL.max_reg_function_use; eauto; crush.
          }
          assert (Ple r (RTL.max_reg_function f))
            by (eapply RTL.max_reg_function_use; eauto; crush).
