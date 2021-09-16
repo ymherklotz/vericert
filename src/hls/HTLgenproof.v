@@ -1798,6 +1798,32 @@ Section CORRECTNESS.
     transitivity (nth_error params n); crush.
   Qed.
 
+  Lemma param_reg_lower : forall params r clk args externctrl fn,
+      externctrl_params_mapped args params externctrl fn ->
+      externctrl_ordering externctrl clk ->
+      (r < clk)%positive ->
+      ~ In r params.
+  Proof.
+    unfold externctrl_ordering.
+    intros * [Hlen Hmapped] Hordering Hlt contra.
+    destruct (In_nth_error _ _ contra) as [n Hparam].
+    destruct (nth_error_same_length params args _ _ ltac:(crush) Hparam).
+    destruct (Hmapped n _ ltac:(eassumption)) as [r' [? ?]].
+    replace r' with r in *.
+    - specialize (Hordering r ltac:(eauto)).
+      lia.
+    - enough (Some r = Some r') by crush.
+      transitivity (nth_error params n); crush.
+  Qed.
+
+  Lemma not_in_combine_l : forall A B (x : A) (y : B) l1 l2,
+      ~ In x l1 ->
+      ~ In (x, y) (List.combine l1 l2).
+  Proof. eauto using in_combine_l. Qed.
+
+  Ltac not_in_params :=
+    intros; try apply not_in_combine_l; eapply param_reg_lower; eauto; lia.
+
   Lemma transl_icall_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
       (pc : positive) (rs : RTL.regset) (m : mem) sig fn fd args dst pc',
@@ -1847,25 +1873,25 @@ Section CORRECTNESS.
         * trivial.
         * trivial.
         * apply merge_st.
-          -- admit.
+          -- eapply param_reg_lower; eauto. lia.
           -- not_control_reg.
         * eauto.
       + eapply HTL.step_module; trivial.
         * simpl.
           apply AssocMapExt.merge_correct_2; auto.
-          rewrite assign_all_out by admit.
+          rewrite assign_all_out by not_in_params.
           rewrite AssocMap.gso by not_control_reg.
           rewrite AssocMap.gso by lia.
           apply AssocMap.gempty.
         * simpl.
           apply AssocMapExt.merge_correct_2; auto.
-          rewrite assign_all_out by admit.
+          rewrite assign_all_out by not_in_params.
           rewrite AssocMap.gso by not_control_reg.
           rewrite AssocMap.gso by lia.
           apply AssocMap.gempty.
         * simpl.
           apply AssocMapExt.merge_correct_1; auto.
-          rewrite assign_all_out by admit.
+          rewrite assign_all_out by not_in_params.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gss.
         * eauto.
@@ -1875,12 +1901,13 @@ Section CORRECTNESS.
           -- simpl. econstructor; econstructor; simpl.
              replace (Verilog.merge_regs ((empty_assocmap # st1 <- (posToValue x0)) # x1 <- (ZToValue 1)) ## x4 <- (asr ## args) asr) # x3
                with (ZToValue 0) by admit.
+             (* TODO: Externctrl finish is false *)
              trivial.
           -- auto.
           -- econstructor.
         * simpl.
           apply AssocMapExt.merge_correct_1; auto.
-          rewrite assign_all_out by admit.
+          rewrite assign_all_out by not_in_params.
           rewrite AssocMap.gso by not_control_reg.
           apply AssocMap.gss.
         * unfold join.
@@ -1895,7 +1922,7 @@ Section CORRECTNESS.
           apply AssocMapExt.merge_correct_2.
           big_tac; [ apply AssocMap.gempty | not_control_reg].
           apply merge_st.
-          -- admit.
+          -- not_in_params.
           -- not_control_reg.
         * auto.
       + eapply HTL.step_initcall.
@@ -1924,13 +1951,13 @@ Section CORRECTNESS.
         * (* Match constants *)
           constructor; big_tac.
           -- apply AssocMapExt.merge_correct_2; crush.
-             rewrite assign_all_out by admit.
+             rewrite assign_all_out by not_in_params.
              rewrite AssocMap.gso by not_control_reg.
              rewrite AssocMap.gso by not_control_reg.
              apply AssocMap.gempty.
           -- not_control_reg.
           -- apply AssocMapExt.merge_correct_2; crush.
-             rewrite assign_all_out by admit.
+             rewrite assign_all_out by not_in_params.
              rewrite AssocMap.gso by not_control_reg.
              rewrite AssocMap.gso by not_control_reg.
              apply AssocMap.gempty.
