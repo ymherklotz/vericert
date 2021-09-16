@@ -1489,6 +1489,42 @@ Section CORRECTNESS.
         ].
   Qed.
 
+  Lemma mem_alloc_stack_bounds : forall mem mem' sz stk,
+      Mem.alloc mem 0 sz = (mem', stk) ->
+      stack_bounds (Values.Vptr stk Ptrofs.zero) sz mem'.
+  Proof.
+    Transparent Mem.load.
+    Transparent Mem.store.
+    unfold stack_bounds.
+    intros * Halloc * Hbounds Halign.
+
+    assert (~ Mem.valid_access mem' AST.Mint32 stk (Ptrofs.unsigned (Ptrofs.repr ptr)) Readable). {
+      intro contra.
+
+      eapply Mem.valid_access_alloc_inv in contra; eauto.
+      rewrite peq_true in contra.
+      big_tac.
+      rewrite Ptrofs.unsigned_repr_eq in *.
+      rewrite (Z.mod_small ptr Ptrofs.modulus) in *; crush.
+    }
+
+    assert (~ Mem.valid_access mem' AST.Mint32 stk (Ptrofs.unsigned (Ptrofs.repr ptr)) Writable). {
+      intro contra.
+
+      eapply Mem.valid_access_alloc_inv in contra; eauto.
+      rewrite peq_true in contra.
+      big_tac.
+      rewrite Ptrofs.unsigned_repr_eq in *.
+      rewrite (Z.mod_small ptr Ptrofs.modulus) in *; crush.
+    }
+
+    big_tac.
+    - unfold Mem.load.
+      destruct_match; crush.
+    - unfold Mem.store.
+      destruct_match; crush.
+  Qed.
+
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
       (m : mem) (m' : Mem.mem') (stk : Values.block),
@@ -1519,23 +1555,24 @@ Section CORRECTNESS.
       + subst. inv MF. constructor.
     - big_tac.
       destruct (Mem.load AST.Mint32 m' stk (Ptrofs.unsigned (Ptrofs.repr (4 * ptr)))) eqn:eq_load; repeat constructor.
-      erewrite (Mem.load_alloc_same m _ _ m' _ _ _ _ v); eauto; repeat econstructor.
-    - eauto using stack_based_non_pointers.
+      erewrite (Mem.load_alloc_same m 0 (RTL.fn_stacksize f) m' _ _ _ _ v); eauto; repeat econstructor.
+    - auto using stack_based_non_pointers.
     - (* Stack based stack pointer *)
       unfold arr_stack_based_pointers; intros.
       destruct (Mem.loadv AST.Mint32 m'
                           (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:eq_load.
       + simpl.
         unfold Mem.loadv in *; simplify.
-        erewrite (Mem.load_alloc_same m _ _ m' _ _ _ _ v); eauto; repeat econstructor.
+        erewrite (Mem.load_alloc_same m 0 (RTL.fn_stacksize f) m' _ _ _ _ v); eauto; repeat econstructor.
       + crush.
-    - constructor; unfold Mem.loadv, Mem.storev; big_tac.
-      admit.
+    - eauto using mem_alloc_stack_bounds.
     - constructor; simplify.
       + rewrite AssocMap.gss; crush.
       + rewrite AssocMap.gso by not_control_reg.
         rewrite AssocMap.gss. crush.
-  Admitted.
+    Unshelve.
+    all: eauto.
+  Qed.
   Hint Resolve transl_callstate_correct : htlproof.
 
   Lemma only_internal_calls : forall fd fn rs,
