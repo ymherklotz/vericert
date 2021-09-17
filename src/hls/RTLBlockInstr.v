@@ -183,30 +183,30 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
      | Pvar p' => Some (exist _ (((true, p') :: nil) :: nil) _)
      | Pand p1 p2 =>
       match trans_pred n p1, trans_pred n p2 with
-      | Some (exist p1' _), Some (exist p2' _) =>
+      | Some (exist _ p1' _), Some (exist _ p2' _) =>
         Some (exist _ (p1' ++ p2') _)
       | _, _ => None
       end
      | Por p1 p2 =>
       match trans_pred n p1, trans_pred n p2 with
-      | Some (exist p1' _), Some (exist p2' _) =>
+      | Some (exist _ p1' _), Some (exist _ p2' _) =>
         Some (exist _ (mult p1' p2') _)
       | _, _ => None
       end
      | Pnot (Pvar p') => Some (exist _ (((false, p') :: nil) :: nil) _)
      | Pnot (Pnot p') =>
        match trans_pred n p' with
-       | Some (exist p1' _) => Some (exist _ p1' _)
+       | Some (exist _ p1' _) => Some (exist _ p1' _)
        | None => None
        end
      | Pnot (Pand p1 p2) =>
        match trans_pred n (Por (Pnot p1) (Pnot p2)) with
-       | Some (exist p1' _) => Some (exist _ p1' _)
+       | Some (exist _ p1' _) => Some (exist _ p1' _)
        | None => None
        end
      | Pnot (Por p1 p2) =>
        match trans_pred n (Pand (Pnot p1) (Pnot p2)) with
-       | Some (exist p1' _) => Some (exist _ p1' _)
+       | Some (exist _ p1' _) => Some (exist _ p1' _)
        | None => None
        end
      end
@@ -239,9 +239,9 @@ Definition sat_pred (bound: nat) (p: pred_op) :
           + {forall a : asgn, sat_predicate p a = false}).
   refine
   ( match trans_pred bound p with
-    | Some (exist fm _) =>
+    | Some (exist _ fm _) =>
       match boundedSat bound fm with
-      | Some (inleft (exist a _)) => Some (inleft (exist _ a _))
+      | Some (inleft (exist _ a _)) => Some (inleft (exist _ a _))
       | Some (inright _) => Some (inright _)
       | None => None
       end
@@ -255,7 +255,7 @@ Qed.
 
 Definition sat_pred_simple (bound: nat) (p: pred_op) :=
   match sat_pred bound p with
-  | Some (inleft (exist al _)) => Some (Some al)
+  | Some (inleft (exist _ al _)) => Some (Some al)
   | Some (inright _) => Some None
   | None => None
   end.
