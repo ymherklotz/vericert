@@ -1,4 +1,4 @@
 *.h linguist-language=C
 *.c linguist-language=C
 *.v linguist-language=Coq
-benchmarks/* linguist-vendored
+benchmarks/** linguist-vendored

@@ -9,9 +9,25 @@ This artifact should support the claims made in the paper "Formal Verification o
 - The cycle counts of Vericert on the benchmarks can be checked and compared against LegUp 4.0.
 - If Vivado is downloaded separately, then the whole performance section can be checked, including all the graphs that appear in the paper.
 
+** Artifact availability
+
+The artifact is available on Github, specifically on the ~oopsla21~ branch:
+
+https://github.com/ymherklotz/vericert
+
+#+latex: \noindent
+This release is also archived on Zenodo permanently:
+
+http://doi.org/10.5281/zenodo.5093839
+
+#+latex: \noindent
+However, for the purposes of this artifact review, a Docker image has been set up:
+
+https://hub.docker.com/repository/docker/ymherklotz/vericert
+
 ** Claims that are not supported by the artifact
 
-Unfortunately, we could not include our version of LegUp 4.0 in the artifact due to license restrictions.  In addition to that, LegUp was recently bought by Microchip and renamed to SmartHLS[fn:1], which means that it also cannot be freely downloaded anymore either, and the original open source version of LegUp 4.0 is not available anymore due to server issues in Toronto[fn:2].  We have tried contacting the authors of LegUp in Toronto, but have not heard back yet on if our version of LegUp can be shared in the artifact.
+Unfortunately, we could not include our version of LegUp 4.0 in the artifact due to license restrictions.  In addition to that, LegUp was recently bought by Microchip and renamed to SmartHLS[fn:1], which means that the most recent versions of LegUp are closed source and cannot be downloaded anymore.  The original open source version of LegUp 4.0 is not currently available either at the moment. The LegUp team have advised us that this is due to server issues in Toronto.[fn:2] We have not heard back from them about whether it is ok for us to share our copy of LegUp 4.0 for artifact evaluation purposes, so we have not done so.
 
 Instead, we have included the net lists that LegUp generated from the benchmarks in the artifact, with all the optimisation levels that were tried, however, it does mean that these cannot be verified again and that other optimisation options cannot be tried.
 
@@ -29,18 +45,35 @@ docker run -it ymherklotz/vericert:1.0 sh
 Then, one just has to go into the directory which contains the git repository (~/vericert~) and open a ~nix-shell~, which will load a shell with all the correct dependencies loaded:
 
 #+begin_src shell
+cd /vericert
 nix-shell
 #+end_src
 
-Then, any commands can be run in this shell to run ~vericert~, which has already been compiled and can be found in the ~/vericert/bin~ directory.  For a quick test that it is working, a few very simple examples in the ~/vericert/test~ directory can be run by using the following inside of the ~/vericert~ directory:
+Then, all commands can be run in this shell, as well as ~vericert~, which has already been compiled and can be found in the ~/vericert/bin~ directory.  For a quick test that it is working, a few very simple examples in the ~/vericert/test~ directory can be run by using the following inside of the ~/vericert~ directory:
 
 #+begin_src shell
+cd /vericert
 make test
 #+end_src
 
 If this finishes without errors, it means that Vericert is working correctly.
 
-* Detailed Artifact Description
+Finally, to check that the benchmarks work correctly as well, we can quickly compile and run one as well:
+
+#+begin_src shell
+cd /vericert/benchmarks/polybench-syn
+make
+./stencils/jacobi-1d
+#+end_src
+
+This simulates the hardware design generated for the jacobi-1d benchmark in PolyBench/C, and should print the return value: 1, as well as the cycle count: 19996 as follows:
+
+#+begin_src shell
+cycles: 19996
+finished: 1
+#+end_src
+
+* Step-by-Step instructions
 
 This section describes the detailed instructions to get the results for the different sections of the paper, first describing the structure of the proof and how to execute Vericert manually, to finally running Vericert on the benchmarks and get the cycle counts for the Vericert designs as well as the precompiled LegUp designs.
 
@@ -60,7 +93,63 @@ The main directory structure of Vericert is the following:
 
 ** Description of the proof
 
-The proof is mostly located in ~/src/hls~, which contains the proof of correctness of the 3AC to HTL transformation, as well as the transformation from HTL to Verilog.  Any other files in the ~/src/hls~ directory that are not mentioned below are there for future optimisations such as scheduling, which are not used.
+The proof is mostly located in ~/src/hls~, which contains the proof of correctness of the 3AC to HTL transformation, as well as the transformation from HTL to Verilog.  First, we will describe where each section of the paper is implemented, then a description of all the files in the src directory will be included.
+
+*** Implementation of paper sections
+
+When mentioning Coq source files, they will always be relative to the ~/vericert/src~ directory in the docker image.
+
+**** Section 2
+
+- Figure 2 :: This example is not included in the repository or docker image, however, if the small C example in Figure 2a is copied into a file ~main.v~, it can be compiled using the following:
+
+#+begin_src shell
+vericert -o main.v -O0 -drtl -dhtl main.c
+#+end_src
+
+Where ~-O0~ means it will not apply any CompCert optimisations, ~-drtl~ means it will print the internal 3AC (also known as RTL) representation and ~-dhtl~ outputs the HTL representation.  After running that command, Figure 2b should be the exact same as the ~main.rtl.7~ file that was generated, and Figure 2c should be the same as ~main.v~, with some slight modifications to some variable names and formatting.
+
+- Figure 3 :: After running the above command, Figure 3 will be a visual representation of ~main.
+
+- Section 2.2.2 :: The abstract RAM description and is used in HTL can be found in ~hls/HTL.v:139~. This also corresponds to Figure 7. This abstract description is then implemented as a concrete Verilog implementation shown in ~hls/Veriloggen.v:45~.  The proof that the Verilog implementation is correct according to the HTL specification of it can be found in Lemma ~ram_exec_match~, ~hls/Veriloggenproof.v:284~.
+
+- Section 2.2.3 :: This proof is for Theorem ~shrx_shrx_alt_equiv~, ~common/Integer~\-~Extra.v:661~.
+
+**** Section 3
+
+This Section is mainly implemented in ~hls/Verilog.v~.
+
+- Module execution rule :: The updated negative edge execution rule can be found in ~hls/Verilog.v:582~ which is called ~step_module~, and has a ~mis_stepp~ and ~mis_stepp_negedge~ for the steps of the positive and negative edge triggered always blocks.
+
+- Figure 5 :: This is implemented as all the other possible steps in one Verilog step, shown in ~hls/Verilog.v:581~.  The Figure just uses some nicer notation for the inference rules.
+
+- Figure 6 :: Our dependenty typed arrays used for the memory model are implemented in ~hls/Array.v~, and is then integrated in the Verilog semantics properly using the ~arr_associations~ type, defined in ~hls/Verilog.v:60~, which is a blocking and nonblocking array where each element is an optional, as shown in Figure 6.
+
+**** Section 5
+
+- Theorem 1 :: This is proven as Theorem ~transf_c_program_correct~ in ~Compiler.v~\-~:415~.
+
+- Lemma 1 :: This is proven as part of Theorem ~cstrategy_semantic_preservation~ in ~Compiler.v:334~, which also proves the backward simulation at the same time.
+
+- Lemma 2 :: The specification of the translation from 3AC to HTL is shown in Theorem ~transl_module_correct~ in ~hls/HTLgenspec.v:608~ and is called ~tr_module~ instead of ~spec_htl~ as in the paper, and ~tr_htl~ is called ~transl_~\-~module~ instead.
+
+- Section 4.1.2, ~match_states~ :: The ~match_states~ property to match two states in 3AC and HTL up is defined in ~hls/HTLgenproof.v:112~.
+
+- Lemma 3 :: Proven as Theorem ~transl_step_correct~ in ~hls/HTLgenproof.v:2856~ and describes the simulation diagram shown in the paper.
+
+- Section 4.2.1 :: The specification of the store is located in ~hls/Memorygen.v:2096~ and is called ~alt_store~.
+
+- Section 4.2.2, ~match_states~ :: The definition of matching states is defined in ~hls~\-~/Memory~\-~gen.v:314~, where ~ARRS_SIZE~ corresponds to the property of equally sized arrays at each step and ~DISABLE_RAM~ corresponds to the property that the RAM is always disabled by default.
+
+- Lemma 4 :: There is a small typo in the paper, and this Lemma should describe the forward simulation of the insertion of the RAM.  This is proven in Theorem ~transf_program_correct~ in ~hls/Memorygen.v:3196~, and the simulation diagram for this translation is proven in Theorem ~transf_step_correct~ in ~hls/Memorygen.v:3000~.
+
+- Lemma 5 :: This is proven in Theorem ~transf_program_correct~ in ~hls/Veriloggen~\-~proof.v:537~.  The assumption that the HTL module and Verilog module are related by ~transl_program~ (~tr_verilog~ in the paper) is given in the hypothesis ~TRANSL~ in ~hls/Veriloggenproof.v:343~.
+
+- Lemma 6 :: The determinism of the Verilog semantics is proven in ~semantics_deter~\-~minate~ in ~hls/Verilog.v:810~.
+
+- Table 1 :: These values were calculated by hand to separate specification, implementation and proof code.  The raw results can be found in the last table in the ~/data/data/results.org~ file, or in the ~/data/data/code-count.csv~.
+
+*** Description of files
 
 - ~/src/Compiler.v~ :: The very top-level of the proof is located here and it contains the main proof of the compiler, which is the proof that the ~transf_hls~ function is correct, which takes C and outputs Verilog.  The main proof of correctness is in the Theorem called ~transf_c_program_correct~, which says that if the ~transf_hls~ function succeeded, that the backward simulation should hold between C and Verilog.
 - ~/src/common~ :: This directory contains some common library extensions and proofs that are used in other parts of Vericert.  This includes the proof of correctness of Section 2.2.3, which is located in ~/src/common/IntegerExtra.v~ under the Theorem ~shrx_shrx_alt_equiv~.
@@ -214,9 +303,28 @@ Then, using the hash it can be run in the same way as the docker container that 
 docker run -it <hash> sh
 #+end_src
 
+** Building from git without Docker.
+
+The only dependency that is require is nix[fn:7].  Once that is installed, we can clone the Github repository and checkout the ~oopsla21~ branch:
+
+#+begin_src shell
+git clone https://github.com/ymherklotz/vericert
+cd vericert
+git checkout oopsla21
+#+end_src
+
+Then, it can be compiled and installed using:
+
+#+begin_src shell
+nix-shell --run "make -j7"
+nix-shell --run "make install"
+nix-shell --run "./bin/vericert ./test/add.c -o add.v"
+#+end_src
+
 * Footnotes
 
 
+[fn:7] https://nixos.org/download.html
 [fn:6] https://imperialcollegelondon.box.com/s/nqoaquk7j5mj70db16s6bdbhg44zjn52
 [fn:5] https://imperialcollegelondon.box.com/s/94clcbjowla3987opf3icjz087ozoi1o
 [fn:4] https://imperialcollegelondon.box.com/s/ril1utuk2n88fhoq3375oxiqcgw42b8a
