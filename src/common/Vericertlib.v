@@ -220,6 +220,8 @@ Ltac liapp :=
 
 Ltac plia := solve [ unfold Ple in *; lia ].
 
+Ltac xomega := unfold Plt, Ple in *; zify; lia.
+
 Ltac crush := simplify; try discriminate; try congruence; try plia; liapp;
               try assumption; try (solve [auto]).
 
