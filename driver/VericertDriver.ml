@@ -65,7 +65,6 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintClight.destination option_dclight ".light.c";
   set_dest Vericert.PrintCminor.destination option_dcminor ".cm";
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
-  set_dest Vericert.PrintRTLBlock.destination option_drtlblock ".rtlblock";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
@@ -93,7 +92,7 @@ let compile_c_file sourcename ifile ofile =
   end else begin
     let verilog =
       let translation = if !option_hls_schedule
-                        then Vericert.Compiler0.transf_hls_temp
+                        then Vericert.Compiler0.transf_hls
                         else Vericert.Compiler0.transf_hls
       in
       match translation csyntax with

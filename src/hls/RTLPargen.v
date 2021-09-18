@@ -705,11 +705,11 @@ Lemma sems_det:
   forall A ge tge sp st f,
   ge_preserved ge tge ->
   forall v v' mv mv',
-  (@sem_value A ge sp st f v /\ @sem_value A tge sp st f v' -> v = v') /\
-  (@sem_mem A ge sp st f mv /\ @sem_mem A tge sp st f mv' -> mv = mv').
-Proof. Admitted.
+  (sem_value A ge sp st f v /\ sem_value A tge sp st f v' -> v = v') /\
+  (sem_mem A ge sp st f mv /\ sem_mem A tge sp st f mv' -> mv = mv').
+Proof. Abort.
 
-Lemma sem_value_det:
+(*Lemma sem_value_det:
   forall A ge tge sp st f v v',
   ge_preserved ge tge ->
   @sem_value A ge sp st f v ->
@@ -1563,6 +1563,7 @@ Qed.
 Proof.
   intros.*)
 
+
 (*|
 Top-level functions
 ===================
@@ -1585,3 +1586,4 @@ Definition transl_fundef := transf_partial_fundef transl_function.
 
 Definition transl_program (p : RTLBlock.program) : Errors.res RTLPar.program :=
   transform_partial_program transl_fundef p.
+*)

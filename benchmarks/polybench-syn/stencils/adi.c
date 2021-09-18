@@ -15,28 +15,23 @@
 #include <stdio.h>
 #endif 
 
-#define plus(i) i = i + ONE
-
 static
-void init_array (int n,
-   int u[ 20 + 0][20 + 0])
+void init_array (int n, int u[ 20 + 0][20 + 0])
 {
   int i, j;
 
   for (i = 0; i < n; i++)
     for (j = 0; j < n; j++)
-      {
- u[i][j] = divider((int)(i + n-j) ,n);
-      }
+    {
+      u[i][j] = divider((int)(i + n-j), n);
+    }
 }
 
 
 
 
 static
-int print_array(int n,
-   int u[ 20 + 0][20 + 0])
-
+int print_array(int n, int u[ 20 + 0][20 + 0])
 {
   int i, j;
   int res = 0;
@@ -53,10 +48,10 @@ int print_array(int n,
 }
 static
 void kernel_adi(int tsteps, int n,
-  int u[ 20 + 0][20 + 0],
-  int v[ 20 + 0][20 + 0],
-  int p[ 20 + 0][20 + 0],
-  int q[ 20 + 0][20 + 0])
+                int u[ 20 + 0][20 + 0],
+                int v[ 20 + 0][20 + 0],
+                int p[ 20 + 0][20 + 0],
+                int q[ 20 + 0][20 + 0])
 {
   int t, i, j;
   int B1, B2;
