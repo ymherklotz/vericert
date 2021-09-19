@@ -390,13 +390,27 @@ Proof.
   - eauto using xmap_externctrl_params_ascending, Ascending_NoDup.
   - intros.
     specialize (Hspec n).
-    rewrite map_externctrl_params_args.
-    replace (snd (split param_pairs)) with args in *.
+    erewrite (map_externctrl_params_args args) in *; eauto.
     replace (n + 0)%nat with n in * by lia.
     assert (n < Datatypes.length args)%nat by eauto using nth_error_length.
     eauto.
 Qed.
 Hint Resolve map_externctrl_params_spec : htlspec.
+
+Lemma externctrl_params_mapped_trans : forall s s' args params fn,
+    externctrl_params_mapped args params (st_externctrl s) fn ->
+    st_prop s s' ->
+    externctrl_params_mapped args params (st_externctrl s') fn.
+Proof.
+  unfold externctrl_params_mapped.
+  intros * [Hlen [Hnodup Hmapped]] INCR.
+  repeat split; eauto.
+  intros n arg Hntharg.
+  edestruct Hmapped as [? [Hnthparam Hparam]]; try eassumption.
+  exists x. split. assumption.
+  inv INCR.
+  destruct (H4 x); crush.
+Qed.
 
 Lemma iter_expand_instr_spec :
   forall l prog fin rtrn stack s s' i x c,
@@ -439,34 +453,38 @@ Proof.
 
       repeat (eapply ex_intro).
 
-      repeat (apply conj).
-      * monad_crush.
-      * monad_crush.
-      * monad_crush.
-      * transitivity (length x1).
-        replace l0 with (snd (List.split x1)).
-        apply split_length_r.
-        eapply map_externctrl_params_args; eassumption.
-        auto using split_length_l.
-      * admit.
-      * intros.
-        destruct (map_externctrl_params_args _ _ _ _ _ _ EQ1); eauto using nth_error_length.
-        destruct (map_externctrl_params_spec _ n0 _ _ _ _ _ EQ1); eauto using nth_error_length.
-        exists x8. simplify; eauto.
-        monad_crush.
-      * eapply create_state_max; eassumption.
-      * replace x5 with (st_freshreg s6) in * by intro_step.
+      split. { monad_crush. }
+      split. { monad_crush. }
+      split. { monad_crush. }
+      split. {
+        apply (externctrl_params_mapped_trans s3 s').
+        erewrite <- (map_externctrl_params_args l0 x1).
+        eapply map_externctrl_params_spec.
+        - eauto.
+        - eauto.
+        - saturate_incr. eauto.
+      }
+      split. { eapply create_state_max; eassumption. }
+      split. {
+        replace x5 with (st_freshreg s6) in * by intro_step.
         replace l0 with (snd (split x1)) by
             eauto using map_externctrl_params_args.
         rewrite combine_split.
         monad_crush.
-      * monad_crush.
-      * replace x6 with (st_freshreg s7) in * by intro_step.
+      }
+      split. {
+       monad_crush.
+      }
+      split. {
+        replace x6 with (st_freshreg s7) in * by intro_step.
         replace x5 with (st_freshreg s6) in * by intro_step.
         replace x4 with (st_freshreg s5) in * by intro_step.
         monad_crush.
-      * replace x4 with (st_freshreg s5) in * by intro_step.
+      }
+      {
+        replace x4 with (st_freshreg s5) in * by intro_step.
         monad_crush.
+      }
     + (* Icond *) tr_code_simple_tac.
     + (* Ireturn *)
       inversion H2; try solve [eapply in_map with (f:=fst) in H; contradiction].
@@ -507,20 +525,19 @@ Proof.
     inversion Htrans.
     replace (st_st s').
     repeat (eapply ex_intro).
-    repeat (apply conj).
-    * eapply map_incr_some; inversion Htrans; eauto with htlspec.
-    * eapply map_incr_some; inversion Htrans; eauto with htlspec.
-    * eapply map_incr_some; inversion Htrans; eauto with htlspec.
-    * inv H5. eassumption.
-    * intros.
-      destruct H5.
-      destruct (H21 n0 ltac:(auto) ltac:(auto)) as [r [? ?]].
-      eexists. split; eauto with htlspec.
-    * eauto with htlspec.
-    * eauto with htlspec.
-    * eauto with htlspec.
-    * eauto with htlspec.
-    * eauto with htlspec.
+    split. {
+      eapply map_incr_some; inversion Htrans; eauto with htlspec.
+    }
+    split. {
+      eapply map_incr_some; inversion Htrans; eauto with htlspec.
+    }
+    split. {
+      eapply map_incr_some; inversion Htrans; eauto with htlspec.
+    }
+    split. {
+      eauto using externctrl_params_mapped_trans.
+    }
+    eauto 10 with htlspec.
   + eapply tr_code_return; eauto with htlspec.
     inversion Htrans.
     simplify. eexists.
