@@ -646,8 +646,8 @@ Section CORRECTNESS.
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
   Proof. intros. eapply (Genv.find_symbol_match TRANSL'). Qed.
 
-  Lemma function_ptr_translated:
-    forall (b: Values.block) (f: RTL.fundef),
+  Lemma function_ptr_translated :
+    forall (b : Values.block) (f: RTL.fundef),
       Genv.find_funct_ptr ge b = Some f ->
       exists tf,
         Genv.find_funct_ptr tge b = Some tf /\ transl_fundef prog f = Errors.OK tf.
@@ -2088,7 +2088,7 @@ Section CORRECTNESS.
            | [ _ : context[if ?x then _ else _] |- _ ] =>
              let EQ := fresh "EQ" in
              destruct x eqn:EQ; simpl in *
-           | [ H : ret _ _ = _  |- _ ] => invert H
+           | [ H : ret _ = _  |- _ ] => invert H
            | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
            end.
 
