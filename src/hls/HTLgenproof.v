@@ -1690,7 +1690,7 @@ Section CORRECTNESS.
       (forall n param, nth_error fn_params n = Some param ->
                   externctrl!param = Some (fn, HTL.ctrl_param n)).
   Proof.
-    intros * [Hlen Htr] * Hfn_params.
+    intros * [Hlen [Hnodup Hmapped]] * Hfn_params.
 
     assert (H : exists arg, nth_error args n = Some arg). {
       apply length_nth_error.
@@ -1698,7 +1698,7 @@ Section CORRECTNESS.
       lia.
     }
     destruct H as [ arg H ].
-    edestruct (Htr _ _ H) as [? [? ?]].
+    edestruct (Hmapped _ _ H) as [? [? ?]].
 
     enough (Some x = Some param) by crush.
     congruence.
@@ -1734,7 +1734,7 @@ Section CORRECTNESS.
       forall v : value, ~ In (r, v) (List.combine params argvals).
   Proof.
     unfold "~".
-    intros * Hordering [Hlen Hmapped] Hclk * contra.
+    intros * Hordering [Hlen [Hnodup Hmapped]] Hclk * contra.
     apply in_combine_l in contra.
     apply In_nth_error in contra.
     destruct contra as [? ?].
@@ -1791,8 +1791,8 @@ Section CORRECTNESS.
     intros * Hmapped Hrst contra.
     inv Hmapped.
     edestruct (In_nth_error _ _ contra) as [n ?].
-    edestruct (nth_error_same_length params args); crush; eauto.
-    edestruct H0 as [? [? ?]]; eauto.
+    edestruct (nth_error_same_length params args); eauto.
+    edestruct H0 as [? [? [? ?]]]; eauto.
     replace x0 with r in *; crush.
     apply option_inv.
     transitivity (nth_error params n); crush.
@@ -1805,7 +1805,7 @@ Section CORRECTNESS.
       ~ In r params.
   Proof.
     unfold externctrl_ordering.
-    intros * [Hlen Hmapped] Hordering Hlt contra.
+    intros * [Hlen [Hnodup Hmapped]] Hordering Hlt contra.
     destruct (In_nth_error _ _ contra) as [n Hparam].
     destruct (nth_error_same_length params args _ _ ltac:(crush) Hparam).
     destruct (Hmapped n _ ltac:(eassumption)) as [r' [? ?]].
