@@ -31,8 +31,10 @@ all: lib/COMPCERTSTAMP
 	$(MAKE) proof
 	$(MAKE) compile
 
-lib/COMPCERTSTAMP:
+lib/CompCert/Makefile.config: lib/CompCert/configure
 	(cd lib/CompCert && ./configure --ignore-coq-version $(ARCH))
+
+lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
 
