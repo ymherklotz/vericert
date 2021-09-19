@@ -236,6 +236,41 @@ Ltac maybe t := t + idtac.
 Global Opaque Nat.div.
 Global Opaque Z.mul.
 
+Inductive Ascending : list positive -> Prop :=
+  | Ascending_nil : Ascending nil
+  | Ascending_single : forall x, Ascending (x::nil)
+  | Ascending_cons : forall x y l, (x < y)%positive -> Ascending (y::l) -> Ascending (x::y::l).
+
+Lemma map_fst_split : forall A B (l : list (A * B)), List.map fst l = fst (List.split l).
+Proof.
+  induction l; crush.
+  destruct a; destruct (split l).
+  crush.
+Qed.
+
+Lemma Ascending_Forall : forall l x, Ascending (x :: l) -> Forall (fun y => x < y)%positive l.
+Proof.
+  induction l; crush.
+  inv H.
+  specialize (IHl _ H4).
+  apply Forall_cons.
+  - crush.
+  - apply Forall_impl with (P:=(fun y : positive => (a < y)%positive)); crush.
+Qed.
+
+Lemma Ascending_NoDup : forall l, Ascending l -> NoDup l.
+Proof.
+  induction 1; simplify.
+  - constructor.
+  - constructor. crush. constructor.
+  - constructor; auto.
+    intro contra. inv contra; crush.
+    auto_apply Ascending_Forall.
+    rewrite Forall_forall in *.
+    specialize (H2 x ltac:(auto)).
+    lia.
+Qed.
+
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
 Definition compose (A B C : Type) (f : B -> C) (g : A -> B) (x : A) : C := f (g x). *)

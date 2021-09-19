@@ -78,6 +78,7 @@ Hint Constructors tr_instr : htlspec.
 
 Definition externctrl_params_mapped (args params : list reg) externctrl (fn : ident) :=
   length args = length params /\
+  NoDup params /\
   forall n arg, List.nth_error args n = Some arg ->
            exists r, List.nth_error params n = Some r /\
                 externctrl ! r = Some (fn, ctrl_param n).
@@ -312,7 +313,7 @@ Ltac some_incr :=
   | [ INCR : st_prop _ _ |- _ ] => inversion INCR
   end.
 
-Lemma helper__map_externctrl_params_args : forall args param_pairs fn s s' k i,
+Lemma xmap_externctrl_params_args : forall args param_pairs fn s s' k i,
     xmap_externctrl_params k fn args s = OK param_pairs s' i ->
     snd (List.split param_pairs) = args.
 Proof.
@@ -324,13 +325,14 @@ Qed.
 Lemma map_externctrl_params_args : forall args param_pairs fn s s' i,
     map_externctrl_params fn args s = OK param_pairs s' i ->
     snd (List.split param_pairs) = args.
-Proof. sauto use: helper__map_externctrl_params_args. Qed.
+Proof. sauto use: xmap_externctrl_params_args. Qed.
 
-Lemma helper__map_externctrl_params_spec : forall args n param_pairs k fn s s' i,
+Lemma helper__map_externctrl_params_spec : forall args param_pairs k fn s s' i,
     xmap_externctrl_params k fn args s = OK param_pairs s' i ->
-    (n < length args)%nat ->
-    exists r, (List.nth_error (fst (List.split param_pairs)) n = Some r) /\
-         (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
+    forall n,
+      (n < length args)%nat ->
+      exists r, (List.nth_error (fst (List.split param_pairs)) n = Some r) /\
+           (s'.(st_externctrl) ! r = Some (fn, ctrl_param (n+k))).
 Proof.
   induction args.
   - sauto use: nth_error_nil.
@@ -339,18 +341,61 @@ Proof.
     destruct n; simplify.
     + destruct (split x0). simpl.
       exists x. crush. monad_crush.
-    + destruct (IHargs n _ _ _ _ _ _ EQ1 ltac:(lia)).
+    + destruct (IHargs _ _ _ _ _ _ EQ1 n ltac:(lia)).
       destruct (split _). simpl in *.
       eexists. replace (S (n + k))%nat with (n + S k)%nat by lia.
       eassumption.
-    Qed.
+Qed.
 
-Lemma map_externctrl_params_spec : forall args n param_pairs fn s s' i,
+Set Nested Proofs Allowed.
+
+Lemma xmap_externctrl_params_ascending :
+  forall args param_pairs k fn s s' i,
+    xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+    Ascending (fst (List.split param_pairs)).
+Proof.
+  assert (
+      forall args param_pairs k fn s s' i,
+        xmap_externctrl_params k fn args s = OK param_pairs s' i ->
+        Ascending (List.map fst param_pairs)). {
+    induction args.
+    - simplify. monadInv H. simpl. constructor.
+    - intros.
+      monadInv H.
+      simpl.
+      exploit IHargs; try eassumption; intros.
+      destruct args; monadInv EQ1.
+      + constructor.
+      + simpl in *.
+        constructor.
+        * monadInv EQ.
+          monadInv EQ0.
+          lia.
+        * assumption.
+  }
+  intros.
+  rewrite <- map_fst_split.
+  eauto.
+Qed.
+
+Lemma map_externctrl_params_spec : forall args param_pairs fn s s' i,
     map_externctrl_params fn args s = OK param_pairs s' i ->
-    (n < length args)%nat ->
-    exists r, (List.nth_error (fst (List.split param_pairs)) n = Some r) /\
-         (s'.(st_externctrl) ! r = Some (fn, ctrl_param n)).
-Proof. sauto use: helper__map_externctrl_params_spec. Qed.
+    externctrl_params_mapped (snd (List.split param_pairs)) (fst (List.split param_pairs)) (st_externctrl s') fn.
+Proof.
+  intros.
+  unfold map_externctrl_params in *.
+  specialize (helper__map_externctrl_params_spec _ _ _ _ _ _ _ H); intro Hspec.
+  repeat split.
+  - rewrite split_length_r, split_length_l. trivial.
+  - eauto using xmap_externctrl_params_ascending, Ascending_NoDup.
+  - intros.
+    specialize (Hspec n).
+    rewrite map_externctrl_params_args.
+    replace (snd (split param_pairs)) with args in *.
+    replace (n + 0)%nat with n in * by lia.
+    assert (n < Datatypes.length args)%nat by eauto using nth_error_length.
+    eauto.
+Qed.
 Hint Resolve map_externctrl_params_spec : htlspec.
 
 Lemma iter_expand_instr_spec :
@@ -403,6 +448,7 @@ Proof.
         apply split_length_r.
         eapply map_externctrl_params_args; eassumption.
         auto using split_length_l.
+      * admit.
       * intros.
         destruct (map_externctrl_params_args _ _ _ _ _ _ EQ1); eauto using nth_error_length.
         destruct (map_externctrl_params_spec _ n0 _ _ _ _ _ EQ1); eauto using nth_error_length.
