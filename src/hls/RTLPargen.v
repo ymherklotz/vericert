@@ -511,6 +511,50 @@ Inductive sem :
 
 End SEMANTICS.
 
+Definition hash_pred := @pred positive.
+
+Definition hash_tree := PTree.t (condition * list reg).
+
+Definition find_tree (el: predicate * list reg) (h: hash_tree) : option positive :=
+  match
+    filter (fun x => match x with (a, b) => if hash_el_dec el b then true else false end)
+           (PTree.elements h) with
+  | (p, _) :: nil => Some p
+  | _ => None
+  end.
+
+Definition combine_option {A} (a b: option A) : option A :=
+  match a, b with
+  | Some a', _ => Some a'
+  | _, Some b' => Some b'
+  | _, _ => None
+  end.
+
+Definition max_key {A} (t: PTree.t A) :=
+  fold_right Pos.max 1 (map fst (PTree.elements t)).
+
+Fixpoint hash_predicate (p: predicate) (h: PTree.t (condition * list reg))
+  : hash_pred * PTree.t (condition * list reg) :=
+    match p with
+  | T => (T, h)
+  | ⟂ => (⟂, h)
+  | Pbase (b, (c, args)) =>
+    match find_tree (c, args) h with
+    | Some p => (Pbase (b, p), h)
+    | None =>
+      let nkey := max_key h + 1 in
+      (Pbase (b, nkey), PTree.set nkey (c, args) h)
+    end
+  | p1 ∧ p2 =>
+    let (p1', t1) := hash_predicate p1 h in
+    let (p2', t2) := hash_predicate p2 t1 in
+    (p1' ∧ p2', t2)
+  | p1 ∨ p2 =>
+    let (p1', t1) := hash_predicate p1 h in
+    let (p2', t2) := hash_predicate p2 t1 in
+    (p1' ∨ p2', t2)
+  end.
+
 Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
   match e1, e2 with
   | Ebase r1, Ebase r2 => if resource_eq r1 r2 then true else false
@@ -567,11 +611,11 @@ Proof.
              forall e2, beq_expression_list e1 e2 = true -> e1 = e2)
       (P1 := fun (e1 : expr_pred_list) =>
              forall e2, beq_expr_pred_list e1 e2 = true -> e1 = e2); simplify;
-    repeat match goal with
-           | [ H : context[match ?x with _ => _ end] |- _ ] => destruct x eqn:?
-           | [ H : context[if ?x then _ else _] |- _ ] => destruct x eqn:?
-           end; subst; f_equal; crush.
-  eauto using Peqb_true_eq.
+  try solve [repeat match goal with
+                    | [ H : context[match ?x with _ => _ end] |- _ ] => destruct x eqn:?
+                    | [ H : context[if ?x then _ else _] |- _ ] => destruct x eqn:?
+                    end; subst; f_equal; crush; eauto using Peqb_true_eq].
+  destruct e2; try discriminate. eauto.
 Qed.
 
 Definition empty : forest := Rtree.empty _.

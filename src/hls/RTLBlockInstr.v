@@ -193,7 +193,7 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
         Some (exist _ (mult p1' p2') _)
       | _, _ => None
       end
-     | Pnot (Pvar p') => Some (exist _ (((false, p') :: nil) :: nil) _)
+     | Pnot (Pvar p') => Some (exist _ (((false, Pos.to_nat p') :: nil) :: nil) _)
      | Pnot (Pnot p') =>
        match trans_pred n p' with
        | Some (exist _ p1' _) => Some (exist _ p1' _)
@@ -212,7 +212,7 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
      end
    end); split; intros; simpl in *; auto.
   - inv H. inv H0; auto.
-  - split; auto. destruct (a p') eqn:?; crush.
+  - split; auto. destruct (a (Pos.to_nat p')) eqn:?; crush.
   - inv H. inv H0. unfold satLit in H. simplify. rewrite H. auto.
     crush.
   - rewrite negb_involutive in H. apply i in H. auto.
