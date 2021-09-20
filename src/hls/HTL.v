@@ -308,7 +308,16 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
            (Returnstate (Stackframe callerid caller pc asr asa :: sf) callee_id i) Events.E0
            (State sf callerid caller pc
                   (asr # mst <- (posToValue pc) # callee_finish <- (ZToValue 1) # callee_return <- i)
-                  asa).
+                  asa)
+| step_finish_reset :
+    forall g sf mid mid' m st asr asa fin,
+      asr ! fin = Some (ZToValue 1) ->
+      (mod_externctrl m) ! fin = Some (mid', ctrl_finish) ->
+      step g
+           (State sf mid m st asr                        asa) Events.E0
+           (State sf mid m st (asr # fin <- (ZToValue 0)) asa).
+
+
 Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=

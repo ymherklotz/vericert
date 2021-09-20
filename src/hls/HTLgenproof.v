@@ -126,6 +126,10 @@ Definition has_externctrl (caller : HTL.module) (current_id : HTL.ident) (ret rs
   (HTL.mod_externctrl caller)!fin = Some (current_id, HTL.ctrl_finish).
 Hint Unfold has_externctrl : htlproof.
 
+Definition match_externctrl m asr :=
+  forall r mid, (HTL.mod_externctrl m) ! r = Some (mid, HTL.ctrl_finish) ->
+           asr ! r = Some (ZToValue 0).
+
 Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.mem)
   : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
 | match_frames_nil :
@@ -162,7 +166,8 @@ Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
     (RSBP : reg_stack_based_pointers sp' rs)
     (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
     (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
-    (CONST : match_constants m asr),
+    (CONST : match_constants m asr)
+    (MEXTERNCTRL : match_externctrl m asr),
     match_states ge
                  (RTL.State sf f sp st rs mem)
                  (HTL.State res mid m st asr asa)
@@ -1369,6 +1374,34 @@ Section CORRECTNESS.
   Ltac small_tac := repeat (crush_val; try array; try ptrofs); crush_val; auto.
   Ltac big_tac := repeat (crush_val; try array; try ptrofs; try tac0); crush_val; auto.
 
+  Lemma match_externctrl_out : forall m r v asr,
+      (HTL.mod_externctrl m) ! r = None ->
+      match_externctrl m asr ->
+      match_externctrl m (asr # r <- v).
+  Proof.
+    unfold match_externctrl.
+    intros * Hunmapped Hprev * Hmapped.
+    rewrite AssocMap.gso by crush.
+    eauto.
+  Qed.
+
+  Lemma externctrl_low : forall clk r externctrl,
+      externctrl_ordering externctrl clk ->
+      (r < clk)%positive ->
+      externctrl ! r = None.
+  Proof.
+    intros * Horder Hclk.
+    destruct (externctrl ! r) eqn:E; trivial.
+
+    unfold externctrl_ordering in Horder.
+    specialize (Horder r ltac:(eauto)).
+    lia.
+  Qed.
+
+  Ltac trans_externctrl :=
+    apply match_externctrl_out; crush;
+    eapply externctrl_low; eauto; crush.
+
   Lemma transl_inop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
       (rs : RTL.regset) (m : mem) (pc' : RTL.node),
@@ -1393,10 +1426,19 @@ Section CORRECTNESS.
       + constructor.
       + big_tac.
     - inv CONST. inv MARR. simplify. big_tac.
-      constructor; rewrite AssocMap.gso; crush.
+      + constructor; rewrite AssocMap.gso; crush.
+      + trans_externctrl.
     Unshelve. exact tt.
   Qed.
   Hint Resolve transl_inop_correct : htlproof.
+
+  Ltac trans_match_externctrl :=
+    unshelve (
+      try eassumption;
+      apply match_externctrl_out;
+      simpl;
+      [eauto; crush; shelve | eauto; crush; try trans_match_externctrl]
+    ).
 
   Lemma transl_iop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -1443,6 +1485,12 @@ Section CORRECTNESS.
           assert (HPle: Ple res0 (RTL.max_reg_function f))
             by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
           unfold Ple in HPle. lia.
+      + trans_match_externctrl.
+        * epose proof (RTL.max_reg_function_def f _ _ res0 _ _); eauto.
+          unfold Ple in *.
+          eapply externctrl_low; eauto; crush.
+        * crush.
+
       Unshelve. exact tt.
   Qed.
   Hint Resolve transl_iop_correct : htlproof.
@@ -1557,8 +1605,7 @@ Section CORRECTNESS.
       destruct (Mem.load AST.Mint32 m' stk (Ptrofs.unsigned (Ptrofs.repr (4 * ptr)))) eqn:eq_load; repeat constructor.
       erewrite (Mem.load_alloc_same m 0 (RTL.fn_stacksize f) m' _ _ _ _ v); eauto; repeat econstructor.
     - auto using stack_based_non_pointers.
-    - (* Stack based stack pointer *)
-      unfold arr_stack_based_pointers; intros.
+    - unfold arr_stack_based_pointers; intros.
       destruct (Mem.loadv AST.Mint32 m'
                           (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:eq_load.
       + simpl.
@@ -1971,12 +2018,13 @@ Section CORRECTNESS.
                 with (asr ## args).
 
         * eauto using match_arg_vals, call_args_maxreg.
-        * rewrite get_all_assign_out.
-          rewrite merge_correct_all_1; crush.
+        * unfold externctrl_params_mapped in *.
+          rewrite get_all_assign_out.
+          rewrite merge_correct_all_1.
+          -- crush.
           -- rewrite get_all_length.
-             inv H6.
              crush.
-          -- admit. (* TODO: NoDup parameters *)
+          -- crush.
           -- eauto using separate_params_reset.
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
