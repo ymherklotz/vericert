@@ -40,7 +40,7 @@ Require vericert.hls.Verilog.
 
 Require Import Lia.
 
-From Hammer Require Import Tactics .
+From Hammer Require Import Tactics.
 Set Nested Proofs Allowed.
 
 Local Open Scope assocmap.
@@ -128,7 +128,7 @@ Hint Unfold has_externctrl : htlproof.
 
 Definition match_externctrl m asr :=
   forall r mid, (HTL.mod_externctrl m) ! r = Some (mid, HTL.ctrl_finish) ->
-           asr ! r = Some (ZToValue 0).
+           asr # r = ZToValue 0.
 
 Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.mem)
   : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
@@ -145,6 +145,7 @@ Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.me
       (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
       (CONST : match_constants m asr)
       (EXTERN_CALLER : has_externctrl m current_id ret rst fin)
+      (MEXTERNCTRL : match_externctrl m asr)
       (JOIN_CTRL : (HTL.mod_controllogic m)!st = Some (state_wait (HTL.mod_st m) fin pc))
       (JOIN_DATA : (HTL.mod_datapath m)!st = Some (join fin rst ret dst))
       (TAILS : match_frames ge mid mem rtl_tl htl_tl)
@@ -1381,7 +1382,7 @@ Section CORRECTNESS.
   Proof.
     unfold match_externctrl.
     intros * Hunmapped Hprev * Hmapped.
-    rewrite AssocMap.gso by crush.
+    rewrite AssocMap.fso by crush.
     eauto.
   Qed.
 
@@ -1486,11 +1487,10 @@ Section CORRECTNESS.
             by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
           unfold Ple in HPle. lia.
       + trans_match_externctrl.
-        * epose proof (RTL.max_reg_function_def f _ _ res0 _ _); eauto.
+        * epose proof (RTL.max_reg_function_def f _ _ res0 ltac:(eauto) ltac:(eauto)).
           unfold Ple in *.
-          eapply externctrl_low; eauto; crush.
-        * crush.
-
+          apply (externctrl_low clk); eauto; crush.
+        * apply (externctrl_low clk); eauto; crush.
       Unshelve. exact tt.
   Qed.
   Hint Resolve transl_iop_correct : htlproof.
@@ -1573,6 +1573,27 @@ Section CORRECTNESS.
       destruct_match; crush.
   Qed.
 
+  Lemma find_init_regs_out : forall ps vs r,
+      ~ In r ps ->
+      (HTL.init_regs vs ps) ! r = None.
+  Proof.
+    induction ps; simplify.
+    - apply AssocMap.gempty.
+    - destruct vs.
+      + apply AssocMap.gempty.
+      + rewrite AssocMap.gso by crush.
+        apply IHps.
+        crush.
+  Qed.
+
+  Lemma find_default : forall m r,
+      m ! r = None ->
+      m # r = ZToValue 0.
+  Proof.
+    unfold "_ # _".
+    hauto unfold: reg, AssocMapExt.get_default.
+  Qed.
+
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
       (m : mem) (m' : Mem.mem') (stk : Values.block),
@@ -1617,6 +1638,19 @@ Section CORRECTNESS.
       + rewrite AssocMap.gss; crush.
       + rewrite AssocMap.gso by not_control_reg.
         rewrite AssocMap.gss. crush.
+    - unfold match_externctrl.
+      simplify.
+      repeat rewrite AssocMap.fso.
+      + apply find_default.
+        apply find_init_regs_out.
+        intro contra.
+        apply RTL.max_reg_function_params in contra. unfold Ple in contra.
+        unfold externctrl_ordering in *.
+        specialize (H17 r ltac:(eauto)).
+        lia.
+      + not_control_reg.
+      + not_control_reg.
+      + not_control_reg.
     Unshelve.
     all: eauto.
   Qed.
@@ -1868,8 +1902,55 @@ Section CORRECTNESS.
       ~ In (x, y) (List.combine l1 l2).
   Proof. eauto using in_combine_l. Qed.
 
+  Lemma match_externctrl_merge : forall m asr1 asr2,
+      match_externctrl m asr1 ->
+      match_externctrl m asr2 ->
+      match_externctrl m (AssocMapExt.merge value asr1 asr2).
+  Proof.
+    unfold match_externctrl.
+    intros * H1 H2 * Hexternctrl.
+    specialize (H1 r mid Hexternctrl).
+    specialize (H2 r mid Hexternctrl).
+    unfold "_ # _" in *.
+    unfold AssocMapExt.get_default in *.
+    destruct (asr1 ! r) eqn:E1, (asr2 ! r) eqn:E2; subst.
+    - erewrite AssocMapExt.merge_correct_1; eauto.
+    - erewrite AssocMapExt.merge_correct_1; eauto.
+    - erewrite AssocMapExt.merge_correct_2; eauto.
+    - erewrite AssocMapExt.merge_correct_3; eauto.
+  Qed.
+
+  Lemma fempty : forall r, empty_assocmap # r = ZToValue 0.
+  Proof.
+    unfold "_ # _", AssocMapExt.get_default.
+    intros.
+    rewrite AssocMap.gempty.
+    trivial.
+  Qed.
+
+  Lemma in_params_exists : forall r params args externctrl fn,
+      externctrl_params_mapped args params externctrl fn ->
+      (In r params) ->
+      exists n, externctrl ! r = Some (fn, HTL.ctrl_param n).
+  Proof.
+    intros param * [Hlen [Hnodup Hmapped]].
+    intro Hin.
+    apply In_nth_error in Hin; destruct Hin as [n Hparam].
+    edestruct (nth_error_same_length params args) as [arg Harg]; eauto.
+    edestruct (Hmapped _ _ Harg) as [param' [Hparam' ?]].
+    replace param' with param in * by crush.
+    eauto.
+  Qed.
+
+  Ltac not_in_params_low := eapply param_reg_lower; eauto; lia.
+  Ltac not_in_params_other :=
+    let contra := fresh "contra" in
+    intro contra; eapply in_params_exists in contra; eauto; crush.
+
   Ltac not_in_params :=
-    intros; try apply not_in_combine_l; eapply param_reg_lower; eauto; lia.
+    solve [
+      intros; try apply not_in_combine_l; (not_in_params_low + not_in_params_other)
+    ].
 
   Lemma transl_icall_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val)
@@ -1923,7 +2004,8 @@ Section CORRECTNESS.
           -- eapply param_reg_lower; eauto. lia.
           -- not_control_reg.
         * eauto.
-      + eapply HTL.step_module; trivial.
+      + assert ((asr # x3) = ZToValue 0) by eauto using MEXTERNCTRL.
+        eapply HTL.step_module; trivial.
         * simpl.
           apply AssocMapExt.merge_correct_2; auto.
           rewrite assign_all_out by not_in_params.
@@ -1946,10 +2028,11 @@ Section CORRECTNESS.
         * unfold state_wait.
           eapply Verilog.stmnt_runp_Vcond_false.
           -- simpl. econstructor; econstructor; simpl.
-             replace (Verilog.merge_regs ((empty_assocmap # st1 <- (posToValue x0)) # x1 <- (ZToValue 1)) ## x4 <- (asr ## args) asr) # x3
-               with (ZToValue 0) by admit.
-             (* TODO: Externctrl finish is false *)
-             trivial.
+             rewrite find_merge_right. eassumption.
+             rewrite assign_all_out by not_in_params.
+             rewrite AssocMap.gso by crush.
+             rewrite AssocMap.gso by not_control_reg.
+             apply AssocMap.gempty.
           -- auto.
           -- econstructor.
         * simpl.
@@ -1962,7 +2045,12 @@ Section CORRECTNESS.
           -- repeat econstructor.
           -- eapply Verilog.stmnt_runp_Vcond_false.
              ++ repeat econstructor.
-             ++ big_tac. admit. (* TODO: Externctrl finish is false *)
+             ++ big_tac.
+                rewrite find_merge_right. replace (asr # x3). auto.
+                rewrite assign_all_out by not_in_params.
+                rewrite AssocMap.gso by crush.
+                rewrite AssocMap.gso by not_control_reg.
+                apply AssocMap.gempty.
              ++ repeat econstructor.
         * constructor.
         * simpl.
@@ -2009,6 +2097,17 @@ Section CORRECTNESS.
              rewrite AssocMap.gso by not_control_reg.
              apply AssocMap.gempty.
           -- not_control_reg.
+        * simplify.
+          unfold Verilog.merge_regs.
+
+          apply match_externctrl_merge; [idtac | apply match_externctrl_merge ]; eauto; unfold match_externctrl; simplify.
+          -- rewrite AssocMap.fso by crush.
+             apply fempty.
+          -- apply find_default.
+             rewrite assign_all_out by not_in_params.
+             rewrite AssocMap.gso by crush.
+             rewrite AssocMap.gso by not_control_reg.
+             apply AssocMap.gempty.
       + (* Non-pointers *) admit.
       + (* Argument values match *)
         big_tac.
@@ -2026,6 +2125,8 @@ Section CORRECTNESS.
              crush.
           -- crush.
           -- eauto using separate_params_reset.
+    Unshelve.
+    all: eauto; exact tt.
   Admitted.
   Hint Resolve transl_icall_correct : htlproof.
   Close Scope rtl.
@@ -2099,9 +2200,11 @@ Section CORRECTNESS.
     inv MSTATE.
     inversion MF.
     inversion EXTERN_CALLER.
+    inversion TF.
+
     simplify.
     eexists; split.
-    - eapply Smallstep.plus_two.
+    - eapply Smallstep.plus_three.
       + (* Return to caller *)
         repeat econstructor; eauto.
       + (* Join *)
@@ -2119,29 +2222,35 @@ Section CORRECTNESS.
           rewrite AssocMap.fso by crush.
           rewrite AssocMap.fss.
           auto.
-        * replace (HTL.mod_ram m0) with (@None HTL.ram) by (inv TF; trivial).
+        * simplify.
           constructor.
         * big_tac; inv TF; simplify; not_control_reg.
+      + simplify.
+        eapply HTL.step_finish_reset with (fin:=fin).
+        big_tac.
+        * not_control_reg.
+        * not_control_reg.
+        * eauto.
       + trivial.
     - simpl.
       eapply match_state; simpl; eauto.
       + big_tac.
-        inv TF. simplify.
-        eapply regs_lessdef_add_match. rewrite fss; eauto.
+        rewrite AssocMap.fss.
+        eapply regs_lessdef_add_greater; try not_control_reg.
+        eapply regs_lessdef_add_match; eauto.
         repeat eapply regs_lessdef_add_greater; eauto; not_control_reg.
       + unfold state_st_wf.
         intros * Hwf.
         inv Hwf.
-        inv TF.
         big_tac.
-        not_control_reg.
+        * not_control_reg.
+        * not_control_reg.
       + auto using match_arrs_empty.
       + eapply stack_based_set; eauto.
         unfold not_pointer in *.
         destruct vres; crush.
       + (* match_constants *)
         inv CONST.
-        inv TF.
         big_tac.
         constructor.
         * simplify.
@@ -2149,6 +2258,7 @@ Section CORRECTNESS.
           repeat rewrite AssocMap.gso; auto; not_control_reg.
         * simplify.
           repeat rewrite AssocMap.gso; auto; not_control_reg.
+      + unfold match_externctrl. simplify.
       Unshelve. all: try exact tt; eauto.
   Qed.
   Hint Resolve transl_returnstate_correct : htlproof.
