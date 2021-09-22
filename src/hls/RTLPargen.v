@@ -31,6 +31,8 @@ Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.RTLBlockInstr.
 
+#[local] Open Scope positive.
+
 (*|
 Schedule Oracle
 ===============
@@ -216,26 +218,27 @@ Inductive expression : Type :=
 | Eload : AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Estore : expression -> AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Esetpred : predicate -> Op.condition -> expression_list -> expression -> expression
-| Econd : expr_pred_list -> expression
 with expression_list : Type :=
 | Enil : expression_list
 | Econs : expression -> expression_list -> expression_list
-with expr_pred_list : Type :=
-| EPnil : expr_pred_list
-| EPcons : pred_op -> expression -> expr_pred_list -> expr_pred_list
 .
+
+Inductive pred_expr : Type :=
+| PEsingleton : option pred_op -> expression -> pred_expr
+| PEcons : pred_op -> expression -> pred_expr -> pred_expr.
 
 Definition pred_list_wf l : Prop :=
   forall a b, In a l -> In b l -> a <> b -> unsat (Pand a b).
 
-Fixpoint expr_pred_list_to_list e :=
-  match e with
-  | EPnil => nil
-  | EPcons p e l => (p, e) :: expr_pred_list_to_list l
+Fixpoint pred_expr_list (p: pred_expr) :=
+  match p with
+  | PEsingleton None _ => nil
+  | PEsingleton (Some pr) e => (pr, e) :: nil
+  | PEcons pr e p' => (pr, e) :: pred_expr_list p'
   end.
 
-Definition pred_list_wf_ep l : Prop :=
-  pred_list_wf (map fst (expr_pred_list_to_list l)).
+Definition pred_list_wf_ep (l: pred_expr) : Prop :=
+  pred_list_wf (map fst (pred_expr_list l)).
 
 Lemma unsat_correct1 :
   forall a b c,
@@ -380,11 +383,11 @@ identified as positive numbers.
 
 Module Rtree := ITree(R_indexed).
 
-Definition forest : Type := Rtree.t expression.
+Definition forest : Type := Rtree.t pred_expr.
 
-Definition get_forest v f :=
+Definition get_forest v (f: forest) :=
   match Rtree.get v f with
-  | None => Ebase v
+  | None => PEsingleton None (Ebase v)
   | Some v' => v'
   end.
 
@@ -397,9 +400,9 @@ Definition maybe {A: Type} (vo: A) (pr: predset) p (v: A) :=
   | None => v
   end.
 
-Definition get_pr i := match i with InstrState a b c => b end.
+Definition get_pr i := match i with mk_instr_state a b c => b end.
 
-Definition get_m i := match i with InstrState a b c => c end.
+Definition get_m i := match i with mk_instr_state a b c => c end.
 
 Definition eval_predf_opt pr p :=
   match p with Some p' => eval_predf pr p' | None => true end.
@@ -417,13 +420,13 @@ Inductive sem_value :
   val -> instr_state -> expression -> val -> Prop :=
 | Sbase_reg:
     forall sp rs r m pr,
-    sem_value sp (InstrState rs pr m) (Ebase (Reg r)) (rs !! r)
+    sem_value sp (mk_instr_state rs pr m) (Ebase (Reg r)) (rs !! r)
 | Sop:
     forall rs m op args v lv sp m' mem_exp pr,
-    sem_mem sp (InstrState rs pr m) mem_exp m' ->
-    sem_val_list sp (InstrState rs pr m) args lv ->
+    sem_mem sp (mk_instr_state rs pr m) mem_exp m' ->
+    sem_val_list sp (mk_instr_state rs pr m) args lv ->
     Op.eval_operation genv sp op lv m' = Some v ->
-    sem_value sp (InstrState rs pr m) (Eop op args mem_exp) v
+    sem_value sp (mk_instr_state rs pr m) (Eop op args mem_exp) v
 | Sload :
     forall st mem_exp addr chunk args a v m' lv sp,
     sem_mem sp st mem_exp m' ->
@@ -431,21 +434,17 @@ Inductive sem_value :
     Op.eval_addressing genv sp addr lv = Some a ->
     Memory.Mem.loadv chunk m' a = Some v ->
     sem_value sp st (Eload chunk addr args mem_exp) v
-| Scond :
-    forall sp st e v,
-    sem_val_ep_list sp st e v ->
-    sem_value sp st (Econd e) v
 with sem_pred :
        val -> instr_state -> expression -> bool -> Prop :=
 | Spred:
-    forall st mem_exp args p c lv m m' v sp,
-    sem_mem sp st mem_exp m' ->
+    forall st pred_exp args p c lv m m' v sp,
+    sem_pred sp st pred_exp m' ->
     sem_val_list sp st args lv ->
     Op.eval_condition c lv m = Some v ->
-    sem_pred sp st (Esetpred p c args mem_exp) v
+    sem_pred sp st (Esetpred p c args pred_exp) v
 | Sbase_pred:
     forall rs pr m p sp,
-    sem_pred sp (InstrState rs pr m) (Ebase (Pred p)) (PMap.get p pr)
+    sem_pred sp (mk_instr_state rs pr m) (Ebase (Pred p)) (PMap.get p pr)
 with sem_mem :
        val -> instr_state -> expression -> Memory.mem -> Prop :=
 | Sstore :
@@ -458,7 +457,7 @@ with sem_mem :
     sem_mem sp st (Estore mem_exp chunk addr args val_exp) m''
 | Sbase_mem :
     forall rs m sp pr,
-    sem_mem sp (InstrState rs pr m) (Ebase Mem) m
+    sem_mem sp (mk_instr_state rs pr m) (Ebase Mem) m
 with sem_val_list :
        val -> instr_state -> expression_list -> list val -> Prop :=
 | Snil :
@@ -469,35 +468,51 @@ with sem_val_list :
     sem_value sp st e v ->
     sem_val_list sp st l lv ->
     sem_val_list sp st (Econs e l) (v :: lv)
-with sem_val_ep_list :
-       val -> instr_state -> expr_pred_list -> val -> Prop :=
-| SPnil :
-    forall sp rs r m pr,
-    sem_val_ep_list sp (InstrState rs pr m) EPnil (rs !! r)
-| SPconsTrue :
-    forall pr p sp rs m e v el,
-    eval_predf pr p = true ->
-    sem_value sp (InstrState rs pr m) e v ->
-    sem_val_ep_list sp (InstrState rs pr m) (EPcons p e el) v
-| SPconsFalse :
-    forall pr p sp rs m e v el,
-    eval_predf pr p = false ->
-    sem_val_ep_list sp (InstrState rs pr m) el v ->
-    sem_val_ep_list sp (InstrState rs pr m) (EPcons p e el) v
 .
+
+Inductive sem_pred_expr {A: Type} (sem: val -> instr_state -> expression -> A -> Prop):
+  val -> instr_state -> pred_expr -> A -> Prop :=
+| sem_pred_expr_base :
+    forall sp st e v,
+    sem sp st e v ->
+    sem_pred_expr sem sp st (PEsingleton None e) v
+| sem_pred_expr_p :
+    forall sp st e p v,
+    eval_predf (instr_st_predset st) p = true ->
+    sem sp st e v ->
+    sem_pred_expr sem sp st (PEsingleton (Some p) e) v
+| sem_pred_expr_cons_true :
+    forall sp st e pr p' v,
+    eval_predf (instr_st_predset st) pr = true ->
+    sem sp st e v ->
+    sem_pred_expr sem sp st (PEcons pr e p') v
+| sem_pred_expr_cons_false :
+    forall sp st e pr p' v,
+    eval_predf (instr_st_predset st) pr = false ->
+    sem_pred_expr sem sp st p' v ->
+    sem_pred_expr sem sp st (PEcons pr e p') v
+.
+
+Definition collapse_pe (p: pred_expr) : option expression :=
+  match p with
+  | PEsingleton None p => Some p
+  | _ => None
+  end.
 
 Inductive sem_predset :
   val -> instr_state -> forest -> predset -> Prop :=
 | Spredset:
     forall st f sp rs',
-    (forall x, sem_pred sp st (f # (Pred x)) (PMap.get x rs')) ->
+    (forall pe x,
+      collapse_pe (f # (Pred x)) = Some pe ->
+      sem_pred sp st pe (PMap.get x rs')) ->
     sem_predset sp st f rs'.
 
 Inductive sem_regset :
   val -> instr_state -> forest -> regset -> Prop :=
 | Sregset:
     forall st f sp rs',
-    (forall x, sem_value sp st (f # (Reg x)) (rs' !! x)) ->
+    (forall x, sem_pred_expr sem_value sp st (f # (Reg x)) (rs' !! x)) ->
     sem_regset sp st f rs'.
 
 Inductive sem :
@@ -506,54 +521,10 @@ Inductive sem :
     forall st rs' m' f sp pr',
     sem_regset sp st f rs' ->
     sem_predset sp st f pr' ->
-    sem_mem sp st (f # Mem) m' ->
-    sem sp st f (InstrState rs' pr' m').
+    sem_pred_expr sem_mem sp st (f # Mem) m' ->
+    sem sp st f (mk_instr_state rs' pr' m').
 
 End SEMANTICS.
-
-Definition hash_pred := @pred positive.
-
-Definition hash_tree := PTree.t (condition * list reg).
-
-Definition find_tree (el: predicate * list reg) (h: hash_tree) : option positive :=
-  match
-    filter (fun x => match x with (a, b) => if hash_el_dec el b then true else false end)
-           (PTree.elements h) with
-  | (p, _) :: nil => Some p
-  | _ => None
-  end.
-
-Definition combine_option {A} (a b: option A) : option A :=
-  match a, b with
-  | Some a', _ => Some a'
-  | _, Some b' => Some b'
-  | _, _ => None
-  end.
-
-Definition max_key {A} (t: PTree.t A) :=
-  fold_right Pos.max 1 (map fst (PTree.elements t)).
-
-Fixpoint hash_predicate (p: predicate) (h: PTree.t (condition * list reg))
-  : hash_pred * PTree.t (condition * list reg) :=
-    match p with
-  | T => (T, h)
-  | ⟂ => (⟂, h)
-  | Pbase (b, (c, args)) =>
-    match find_tree (c, args) h with
-    | Some p => (Pbase (b, p), h)
-    | None =>
-      let nkey := max_key h + 1 in
-      (Pbase (b, nkey), PTree.set nkey (c, args) h)
-    end
-  | p1 ∧ p2 =>
-    let (p1', t1) := hash_predicate p1 h in
-    let (p2', t2) := hash_predicate p2 t1 in
-    (p1' ∧ p2', t2)
-  | p1 ∨ p2 =>
-    let (p1', t1) := hash_predicate p1 h in
-    let (p2', t2) := hash_predicate p2 t1 in
-    (p1' ∨ p2', t2)
-  end.
 
 Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
   match e1, e2 with
@@ -578,7 +549,6 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
     then if condition_eq c1 c2
          then if beq_expression_list el1 el2
               then beq_expression m1 m2 else false else false else false
-  | Econd el1, Econd el2 => beq_expr_pred_list el1 el2
   | _, _ => false
   end
 with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
@@ -587,17 +557,10 @@ with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
   | Econs e1 t1, Econs e2 t2 => beq_expression e1 e2 && beq_expression_list t1 t2
   | _, _ => false
   end
-with beq_expr_pred_list (el1 el2: expr_pred_list) {struct el1} : bool :=
-  match el1, el2 with
-  | EPnil, EPnil => true
-  | EPcons p1 e1 el1', EPcons p2 e2 el2' => true
-  | _, _ => false
-  end
 .
 
 Scheme expression_ind2 := Induction for expression Sort Prop
   with expression_list_ind2 := Induction for expression_list Sort Prop
-  with expr_pred_list_ind2 := Induction for expr_pred_list Sort Prop
 .
 
 Lemma beq_expression_correct:
@@ -608,38 +571,116 @@ Proof.
       (P := fun (e1 : expression) =>
             forall e2, beq_expression e1 e2 = true -> e1 = e2)
       (P0 := fun (e1 : expression_list) =>
-             forall e2, beq_expression_list e1 e2 = true -> e1 = e2)
-      (P1 := fun (e1 : expr_pred_list) =>
-             forall e2, beq_expr_pred_list e1 e2 = true -> e1 = e2); simplify;
+             forall e2, beq_expression_list e1 e2 = true -> e1 = e2);
   try solve [repeat match goal with
                     | [ H : context[match ?x with _ => _ end] |- _ ] => destruct x eqn:?
                     | [ H : context[if ?x then _ else _] |- _ ] => destruct x eqn:?
                     end; subst; f_equal; crush; eauto using Peqb_true_eq].
   destruct e2; try discriminate. eauto.
-Qed.
+Abort.
+
+Definition hash_tree := PTree.t expression.
+
+Definition find_tree (el: expression) (h: hash_tree) : option positive :=
+  match filter (fun x => beq_expression el (snd x)) (PTree.elements h) with
+  | (p, _) :: nil => Some p
+  | _ => None
+  end.
+
+Definition combine_option {A} (a b: option A) : option A :=
+  match a, b with
+  | Some a', _ => Some a'
+  | _, Some b' => Some b'
+  | _, _ => None
+  end.
+
+Definition max_key {A} (t: PTree.t A) :=
+  fold_right Pos.max 1%positive (map fst (PTree.elements t)).
+
+Definition hash_expr (max: predicate) (e: expression) (h: hash_tree): predicate * hash_tree :=
+  match find_tree e h with
+  | Some p => (p, h)
+  | None =>
+    let nkey := Pos.max max (max_key h) + 1 in
+    (nkey, PTree.set nkey e h)
+  end.
+
+Fixpoint encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
+  match pe with
+  | PEsingleton None e =>
+    let (p, h') := hash_expr max e h in
+    (Pvar p, h')
+  | PEsingleton (Some p) e =>
+    let (p', h') := hash_expr max e h in
+    (Por (Pnot p) (Pvar p'), h')
+  | PEcons p e pe' =>
+    let (p', h') := hash_expr max e h in
+    let (p'', h'') := encode_expression max pe' h' in
+    (Pand (Por (Pnot p) (Pvar p')) p'', h'')
+  end.
+
+Fixpoint max_predicate (p: pred_op) : positive :=
+  match p with
+  | Pvar p => p
+  | Pand a b => Pos.max (max_predicate a) (max_predicate b)
+  | Por a b => Pos.max (max_predicate a) (max_predicate b)
+  | Pnot a => max_predicate a
+  end.
+
+Fixpoint max_pred_expr (pe: pred_expr) : positive :=
+  match pe with
+  | PEsingleton None _ => 1
+  | PEsingleton (Some p) _ => max_predicate p
+  | PEcons p _ pe' => Pos.max (max_predicate p) (max_pred_expr pe')
+  end.
+
+Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
+  match pe1, pe2 with
+  (*| PEsingleton None e1, PEsingleton None e2 => beq_expression e1 e2
+  | PEsingleton (Some p1) e1, PEsingleton (Some p2) e2 =>
+    if beq_expression e1 e2
+    then match sat_pred_simple bound (Por (Pand p1 (Pnot p2)) (Pand p2 (Pnot p1))) with
+         | Some None => true
+         | _ => false
+         end
+    else false
+  | PEsingleton (Some p) e1, PEsingleton None e2
+  | PEsingleton None e1, PEsingleton (Some p) e2 =>
+    if beq_expression e1 e2
+    then match sat_pred_simple bound (Pnot p) with
+         | Some None => true
+         | _ => false
+         end
+    else false*)
+  | pe1, pe2 =>
+    let max := Pos.max (max_pred_expr pe1) (max_pred_expr pe2) in
+    let (p1, h) := encode_expression max pe1 (PTree.empty _) in
+    let (p2, h') := encode_expression max pe2 h in
+    match sat_pred_simple bound (Por (Pand p1 (Pnot p2)) (Pand p2 (Pnot p1))) with
+    | Some None => true
+    | _ => false
+    end
+  end.
 
 Definition empty : forest := Rtree.empty _.
 
-(*|
-This function checks if all the elements in [fa] are in [fb], but not the other way round.
-|*)
-
-Definition check := Rtree.beq beq_expression.
+Definition check := Rtree.beq (beq_pred_expr 10000).
 
 Lemma check_correct: forall (fa fb : forest),
   check fa fb = true -> (forall x, fa # x = fb # x).
 Proof.
-  unfold check, get_forest; intros;
+  (*unfold check, get_forest; intros;
   pose proof beq_expression_correct;
   match goal with
     [ Hbeq : context[Rtree.beq], y : Rtree.elt |- _ ] =>
     apply (Rtree.beq_sound beq_expression fa fb) with (x := y) in Hbeq
   end;
   repeat destruct_match; crush.
-Qed.
+Qed.*)
+  Abort.
 
 Lemma get_empty:
-  forall r, empty#r = Ebase r.
+  forall r, empty#r = PEsingleton None (Ebase r).
 Proof.
   intros; unfold get_forest;
   destruct_match; auto; [ ];
@@ -691,16 +732,11 @@ Proof.
         apply IHm1_2. intros; apply (H (xI x)).
 Qed.
 
-Lemma map0:
-  forall r,
-  empty # r = Ebase r.
-Proof. intros; eapply get_empty. Qed.
-
 Lemma map1:
   forall w dst dst',
   dst <> dst' ->
-  (empty # dst <- w) # dst' = Ebase dst'.
-Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply map0. Qed.
+  (empty # dst <- w) # dst' = PEsingleton None (Ebase dst').
+Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply get_empty. Qed.
 
 Lemma genmap1:
   forall (f : forest) w dst dst',
@@ -709,7 +745,7 @@ Lemma genmap1:
 Proof. intros; unfold get_forest; rewrite Rtree.gso; auto. Qed.
 
 Lemma map2:
-  forall (v : expression) x rs,
+  forall (v : pred_expr) x rs,
   (rs # x <- v) # x = v.
 Proof. intros; unfold get_forest; rewrite Rtree.gss; trivial. Qed.
 
@@ -736,14 +772,14 @@ Inductive match_states : instr_state -> instr_state -> Prop :=
   forall rs rs' m m',
     (forall x, rs !! x = rs' !! x) ->
     m = m' ->
-    match_states (InstrState rs m) (InstrState rs' m').
+    match_states (mk_instr_state rs m) (mk_instr_state rs' m').
 
 Inductive match_states_ld : instr_state -> instr_state -> Prop :=
 | match_states_ld_intro:
   forall rs rs' m m',
     regs_lessdef rs rs' ->
     Mem.extends m m' ->
-    match_states_ld (InstrState rs m) (InstrState rs' m').
+    match_states_ld (mk_instr_state rs m) (mk_instr_state rs' m').
 
 Lemma sems_det:
   forall A ge tge sp st f,
@@ -761,7 +797,7 @@ Proof. Abort.
   v = v'.
 Proof.
   intros. destruct st.
-  generalize (sems_det A ge tge sp (InstrState rs m) f H v v'
+  generalize (sems_det A ge tge sp (mk_instr_state rs m) f H v v'
                       m m);
   crush.
 Qed.
@@ -784,7 +820,7 @@ Lemma sem_mem_det:
   m = m'.
 Proof.
   intros. destruct st.
-  generalize (sems_det A ge tge sp (InstrState rs m0) f H sp sp m m');
+  generalize (sems_det A ge tge sp (mk_instr_state rs m0) f H sp sp m m');
   crush.
 Qed.
 Hint Resolve sem_mem_det : rtlpar.
@@ -928,14 +964,14 @@ Abstract computations
 =====================
 |*)
 
-Definition is_regs i := match i with InstrState rs _ => rs end.
-Definition is_mem i := match i with InstrState _ m => m end.
+Definition is_regs i := match i with mk_instr_state rs _ => rs end.
+Definition is_mem i := match i with mk_instr_state _ m => m end.
 
 Inductive state_lessdef : instr_state -> instr_state -> Prop :=
   state_lessdef_intro :
     forall rs1 rs2 m1,
     (forall x, rs1 !! x = rs2 !! x) ->
-    state_lessdef (InstrState rs1 m1) (InstrState rs2 m1).
+    state_lessdef (mk_instr_state rs1 m1) (mk_instr_state rs2 m1).
 
 (*|
 RTLBlock to abstract translation
@@ -1177,9 +1213,9 @@ Lemma sem_update_Op :
   forall A ge sp st f st' r l o0 o m rs v,
   @sem A ge sp st f st' ->
   Op.eval_operation ge sp o0 rs ## l m = Some v ->
-  match_states st' (InstrState rs m) ->
+  match_states st' (mk_instr_state rs m) ->
   exists tst,
-  sem ge sp st (update f (RBop o o0 l r)) tst /\ match_states (InstrState (Regmap.set r v rs) m) tst.
+  sem ge sp st (update f (RBop o o0 l r)) tst /\ match_states (mk_instr_state (Regmap.set r v rs) m) tst.
 Proof.
   intros. inv H1. simplify.
   destruct st.
@@ -1201,10 +1237,10 @@ Lemma sem_update_load :
   @sem A ge sp st f st' ->
   Op.eval_addressing ge sp a rs ## l = Some a0 ->
   Mem.loadv m m0 a0 = Some v ->
-  match_states st' (InstrState rs m0) ->
+  match_states st' (mk_instr_state rs m0) ->
   exists tst : instr_state,
     sem ge sp st (update f (RBload o m a l r)) tst
-    /\ match_states (InstrState (Regmap.set r v rs) m0) tst.
+    /\ match_states (mk_instr_state (Regmap.set r v rs) m0) tst.
 Proof.
   intros. inv H2. pose proof H. inv H. inv H9.
   destruct st.
@@ -1226,9 +1262,9 @@ Lemma sem_update_store :
   @sem A ge sp st f st' ->
   Op.eval_addressing ge sp a rs ## l = Some a0 ->
   Mem.storev m m0 a0 rs !! r = Some m' ->
-  match_states st' (InstrState rs m0) ->
+  match_states st' (mk_instr_state rs m0) ->
   exists tst, sem ge sp st (update f (RBstore o m a l r)) tst
-              /\ match_states (InstrState rs m') tst.
+              /\ match_states (mk_instr_state rs m') tst.
 Proof.
   intros. inv H2. pose proof H. inv H. inv H9.
   destruct st.
@@ -1258,9 +1294,9 @@ Qed.
 
 Lemma sem_update2_Op :
   forall A ge sp st f r l o0 o m rs v,
-  @sem A ge sp st f (InstrState rs m) ->
+  @sem A ge sp st f (mk_instr_state rs m) ->
   Op.eval_operation ge sp o0 rs ## l m = Some v ->
-  sem ge sp st (update f (RBop o o0 l r)) (InstrState (Regmap.set r v rs) m).
+  sem ge sp st (update f (RBop o o0 l r)) (mk_instr_state (Regmap.set r v rs) m).
 Proof.
   intros. destruct st. constructor.
   inv H. inv H6.
@@ -1275,10 +1311,10 @@ Qed.
 
 Lemma sem_update2_load :
   forall A ge sp st f r o m a l m0 rs v a0,
-    @sem A ge sp st f (InstrState rs m0) ->
+    @sem A ge sp st f (mk_instr_state rs m0) ->
     Op.eval_addressing ge sp a rs ## l = Some a0 ->
     Mem.loadv m m0 a0 = Some v ->
-    sem ge sp st (update f (RBload o m a l r)) (InstrState (Regmap.set r v rs) m0).
+    sem ge sp st (update f (RBload o m a l r)) (mk_instr_state (Regmap.set r v rs) m0).
 Proof.
   intros. simplify. inv H. inv H7. constructor.
   { constructor; intros. destruct (Pos.eq_dec r x); subst.
@@ -1291,10 +1327,10 @@ Qed.
 
 Lemma sem_update2_store :
   forall A ge sp a0 m a l r o f st m' rs m0,
-    @sem A ge sp st f (InstrState rs m0) ->
+    @sem A ge sp st f (mk_instr_state rs m0) ->
     Op.eval_addressing ge sp a rs ## l = Some a0 ->
     Mem.storev m m0 a0 rs !! r = Some m' ->
-    sem ge sp st (update f (RBstore o m a l r)) (InstrState rs m').
+    sem ge sp st (update f (RBstore o m a l r)) (mk_instr_state rs m').
 Proof.
   intros. simplify. inv H. inv H7. constructor; simplify.
   { econstructor; intros. rewrite genmap1; crush. }
