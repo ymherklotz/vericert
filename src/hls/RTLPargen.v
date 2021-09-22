@@ -444,7 +444,7 @@ with sem_pred :
     sem_pred sp st (Esetpred p c args pred_exp) v
 | Sbase_pred:
     forall rs pr m p sp,
-    sem_pred sp (mk_instr_state rs pr m) (Ebase (Pred p)) (PMap.get p pr)
+    sem_pred sp (mk_instr_state rs pr m) (Ebase (Pred p)) (pr !! p)
 with sem_mem :
        val -> instr_state -> expression -> Memory.mem -> Prop :=
 | Sstore :
@@ -505,7 +505,7 @@ Inductive sem_predset :
     forall st f sp rs',
     (forall pe x,
       collapse_pe (f # (Pred x)) = Some pe ->
-      sem_pred sp st pe (PMap.get x rs')) ->
+      sem_pred sp st pe (rs' !! x)) ->
     sem_predset sp st f rs'.
 
 Inductive sem_regset :
@@ -666,6 +666,12 @@ Definition empty : forest := Rtree.empty _.
 
 Definition check := Rtree.beq (beq_pred_expr 10000).
 
+Compute (check (empty # (Reg 2) <-
+                (PEcons (Pand (Pvar 4) (Pnot (Pvar 4))) (Ebase (Reg 9))
+                        (PEsingleton (Some (Pvar 2)) (Ebase (Reg 3)))))
+               (empty # (Reg 2) <- (PEsingleton (Some (Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3)))))
+                                                (Ebase (Reg 3))))).
+
 Lemma check_correct: forall (fa fb : forest),
   check fa fb = true -> (forall x, fa # x = fb # x).
 Proof.
@@ -769,24 +775,26 @@ Ltac rtlpar_crush := crush; eauto with rtlpar.
 
 Inductive match_states : instr_state -> instr_state -> Prop :=
 | match_states_intro:
-  forall rs rs' m m',
+  forall ps ps' rs rs' m m',
     (forall x, rs !! x = rs' !! x) ->
+    (forall x, ps !! x = ps' !! x) ->
     m = m' ->
-    match_states (mk_instr_state rs m) (mk_instr_state rs' m').
+    match_states (mk_instr_state rs ps  m) (mk_instr_state rs' ps' m').
 
 Inductive match_states_ld : instr_state -> instr_state -> Prop :=
 | match_states_ld_intro:
-  forall rs rs' m m',
+  forall ps ps' rs rs' m m',
     regs_lessdef rs rs' ->
+    (forall x, ps !! x = ps' !! x) ->
     Mem.extends m m' ->
-    match_states_ld (mk_instr_state rs m) (mk_instr_state rs' m').
+    match_states_ld (mk_instr_state rs ps m) (mk_instr_state rs' ps' m').
 
 Lemma sems_det:
   forall A ge tge sp st f,
   ge_preserved ge tge ->
   forall v v' mv mv',
-  (sem_value A ge sp st f v /\ sem_value A tge sp st f v' -> v = v') /\
-  (sem_mem A ge sp st f mv /\ sem_mem A tge sp st f mv' -> mv = mv').
+  (@sem_value A ge sp st f v /\ @sem_value A tge sp st f v' -> v = v') /\
+  (@sem_mem A ge sp st f mv /\ @sem_mem A tge sp st f mv' -> mv = mv').
 Proof. Abort.
 
 (*Lemma sem_value_det:

@@ -232,7 +232,7 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
   - apply orb_true_intro.
     apply satFormula_mult2 in H. inv H. apply i in H0. auto.
     apply i0 in H0. auto.
-Qed.
+Defined.
 
 Definition sat_pred (bound: nat) (p: pred_op) :
   option ({al : alist | sat_predicate p (interp_alist al) = true}
@@ -251,7 +251,7 @@ Definition sat_pred (bound: nat) (p: pred_op) :
   - intros. specialize (n a). specialize (i a).
     destruct (sat_predicate p a). exfalso.
     apply n. apply i. auto. auto.
-Qed.
+Defined.
 
 Definition sat_pred_simple (bound: nat) (p: pred_op) :=
   match sat_pred bound p with
