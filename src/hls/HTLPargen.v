@@ -641,9 +641,9 @@ Definition add_control_instr_force_state_incr :
        s.(st_arrdecls)
        s.(st_datapath)
        (AssocMap.set n st s.(st_controllogic))).
-Admitted.
+Abort.
 
-Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
+(*Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
   fun s =>
     OK tt (mkstate
       s.(st_st)
@@ -708,7 +708,7 @@ Lemma create_new_state_state_incr:
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
-Admitted.
+Abort.
 
 Definition create_new_state (p: node): mon node :=
   fun s => OK s.(st_freshstate)
@@ -876,3 +876,4 @@ Definition transl_program (p : RTLBlockInstr.program) : Errors.res HTL.program :
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").
+*)

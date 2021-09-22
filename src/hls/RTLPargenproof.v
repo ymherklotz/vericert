@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import compcert.backend.Registers.
+(*Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Linking.
@@ -377,3 +377,4 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
 End CORRECTNESS.
+*)
