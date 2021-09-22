@@ -347,12 +347,11 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | _, _ => Regmap.init Vundef
   end.
 
-Inductive instr_state : Type :=
-| InstrState:
-    forall (rs: regset)
-           (pr: predset)
-           (m: mem),
-    instr_state.
+Record instr_state := mk_instr_state {
+  instr_st_regset: regset;
+  instr_st_predset: predset;
+  instr_st_mem: mem;
+}.
 
 Section DEFINITION.
 
@@ -440,11 +439,11 @@ Section RELSEM.
   | eval_pred_true:
       forall (pr: predset) p rs pr m i,
       eval_predf pr p = true ->
-      eval_pred (Some p) (InstrState rs pr m) i i
+      eval_pred (Some p) (mk_instr_state rs pr m) i i
   | eval_pred_false:
       forall (pr: predset) p rs pr m i,
       eval_predf pr p = false ->
-      eval_pred (Some p) (InstrState rs pr m) i (InstrState rs pr m)
+      eval_pred (Some p) (mk_instr_state rs pr m) i (mk_instr_state rs pr m)
   | eval_pred_none:
       forall i i',
       eval_pred None i i' i.
@@ -456,25 +455,25 @@ Section RELSEM.
   | exec_RBop:
       forall op v res args rs m sp p ist pr,
         eval_operation ge sp op rs##args m = Some v ->
-        eval_pred p (InstrState rs pr m) (InstrState (rs#res <- v) pr m) ist ->
-        step_instr sp (InstrState rs pr m) (RBop p op args res) ist
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#res <- v) pr m) ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBop p op args res) ist
   | exec_RBload:
       forall addr rs args a chunk m v dst sp p pr ist,
         eval_addressing ge sp addr rs##args = Some a ->
         Mem.loadv chunk m a = Some v ->
-        eval_pred p (InstrState rs pr m) (InstrState (rs#dst <- v) pr m) ist ->
-        step_instr sp (InstrState rs pr m) (RBload p chunk addr args dst) ist
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#dst <- v) pr m) ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBload p chunk addr args dst) ist
   | exec_RBstore:
       forall addr rs args a chunk m src m' sp p pr ist,
         eval_addressing ge sp addr rs##args = Some a ->
         Mem.storev chunk m a rs#src = Some m' ->
-        eval_pred p (InstrState rs pr m) (InstrState rs pr m') ist ->
-        step_instr sp (InstrState rs pr m) (RBstore p chunk addr args src) ist
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state rs pr m') ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBstore p chunk addr args src) ist
   | exec_RBsetpred:
       forall sp rs pr m p c b args,
       Op.eval_condition c rs##args m = Some b ->
-      step_instr sp (InstrState rs pr m) (RBsetpred c args p)
-                 (InstrState rs (PMap.set p b pr) m).
+      step_instr sp (mk_instr_state rs pr m) (RBsetpred c args p)
+                 (mk_instr_state rs (PMap.set p b pr) m).
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:

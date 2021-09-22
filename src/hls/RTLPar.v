@@ -82,7 +82,7 @@ Section RELSEM.
   | exec_bblock:
     forall s f sp pc rs rs' m m' t s' bb pr pr',
       f.(fn_code)!pc = Some bb ->
-      step_instr_block sp (InstrState rs pr m) bb.(bb_body) (InstrState rs' pr' m') ->
+      step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
       step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
       step (State s f sp pc rs pr m) t s'
   | exec_function_internal:
