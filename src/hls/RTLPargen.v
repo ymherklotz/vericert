@@ -238,11 +238,15 @@ Inductive non_empty (A: Type) :=
 Arguments singleton [A].
 Arguments cons [A].
 
-Delimit Scope list_scope with list.
+Declare Scope non_empty_scope.
+Delimit Scope non_empty_scope with non_empty.
 
-Infix "::|" := cons (at level 60, right associativity) : list_scope.
+Module NonEmptyNotation.
+Infix "::|" := cons (at level 60, right associativity) : non_empty_scope.
+End NonEmptyNotation.
+Import NonEmptyNotation.
 
-#[local] Open Scope list_scope.
+#[local] Open Scope non_empty_scope.
 
 Fixpoint map {A B} (f: A -> B) (l: non_empty A): non_empty B :=
   match l with
@@ -279,17 +283,11 @@ Fixpoint of_list {A} (l: list A): option (non_empty A) :=
   end.
 
 End NonEmpty.
+
 Module NE := NonEmpty.
+Import NE.NonEmptyNotation.
 
-Module NonEmptyNotation.
-
-  Notation "A '::|' B" := (NE.cons A B) (at level 70, right associativity) : non_empty.
-
-End NonEmptyNotation.
-Import NonEmptyNotation.
-
-#[local]
- Open Scope non_empty.
+#[local] Open Scope non_empty_scope.
 
 Definition predicated A := NE.non_empty (option pred_op * A).
 
