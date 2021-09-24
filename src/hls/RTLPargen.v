@@ -31,7 +31,8 @@ Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.RTLBlockInstr.
 
-#[local] Open Scope positive.
+#[local]
+Open Scope positive.
 
 (*|
 Schedule Oracle
@@ -223,22 +224,82 @@ with expression_list : Type :=
 | Econs : expression -> expression_list -> expression_list
 .
 
-Inductive pred_expr : Type :=
+(*Inductive pred_expr : Type :=
 | PEsingleton : option pred_op -> expression -> pred_expr
-| PEcons : pred_op -> expression -> pred_expr -> pred_expr.
+| PEcons : option pred_op -> expression -> pred_expr -> pred_expr.*)
 
-Definition pred_list_wf l : Prop :=
-  forall a b, In a l -> In b l -> a <> b -> unsat (Pand a b).
+Module NonEmpty.
 
-Fixpoint pred_expr_list (p: pred_expr) :=
-  match p with
-  | PEsingleton None _ => nil
-  | PEsingleton (Some pr) e => (pr, e) :: nil
-  | PEcons pr e p' => (pr, e) :: pred_expr_list p'
+Inductive non_empty (A: Type) :=
+| singleton : A -> non_empty A
+| cons : A -> non_empty A -> non_empty A
+.
+
+Arguments singleton [A].
+Arguments cons [A].
+
+Delimit Scope list_scope with list.
+
+Infix "::|" := cons (at level 60, right associativity) : list_scope.
+
+#[local] Open Scope list_scope.
+
+Fixpoint map {A B} (f: A -> B) (l: non_empty A): non_empty B :=
+  match l with
+  | singleton a => singleton (f a)
+  | a ::| b => f a ::| map f b
   end.
 
+Fixpoint to_list {A} (l: non_empty A): list A :=
+  match l with
+  | singleton a => a::nil
+  | a ::| b => a :: to_list b
+  end.
+
+Fixpoint app {A} (l1 l2: non_empty A) :=
+  match l1 with
+  | singleton a => a ::| l2
+  | a ::| b => a ::| app b l2
+  end.
+
+Fixpoint non_empty_prod {A B} (l: non_empty A) (l': non_empty B) :=
+  match l with
+  | singleton a => map (fun x => (a, x)) l'
+  | a ::| b => app (map (fun x => (a, x)) l') (non_empty_prod b l')
+  end.
+
+Fixpoint of_list {A} (l: list A): option (non_empty A) :=
+  match l with
+  | a::b =>
+    match of_list b with
+    | Some b' => Some (a ::| b')
+    | _ => None
+    end
+  | nil => None
+  end.
+
+End NonEmpty.
+Module NE := NonEmpty.
+
+Module NonEmptyNotation.
+
+  Notation "A '::|' B" := (NE.cons A B) (at level 70, right associativity) : non_empty.
+
+End NonEmptyNotation.
+Import NonEmptyNotation.
+
+#[local]
+ Open Scope non_empty.
+
+Definition predicated A := NE.non_empty (option pred_op * A).
+
+Definition pred_expr := predicated expression.
+
+Definition pred_list_wf l : Prop :=
+  forall a b, In (Some a) l -> In (Some b) l -> a <> b -> unsat (Pand a b).
+
 Definition pred_list_wf_ep (l: pred_expr) : Prop :=
-  pred_list_wf (map fst (pred_expr_list l)).
+  pred_list_wf (NE.to_list (NE.map fst l)).
 
 Lemma unsat_correct1 :
   forall a b c,
@@ -387,7 +448,7 @@ Definition forest : Type := Rtree.t pred_expr.
 
 Definition get_forest v (f: forest) :=
   match Rtree.get v f with
-  | None => PEsingleton None (Ebase v)
+  | None => NE.singleton (None, (Ebase v))
   | Some v' => v'
   end.
 
@@ -475,27 +536,31 @@ Inductive sem_pred_expr {A: Type} (sem: val -> instr_state -> expression -> A ->
 | sem_pred_expr_base :
     forall sp st e v,
     sem sp st e v ->
-    sem_pred_expr sem sp st (PEsingleton None e) v
+    sem_pred_expr sem sp st (NE.singleton (None, e)) v
 | sem_pred_expr_p :
     forall sp st e p v,
     eval_predf (instr_st_predset st) p = true ->
     sem sp st e v ->
-    sem_pred_expr sem sp st (PEsingleton (Some p) e) v
+    sem_pred_expr sem sp st (NE.singleton (Some p, e)) v
 | sem_pred_expr_cons_true :
     forall sp st e pr p' v,
     eval_predf (instr_st_predset st) pr = true ->
     sem sp st e v ->
-    sem_pred_expr sem sp st (PEcons pr e p') v
+    sem_pred_expr sem sp st ((Some pr, e)::|p') v
 | sem_pred_expr_cons_false :
     forall sp st e pr p' v,
     eval_predf (instr_st_predset st) pr = false ->
     sem_pred_expr sem sp st p' v ->
-    sem_pred_expr sem sp st (PEcons pr e p') v
+    sem_pred_expr sem sp st ((Some pr, e)::|p') v
+| sem_pred_expr_cons_None :
+    forall sp st e p' v,
+    sem sp st e v ->
+    sem_pred_expr sem sp st ((None, e)::|p') v
 .
 
 Definition collapse_pe (p: pred_expr) : option expression :=
   match p with
-  | PEsingleton None p => Some p
+  | NE.singleton (None, p) => Some p
   | _ => None
   end.
 
@@ -607,16 +672,20 @@ Definition hash_expr (max: predicate) (e: expression) (h: hash_tree): predicate 
 
 Fixpoint encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
   match pe with
-  | PEsingleton None e =>
+  | NE.singleton (None, e) =>
     let (p, h') := hash_expr max e h in
     (Pvar p, h')
-  | PEsingleton (Some p) e =>
+  | NE.singleton (Some p, e) =>
     let (p', h') := hash_expr max e h in
     (Por (Pnot p) (Pvar p'), h')
-  | PEcons p e pe' =>
+  | (Some p, e)::|pe' =>
     let (p', h') := hash_expr max e h in
     let (p'', h'') := encode_expression max pe' h' in
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
+  | (None, e)::|pe' =>
+    let (p', h') := hash_expr max e h in
+    let (p'', h'') := encode_expression max pe' h' in
+    (Pand (Pvar p') p'', h'')
   end.
 
 Fixpoint max_predicate (p: pred_op) : positive :=
@@ -629,9 +698,10 @@ Fixpoint max_predicate (p: pred_op) : positive :=
 
 Fixpoint max_pred_expr (pe: pred_expr) : positive :=
   match pe with
-  | PEsingleton None _ => 1
-  | PEsingleton (Some p) _ => max_predicate p
-  | PEcons p _ pe' => Pos.max (max_predicate p) (max_pred_expr pe')
+  | NE.singleton (None, _) => 1
+  | NE.singleton (Some p, _) => max_predicate p
+  | (Some p, _) ::| pe' => Pos.max (max_predicate p) (max_pred_expr pe')
+  | (None, _) ::| pe' => (max_pred_expr pe')
   end.
 
 Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
@@ -667,10 +737,10 @@ Definition empty : forest := Rtree.empty _.
 Definition check := Rtree.beq (beq_pred_expr 10000).
 
 Compute (check (empty # (Reg 2) <-
-                (PEcons (Pand (Pvar 4) (Pnot (Pvar 4))) (Ebase (Reg 9))
-                        (PEsingleton (Some (Pvar 2)) (Ebase (Reg 3)))))
-               (empty # (Reg 2) <- (PEsingleton (Some (Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3)))))
-                                                (Ebase (Reg 3))))).
+                (((Some (Pand (Pvar 4) (Pnot (Pvar 4)))), (Ebase (Reg 9))) ::|
+                        (NE.singleton ((Some (Pvar 2)), (Ebase (Reg 3))))))
+               (empty # (Reg 2) <- (NE.singleton ((Some (Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3))))),
+                                                (Ebase (Reg 3)))))).
 
 Lemma check_correct: forall (fa fb : forest),
   check fa fb = true -> (forall x, fa # x = fb # x).
@@ -686,7 +756,7 @@ Qed.*)
   Abort.
 
 Lemma get_empty:
-  forall r, empty#r = PEsingleton None (Ebase r).
+  forall r, empty#r = NE.singleton (None, Ebase r).
 Proof.
   intros; unfold get_forest;
   destruct_match; auto; [ ];
@@ -741,7 +811,7 @@ Qed.
 Lemma map1:
   forall w dst dst',
   dst <> dst' ->
-  (empty # dst <- w) # dst' = PEsingleton None (Ebase dst').
+  (empty # dst <- w) # dst' = NE.singleton (None, Ebase dst').
 Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply get_empty. Qed.
 
 Lemma genmap1:
@@ -881,22 +951,70 @@ Proof. eauto with rtlpar. Qed.
 (*|
 Update functions.
 |*)
+*)
 
-Fixpoint list_translation (l : list reg) (f : forest) {struct l} : expression_list :=
+Fixpoint list_translation (l : list reg) (f : forest) {struct l} : list pred_expr :=
   match l with
-  | nil => Enil
-  | i :: l => Econs (f # (Reg i)) (list_translation l f)
+  | nil => nil
+  | i :: l => (f # (Reg i)) :: (list_translation l f)
   end.
+
+Fixpoint replicate {A} (n: nat) (l: A) :=
+  match n with
+  | O => nil
+  | S n => l :: replicate n l
+  end.
+
+Definition merge''' x y :=
+  match x, y with
+  | Some p1, Some p2 => Some (Pand p1 p2)
+  | Some p, None | None, Some p => Some p
+  | None, None => None
+  end.
+
+Definition merge'' x :=
+  match x with
+  | ((a, e), (b, el)) => (merge''' a b, Econs e el)
+  end.
+
+(*map (fun x => (fst x, Econs (snd x) Enil)) pel*)
+Fixpoint merge' (pel: pred_expr) (tpel: predicated expression_list) :=
+  NE.map merge'' (NE.non_empty_prod pel tpel).
+
+Fixpoint merge (pel: list pred_expr): predicated expression_list :=
+  match pel with
+  | nil => NE.singleton (None, Enil)
+  | a :: b => merge' a (merge b)
+  end.
+
+Definition map_pred_op {A B} (pf: option pred_op * (A -> B)) (pa: option pred_op * A): option pred_op * B :=
+  match pa, pf with
+  | (p, a), (p', f) => (merge''' p p', f a)
+  end.
+
+Definition map_predicated {A B} (pf: predicated (A -> B)) (pa: predicated A): predicated B :=
+  NE.map (fun x => match x with ((p1, f), (p2, a)) => (merge''' p1 p2, f a) end) (NE.non_empty_prod pf pa).
+
+Definition apply1_predicated {A B} (pf: predicated (A -> B)) (pa: A): predicated B :=
+  NE.map (fun x => (fst x, (snd x) pa)) pf.
+
+Definition apply2_predicated {A B C} (pf: predicated (A -> B -> C)) (pa: A) (pb: B): predicated C :=
+  NE.map (fun x => (fst x, (snd x) pa pb)) pf.
+
+Definition apply3_predicated {A B C D} (pf: predicated (A -> B -> C -> D)) (pa: A) (pb: B) (pc: C): predicated D :=
+  NE.map (fun x => (fst x, (snd x) pa pb pc)) pf.
+
+(*Compute merge (((Some (Pvar 2), Ebase (Reg 4))::nil)::((Some (Pvar 3), Ebase (Reg 3))::(Some (Pvar 1), Ebase (Reg 3))::nil)::nil).*)
 
 Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
   | RBop p op rl r =>
-    f # (Reg r) <- (Eop op (list_translation rl f) (f # Mem))
+    f # (Reg r) <- (map_predicated (map_predicated (NE.singleton (p, Eop op)) (merge (list_translation rl f))) (f # Mem))
   | RBload p chunk addr rl r =>
-    f # (Reg r) <- (Eload chunk addr (list_translation rl f) (f # Mem))
+    f # (Reg r) <- (map_predicated (map_predicated (NE.singleton (p, Eload chunk addr)) (merge (list_translation rl f))) (f # Mem))
   | RBstore p chunk addr rl r =>
-    f # Mem <- (Estore (f # Mem) chunk addr (list_translation rl f) (f # (Reg r)))
+    f # Mem <- (map_predicated (map_predicated (apply2_predicated (map_predicated (NE.singleton (p, Estore)) (f # Mem)) chunk addr) (merge (list_translation rl f))) (f # (Reg r)))
   | RBsetpred c addr p => f
   end.
 
@@ -972,7 +1090,7 @@ Abstract computations
 =====================
 |*)
 
-Definition is_regs i := match i with mk_instr_state rs _ => rs end.
+(*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
 Inductive state_lessdef : instr_state -> instr_state -> Prop :=
@@ -1016,7 +1134,7 @@ Proof.
   constructor. unfold regs_lessdef.
   intros. inv H0. specialize (H1 x). inv H1; auto.
   auto.
-Qed.
+Qed.*)
 
 Definition check_dest i r' :=
   match i with
@@ -1040,7 +1158,7 @@ Lemma check_dest_l_forall :
   Forall (fun x => check_dest x r = false) l.
 Proof. induction l; crush. Qed.
 
-Lemma check_dest_l_ex :
+(*Lemma check_dest_l_ex :
   forall l r,
   check_dest_l l r = true ->
   exists a, In a l /\ check_dest a r = true.
@@ -1650,7 +1768,7 @@ Qed.
                  /\ match_states st' tst'.
 Proof.
   intros.*)
-
+*)
 
 (*|
 Top-level functions
@@ -1674,4 +1792,3 @@ Definition transl_fundef := transf_partial_fundef transl_function.
 
 Definition transl_program (p : RTLBlock.program) : Errors.res RTLPar.program :=
   transform_partial_program transl_fundef p.
-*)
