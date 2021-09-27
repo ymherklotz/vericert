@@ -1,3 +1,5 @@
+#+title:
+
 #+html: <a href="https://vericert.ymhg.org"><img src="https://vericert.ymhg.org/vericert-main.svg" width="100%" height="144" /></a>
 
 #+html: <p align=center><a href="https://github.com/ymherklotz/vericert/actions"><img src="https://github.com/ymherklotz/vericert/workflows/CI/badge.svg" /></a>&nbsp;<a href="https://vericert.ymhg.org/"><img src="https://github.com/ymherklotz/vericert-docs/workflows/docs/badge.svg" /></a></p>
