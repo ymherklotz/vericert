@@ -13,8 +13,8 @@ correctness.
    :PROPERTIES:
    :CUSTOM_ID: features
    :END:
-The project is currently a work in progress, so proofs remain to be finished. Currently, the
-following C features are supported, but are not all proven correct yet:
+
+Currently all proofs of the following features have been completed.
 
 - all int operations,
 - non-recursive function calls,
