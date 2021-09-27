@@ -202,9 +202,9 @@ Local Hint Resolve satLit_contra : core.
   obligations that it can't solve, or obligations that it takes 42 years to
   solve.
   However, if you think enough like me, each of the four definitions you fill in
-  should read like: [[
+  should read like:
 refine some_expression_with_holes; clear function_name; magic_solver.
-]] leaving out the [clear] invocation for non-recursive function definitions.
+ leaving out the [clear] invocation for non-recursive function definitions.
   *)
 Ltac magic_solver := simpl; intros; subst; intuition eauto; firstorder;
   match goal with
