@@ -130,18 +130,26 @@ Definition match_externctrl m asr :=
   forall r mid, (HTL.mod_externctrl m) ! r = Some (mid, HTL.ctrl_finish) ->
            asr # r = ZToValue 0.
 
+Inductive match_sp : list RTL.stackframe -> Values.val -> Values.block -> Prop :=
+  | match_sp_nil : forall sp,
+      match_sp nil (Values.Vptr sp (Ptrofs.repr 0)) sp
+  | match_sp_cons : forall blk sp sp' blk' dst f pc rs stk_tl,
+      sp' = Values.Vptr blk' (Ptrofs.repr 0) ->
+      match_sp stk_tl                                     sp  blk ->
+      match_sp ((RTL.Stackframe dst f sp pc rs) :: stk_tl) sp' blk.
+
 Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.mem)
   : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
 | match_frames_nil :
     match_frames ge current_id mem nil nil
 | match_frames_cons :
-    forall dst f sp sp' rs mid m pc st asr asa rtl_tl htl_tl ret rst fin
+    forall dst f sp blk rs mid m pc st asr asa rtl_tl htl_tl ret rst fin
       (MASSOC : match_assocmaps f rs asr)
       (TF : tr_module ge f m)
       (MARR : match_arrs m f sp mem asa)
-      (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
-      (RSBP : reg_stack_based_pointers sp' rs)
-      (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
+      (SP : match_sp rtl_tl sp blk)
+      (RSBP : reg_stack_based_pointers blk rs)
+      (ASBP : arr_stack_based_pointers blk mem (f.(RTL.fn_stacksize)) sp)
       (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
       (CONST : match_constants m asr)
       (EXTERN_CALLER : has_externctrl m current_id ret rst fin)
@@ -152,43 +160,41 @@ Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.me
       (DST : Ple dst (RTL.max_reg_function f))
       (PC : (Z.pos pc <= Int.max_unsigned)),
       match_frames ge current_id mem
-                   ((RTL.Stackframe dst f sp pc rs) :: rtl_tl)
-                   ((HTL.Stackframe mid m st asr asa) :: htl_tl).
+                   ((RTL.Stackframe     dst f sp pc rs     ) :: rtl_tl)
+                   ((HTL.Stackframe mid     m    st asr asa) :: htl_tl).
 Hint Constructors match_frames : htlproof.
 
 Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
-| match_state : forall asa asr sf f sp sp' rs mem mid m st res
+| match_state : forall asa asr rtl_stk f sp blk rs mem mid m st htl_stk
     (MASSOC : match_assocmaps f rs asr)
     (TF : tr_module ge f m)
-    (WF : state_st_wf m (HTL.State res mid m st asr asa))
-    (MF : match_frames ge mid mem sf res)
+    (WF : state_st_wf m (HTL.State htl_stk mid m st asr asa))
+    (MF : match_frames ge mid mem rtl_stk htl_stk)
     (MARR : match_arrs m f sp mem asa)
-    (SP : sp = Values.Vptr sp' (Integers.Ptrofs.repr 0))
-    (RSBP : reg_stack_based_pointers sp' rs)
-    (ASBP : arr_stack_based_pointers sp' mem (f.(RTL.fn_stacksize)) sp)
+    (SP : match_sp rtl_stk sp blk)
+    (RSBP : reg_stack_based_pointers blk rs)
+    (ASBP : arr_stack_based_pointers blk mem (f.(RTL.fn_stacksize)) sp)
     (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
     (CONST : match_constants m asr)
     (MEXTERNCTRL : match_externctrl m asr),
     match_states ge
-                 (RTL.State sf f sp st rs mem)
-                 (HTL.State res mid m st asr asa)
+                 (RTL.State rtl_stk     f sp st rs      mem)
+                 (HTL.State htl_stk mid m    st asr asa    )
 | match_returnstate :
     forall v v' rtl_stk htl_stk mem mid
       (MF : match_frames ge mid mem rtl_stk htl_stk)
-      (MV : val_value_lessdef v v')
-      (NP : not_pointer v),
+      (MV : val_value_lessdef v v'),
       match_states ge
-                   (RTL.Returnstate rtl_stk v mem)
-                   (HTL.Returnstate htl_stk mid v')
+                   (RTL.Returnstate rtl_stk     v  mem)
+                   (HTL.Returnstate htl_stk mid v'    )
 | match_call :
     forall f m rtl_args htl_args mid mem rtl_stk htl_stk
     (TF : tr_module ge f m)
     (MF : match_frames ge mid mem rtl_stk htl_stk)
-    (NP : Forall not_pointer rtl_args)
     (MARGS : list_forall2 val_value_lessdef rtl_args htl_args),
       match_states ge
-                   (RTL.Callstate rtl_stk (AST.Internal f) rtl_args mem)
-                   (HTL.Callstate htl_stk mid m htl_args).
+                   (RTL.Callstate rtl_stk     (AST.Internal f) rtl_args mem)
+                   (HTL.Callstate htl_stk mid m                htl_args).
 Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
