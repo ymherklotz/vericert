@@ -88,7 +88,7 @@ end)(struct
 end)
 
 let reg r = sprintf "r%d" (P.to_int r)
-let print_pred r = sprintf "p%d" (Nat.to_int r)
+let print_pred r = sprintf "p%d" (P.to_int r)
 
 let print_instr = function
   | RBnop -> ""
@@ -400,7 +400,7 @@ let accumulate_WAW_mem_deps instrs dfg curri =
 
 let rec in_predicate p p' =
   match p' with
-  | Pvar p'' -> Nat.to_int p = Nat.to_int p''
+  | Pvar p'' -> P.to_int p = P.to_int p''
   | Pnot p'' -> in_predicate p p''
   | Pand (p1, p2) -> in_predicate p p1 || in_predicate p p2
   | Por (p1, p2) -> in_predicate p p1 || in_predicate p p2
@@ -509,7 +509,7 @@ let get_pred = function
   | RBsetpred (_, _, _) -> None
 
 let independant_pred p p' =
-  match sat_pred_temp (Nat.of_int 100000) (Pand (p, p')) with
+  match sat_pred_simple (Nat.of_int 100000) (Pand (p, p')) with
   | Some None -> true
   | _ -> false
 
