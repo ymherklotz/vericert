@@ -293,6 +293,20 @@ Definition posToLit (p : positive) : expr :=
 Definition fext := unit.
 Definition fextclk := nat -> fext.
 
+Definition map_body (f : list module_item -> list module_item) (m : module) :=
+  mkmodule
+    (mod_start m)
+    (mod_reset m)
+    (mod_clk m)
+    (mod_finish m)
+    (mod_return m)
+    (mod_st m)
+    (mod_stk m)
+    (mod_stk_len m)
+    (mod_args m)
+    (f (mod_body m))
+    (mod_entrypoint m).
+
 (** ** State
 
 The [state] contains the following items:

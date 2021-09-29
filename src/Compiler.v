@@ -61,6 +61,8 @@ Require Import compcert.lib.Coqlib.
 Require vericert.hls.Verilog.
 Require vericert.hls.Veriloggen.
 Require vericert.hls.Veriloggenproof.
+Require vericert.hls.ApplyExternctrl.
+Require vericert.hls.Renaming.
 Require vericert.hls.HTLgen.
 Require vericert.hls.RTLBlock.
 Require vericert.hls.RTLBlockgen.
@@ -81,7 +83,7 @@ We then need to declare the external OCaml functions used to print out intermedi
 |*)
 
 Parameter print_RTL: Z -> RTL.program -> unit.
-Parameter print_HTL: HTL.program -> unit.
+Parameter print_HTL: Z -> HTL.program -> unit.
 Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
@@ -191,9 +193,14 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
-   @@ print print_HTL
+   @@ print (print_HTL 1)
    @@ total_if HLSOpts.optim_ram Memorygen.transf_program
-   @@ Veriloggen.transl_program.
+   @@ print (print_HTL 2)
+  @@@ Renaming.transf_program
+   @@ print (print_HTL 3)
+  @@@ ApplyExternctrl.transf_program
+   @@ print (print_HTL 4)
+  @@@ Veriloggen.transl_program.
 
 (*|
 The transformation functions from RTL to Verilog are then added to the backend of the CompCert transformations from Clight to RTL.
@@ -272,6 +279,8 @@ Definition CompCert's_passes :=
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
   ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
+  ::: mkpass Renaming.match_prog
+  ::: mkpass ApplyExternctrl.match_prog
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
@@ -300,7 +309,7 @@ Proof.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
   rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
-  unfold transf_backend, time in T. simpl in T. rewrite ! compose_print_identity in T.
+  unfold transf_backend, time in T. rewrite ! compose_print_identity in T. simpl in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
   set (p9 := total_if Compopts.optim_constprop Constprop.transf_program p8) in *.
@@ -310,7 +319,10 @@ Proof.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
   set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.
-  set (p16 := Veriloggen.transl_program p15) in *.
+  destruct (Renaming.transf_program p15) as [p16|e] eqn:P16; simpl in T; try discriminate.
+  destruct (ApplyExternctrl.transf_program p16) as [p17|e] eqn:P17; simpl in T; try discriminate.
+  destruct (Veriloggen.transl_program p17) as [p18|e] eqn:P18; simpl in T; try discriminate.
+
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -326,8 +338,10 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  exists p15; split. apply total_if_match. apply Memorygen.transf_program_match; auto.
-  exists p16; split. apply Veriloggenproof.transf_program_match; auto.
+  exists p15; split. apply total_if_match. apply Memorygen.transf_program_match.
+  exists p16; split. apply Renaming.transf_program_match; auto.
+  exists p17; split. apply ApplyExternctrl.transf_program_match; auto.
+  exists p18; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
 
@@ -338,14 +352,14 @@ Theorem cstrategy_semantic_preservation:
   /\ backward_simulation (atomic (Cstrategy.semantics p)) (Verilog.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
-Ltac DestructM :=
-  match goal with
-    [ H: exists p, _ /\ _ |- _ ] =>
-      let p := fresh "p" in let M := fresh "M" in let MM := fresh "MM" in
-      destruct H as (p & M & MM); clear H
-  end.
+  Ltac DestructM :=
+    match goal with
+      [ H: exists p, _ /\ _ |- _ ] =>
+        let p := fresh "p" in let M := fresh "M" in let MM := fresh "MM" in
+        destruct H as (p & M & MM); clear H
+    end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p16)).
+  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p18)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -374,9 +388,13 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
-    eapply HTLgenproof.transf_program_correct. eassumption.
+    eapply HTLgenproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption. exact Memorygen.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply Renaming.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply ApplyExternctrl.transf_program_correct; eassumption.
   eapply Veriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.

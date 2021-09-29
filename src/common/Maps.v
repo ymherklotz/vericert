@@ -61,4 +61,54 @@ Definition traverse (A B : Type) (f : positive -> A -> res B) m := xtraverse f m
 
 Definition traverse1 (A B : Type) (f : A -> res B) := traverse (fun _ => f).
 
+Definition filter (A: Type) (pred: PTree.elt -> A -> bool) (m: t A) : t A :=
+  PTree.map (fun _ a => snd a) (PTree.filter1 (fun a => pred (fst a) (snd a)) (PTree.map (fun i x => (i, x)) m)).
+
+Theorem filter_spec: forall (A: Type) (pred: PTree.elt -> A -> bool) (m: PTree.t A) (i: PTree.elt) (x : A),
+    (filter pred m) ! i =
+    match m ! i with
+    | None => None
+    | Some x => if pred i x then Some x else None
+    end.
+Proof.
+  intros.
+  unfold filter.
+
+  rewrite gmap.
+  unfold option_map.
+
+  rewrite gfilter1.
+
+  rewrite gmap.
+  unfold option_map.
+
+  destruct (m ! i).
+  - simpl.
+    destruct (pred i a); simpl; reflexivity.
+  - reflexivity.
+Qed.
+
+Definition contains (A: Type) (i: positive) (m: t A) : bool :=
+  match get i m with
+  | Some _ => true
+  | None => false
+  end.
 End PTree.
+
+Definition max_pc_map {A: Type} (m : Maps.PTree.t A) :=
+  PTree.fold (fun m pc i => Pos.max m pc) m 1%positive.
+
+Lemma max_pc_map_sound:
+  forall A m pc i, m!pc = Some i -> Ple pc (@max_pc_map A m).
+Proof.
+  intros until i. unfold max_pc_map.
+  apply PTree_Properties.fold_rec with (P := fun c m => c!pc = Some i -> Ple pc m).
+  (* extensionality *)
+  intros. apply H0. rewrite H; auto.
+  (* base case *)
+  rewrite PTree.gempty. congruence.
+  (* inductive case *)
+  intros. rewrite PTree.gsspec in H2. destruct (peq pc k).
+  inv H2. xomega.
+  apply Ple_trans with a. auto. xomega.
+Qed.

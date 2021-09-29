@@ -1,0 +1,89 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -p "haskellPackages.ghcWithPackages (pkgs: with pkgs; [ turtle parsec text ])" -i runghc
+
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
+
+import Turtle
+import Text.Parsec as P
+import qualified Data.Text as T
+import Data.List (group)
+import Debug.Trace
+
+args = argPath "benchmark" "The benchmark directory to check"
+
+data ParserState = ParserState {
+  macroNames :: [String],
+  functionCalls :: [String]
+}
+
+addMacroName :: String -> ParserState -> ParserState
+addMacroName macroName ParserState{macroNames, ..} = ParserState {macroNames = macroName:macroNames, ..}
+
+addFunctionCall :: String -> ParserState -> ParserState
+addFunctionCall functionCall ParserState{functionCalls, ..} = ParserState {functionCalls = functionCall:functionCalls, ..}
+
+cParser :: Parsec T.Text ParserState [T.Text]
+cParser = do
+  P.manyTill
+    (betweenFuncs >> parserTrace "interesting" >> (try macroDef P.<|> funcBody))
+    (try endOfFile)
+  map T.pack . functionCalls <$> getState
+  where
+    betweenFuncs = do
+      traceM "betweenFuncs"
+      manyTill P.anyChar $ lookAhead (P.oneOf "#{")
+
+    funcBody :: Parsec T.Text ParserState ()
+    funcBody = do
+      parserTrace "funcBody"
+      P.char '{'
+      void (P.char '}') P.<|> (call >> funcBody) P.<|> (P.anyChar >> funcBody)
+
+    macroDef :: Parsec T.Text ParserState ()
+    macroDef = do
+      parserTrace "macroDef"
+      P.char '#'
+      traceM "macroDef #"
+      P.many (P.char ' ')
+      traceM "macroDef spaces"
+      macroName <- P.many P.alphaNum
+      traceM ("macroDef " ++ macroName)
+      modifyState (addMacroName macroName)
+
+    endOfFile = P.many P.space >> P.eof
+
+    call = do
+      identifier <- many1 idChar
+      inParens <- P.between (P.char '(') (P.char ')') inParensP
+      guard (identifier `notElem` ["for", "while"])
+      modifyState (addFunctionCall identifier)
+      pure identifier
+
+    -- handle balanced parens inside calls
+    inParensP = P.option "" do
+      t1 <- P.many (P.noneOf "()")
+      t2 <- P.option "" $ P.between (P.char '(') (P.char ')') inParensP
+      t3 <- P.many (P.noneOf "()")
+      return (t1 ++ t2 ++ t3)
+    idChar = label (P.alphaNum P.<|> P.oneOf "_-") "identifier"
+
+main = sh do
+  benchmarkDir <- options "count-calls" args
+
+  printf "benchmark,totalCalls,repeatedCalls\n"
+  benchmarkName <- fromText . lineToText <$> input (benchmarkDir </> "benchmark-list-master")
+  let filePath = benchmarkDir </> benchmarkName <.> "c"
+
+  fileContents <- strict $ input filePath
+  printf (fp%"\n") benchmarkName
+
+  case runParser cParser (ParserState [] []) "file" fileContents of
+    Left err -> error $ show err
+    Right calls ->
+      let
+        callCount = length calls
+        repeatedCalls = calls & group & map length & sum
+      in printf (fp%","%d%","%d%"\n") (basename filePath) callCount repeatedCalls

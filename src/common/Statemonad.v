@@ -63,6 +63,14 @@ Module Statemonad(S : State) <: Monad.
       | Error _ => g s
       end.
 
+  Definition handle_opt {A : Type} (err : Errors.errmsg) (val : option A)
+    : mon A :=
+    fun s =>
+      match val with
+      | Some a => OK a s (S.st_refl s)
+      | None => Error err
+      end.
+
   Definition error {A: Type} (err: Errors.errmsg) : mon A := fun (s: S.st) => Error err.
 
   Definition get : mon S.st := fun s => OK s s (S.st_refl s).

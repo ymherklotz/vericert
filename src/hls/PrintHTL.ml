@@ -30,34 +30,99 @@ open VericertClflags
 
 let pstr pp = fprintf pp "%s"
 
-let reg pp r =
-  fprintf pp "x%d" (P.to_int r)
+let concat = String.concat ""
 
-let rec regs pp = function
-  | [] -> ()
-  | [r] -> reg pp r
-  | r1::rl -> fprintf pp "%a, %a" reg r1 regs rl
+let rec intersperse c = function
+  | [] -> []
+  | [x] -> [x]
+  | x :: xs -> x :: c :: intersperse c xs
+
+let register a = sprintf "reg_%d" (P.to_int a)
+let registers a = String.concat "" (intersperse ", " (List.map register a))
 
 let print_instruction pp (pc, i) =
   fprintf pp "%5d:\t%s" pc (pprint_stmnt 0 i)
 
+let string_controlsignal = function
+  | Coq_ctrl_finish -> "finish"
+  | Coq_ctrl_return -> "return"
+  | Coq_ctrl_start -> "start"
+  | Coq_ctrl_reset -> "rst"
+  | Coq_ctrl_clk -> "clk"
+  | Coq_ctrl_param idx -> sprintf "param_%d" (Nat.to_int idx)
+
+let print_externctrl pp ((local_reg : reg), ((target_mod: ident), (target_reg: controlsignal))) =
+  fprintf pp "%s -> %s.%s\n" (register local_reg) (extern_atom target_mod) (string_controlsignal target_reg)
+
+let ptree_to_list ptree =
+  List.sort
+    (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
+    (List.rev_map
+      (fun (pc, i) -> (P.to_int pc, i))
+      (PTree.elements ptree))
+
+let print_ram pp opt_ram =
+  match opt_ram with
+  | Some ram ->
+    fprintf pp "ram {\n";
+    fprintf pp "   size: %d\n" (Nat.to_int ram.ram_size);
+    fprintf pp "    mem: %s\n" (register ram.ram_mem);
+    fprintf pp "     en: %s\n" (register ram.ram_en);
+    fprintf pp "   u_en: %s\n" (register ram.ram_u_en);
+    fprintf pp "   addr: %s\n" (register ram.ram_addr);
+    fprintf pp "  wr_en: %s\n" (register ram.ram_wr_en);
+    fprintf pp "   d_in: %s\n" (register ram.ram_d_in);
+    fprintf pp "  d_out: %s\n" (register ram.ram_d_out);
+    fprintf pp "}\n\n"
+  | None -> ()
+
+let print_control pp f =
+  fprintf pp "control {\n";
+  fprintf pp "     st: %s\n" (register f.mod_st);
+  fprintf pp "    stk: %s\n" (register f.mod_stk);
+  fprintf pp " finish: %s\n" (register f.mod_finish);
+  fprintf pp " return: %s\n" (register f.mod_return);
+  fprintf pp "  start: %s\n" (register f.mod_start);
+  fprintf pp "  reset: %s\n" (register f.mod_reset);
+  fprintf pp "    clk: %s\n" (register f.mod_clk);
+  fprintf pp "}\n\n"
+
+let print_scldecl pp (r, (io, sz)) =
+  fprintf pp "  %s [%d:0]%s\n" (fst (print_io io)) (Nat.to_int sz - 1) (register (P.of_int r))
+
+let print_arrdecl pp (r, (io, Verilog.VArray(sz, ln))) =
+  fprintf pp "  %s [%d:0]%s[%d:0]\n" (fst (print_io io)) (Nat.to_int sz - 1) (register (P.of_int r)) (Nat.to_int ln - 1)
+
 let print_module pp id f =
-  fprintf pp "%s(%a) {\n" (extern_atom id) regs f.mod_params;
-  let datapath =
-    List.sort
-      (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
-      (List.rev_map
-        (fun (pc, i) -> (P.to_int pc, i))
-        (PTree.elements f.mod_datapath)) in
-  let controllogic =
-    List.sort
-      (fun (pc1, _) (pc2, _) -> compare pc2 pc1)
-      (List.rev_map
-        (fun (pc, i) -> (P.to_int pc, i))
-        (PTree.elements f.mod_controllogic)) in
-  fprintf pp "  datapath {\n";
+  fprintf pp "%s(%s) {\n" (extern_atom id) (registers f.mod_params);
+
+  let externctrl = PTree.elements f.mod_externctrl in
+  let datapath = ptree_to_list f.mod_datapath in
+  let controllogic = ptree_to_list f.mod_controllogic in
+  let scldecls = ptree_to_list f.mod_scldecls in
+  let arrdecls = ptree_to_list f.mod_arrdecls in
+
+  print_control pp f;
+
+  fprintf pp "scldecls {\n";
+  List.iter (print_scldecl pp) scldecls;
+  fprintf pp "  }\n\n";
+
+  fprintf pp "arrdecls {\n";
+  List.iter (print_arrdecl pp) arrdecls;
+  fprintf pp "  }\n\n";
+
+  print_ram pp f.mod_ram;
+
+  fprintf pp "externctrl {\n";
+  List.iter (print_externctrl pp) externctrl;
+  fprintf pp "  }\n\n";
+
+  fprintf pp "datapath {\n";
   List.iter (print_instruction pp) datapath;
-  fprintf pp "  }\n\n  controllogic {\n";
+  fprintf pp "  }\n\n";
+
+  fprintf pp "controllogic {\n";
   List.iter (print_instruction pp) controllogic;
   fprintf pp "  }\n}\n\n"
 
@@ -71,10 +136,10 @@ let print_program pp prog =
 
 let destination : string option ref = ref None
 
-let print_if prog =
+let print_if passno prog =
   match !destination with
   | None -> ()
   | Some f ->
-    let oc = open_out f in
-    print_program oc prog;
-    close_out oc
+      let oc = open_out (f ^ "." ^ Z.to_string passno) in
+      print_program oc prog;
+      close_out oc

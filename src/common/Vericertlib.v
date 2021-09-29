@@ -57,6 +57,19 @@ Ltac learn_tac fact name :=
 Tactic Notation "learn" constr(fact) := let name := fresh "H" in learn_tac fact name.
 Tactic Notation "learn" constr(fact) "as" simple_intropattern(name) := learn_tac fact name.
 
+Ltac auto_apply fact :=
+  let H' := fresh "H" in
+  match goal with
+  | H : _ |- _ => pose proof H as H'; apply fact in H'
+  end.
+
+(** Specialize all hypotheses with a forall to a specific term *)
+Tactic Notation "specialize_all" constr(v) :=
+  let t := type of v in
+  repeat match goal with
+         | [H : (forall (x: t), _) |- _ ] => learn H; destruct H with v
+         end.
+
 Ltac unfold_rec c := unfold c; fold c.
 
 Ltac solve_by_inverts n :=
@@ -71,10 +84,28 @@ Ltac solve_by_invert := solve_by_inverts 1.
 
 Ltac invert x := inversion x; subst; clear x.
 
+(** For a hypothesis of a forall-type, instantiate every variable to a fresh existential *)
+Ltac insterU1 H :=
+  match type of H with
+  | forall x : ?T, _ =>
+    let x := fresh "x" in
+    evar (x : T);
+    let x' := eval unfold x in x in
+        clear x; specialize (H x')
+  end.
+
+Ltac insterU H :=
+  repeat (insterU1 H).
+
 Ltac destruct_match :=
   match goal with
   | [ |- context[match ?x with | _ => _ end ] ] => destruct x eqn:?
   | [ H: context[match ?x with | _ => _ end] |- _ ] => destruct x eqn:?
+  end.
+
+Ltac unfold_match H :=
+  match type of H with
+  | context[match ?g with _ => _ end] => destruct g eqn:?; try discriminate
   end.
 
 Ltac auto_destruct x := destruct x eqn:?; simpl in *; try discriminate; try congruence.
@@ -187,11 +218,60 @@ Ltac liapp :=
          | _ => idtac
          end.
 
-Ltac crush := simplify; try discriminate; try congruence; try lia; liapp;
+Ltac plia := solve [ unfold Ple in *; lia ].
+
+Ltac xomega := unfold Plt, Ple in *; zify; lia.
+
+Ltac crush := simplify; try discriminate; try congruence; try plia; liapp;
               try assumption; try (solve [auto]).
+
+Ltac crush_trans :=
+  match goal with
+  | [ H : ?g = ?inter |- ?g = _ ] => transitivity inter; crush
+  | [ H : ?inter = ?g |- ?g = _ ] => transitivity inter; crush
+  | [ H : ?g = ?inter |- _ = ?g ] => transitivity inter; crush
+  | [ H : ?inter = ?g |- _ = ?g ] => transitivity inter; crush
+  end.
+
+Ltac maybe t := t + idtac.
 
 Global Opaque Nat.div.
 Global Opaque Z.mul.
+
+Inductive Ascending : list positive -> Prop :=
+  | Ascending_nil : Ascending nil
+  | Ascending_single : forall x, Ascending (x::nil)
+  | Ascending_cons : forall x y l, (x < y)%positive -> Ascending (y::l) -> Ascending (x::y::l).
+
+Lemma map_fst_split : forall A B (l : list (A * B)), List.map fst l = fst (List.split l).
+Proof.
+  induction l; crush.
+  destruct a; destruct (split l).
+  crush.
+Qed.
+
+Lemma Ascending_Forall : forall l x, Ascending (x :: l) -> Forall (fun y => x < y)%positive l.
+Proof.
+  induction l; crush.
+  inv H.
+  specialize (IHl _ H4).
+  apply Forall_cons.
+  - crush.
+  - apply Forall_impl with (P:=(fun y : positive => (a < y)%positive)); crush.
+Qed.
+
+Lemma Ascending_NoDup : forall l, Ascending l -> NoDup l.
+Proof.
+  induction 1; simplify.
+  - constructor.
+  - constructor. crush. constructor.
+  - constructor; auto.
+    intro contra. inv contra; crush.
+    auto_apply Ascending_Forall.
+    rewrite Forall_forall in *.
+    specialize (H2 x ltac:(auto)).
+    lia.
+Qed.
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
@@ -227,6 +307,15 @@ Definition join {A : Type} (a : option (option A)) : option A :=
   match a with
   | None => None
   | Some a' => a'
+  end.
+
+Fixpoint map_option {A B : Type} (f : A -> option B) (l : list A) : list B :=
+  match l with
+  | nil => nil
+  | x::xs => match f x with
+           | None => map_option f xs
+           | Some x' => x'::map_option f xs
+           end
   end.
 
 Module Notation.

@@ -1,0 +1,6 @@
+*.clog
+*.iver
+*.comp
+*.tmp
+*.v
+*-exec.csv
