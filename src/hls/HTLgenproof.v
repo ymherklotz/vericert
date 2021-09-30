@@ -2311,10 +2311,10 @@ Section CORRECTNESS.
     eexists; split.
     - eapply Smallstep.plus_three.
       + (* Return to caller *)
-        repeat econstructor; eauto.
+        eapply HTL.step_return; repeat econstructor; eauto.
       + (* Join *)
         inv CONST.
-        econstructor; eauto.
+        eapply HTL.step_module; eauto.
         * big_tac; inv TF; simplify; not_control_reg.
         * big_tac; inv TF; simplify; not_control_reg.
         * big_tac; inv TF; simplify; not_control_reg.
@@ -2323,12 +2323,12 @@ Section CORRECTNESS.
           rewrite fso by crush.
           rewrite fss. crush.
         * big_tac; inv TF; simplify; not_control_reg.
-        * repeat econstructor. simpl.
+        * (* datapath *)
+          repeat econstructor. simpl.
           rewrite AssocMap.fso by crush.
           rewrite AssocMap.fss.
           auto.
-        * simplify.
-          constructor.
+        * simplify. constructor.
         * big_tac; inv TF; simplify; not_control_reg.
       + simplify.
         eapply HTL.step_finish_reset with (fin:=fin).
