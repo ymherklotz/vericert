@@ -489,11 +489,15 @@ Lemma mem_alloc_zero_load : forall mem mem' blk chunk sp ptr,
     Mem.alloc mem 0 0 = (mem', blk) ->
     Mem.load chunk mem sp ptr = Mem.load chunk mem' sp ptr.
 Proof.
+  Transparent Mem.load.
   intros.
-  destruct (Mem.load chunk mem sp ptr) eqn:E; symmetry.
-  - eauto using Mem.load_alloc_other.
-  - admit.
-Admitted.
+  destruct (Mem.load chunk mem sp ptr) eqn:E.
+  - hauto lq: on use: Mem.load_alloc_other.
+  - unfold Mem.load in *.
+    destruct (Mem.valid_access_dec mem _ _ _ _), (Mem.valid_access_dec mem' _ _ _ _); crush.
+    eapply Mem.valid_access_alloc_inv in H; eauto.
+    destruct (Values.eq_block _ _), chunk; crush.
+Qed.
 
 Lemma mem_alloc_zero_loadv : forall mem mem' blk chunk ptr,
     Mem.alloc mem 0 0 = (mem', blk) ->
@@ -510,11 +514,14 @@ Lemma mem_alloc_zero_store : forall mem mem' blk chunk sp ofs v,
     Mem.store chunk mem sp ofs v = None ->
     Mem.store chunk mem' sp ofs v = None.
 Proof.
-  Transparent Mem.alloc.
+  Transparent Mem.store.
   intros.
-  unfold Mem.alloc in *.
-  inv H.
-Admitted.
+  unfold Mem.store in *.
+  destruct (Mem.valid_access_dec mem _ _ _ _), (Mem.valid_access_dec mem' _ _ _ _); crush.
+  exfalso.
+  eapply Mem.valid_access_alloc_inv in H; eauto.
+  destruct (Values.eq_block _ _), chunk; crush.
+Qed.
 
 Lemma mem_alloc_zero_storev : forall mem mem' blk chunk ptr v,
     Mem.alloc mem 0 0 = (mem', blk) ->
