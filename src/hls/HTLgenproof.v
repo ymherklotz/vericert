@@ -130,13 +130,15 @@ Definition match_externctrl m asr :=
   forall r mid, (HTL.mod_externctrl m) ! r = Some (mid, HTL.ctrl_finish) ->
            asr # r = ZToValue 0.
 
-Inductive match_sp : list RTL.stackframe -> Values.val -> Values.block -> Prop :=
-  | match_sp_nil : forall sp,
-      match_sp nil (Values.Vptr sp (Ptrofs.repr 0)) sp
-  | match_sp_cons : forall blk sp sp' blk' dst f pc rs stk_tl,
-      sp' = Values.Vptr blk' (Ptrofs.repr 0) ->
-      match_sp stk_tl                                     sp  blk ->
-      match_sp ((RTL.Stackframe dst f sp pc rs) :: stk_tl) sp' blk.
+Definition sp_valid sp := exists blk, sp = Values.Vptr blk Ptrofs.zero.
+
+Inductive stack_base_sp : list RTL.stackframe -> Values.block -> Prop :=
+  | stack_base_sp_one : forall blk dst f pc rs,
+      stack_base_sp (RTL.Stackframe dst f (Values.Vptr blk Ptrofs.zero) pc rs :: nil) blk
+  | stack_base_sp_cons : forall stk_hd stk_tl blk,
+      stack_base_sp stk_tl blk ->
+      stack_base_sp (stk_hd :: stk_tl) blk.
+Hint Constructors stack_base_sp : htlproof.
 
 Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.mem)
   : (list RTL.stackframe) -> (list HTL.stackframe) -> Prop :=
@@ -147,7 +149,8 @@ Inductive match_frames (ge : RTL.genv) (current_id : HTL.ident) (mem : Memory.me
       (MASSOC : match_assocmaps f rs asr)
       (TF : tr_module ge f m)
       (MARR : match_arrs m f sp mem asa)
-      (SP : match_sp rtl_tl sp blk)
+      (SP_VALID : sp_valid sp)
+      (SP_BASE : stack_base_sp rtl_tl blk)
       (RSBP : reg_stack_based_pointers blk rs)
       (ASBP : arr_stack_based_pointers blk mem (f.(RTL.fn_stacksize)) sp)
       (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
@@ -171,7 +174,8 @@ Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
     (WF : state_st_wf m (HTL.State htl_stk mid m st asr asa))
     (MF : match_frames ge mid mem rtl_stk htl_stk)
     (MARR : match_arrs m f sp mem asa)
-    (SP : match_sp rtl_stk sp blk)
+    (SP_VALID : sp_valid sp)
+    (SP_BASE : stack_base_sp rtl_stk blk)
     (RSBP : reg_stack_based_pointers blk rs)
     (ASBP : arr_stack_based_pointers blk mem (f.(RTL.fn_stacksize)) sp)
     (BOUNDS : stack_bounds sp (f.(RTL.fn_stacksize)) mem)
@@ -181,16 +185,20 @@ Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
                  (RTL.State rtl_stk     f sp st rs      mem)
                  (HTL.State htl_stk mid m    st asr asa    )
 | match_returnstate :
-    forall v v' rtl_stk htl_stk mem mid
+    forall v v' rtl_stk htl_stk mem mid blk
       (MF : match_frames ge mid mem rtl_stk htl_stk)
+      (SP_BASE : rtl_stk = nil \/ stack_base_sp rtl_stk blk)
+      (RV_BASED : stack_based v blk)
       (MV : val_value_lessdef v v'),
       match_states ge
                    (RTL.Returnstate rtl_stk     v  mem)
                    (HTL.Returnstate htl_stk mid v'    )
 | match_call :
-    forall f m rtl_args htl_args mid mem rtl_stk htl_stk
+    forall f m rtl_args htl_args mid mem rtl_stk htl_stk blk
     (TF : tr_module ge f m)
     (MF : match_frames ge mid mem rtl_stk htl_stk)
+    (SP_BASE : stack_base_sp rtl_stk blk)
+    (ARGS_BASED : Forall (fun a => stack_based a blk) rtl_args)
     (MARGS : list_forall2 val_value_lessdef rtl_args htl_args),
       match_states ge
                    (RTL.Callstate rtl_stk     (AST.Internal f) rtl_args mem)
@@ -544,23 +552,18 @@ Section CORRECTNESS.
       match_states ge (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
 
-  Lemma match_sp_exists : forall sp stk blk,
-      match_sp stk sp blk -> exists blk', sp = Values.Vptr blk' Ptrofs.zero.
-  Proof. inversion 1; subst; eexists; eauto. Qed.
-
   Lemma mem_free_zero_match_frames : forall rtl_stk htl_stk mem mem' blk id,
       Mem.free mem blk 0 0 = Some mem' ->
       match_frames ge id mem rtl_stk htl_stk ->
       match_frames ge id mem' rtl_stk htl_stk.
   Proof.
-    Lemma mem_free_match_arrs : forall m f rtl_stk sp blk blk' mem mem' asa,
+    Lemma mem_free_match_arrs : forall m f sp blk mem mem' asa,
       Mem.free mem blk 0 0 = Some mem' ->
-      match_sp rtl_stk sp blk' ->
+      sp_valid sp ->
       match_arrs m f sp mem asa ->
       match_arrs m f sp mem' asa.
     Proof.
-      intros * Hfree SP Hmatch.
-      destruct (match_sp_exists _ _ _ SP); subst.
+      intros * Hfree [blk SP] Hmatch.
       inv Hmatch.
       apply match_arr with (stack:=stack); crush.
       intros.
@@ -603,14 +606,13 @@ Section CORRECTNESS.
       match_frames ge id mem rtl_stk htl_stk ->
       match_frames ge id mem' rtl_stk htl_stk.
   Proof.
-    Lemma mem_alloc_zero_match_arrs : forall m f rtl_stk sp blk blk' mem mem' asa,
+    Lemma mem_alloc_zero_match_arrs : forall m f sp blk mem mem' asa,
       Mem.alloc mem 0 0 = (mem', blk) ->
-      match_sp rtl_stk sp blk' ->
+      sp_valid sp ->
       match_arrs m f sp mem asa ->
       match_arrs m f sp mem' asa.
     Proof.
-      intros * Halloc SP Hmatch.
-      destruct (match_sp_exists _ _ _ SP); subst.
+      intros * Halloc [blk SP] Hmatch.
       inv Hmatch.
       apply match_arr with (stack:=stack); crush.
       intros.
@@ -720,12 +722,14 @@ Section CORRECTNESS.
   Qed.
 
   Lemma op_stack_based :
-    forall F V sp blk rtl_stk v m args rs op ge pc' res0 pc f e fin rtrn st stk,
+    forall F V sp blk v m args rs op ge pc' res0 pc f e fin rtrn st stk,
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
                (Verilog.Vnonblock (Verilog.Vvar res0) e)
                (state_goto st pc') ->
       reg_stack_based_pointers blk rs ->
-      match_sp rtl_stk sp blk ->
+      sp_valid sp ->
+
+      (* match_sp rtl_stk sp blk -> *)
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       @Op.eval_operation F V ge sp op
                         (map (fun r : positive => Registers.Regmap.get r rs) args) m = Some v ->
@@ -1121,10 +1125,10 @@ Section CORRECTNESS.
       rewrite H3 in H2. discriminate.
   Qed.
 
-  Lemma match_sp_zero_ofs : forall ofs stk b1 b2,
-      match_sp stk (Values.Vptr b1 ofs) b2 ->
-      ofs = (Ptrofs.repr 0).
-  Proof. induction stk; simplify; inv H; crush. Qed.
+  (* Lemma match_sp_zero_ofs : forall ofs stk b1 b2, *)
+  (*     match_sp stk (Values.Vptr b1 ofs) b2 -> *)
+  (*     ofs = (Ptrofs.repr 0). *)
+  (* Proof. induction stk; simplify; inv H; crush. Qed. *)
 
   Lemma eval_correct :
     forall s sp op rs m v e asr asa f f' stk s' i pc res0 pc' args res mid ml st ,
@@ -1280,7 +1284,7 @@ Section CORRECTNESS.
         rewrite Heqv2 in H4. inv H4.
       + unfold translate_eff_addressing in *. repeat (unfold_match H1). inv H1.
         eexists. repeat (simplify; eval_correct_tac).
-        replace i1 with (Ptrofs.repr 0) by (symmetry; eauto using match_sp_zero_ofs).
+        replace i1 with (Ptrofs.repr 0) by (inversion SP_VALID as [? SP_VALID']; inv SP_VALID'; trivial).
 
         constructor. unfold valueToPtr, ZToValue. rewrite Ptrofs.add_zero_l. unfold Ptrofs.of_int.
         rewrite Int.unsigned_repr. symmetry. apply Ptrofs.repr_unsigned.
@@ -1537,25 +1541,25 @@ Section CORRECTNESS.
     - rewrite AssocMap.gss; auto.
     - rewrite AssocMap.gso; auto.
   Qed.
+  Hint Resolve stack_based_set : htlproof.
 
-  Lemma stack_based_non_pointers : forall args params stk,
-      Forall not_pointer args ->
-      reg_stack_based_pointers stk (RTL.init_regs args params).
+  Lemma stack_based_forall : forall vals regs blk,
+      Forall (fun a => stack_based a blk) vals ->
+      reg_stack_based_pointers blk (RTL.init_regs vals regs).
   Proof.
     unfold reg_stack_based_pointers.
-    induction args; intros * NP *.
-    + destruct params;
+    induction vals; intros * VALS_BASED *.
+    + destruct regs;
       simpl;
       unfold "_ !! _";
       rewrite PTree.gempty;
       crush.
-    + destruct params; simpl.
+    + destruct regs; simpl.
       * unfold "_ !! _". rewrite PTree.gempty. crush.
-      * inv NP.
-        apply stack_based_set;
-        [ destruct a; crush
-        | unfold reg_stack_based_pointers; auto
-        ].
+      * inv VALS_BASED.
+        apply stack_based_set.
+        -- crush.
+        -- unfold reg_stack_based_pointers. auto.
   Qed.
 
   Lemma mem_alloc_stack_bounds : forall mem mem' sz stk,
@@ -1615,8 +1619,6 @@ Section CORRECTNESS.
     hauto unfold: reg, AssocMapExt.get_default.
   Qed.
 
-  Hint Constructors match_sp : htlproof.
-
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
       (m : mem) (m' : Mem.mem') (stk : Values.block),
@@ -1633,18 +1635,19 @@ Section CORRECTNESS.
     inversion MSTATE.
     inversion TF.
     simplify.
-    Lemma match_frames_match_sp : forall rtl_stk htl_stk mid m stk,
-        match_frames ge mid m rtl_stk htl_stk ->
-        exists blk, match_sp rtl_stk (Values.Vptr stk Ptrofs.zero) blk.
-    Proof.
-      induction rtl_stk; simplify.
-      - repeat econstructor.
-      - destruct a.
-        inv H.
-        eauto with htlproof.
-    Qed.
-    edestruct (match_frames_match_sp) as [blk ?]; eauto.
+    (* Lemma match_frames_match_sp : forall rtl_stk htl_stk mid m stk, *)
+    (*     match_frames ge mid m rtl_stk htl_stk -> *)
+    (*     exists blk, match_sp rtl_stk (Values.Vptr stk Ptrofs.zero) blk. *)
+    (* Proof. *)
+    (*   destruct rtl_stk; simplify. *)
+    (*   - repeat econstructor. *)
+    (*   - destruct s. *)
+    (*     inv H. *)
+    (*     eauto with htlproof. *)
+    (* Qed. *)
+    (* edestruct (match_frames_match_sp) as [blk ?]; eauto. *)
 
+    Hint Unfold sp_valid : htlproof.
 
     eexists. split.
     apply Smallstep.plus_one.
@@ -1659,15 +1662,13 @@ Section CORRECTNESS.
         eauto using mem_alloc_zero_match_frames.
       + subst. inv MF. constructor.
     - big_tac.
-      destruct (Mem.load AST.Mint32 m' stk (Ptrofs.unsigned (Ptrofs.repr (4 * ptr)))) eqn:eq_load; repeat constructor.
+      destruct (Mem.load _ _ _ _) eqn:eq_load; repeat constructor.
       erewrite (Mem.load_alloc_same m 0 (RTL.fn_stacksize f) m' _ _ _ _ v); eauto; repeat econstructor.
-    -
-      eapply match_frames_match_sp.
-      (* SP *) admit.
-    - (* RSBP *) admit.
+    - eauto with htlproof.
+    - eauto with htlproof.
+    - eauto using stack_based_forall.
     - unfold arr_stack_based_pointers; intros.
-      destruct (Mem.loadv AST.Mint32 m'
-                          (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:eq_load.
+      destruct (Mem.loadv _ _ _) eqn:eq_load.
       + simpl.
         unfold Mem.loadv in *; simplify.
         erewrite (Mem.load_alloc_same m 0 (RTL.fn_stacksize f) m' _ _ _ _ v); eauto; repeat econstructor.
@@ -1692,7 +1693,7 @@ Section CORRECTNESS.
       + not_control_reg.
     Unshelve.
     all: eauto.
-  Admitted.
+  Qed.
   Hint Resolve transl_callstate_correct : htlproof.
 
   Lemma only_internal_calls : forall fd fn rs,
@@ -1981,6 +1982,27 @@ Section CORRECTNESS.
     eauto.
   Qed.
 
+  Lemma Forall_map_iff : forall A B P (f : A -> B) (l : list A),
+      Forall P (map f l) <-> Forall (fun x => P (f x)) l.
+  Proof.
+    induction l; split; intros.
+    - trivial.
+    - simpl. trivial.
+    - inv H.
+      constructor.
+      auto. apply IHl. auto.
+    - inv H.
+      simpl.
+      constructor.
+      auto. apply IHl. auto.
+  Qed.
+
+  (* Lemma stack_based_forall : forall args rs blk, *)
+  (*     reg_stack_based_pointers blk rs -> *)
+  (*     Forall (fun a : Values.val => stack_based a blk) (map (fun r : positive => rs !! r) args). *)
+  (* Proof. induction args; crush. Qed. *)
+
+
   Ltac not_in_params_low := eapply param_reg_lower; eauto; lia.
   Ltac not_in_params_other :=
     let contra := fresh "contra" in
@@ -2106,7 +2128,7 @@ Section CORRECTNESS.
         * big_tac.
         * simpl; trivial.
       + eauto with htlproof.
-    - constructor; try solve [repeat econstructor; eauto with htlproof ].
+    - econstructor; try solve [repeat econstructor; eauto with htlproof ].
       + eauto using match_find_function.
       + econstructor; eauto with htlproof.
         * (* match_assocmaps *) big_tac.
@@ -2147,6 +2169,9 @@ Section CORRECTNESS.
              rewrite AssocMap.gso by crush.
              rewrite AssocMap.gso by not_control_reg.
              apply AssocMap.gempty.
+      + apply Forall_map_iff.
+        apply Forall_forall.
+        auto.
       + (* Argument values match *)
         big_tac.
         replace (((AssocMapExt.merge value
@@ -2203,11 +2228,12 @@ Section CORRECTNESS.
           eauto.
       + eapply HTL.step_finish; big_tac.
       + eauto with htlproof.
-   - constructor; eauto with htlproof.
+   - econstructor; eauto with htlproof.
      + edestruct no_stack_functions; eauto.
        * replace (RTL.fn_stacksize f) in *.
          eauto using mem_free_zero_match_frames.
        * subst. inv MF. constructor.
+     + destruct or; simpl; auto.
      + destruct or.
        * rewrite fso. (* Return value is not fin *)
          {
@@ -2223,6 +2249,23 @@ Section CORRECTNESS.
   Unshelve. try exact tt; eauto.
   Qed.
   Hint Resolve transl_ireturn_correct : htlproof.
+
+  Lemma stack_base_sp_fequal : forall stk blk blk',
+      stack_base_sp stk blk ->
+      stack_base_sp stk blk' ->
+      blk = blk'.
+  Proof.
+    Ltac inv_stack_base :=
+      repeat match goal with
+             | [ H : stack_base_sp _ _ |- _ ] => learn H; inversion H; subst; crush
+             end.
+    induction stk; intros * H H'.
+    - inv_stack_base.
+    - inversion H; inversion H'; subst; inv_stack_base.
+  Qed.
+  Hint Resolve stack_base_sp_fequal : htlproof.
+
+  Hint Resolve stack_based_set : htlproof.
 
   Lemma transl_returnstate_correct:
     forall (res0 : Registers.reg) (f : RTL.function) (sp : Values.val) (pc : RTL.node)
@@ -2283,8 +2326,9 @@ Section CORRECTNESS.
         * not_control_reg.
         * not_control_reg.
       + auto using match_arrs_empty.
-      + eapply stack_based_set; eauto.
-        (* RSBP *) admit.
+      + replace blk0 with blk in *
+          by (inv SP_BASE; crush; eauto with htlproof).
+        eauto with htlproof.
       + (* match_constants *)
         inv CONST.
         big_tac.
@@ -2295,8 +2339,18 @@ Section CORRECTNESS.
         * simplify.
           repeat rewrite AssocMap.gso; auto; not_control_reg.
       + unfold match_externctrl. simplify.
+        destruct (peq fin r); subst; auto using fss.
+        rewrite fso by assumption.
+        rewrite find_merge_right.
+        * rewrite fso by crush.
+          rewrite fso by not_control_reg.
+          rewrite fso by not_control_reg.
+          unfold match_externctrl in *.
+          eauto.
+        * big_tac; try not_control_reg.
+          apply AssocMap.gempty.
       Unshelve. all: try exact tt; eauto.
-  Admitted.
+  Qed.
   Hint Resolve transl_returnstate_correct : htlproof.
 
   Ltac tac :=
