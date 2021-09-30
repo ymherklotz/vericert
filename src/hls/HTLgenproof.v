@@ -658,9 +658,27 @@ Section CORRECTNESS.
   Qed.
 
   Lemma match_arrs_empty : forall m f sp mem asa,
+      HTL.mod_stk_len m = Z.to_nat (f.(RTL.fn_stacksize) / 4) ->
       match_arrs m f sp mem asa ->
       match_arrs m f sp mem (Verilog.merge_arrs (HTL.empty_stack m) asa).
-  Admitted.
+  Proof.
+    intros * Hstklen [? ? [Hstk [Hstklen' Hstkval]]].
+    econstructor; repeat split.
+    - unfold Verilog.merge_arrs, HTL.empty_stack.
+      rewrite AssocMap.gcombine by trivial.
+      rewrite AssocMap.gss.
+      replace (_ ! _) with (Some stack).
+      crush.
+    - unfold combine, make_array. simpl.
+      rewrite list_combine_length, list_repeat_len, arr_wf, Hstklen, Hstklen'.
+      lia.
+    - simplify.
+      rewrite combine_lookup_first; eauto.
+      + rewrite arr_repeat_length. congruence.
+      + unfold arr_repeat, make_array, array_get_error. simpl.
+        apply list_repeat_lookup.
+        lia.
+  Qed.
 
   Lemma TRANSL' :
     Linking.match_program (fun cu f tf => transl_fundef prog f = Errors.OK tf) eq prog tprog.
