@@ -81,8 +81,9 @@ We then need to declare the external OCaml functions used to print out intermedi
 |*)
 
 Parameter print_RTL: Z -> RTL.program -> unit.
-Parameter print_HTL: HTL.program -> unit.
+Parameter print_HTL: Z -> HTL.program -> unit.
 Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
+Parameter print_RTLPar: Z -> RTLPar.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -191,8 +192,9 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
-   @@ print print_HTL
+   @@ print (print_HTL 0)
    @@ total_if HLSOpts.optim_ram Memorygen.transf_program
+   @@ print (print_HTL 1)
    @@ Veriloggen.transl_program.
 
 (*|
@@ -216,7 +218,7 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
 
 (* This is an unverified version of transf_hls with some experimental additions such as scheduling
 that aren't completed yet. *)
-(*Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
+Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   OK p
   @@@ SimplExpr.transl_program
   @@@ SimplLocals.transf_program
@@ -239,13 +241,14 @@ that aren't completed yet. *)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
   @@@ RTLBlockgen.transl_program
-   @@ print (print_RTLBlock 1)
+   @@ print (print_RTLBlock 0)
    @@ total_if HLSOpts.optim_if_conversion IfConversion.transf_program
-   @@ print (print_RTLBlock 2)
+   @@ print (print_RTLBlock 1)
   @@@ RTLPargen.transl_program
+   @@ print (print_RTLPar 0)
   @@@ HTLPargen.transl_program
-   @@ print print_HTL
-   @@ Veriloggen.transl_program.*)
+   @@ print (print_HTL 0)
+   @@ Veriloggen.transl_program.
 
 (*|
 Correctness Proof

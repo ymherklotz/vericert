@@ -71,10 +71,10 @@ let print_program pp prog =
 
 let destination : string option ref = ref None
 
-let print_if prog =
+let print_if passno prog =
   match !destination with
   | None -> ()
   | Some f ->
-    let oc = open_out f in
+    let oc = open_out (f ^ "." ^ Z.to_string passno) in
     print_program oc prog;
     close_out oc
