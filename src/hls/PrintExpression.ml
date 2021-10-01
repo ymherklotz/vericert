@@ -34,7 +34,7 @@ let rec print_expression pp = function
       (PrintOp.print_addressing print_expression) (addr, to_expr_list elist)
       print_expression e;
     print_expression pp e
-  | Esetpred (p, cond, elist, e) ->
-    fprintf pp "%a = %a; " pred p (PrintOp.print_condition print_expression) (cond, to_expr_list elist);
+  | Esetpred (cond, elist, e) ->
+    fprintf pp "%a; " (PrintOp.print_condition print_expression) (cond, to_expr_list elist);
     print_expression pp e
 *)
