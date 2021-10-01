@@ -34,7 +34,6 @@ compiled and executed. The dependencies of this project are the following:
 
 - [[https://coq.inria.fr/][Coq]]: theorem prover that is used to also program the HLS tool.
 - [[https://ocaml.org/][OCaml]]: the OCaml compiler to compile the extracted files.
-- [[https://github.com/mit-plv/bbv][bbv]]: an efficient bit vector library.
 - [[https://github.com/ocaml/dune][dune]]: build tool for ocaml projects to gather all the ocaml files and compile them in the right
   order.
 - [[http://gallium.inria.fr/~fpottier/menhir/][menhir]]: parser generator for ocaml.

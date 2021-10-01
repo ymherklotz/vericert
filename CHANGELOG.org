@@ -12,6 +12,11 @@
 - Add *RTLPar*, which can execute groups of instructions in parallel.
 - Add scheduling pass to go from RTLBlock to RTLPar.
 
+* 2021-10-01 - v1.2.2
+
+Mainly fix some documentation and remove any ~Admitted~ theorems, even though
+these were in parts of the compiler that were never used.
+
 * 2021-07-12 - v1.2.1
 
 Main release for OOPSLA'21 paper.
