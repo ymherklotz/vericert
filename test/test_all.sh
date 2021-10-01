@@ -1,3 +1,5 @@
+#!/bin/bash
+
 mytmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir')
 echo "--------------------------------------------------"
 echo "Created working directory: $mytmpdir"
