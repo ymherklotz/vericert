@@ -218,7 +218,7 @@ Inductive expression : Type :=
 | Eop : Op.operation -> expression_list -> expression -> expression
 | Eload : AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Estore : expression -> AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
-| Esetpred : predicate -> Op.condition -> expression_list -> expression -> expression
+| Esetpred : Op.condition -> expression_list -> expression -> expression
 with expression_list : Type :=
 | Enil : expression_list
 | Econs : expression -> expression_list -> expression_list
@@ -496,11 +496,11 @@ Inductive sem_value :
 with sem_pred :
        val -> instr_state -> expression -> bool -> Prop :=
 | Spred:
-    forall st pred_exp args p c lv m m' v sp,
-    sem_pred sp st pred_exp m' ->
+    forall st mem_exp args c lv m' v sp,
+    sem_mem sp st mem_exp m' ->
     sem_val_list sp st args lv ->
-    Op.eval_condition c lv m = Some v ->
-    sem_pred sp st (Esetpred p c args pred_exp) v
+    Op.eval_condition c lv m' = Some v ->
+    sem_pred sp st (Esetpred c args mem_exp) v
 | Sbase_pred:
     forall rs pr m p sp,
     sem_pred sp (mk_instr_state rs pr m) (Ebase (Pred p)) (pr !! p)
@@ -513,7 +513,7 @@ with sem_mem :
     sem_val_list sp st args lv ->
     Op.eval_addressing genv sp addr lv = Some a ->
     Memory.Mem.storev chunk m' a v = Some m'' ->
-    sem_mem sp st (Estore mem_exp chunk addr args val_exp) m''
+    sem_mem sp st (Estore val_exp chunk addr args mem_exp) m''
 | Sbase_mem :
     forall rs m sp pr,
     sem_mem sp (mk_instr_state rs pr m) (Ebase Mem) m
@@ -601,17 +601,16 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
     then if addressing_eq addr1 addr2
          then if beq_expression_list el1 el2
               then beq_expression e1 e2 else false else false else false
-  | Estore m1 chk1 addr1 el1 e1, Estore m2 chk2 addr2 el2 e2=>
+  | Estore e1 chk1 addr1 el1 m1, Estore e2 chk2 addr2 el2 m2 =>
     if memory_chunk_eq chk1 chk2
     then if addressing_eq addr1 addr2
          then if beq_expression_list el1 el2
               then if beq_expression m1 m2
                    then beq_expression e1 e2 else false else false else false else false
-  | Esetpred p1 c1 el1 m1, Esetpred p2 c2 el2 m2 =>
-    if Pos.eqb p1 p2
-    then if condition_eq c1 c2
-         then if beq_expression_list el1 el2
-              then beq_expression m1 m2 else false else false else false
+  | Esetpred c1 el1 m1, Esetpred c2 el2 m2 =>
+    if condition_eq c1 c2
+    then if beq_expression_list el1 el2
+         then beq_expression m1 m2 else false else false
   | _, _ => false
   end
 with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
@@ -1008,11 +1007,19 @@ Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
   | RBop p op rl r =>
-    f # (Reg r) <- (map_predicated (map_predicated (NE.singleton (p, Eop op)) (merge (list_translation rl f))) (f # Mem))
+    f # (Reg r) <-
+    (map_predicated (map_predicated (NE.singleton (p, Eop op)) (merge (list_translation rl f))) (f # Mem))
   | RBload p chunk addr rl r =>
-    f # (Reg r) <- (map_predicated (map_predicated (NE.singleton (p, Eload chunk addr)) (merge (list_translation rl f))) (f # Mem))
+    f # (Reg r) <-
+    (map_predicated
+     (map_predicated (NE.singleton (p, Eload chunk addr)) (merge (list_translation rl f)))
+     (f # Mem))
   | RBstore p chunk addr rl r =>
-    f # Mem <- (map_predicated (map_predicated (apply2_predicated (map_predicated (NE.singleton (p, Estore)) (f # Mem)) chunk addr) (merge (list_translation rl f))) (f # (Reg r)))
+    f # Mem <-
+    (map_predicated
+     (map_predicated
+      (apply2_predicated (map_predicated (NE.singleton (p, Estore)) (f # (Reg r))) chunk addr)
+      (merge (list_translation rl f))) (f # Mem))
   | RBsetpred c addr p => f
   end.
 
