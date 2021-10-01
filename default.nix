@@ -10,6 +10,7 @@ stdenv.mkDerivation {
   buildInputs = [ ncoq dune_2 gcc
                   ncoq.ocaml ncoq.ocamlPackages.findlib ncoq.ocamlPackages.menhir
                   ncoq.ocamlPackages.ocamlgraph ncoq.ocamlPackages.merlin
+                  ncoq.ocamlPackages.menhirLib
 
                   ncoqPackages.serapi
                   python3 python3Packages.docutils python3Packages.pygments
