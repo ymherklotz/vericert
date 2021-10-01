@@ -759,7 +759,6 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
       in
       (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
-      Printf.printf "%a\n" print_dfg (subgraph dfg (List.hd body));
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x ->
                                                all_dfs x

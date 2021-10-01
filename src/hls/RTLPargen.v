@@ -594,8 +594,7 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
   | Ebase r1, Ebase r2 => if resource_eq r1 r2 then true else false
   | Eop op1 el1 exp1, Eop op2 el2 exp2 =>
     if operation_eq op1 op2 then
-    if beq_expression exp1 exp2 then
-    beq_expression_list el1 el2 else false else false
+    beq_expression_list el1 el2 else false
   | Eload chk1 addr1 el1 e1, Eload chk2 addr2 el2 e2 =>
     if memory_chunk_eq chk1 chk2
     then if addressing_eq addr1 addr2
@@ -609,8 +608,7 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
                    then beq_expression e1 e2 else false else false else false else false
   | Esetpred c1 el1 m1, Esetpred c2 el2 m2 =>
     if condition_eq c1 c2
-    then if beq_expression_list el1 el2
-         then beq_expression m1 m2 else false else false
+    then beq_expression_list el1 el2 else false
   | _, _ => false
   end
 with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
