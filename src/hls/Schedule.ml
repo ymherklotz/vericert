@@ -96,7 +96,7 @@ module DFGSimp = Graph.Persistent.Graph.Concrete(struct
 
 let convert dfg =
   DFG.fold_vertex (fun v g -> DFGSimp.add_vertex g v) dfg DFGSimp.empty
-  |> DFG.fold_edges (fun v1 v2 g -> DFGSimp.add_edge g v1 v2) dfg
+  |> DFG.fold_edges (fun v1 v2 g -> DFGSimp.add_edge (DFGSimp.add_edge g v1 v2) v2 v1) dfg
 
 let reg r = sprintf "r%d" (P.to_int r)
 let print_pred r = sprintf "p%d" (P.to_int r)
@@ -214,7 +214,7 @@ module DFGDot = Graph.Graphviz.Dot(struct
     include DFG
   end)
 
-module DFGDfs = Graph.Traverse.Dfs(DFGSimp)
+module DFGDfs = Graph.Traverse.Dfs(DFG)
 
 module IMap = Map.Make (struct
   type t = int
@@ -753,12 +753,13 @@ let check_in el =
   List.exists (List.exists ((=) el))
 
 let all_dfs dfg =
-  let roots = DFGSimp.fold_vertex (fun v li ->
-      if DFGSimp.in_degree dfg v = 0 then v :: li else li
+  let roots = DFG.fold_vertex (fun v li ->
+      if DFG.in_degree dfg v = 0 then v :: li else li
     ) dfg [] in
+  let dfg' = DFG.fold_edges (fun v1 v2 g -> DFG.add_edge g v2 v1) dfg dfg in
   List.fold_left (fun a el ->
       if check_in el a then a else
-        (DFGDfs.fold_component (fun v l -> v :: l) [] dfg el) :: a) [] roots
+        (DFGDfs.fold_component (fun v l -> v :: l) [] dfg' el) :: a) [] roots
 
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
@@ -777,7 +778,7 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
       (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x ->
-                                               all_dfs (convert x)
+                                               all_dfs x
                                                |> List.map (subgraph x)
                                                |> List.map (fun y ->
                                                    TopoDFG.fold (fun i l -> snd i :: l) y []
