@@ -203,6 +203,8 @@ module DFGDot = Graph.Graphviz.Dot(struct
     include DFG
   end)
 
+module DFGDfs = Graph.Traverse.Dfs(DFG)
+
 module IMap = Map.Make (struct
   type t = int
 
@@ -713,9 +715,7 @@ let subgraph dfg l =
   List.fold_left (fun g v ->
       List.fold_left (fun g' v' ->
           let edges = DFG.find_all_edges dfg v v' in
-          List.fold_left (fun g'' e ->
-              DFG.add_edge_e g'' e
-            ) g' edges
+          List.fold_left DFG.add_edge_e g' edges
         ) g l
     ) dfg' l
 
@@ -735,6 +735,15 @@ let combine_bb_schedule schedule s =
   let i, st = s in
   IMap.update st (update_schedule i) schedule
 
+(**let add_el dfg i l =
+  List.*)
+
+let all_dfs dfg =
+  let roots = DFG.fold_vertex (fun v li ->
+      if DFG.in_degree dfg v = 0 then v :: li else li
+    ) dfg [] in
+  List.map (fun r -> DFGDfs.fold_component (fun v l -> v :: l) [] dfg r) roots
+
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
   let f i bb : RTLPar.bblock =
@@ -750,11 +759,16 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
       in
       (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
+      Printf.printf "%a\n" print_dfg (subgraph dfg (List.hd body));
       let final_body2 = List.map (fun x -> subgraph dfg x
-                                           |> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
-                                           |> List.rev) body
+                                           |> (fun x ->
+                                               all_dfs x
+                                               |> List.map (subgraph x)
+                                               |> List.map (fun y ->
+                                                   TopoDFG.fold (fun i l -> snd i :: l) y []
+                                                   |> List.rev))) body
       in
-      { bb_body = List.map (fun x -> [x]) final_body2;
+      { bb_body = final_body2;
         bb_exit = ctrl_flow
       }
   in
@@ -764,7 +778,7 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   let debug = true in
   let transf_graph (_, dfg, _) = dfg in
   let c' = PTree.map1 (fun x -> gather_bb_constraints false x |> transf_graph) c in
-  (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg (second o)) c' else PTree.empty in*)
+  (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg o) c' else PTree.empty in*)
   let cgraph = PTree.elements c'
                |> List.map (function (x, y) -> (P.to_int x, y))
                |> List.fold_left (gather_cfg_constraints c) G.empty
@@ -774,7 +788,7 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   close_out graph;
   let schedule' = solve_constraints cgraph in
   (**IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
-  (*printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
+  (**printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
   transf_rtlpar c c' schedule'
 
 let rec find_reachable_states c e =
