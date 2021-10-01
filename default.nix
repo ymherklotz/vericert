@@ -9,11 +9,12 @@ stdenv.mkDerivation {
 
   buildInputs = [ ncoq dune_2 gcc
                   ncoq.ocaml ncoq.ocamlPackages.findlib ncoq.ocamlPackages.menhir
-                  ncoq.ocamlPackages.ocamlgraph
-		  ncoqPackages.serapi
-		  python3 python3Packages.docutils python3Packages.pygments
-		  python3Packages.dominate
-		  python3Packages.pelican
+                  ncoq.ocamlPackages.ocamlgraph ncoq.ocamlPackages.merlin
+
+                  ncoqPackages.serapi
+                  python3 python3Packages.docutils python3Packages.pygments
+                  python3Packages.dominate
+                  python3Packages.pelican
                 ];
 
   enableParallelBuilding = true;
