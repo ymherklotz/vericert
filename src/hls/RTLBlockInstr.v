@@ -348,9 +348,9 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   end.
 
 Record instr_state := mk_instr_state {
-  instr_st_regset: regset;
-  instr_st_predset: predset;
-  instr_st_mem: mem;
+  is_rs: regset;
+  is_ps: predset;
+  is_mem: mem;
 }.
 
 Section DEFINITION.
