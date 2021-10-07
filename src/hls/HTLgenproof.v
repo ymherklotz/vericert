@@ -203,6 +203,7 @@ Inductive match_states (ge : RTL.genv) : RTL.state -> HTL.state -> Prop :=
     (TF : tr_module ge f m)
     (MF : match_frames ge mid mem rtl_stk htl_stk)
     (SP_BASE : nil_stack_base_sp rtl_stk sp blk \/ stack_base_sp rtl_stk blk)
+    (INIT_CALL_NO_ARGS : rtl_stk = nil -> rtl_args = nil)
     (ARGS_BASED : Forall (fun a => stack_based a blk) rtl_args)
     (MARGS : list_forall2 val_value_lessdef rtl_args htl_args),
       match_states ge
