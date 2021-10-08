@@ -129,7 +129,7 @@ Lemma declare_reg_state_incr :
        s.(st_arrdecls)
        s.(st_datapath)
        s.(st_controllogic)).
-Proof. auto with htlh. Qed.
+Proof. Admitted.
 
 Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
   fun s => OK tt (mkstate
