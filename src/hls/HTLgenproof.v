@@ -40,24 +40,24 @@ Require Import Lia.
 
 Local Open Scope assocmap.
 
-Hint Resolve Smallstep.forward_simulation_plus : htlproof.
-Hint Resolve AssocMap.gss : htlproof.
-Hint Resolve AssocMap.gso : htlproof.
+#[local] Hint Resolve Smallstep.forward_simulation_plus : htlproof.
+#[local] Hint Resolve AssocMap.gss : htlproof.
+#[local] Hint Resolve AssocMap.gso : htlproof.
 
-Hint Unfold find_assocmap AssocMapExt.get_default : htlproof.
+#[local] Hint Unfold find_assocmap AssocMapExt.get_default : htlproof.
 
 Inductive match_assocmaps : RTL.function -> RTL.regset -> assocmap -> Prop :=
   match_assocmap : forall f rs am,
     (forall r, Ple r (RTL.max_reg_function f) ->
                val_value_lessdef (Registers.Regmap.get r rs) am#r) ->
     match_assocmaps f rs am.
-Hint Constructors match_assocmaps : htlproof.
+#[local] Hint Constructors match_assocmaps : htlproof.
 
 Definition state_st_wf (m : HTL.module) (s : HTL.state) :=
   forall st asa asr res,
   s = HTL.State res m st asa asr ->
   asa!(m.(HTL.mod_st)) = Some (posToValue st).
-Hint Unfold state_st_wf : htlproof.
+#[local] Hint Unfold state_st_wf : htlproof.
 
 Inductive match_arrs (m : HTL.module) (f : RTL.function) (sp : Values.val) (mem : mem) :
   Verilog.assocmap_arr -> Prop :=
@@ -133,7 +133,7 @@ Inductive match_states : RTL.state -> HTL.state -> Prop :=
     forall f m m0
     (TF : tr_module f m),
       match_states (RTL.Callstate nil (AST.Internal f) nil m0) (HTL.Callstate nil m nil).
-Hint Constructors match_states : htlproof.
+#[local] Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp /\
@@ -187,7 +187,7 @@ Proof.
   apply Pos.le_lt_trans with _ _ n in H2.
   unfold not. intros. subst. eapply Pos.lt_irrefl. eassumption. assumption.
 Qed.
-Hint Resolve regs_lessdef_add_greater : htlproof.
+#[local] Hint Resolve regs_lessdef_add_greater : htlproof.
 
 Lemma regs_lessdef_add_match :
   forall f rs am r v v',
@@ -206,7 +206,7 @@ Proof.
   unfold find_assocmap. unfold AssocMapExt.get_default.
   rewrite AssocMap.gso; eauto.
 Qed.
-Hint Resolve regs_lessdef_add_match : htlproof.
+#[local] Hint Resolve regs_lessdef_add_match : htlproof.
 
 Lemma list_combine_none :
   forall n l,
@@ -348,7 +348,7 @@ Proof.
   eexists.
   unfold Verilog.arr_assocmap_lookup. rewrite H5. reflexivity.
 Qed.
-Hint Resolve arr_lookup_some : htlproof.
+#[local] Hint Resolve arr_lookup_some : htlproof.
 
 Section CORRECTNESS.
 
@@ -392,7 +392,7 @@ Section CORRECTNESS.
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
   Proof
     (Genv.senv_transf_partial TRANSL').
-  Hint Resolve senv_preserved : htlproof.
+  #[local] Hint Resolve senv_preserved : htlproof.
 
   Lemma ptrofs_inj :
     forall a b,
@@ -1104,7 +1104,7 @@ Section CORRECTNESS.
 
     Unshelve. exact tt.
   Qed.
-  Hint Resolve transl_inop_correct : htlproof.
+  #[local] Hint Resolve transl_inop_correct : htlproof.
 
   Lemma transl_iop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -1156,7 +1156,7 @@ Section CORRECTNESS.
     unfold Ple in HPle. lia.
     Unshelve. exact tt.
   Qed.
-  Hint Resolve transl_iop_correct : htlproof.
+  #[local] Hint Resolve transl_iop_correct : htlproof.
 
   Ltac tac :=
     repeat match goal with
@@ -1629,7 +1629,7 @@ Section CORRECTNESS.
       exact (Values.Vint (Int.repr 0)).
       exact tt.
   Qed.
-  Hint Resolve transl_iload_correct : htlproof.
+  #[local] Hint Resolve transl_iload_correct : htlproof.
 
   Lemma transl_istore_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -2499,7 +2499,7 @@ Section CORRECTNESS.
       exact tt.
       exact (Values.Vint (Int.repr 0)).
   Qed.
-  Hint Resolve transl_istore_correct : htlproof.
+  #[local] Hint Resolve transl_istore_correct : htlproof.
 
   Lemma transl_icond_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -2553,7 +2553,7 @@ Section CORRECTNESS.
 
       Unshelve. all: exact tt.
   Qed.
-  Hint Resolve transl_icond_correct : htlproof.
+  #[local] Hint Resolve transl_icond_correct : htlproof.
 
   (*Lemma transl_ijumptable_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -2569,7 +2569,7 @@ Section CORRECTNESS.
   Proof.
     intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE.
   
-  Hint Resolve transl_ijumptable_correct : htlproof.*)
+  #[local] Hint Resolve transl_ijumptable_correct : htlproof.*)
 
   Lemma transl_ireturn_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (stk : Values.block)
@@ -2657,7 +2657,7 @@ Section CORRECTNESS.
       Unshelve.
       all: constructor.
   Qed.
-  Hint Resolve transl_ireturn_correct : htlproof.
+  #[local] Hint Resolve transl_ireturn_correct : htlproof.
 
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
@@ -2765,7 +2765,7 @@ Section CORRECTNESS.
     Opaque Mem.load.
     Opaque Mem.store.
   Qed.
-  Hint Resolve transl_callstate_correct : htlproof.
+  #[local] Hint Resolve transl_callstate_correct : htlproof.
 
   Lemma transl_returnstate_correct:
     forall (res0 : Registers.reg) (f : RTL.function) (sp : Values.val) (pc : RTL.node)
@@ -2779,7 +2779,7 @@ Section CORRECTNESS.
     intros res0 f sp pc rs s vres m R1 MSTATE.
     inversion MSTATE. inversion MF.
   Qed.
-  Hint Resolve transl_returnstate_correct : htlproof.
+  #[local] Hint Resolve transl_returnstate_correct : htlproof.
 
   Lemma option_inv :
     forall A x y,
@@ -2839,7 +2839,7 @@ Section CORRECTNESS.
     rewrite <- H6. setoid_rewrite <- A. trivial.
     trivial. inv H7. assumption.
   Qed.
-  Hint Resolve transl_initial_states : htlproof.
+  #[local] Hint Resolve transl_initial_states : htlproof.
 
   Lemma transl_final_states :
     forall (s1 : Smallstep.state (RTL.semantics prog))
@@ -2851,7 +2851,7 @@ Section CORRECTNESS.
   Proof.
     intros. inv H0. inv H. inv H4. invert MF. constructor. reflexivity.
   Qed.
-  Hint Resolve transl_final_states : htlproof.
+  #[local] Hint Resolve transl_final_states : htlproof.
 
   Theorem transl_step_correct:
     forall (S1 : RTL.state) t S2,
@@ -2862,7 +2862,7 @@ Section CORRECTNESS.
   Proof.
     induction 1; eauto with htlproof; (intros; inv_state).
   Qed.
-  Hint Resolve transl_step_correct : htlproof.
+  #[local] Hint Resolve transl_step_correct : htlproof.
 
   Theorem transf_program_correct:
     Smallstep.forward_simulation (RTL.semantics prog) (HTL.semantics tprog).

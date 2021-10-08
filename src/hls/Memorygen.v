@@ -39,9 +39,9 @@ Require Import vericert.hls.Array.
 Local Open Scope positive.
 Local Open Scope assocmap.
 
-Hint Resolve max_reg_stmnt_le_stmnt_tree : mgen.
-Hint Resolve max_reg_stmnt_lt_stmnt_tree : mgen.
-Hint Resolve max_stmnt_lt_module : mgen.
+#[local] Hint Resolve max_reg_stmnt_le_stmnt_tree : mgen.
+#[local] Hint Resolve max_reg_stmnt_lt_stmnt_tree : mgen.
+#[local] Hint Resolve max_stmnt_lt_module : mgen.
 
 Lemma int_eq_not_false : forall x, Int.eq x (Int.not x) = false.
 Proof.
@@ -291,7 +291,7 @@ Inductive match_arrs_size : assocmap_arr -> assocmap_arr -> Prop :=
 
 Definition match_empty_size (m : module) (ar : assocmap_arr) : Prop :=
   match_arrs_size (empty_stack m) ar.
-Hint Unfold match_empty_size : mgen.
+#[local] Hint Unfold match_empty_size : mgen.
 
 Definition disable_ram (ram: option ram) (asr : assocmap_reg) : Prop :=
   match ram with
@@ -330,7 +330,7 @@ Inductive match_states : state -> state -> Prop :=
     forall m,
       match_states (Callstate nil m nil)
                    (Callstate nil (transf_module m) nil).
-Hint Constructors match_states : htlproof.
+#[local] Hint Constructors match_states : htlproof.
 
 Definition empty_stack_ram r :=
   AssocMap.set (ram_mem r) (Array.arr_repeat None (ram_size r)) (AssocMap.empty arr).
@@ -340,7 +340,7 @@ Definition empty_stack' len st :=
 
 Definition match_empty_size' l s (ar : assocmap_arr) : Prop :=
   match_arrs_size (empty_stack' l s) ar.
-Hint Unfold match_empty_size : mgen.
+#[local] Hint Unfold match_empty_size : mgen.
 
 Definition merge_reg_assocs r :=
   Verilog.mkassociations (Verilog.merge_regs (assoc_nonblocking r) (assoc_blocking r)) empty_assocmap.
@@ -366,23 +366,23 @@ Ltac mgen_crush := crush; eauto with mgen.
 
 Lemma match_assocmaps_equiv : forall p a, match_assocmaps p a a.
 Proof. constructor; auto. Qed.
-Hint Resolve match_assocmaps_equiv : mgen.
+#[local] Hint Resolve match_assocmaps_equiv : mgen.
 
 Lemma match_arrs_equiv : forall a, match_arrs a a.
 Proof. econstructor; mgen_crush. Qed.
-Hint Resolve match_arrs_equiv : mgen.
+#[local] Hint Resolve match_arrs_equiv : mgen.
 
 Lemma match_reg_assocs_equiv : forall p a, match_reg_assocs p a a.
 Proof. destruct a; constructor; mgen_crush. Qed.
-Hint Resolve match_reg_assocs_equiv : mgen.
+#[local] Hint Resolve match_reg_assocs_equiv : mgen.
 
 Lemma match_arr_assocs_equiv : forall a, match_arr_assocs a a.
 Proof. destruct a; constructor; mgen_crush. Qed.
-Hint Resolve match_arr_assocs_equiv : mgen.
+#[local] Hint Resolve match_arr_assocs_equiv : mgen.
 
 Lemma match_arrs_size_equiv : forall a, match_arrs_size a a.
 Proof. intros; repeat econstructor; eauto. Qed.
-Hint Resolve match_arrs_size_equiv : mgen.
+#[local] Hint Resolve match_arrs_size_equiv : mgen.
 
 Lemma match_stacks_equiv :
   forall m s l,
@@ -400,7 +400,7 @@ Proof.
   intros. inv H. constructor. intros.
   apply H0. lia.
 Qed.
-Hint Resolve match_assocmaps_max1 : mgen.
+#[local] Hint Resolve match_assocmaps_max1 : mgen.
 
 Lemma match_assocmaps_max2 :
   forall p p' a b,
@@ -410,7 +410,7 @@ Proof.
   intros. inv H. constructor. intros.
   apply H0. lia.
 Qed.
-Hint Resolve match_assocmaps_max2 : mgen.
+#[local] Hint Resolve match_assocmaps_max2 : mgen.
 
 Lemma match_assocmaps_ge :
   forall p p' a b,
@@ -421,21 +421,21 @@ Proof.
   intros. inv H. constructor. intros.
   apply H1. lia.
 Qed.
-Hint Resolve match_assocmaps_ge : mgen.
+#[local] Hint Resolve match_assocmaps_ge : mgen.
 
 Lemma match_reg_assocs_max1 :
   forall p p' a b,
     match_reg_assocs (Pos.max p' p) a b ->
     match_reg_assocs p a b.
 Proof. intros; inv H; econstructor; mgen_crush. Qed.
-Hint Resolve match_reg_assocs_max1 : mgen.
+#[local] Hint Resolve match_reg_assocs_max1 : mgen.
 
 Lemma match_reg_assocs_max2 :
   forall p p' a b,
     match_reg_assocs (Pos.max p p') a b ->
     match_reg_assocs p a b.
 Proof. intros; inv H; econstructor; mgen_crush. Qed.
-Hint Resolve match_reg_assocs_max2 : mgen.
+#[local] Hint Resolve match_reg_assocs_max2 : mgen.
 
 Lemma match_reg_assocs_ge :
   forall p p' a b,
@@ -443,7 +443,7 @@ Lemma match_reg_assocs_ge :
     p <= p' ->
     match_reg_assocs p a b.
 Proof. intros; inv H; econstructor; mgen_crush. Qed.
-Hint Resolve match_reg_assocs_ge : mgen.
+#[local] Hint Resolve match_reg_assocs_ge : mgen.
 
 Definition forall_ram (P: reg -> Prop) ram :=
   P (ram_en ram)
@@ -462,7 +462,7 @@ Proof.
   unfold forall_ram; simplify; unfold max_reg_module; repeat apply X;
   unfold max_reg_ram; rewrite H; try lia.
 Qed.
-Hint Resolve forall_ram_lt : mgen.
+#[local] Hint Resolve forall_ram_lt : mgen.
 
 Definition exec_all d_s c_s rs1 ar1 rs3 ar3 :=
   exists f rs2 ar2,
@@ -554,7 +554,7 @@ Proof.
   inversion 1; subst; inversion 1; subst;
   econstructor; intros; apply merge_arr_empty' in H6; auto.
 Qed.
-Hint Resolve merge_arr_empty : mgen.
+#[local] Hint Resolve merge_arr_empty : mgen.
 
 Lemma merge_arr_empty'':
   forall m ar s v,
@@ -600,7 +600,7 @@ Proof.
            destruct ar ! s; try discriminate; eauto.
   apply merge_arr_empty''; auto. apply H2 in H3; auto.
 Qed.
-Hint Resolve merge_arr_empty_match : mgen.
+#[local] Hint Resolve merge_arr_empty_match : mgen.
 
 Definition ram_present {A: Type} ar r v v' :=
   (assoc_nonblocking ar)!(ram_mem r) = Some v
@@ -615,7 +615,7 @@ Lemma find_assoc_get :
 Proof.
   intros; unfold find_assocmap, AssocMapExt.get_default; rewrite H; auto.
 Qed.
-Hint Resolve find_assoc_get : mgen.
+#[local] Hint Resolve find_assoc_get : mgen.
 
 Lemma find_assoc_get2 :
   forall rs p r v trs,
@@ -626,7 +626,7 @@ Lemma find_assoc_get2 :
 Proof.
   intros; unfold find_assocmap, AssocMapExt.get_default; rewrite <- H; auto.
 Qed.
-Hint Resolve find_assoc_get2 : mgen.
+#[local] Hint Resolve find_assoc_get2 : mgen.
 
 Lemma get_assoc_gt :
   forall A (rs : AssocMap.t A) p r v trs,
@@ -635,7 +635,7 @@ Lemma get_assoc_gt :
     rs ! r = v ->
     trs ! r = v.
 Proof. intros. rewrite <- H; auto. Qed.
-Hint Resolve get_assoc_gt : mgen.
+#[local] Hint Resolve get_assoc_gt : mgen.
 
 Lemma expr_runp_matches :
   forall f rs ar e v,
@@ -686,7 +686,7 @@ Proof.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max d b) + 1) by lia.
     eapply H5 in H2. apply H4 in H2. auto. auto.
 Qed.
-Hint Resolve expr_runp_matches : mgen.
+#[local] Hint Resolve expr_runp_matches : mgen.
 
 Lemma expr_runp_matches2 :
   forall f rs ar e v p,
@@ -701,7 +701,7 @@ Proof.
   assert (max_reg_expr e + 1 <= p) by lia.
   mgen_crush.
 Qed.
-Hint Resolve expr_runp_matches2 : mgen.
+#[local] Hint Resolve expr_runp_matches2 : mgen.
 
 Lemma match_assocmaps_gss :
   forall p rab rab' r rhsval,
@@ -715,7 +715,7 @@ Proof.
   repeat rewrite PTree.gss; auto.
   repeat rewrite PTree.gso; auto.
 Qed.
-Hint Resolve match_assocmaps_gss : mgen.
+#[local] Hint Resolve match_assocmaps_gss : mgen.
 
 Lemma match_assocmaps_gt :
   forall p s ra ra' v,
@@ -726,21 +726,21 @@ Proof.
   intros. inv H0. constructor.
   intros. rewrite AssocMap.gso; try lia. apply H1; auto.
 Qed.
-Hint Resolve match_assocmaps_gt : mgen.
+#[local] Hint Resolve match_assocmaps_gt : mgen.
 
 Lemma match_reg_assocs_block :
   forall p rab rab' r rhsval,
     match_reg_assocs p rab rab' ->
     match_reg_assocs p (block_reg r rab rhsval) (block_reg r rab' rhsval).
 Proof. inversion 1; econstructor; eauto with mgen. Qed.
-Hint Resolve match_reg_assocs_block : mgen.
+#[local] Hint Resolve match_reg_assocs_block : mgen.
 
 Lemma match_reg_assocs_nonblock :
   forall p rab rab' r rhsval,
     match_reg_assocs p rab rab' ->
     match_reg_assocs p (nonblock_reg r rab rhsval) (nonblock_reg r rab' rhsval).
 Proof. inversion 1; econstructor; eauto with mgen. Qed.
-Hint Resolve match_reg_assocs_nonblock : mgen.
+#[local] Hint Resolve match_reg_assocs_nonblock : mgen.
 
 Lemma some_inj :
   forall A (x: A) y,
@@ -773,7 +773,7 @@ Proof.
   apply nth_error_None. destruct a. simplify.
   lia.
 Qed.
-Hint Resolve array_get_error_bound_gt : mgen.
+#[local] Hint Resolve array_get_error_bound_gt : mgen.
 
 Lemma array_get_error_each :
   forall A addr i (v : A) a x,
@@ -791,7 +791,7 @@ Proof.
   rewrite <- array_set_len. rewrite <- H. lia.
   repeat rewrite array_gso; auto.
 Qed.
-Hint Resolve array_get_error_each : mgen.
+#[local] Hint Resolve array_get_error_each : mgen.
 
 Lemma match_arrs_gss :
   forall ar ar' r v i,
@@ -840,21 +840,21 @@ Proof.
     destruct ar!r eqn:?; repeat mag_tac; crush.
     apply H1 in Heqo. repeat mag_tac; auto.
 Qed.
-Hint Resolve match_arrs_gss : mgen.
+#[local] Hint Resolve match_arrs_gss : mgen.
 
 Lemma match_arr_assocs_block :
   forall rab rab' r i rhsval,
     match_arr_assocs rab rab' ->
     match_arr_assocs (block_arr r i rab rhsval) (block_arr r i rab' rhsval).
 Proof. inversion 1; econstructor; eauto with mgen. Qed.
-Hint Resolve match_arr_assocs_block : mgen.
+#[local] Hint Resolve match_arr_assocs_block : mgen.
 
 Lemma match_arr_assocs_nonblock :
   forall rab rab' r i rhsval,
     match_arr_assocs rab rab' ->
     match_arr_assocs (nonblock_arr r i rab rhsval) (nonblock_arr r i rab' rhsval).
 Proof. inversion 1; econstructor; eauto with mgen. Qed.
-Hint Resolve match_arr_assocs_nonblock : mgen.
+#[local] Hint Resolve match_arr_assocs_nonblock : mgen.
 
 Lemma match_states_same :
   forall f rs1 ar1 c rs2 ar2 p,
@@ -934,7 +934,7 @@ Proof.
   rewrite <- H2; eauto.
   rewrite <- H; eauto.
 Qed.
-Hint Resolve match_reg_assocs_merge : mgen.
+#[local] Hint Resolve match_reg_assocs_merge : mgen.
 
 Lemma transf_not_changed :
   forall state ram n d c i d_s c_s,
@@ -1014,7 +1014,7 @@ Proof.
   intros. apply AssocMapExt.elements_correct' in H. unfold not in *.
   destruct am ! k eqn:?; auto. exfalso. apply H. eexists. auto.
 Qed.
-Hint Resolve elements_correct_none : assocmap.
+#[local] Hint Resolve elements_correct_none : assocmap.
 
 Lemma max_index_2 :
   forall A (d: AssocMap.t A) i, i > max_pc d -> d ! i = None.
@@ -1069,14 +1069,14 @@ Proof.
   intros;
   unfold empty_stack, transf_module; repeat destruct_match; mgen_crush.
 Qed.
-Hint Resolve empty_arrs_match : mgen.
+#[local] Hint Resolve empty_arrs_match : mgen.
 
 Lemma max_module_stmnts :
   forall m,
     Pos.max (max_stmnt_tree (mod_controllogic m))
             (max_stmnt_tree (mod_datapath m)) < max_reg_module m + 1.
 Proof. intros. unfold max_reg_module. lia. Qed.
-Hint Resolve max_module_stmnts : mgen.
+#[local] Hint Resolve max_module_stmnts : mgen.
 
 Lemma transf_module_code :
   forall m,
@@ -1095,36 +1095,36 @@ Lemma transf_module_code :
     = ((mod_datapath (transf_module m)), mod_controllogic (transf_module m)).
 Proof. unfold transf_module; intros; repeat destruct_match; crush.
        apply surjective_pairing. Qed.
-Hint Resolve transf_module_code : mgen.
+#[local] Hint Resolve transf_module_code : mgen.
 
 Lemma transf_module_code_ram :
   forall m r, mod_ram m = Some r -> transf_module m = m.
 Proof. unfold transf_module; intros; repeat destruct_match; crush. Qed.
-Hint Resolve transf_module_code_ram : mgen.
+#[local] Hint Resolve transf_module_code_ram : mgen.
 
 Lemma mod_reset_lt : forall m, mod_reset m < max_reg_module m + 1.
 Proof. intros; unfold max_reg_module; lia. Qed.
-Hint Resolve mod_reset_lt : mgen.
+#[local] Hint Resolve mod_reset_lt : mgen.
 
 Lemma mod_finish_lt : forall m, mod_finish m < max_reg_module m + 1.
 Proof. intros; unfold max_reg_module; lia. Qed.
-Hint Resolve mod_finish_lt : mgen.
+#[local] Hint Resolve mod_finish_lt : mgen.
 
 Lemma mod_return_lt : forall m, mod_return m < max_reg_module m + 1.
 Proof. intros; unfold max_reg_module; lia. Qed.
-Hint Resolve mod_return_lt : mgen.
+#[local] Hint Resolve mod_return_lt : mgen.
 
 Lemma mod_start_lt : forall m, mod_start m < max_reg_module m + 1.
 Proof. intros; unfold max_reg_module; lia. Qed.
-Hint Resolve mod_start_lt : mgen.
+#[local] Hint Resolve mod_start_lt : mgen.
 
 Lemma mod_stk_lt : forall m, mod_stk m < max_reg_module m + 1.
 Proof. intros; unfold max_reg_module; lia. Qed.
-Hint Resolve mod_stk_lt : mgen.
+#[local] Hint Resolve mod_stk_lt : mgen.
 
 Lemma mod_st_lt : forall m, mod_st m < max_reg_module m + 1.
 Proof. intros; unfold max_reg_module; lia. Qed.
-Hint Resolve mod_st_lt : mgen.
+#[local] Hint Resolve mod_st_lt : mgen.
 
 Lemma mod_reset_modify :
   forall m ar ar' v,
@@ -1136,7 +1136,7 @@ Proof.
   unfold transf_module; repeat destruct_match; simplify;
   rewrite <- H0; eauto with mgen.
 Qed.
-Hint Resolve mod_reset_modify : mgen.
+#[local] Hint Resolve mod_reset_modify : mgen.
 
 Lemma mod_finish_modify :
   forall m ar ar' v,
@@ -1148,7 +1148,7 @@ Proof.
   unfold transf_module; repeat destruct_match; simplify;
   rewrite <- H0; eauto with mgen.
 Qed.
-Hint Resolve mod_finish_modify : mgen.
+#[local] Hint Resolve mod_finish_modify : mgen.
 
 Lemma mod_return_modify :
   forall m ar ar' v,
@@ -1160,7 +1160,7 @@ Proof.
   unfold transf_module; repeat destruct_match; simplify;
   rewrite <- H0; eauto with mgen.
 Qed.
-Hint Resolve mod_return_modify : mgen.
+#[local] Hint Resolve mod_return_modify : mgen.
 
 Lemma mod_start_modify :
   forall m ar ar' v,
@@ -1172,7 +1172,7 @@ Proof.
   unfold transf_module; repeat destruct_match; simplify;
   rewrite <- H0; eauto with mgen.
 Qed.
-Hint Resolve mod_start_modify : mgen.
+#[local] Hint Resolve mod_start_modify : mgen.
 
 Lemma mod_st_modify :
   forall m ar ar' v,
@@ -1184,7 +1184,7 @@ Proof.
   unfold transf_module; repeat destruct_match; simplify;
   rewrite <- H0; eauto with mgen.
 Qed.
-Hint Resolve mod_st_modify : mgen.
+#[local] Hint Resolve mod_st_modify : mgen.
 
 Lemma match_arrs_read :
   forall ra ra' addr v mem,
@@ -1199,7 +1199,7 @@ Proof.
   inv H0. eapply H1 in Heqo0. inv Heqo0. inv H0. unfold arr in *.
   rewrite H3 in Heqo. discriminate.
 Qed.
-Hint Resolve match_arrs_read : mgen.
+#[local] Hint Resolve match_arrs_read : mgen.
 
 Lemma match_reg_implies_equal :
   forall ra ra' p a b c,
@@ -1212,7 +1212,7 @@ Proof.
   inv H2. destruct (ra ! a) eqn:?; destruct (ra ! b) eqn:?;
   repeat rewrite <- H3 by lia; rewrite Heqo; rewrite Heqo0; auto.
 Qed.
-Hint Resolve match_reg_implies_equal : mgen.
+#[local] Hint Resolve match_reg_implies_equal : mgen.
 
 Lemma exec_ram_same :
   forall rs1 ar1 ram rs2 ar2 p,
@@ -1261,7 +1261,7 @@ Proof.
   erewrite AssocMapExt.merge_correct_3; mgen_crush.
   erewrite AssocMapExt.merge_correct_3; mgen_crush.
 Qed.
-Hint Resolve match_assocmaps_merge : mgen.
+#[local] Hint Resolve match_assocmaps_merge : mgen.
 
 Lemma list_combine_nth_error1 :
   forall l l' addr v,
@@ -1419,7 +1419,7 @@ Proof.
     unfold Verilog.arr in *.
     rewrite Heqo. rewrite Heqo0. auto.
 Qed.
-Hint Resolve match_arrs_merge : mgen.
+#[local] Hint Resolve match_arrs_merge : mgen.
 
 Lemma match_empty_size_merge :
   forall nasa2 basa2 m,
@@ -1458,7 +1458,7 @@ Proof.
   apply H3 in H6. unfold merge_arrs. rewrite AssocMap.gcombine by auto.
   setoid_rewrite H0. setoid_rewrite H6. auto.
 Qed.
-Hint Resolve match_empty_size_merge : mgen.
+#[local] Hint Resolve match_empty_size_merge : mgen.
 
 Lemma match_empty_size_match :
   forall m nasa2 basa2,
@@ -1484,7 +1484,7 @@ Proof.
     end; simplify.
   inversion 1; inversion 1; constructor; simplify; repeat match_empty_size_match_solve.
 Qed.
-Hint Resolve match_empty_size_match : mgen.
+#[local] Hint Resolve match_empty_size_match : mgen.
 
 Lemma match_get_merge :
   forall p ran ran' rab rab' s v,
@@ -1498,7 +1498,7 @@ Proof.
   assert (X: match_assocmaps p (merge_regs ran rab) (merge_regs ran' rab')) by auto with mgen.
   inv X. rewrite <- H3; auto.
 Qed.
-Hint Resolve match_get_merge : mgen.
+#[local] Hint Resolve match_get_merge : mgen.
 
 Ltac masrp_tac :=
   match goal with
@@ -1557,7 +1557,7 @@ Proof.
   apply H2 in H5. auto. apply H2 in H5. auto.
   Unshelve. auto.
 Qed.
-Hint Resolve match_empty_assocmap_set : mgen.
+#[local] Hint Resolve match_empty_assocmap_set : mgen.
 
 Lemma match_arrs_size_stmnt_preserved :
   forall m f rs1 ar1 ar2 c rs2,
@@ -1590,7 +1590,7 @@ Proof.
   assert (X4: ba = (assoc_blocking ar1)) by (rewrite Heqar1; auto). rewrite X4 in *.
   eapply match_arrs_size_stmnt_preserved; mgen_crush.
 Qed.
-Hint Resolve match_arrs_size_stmnt_preserved2 : mgen.
+#[local] Hint Resolve match_arrs_size_stmnt_preserved2 : mgen.
 
 Lemma match_arrs_size_ram_preserved :
   forall m rs1 ar1 ar2 ram rs2,
@@ -1613,7 +1613,7 @@ Proof.
   apply H9 in H17; auto. apply H9 in H17; auto.
   Unshelve. eauto.
 Qed.
-Hint Resolve match_arrs_size_ram_preserved : mgen.
+#[local] Hint Resolve match_arrs_size_ram_preserved : mgen.
 
 Lemma match_arrs_size_ram_preserved2 :
   forall m rs1 na na' ba ba' ram rs2,
@@ -1631,7 +1631,7 @@ Proof.
   assert (X4: ba = (assoc_blocking ar1)) by (rewrite Heqar1; auto). rewrite X4 in *.
   eapply match_arrs_size_ram_preserved; mgen_crush.
 Qed.
-Hint Resolve match_arrs_size_ram_preserved2 : mgen.
+#[local] Hint Resolve match_arrs_size_ram_preserved2 : mgen.
 
 Lemma empty_stack_m :
   forall m, empty_stack m = empty_stack' (mod_stk_len m) (mod_stk m).
@@ -1927,7 +1927,7 @@ Lemma match_arrs_size_assoc :
     match_arrs_size a b ->
     match_arrs_size b a.
 Proof. inversion 1; constructor; crush; split; apply H2. Qed.
-Hint Resolve match_arrs_size_assoc : mgen.
+#[local] Hint Resolve match_arrs_size_assoc : mgen.
 
 Lemma match_arrs_merge_set2 :
   forall rab rab' ran ran' s m i v,
@@ -2016,11 +2016,11 @@ Qed.
 
 Definition all_match_empty_size m ar :=
   match_empty_size m (assoc_nonblocking ar) /\ match_empty_size m (assoc_blocking ar).
-Hint Unfold all_match_empty_size : mgen.
+#[local] Hint Unfold all_match_empty_size : mgen.
 
 Definition match_module_to_ram m ram :=
   ram_size ram = mod_stk_len m /\ ram_mem ram = mod_stk m.
-Hint Unfold match_module_to_ram : mgen.
+#[local] Hint Unfold match_module_to_ram : mgen.
 
 Lemma zip_range_forall_le :
   forall A (l: list A) n, Forall (Pos.le n) (map snd (zip_range n l)).
@@ -2410,7 +2410,7 @@ Proof.
   unfold merge_arrs. rewrite AssocMap.gcombine; auto. setoid_rewrite H6.
   setoid_rewrite H7. auto.
 Qed.
-Hint Resolve merge_arr_empty2 : mgen.
+#[local] Hint Resolve merge_arr_empty2 : mgen.
 
 Lemma find_assocmap_gso :
   forall ar x y v, x <> y -> (ar # y <- v) # x = ar # x.
@@ -2943,11 +2943,11 @@ Proof.
   unfold disable_ram, find_assocmap, AssocMapExt.get_default; intros;
   repeat rewrite AssocMap.gso by lia; auto.
 Qed.
-Hint Resolve disable_ram_set_gso : mgen.
+#[local] Hint Resolve disable_ram_set_gso : mgen.
 
 Lemma disable_ram_None rs : disable_ram None rs.
 Proof. unfold disable_ram; auto. Qed.
-Hint Resolve disable_ram_None : mgen.
+#[local] Hint Resolve disable_ram_None : mgen.
 
 Lemma init_regs_equal_empty l st :
   Forall (Pos.gt st) l -> (init_regs nil l) ! st = None.
@@ -2968,7 +2968,7 @@ Section CORRECTNESS.
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
   Proof using TRANSL. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
-  Hint Resolve symbols_preserved : mgen.
+  #[local] Hint Resolve symbols_preserved : mgen.
 
   Lemma function_ptr_translated:
     forall (b: Values.block) (f: fundef),
@@ -2979,7 +2979,7 @@ Section CORRECTNESS.
     intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
-  Hint Resolve function_ptr_translated : mgen.
+  #[local] Hint Resolve function_ptr_translated : mgen.
 
   Lemma functions_translated:
     forall (v: Values.val) (f: fundef),
@@ -2990,12 +2990,12 @@ Section CORRECTNESS.
     intros. exploit (Genv.find_funct_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
-  Hint Resolve functions_translated : mgen.
+  #[local] Hint Resolve functions_translated : mgen.
 
   Lemma senv_preserved:
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
   Proof (Genv.senv_transf TRANSL).
-  Hint Resolve senv_preserved : mgen.
+  #[local] Hint Resolve senv_preserved : mgen.
 
   Theorem transf_step_correct:
     forall (S1 : state) t S2,
@@ -3161,7 +3161,7 @@ Section CORRECTNESS.
       simplify. unfold max_reg_module. lia.
       simplify. unfold max_reg_module. lia.
   Qed.
-  Hint Resolve transf_step_correct : mgen.
+  #[local] Hint Resolve transf_step_correct : mgen.
 
   Lemma transf_initial_states :
     forall s1 : state,
@@ -3179,7 +3179,7 @@ Section CORRECTNESS.
     eauto.
     econstructor.
   Qed.
-  Hint Resolve transf_initial_states : mgen.
+  #[local] Hint Resolve transf_initial_states : mgen.
 
   Lemma transf_final_states :
     forall (s1 : state)
@@ -3191,7 +3191,7 @@ Section CORRECTNESS.
   Proof using TRANSL.
     intros. inv H0. inv H. inv STACKS. unfold valueToInt. constructor. auto.
   Qed.
-  Hint Resolve transf_final_states : mgen.
+  #[local] Hint Resolve transf_final_states : mgen.
 
   Theorem transf_program_correct:
     Smallstep.forward_simulation (semantics prog) (semantics tprog).

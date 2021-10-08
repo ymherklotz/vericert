@@ -32,8 +32,8 @@ Require Import vericert.hls.HTL.
 Require Import vericert.hls.HTLgen.
 Require Import vericert.hls.AssocMap.
 
-Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
-Hint Resolve Maps.PTree.elements_correct : htlspec.
+#[local] Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
+#[local] Hint Resolve Maps.PTree.elements_correct : htlspec.
 
 Remark bind_inversion:
   forall (A B: Type) (f: mon A) (g: A -> mon B)
@@ -163,7 +163,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
     forall cexpr tbl r,
     cexpr = tbl_to_case_expr st tbl ->
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)
-Hint Constructors tr_instr : htlspec.
+#[local] Hint Constructors tr_instr : htlspec.
 
 Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts trans : PTree.t stmnt)
           (fin rtrn st stk : reg) : Prop :=
@@ -174,7 +174,7 @@ Inductive tr_code (c : RTL.code) (pc : RTL.node) (i : RTL.instruction) (stmnts t
       trans!pc = Some t ->
       tr_instr fin rtrn st stk i s t ->
       tr_code c pc i stmnts trans fin rtrn st stk.
-Hint Constructors tr_code : htlspec.
+#[local] Hint Constructors tr_code : htlspec.
 
 Inductive tr_module (f : RTL.function) : module -> Prop :=
   tr_module_intro :
@@ -197,70 +197,70 @@ Inductive tr_module (f : RTL.function) : module -> Prop :=
       rst = ((RTL.max_reg_function f) + 6)%positive ->
       clk = ((RTL.max_reg_function f) + 7)%positive ->
       tr_module f m.
-Hint Constructors tr_module : htlspec.
+#[local] Hint Constructors tr_module : htlspec.
 
 Lemma create_reg_datapath_trans :
   forall sz s s' x i iop,
     create_reg iop sz s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_datapath_trans : htlspec.
+#[local] Hint Resolve create_reg_datapath_trans : htlspec.
 
 Lemma create_reg_controllogic_trans :
   forall sz s s' x i iop,
     create_reg iop sz s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_controllogic_trans : htlspec.
+#[local] Hint Resolve create_reg_controllogic_trans : htlspec.
 
 Lemma declare_reg_datapath_trans :
   forall sz s s' x i iop r,
     declare_reg iop r sz s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_datapath_trans : htlspec.
+#[local] Hint Resolve create_reg_datapath_trans : htlspec.
 
 Lemma declare_reg_controllogic_trans :
   forall sz s s' x i iop r,
     declare_reg iop r sz s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_reg_controllogic_trans : htlspec.
+#[local] Hint Resolve create_reg_controllogic_trans : htlspec.
 
 Lemma declare_reg_freshreg_trans :
   forall sz s s' x i iop r,
     declare_reg iop r sz s = OK x s' i ->
     s.(st_freshreg) = s'.(st_freshreg).
 Proof. inversion 1; auto. Qed.
-Hint Resolve declare_reg_freshreg_trans : htlspec.
+#[local] Hint Resolve declare_reg_freshreg_trans : htlspec.
 
 Lemma create_arr_datapath_trans :
   forall sz ln s s' x i iop,
     create_arr iop sz ln s = OK x s' i ->
     s.(st_datapath) = s'.(st_datapath).
 Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_arr_datapath_trans : htlspec.
+#[local] Hint Resolve create_arr_datapath_trans : htlspec.
 
 Lemma create_arr_controllogic_trans :
   forall sz ln s s' x i iop,
     create_arr iop sz ln s = OK x s' i ->
     s.(st_controllogic) = s'.(st_controllogic).
 Proof. intros. monadInv H. trivial. Qed.
-Hint Resolve create_arr_controllogic_trans : htlspec.
+#[local] Hint Resolve create_arr_controllogic_trans : htlspec.
 
 Lemma get_refl_x :
   forall s s' x i,
     get s = OK x s' i ->
     s = x.
 Proof. inversion 1. trivial. Qed.
-Hint Resolve get_refl_x : htlspec.
+#[local] Hint Resolve get_refl_x : htlspec.
 
 Lemma get_refl_s :
   forall s s' x i,
     get s = OK x s' i ->
     s = s'.
 Proof. inversion 1. trivial. Qed.
-Hint Resolve get_refl_s : htlspec.
+#[local] Hint Resolve get_refl_s : htlspec.
 
 Ltac inv_incr :=
   repeat match goal with
@@ -349,7 +349,7 @@ Lemma translate_eff_addressing_freshreg_trans :
 Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
 Qed.
-Hint Resolve translate_eff_addressing_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_eff_addressing_freshreg_trans : htlspec.
 
 Lemma translate_comparison_freshreg_trans :
   forall op args s r s' i,
@@ -358,7 +358,7 @@ Lemma translate_comparison_freshreg_trans :
 Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
 Qed.
-Hint Resolve translate_comparison_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_comparison_freshreg_trans : htlspec.
 
 Lemma translate_comparisonu_freshreg_trans :
   forall op args s r s' i,
@@ -367,7 +367,7 @@ Lemma translate_comparisonu_freshreg_trans :
 Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
 Qed.
-Hint Resolve translate_comparisonu_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_comparisonu_freshreg_trans : htlspec.
 
 Lemma translate_comparison_imm_freshreg_trans :
   forall op args s r s' i n,
@@ -376,7 +376,7 @@ Lemma translate_comparison_imm_freshreg_trans :
 Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
 Qed.
-Hint Resolve translate_comparison_imm_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_comparison_imm_freshreg_trans : htlspec.
 
 Lemma translate_comparison_immu_freshreg_trans :
   forall op args s r s' i n,
@@ -385,7 +385,7 @@ Lemma translate_comparison_immu_freshreg_trans :
 Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; auto.
 Qed.
-Hint Resolve translate_comparison_immu_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_comparison_immu_freshreg_trans : htlspec.
 
 Lemma translate_condition_freshreg_trans :
   forall op args s r s' i,
@@ -394,7 +394,7 @@ Lemma translate_condition_freshreg_trans :
 Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; eauto with htlspec.
 Qed.
-Hint Resolve translate_condition_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_condition_freshreg_trans : htlspec.
 
 Lemma translate_instr_freshreg_trans :
   forall op args s r s' i,
@@ -404,7 +404,7 @@ Proof.
   destruct op; intros; simpl in *; repeat (unfold_match H); inv H; eauto with htlspec.
   monadInv H1. eauto with htlspec.
 Qed.
-Hint Resolve translate_instr_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_instr_freshreg_trans : htlspec.
 
 Lemma translate_arr_access_freshreg_trans :
   forall mem addr args st s r s' i,
@@ -413,35 +413,35 @@ Lemma translate_arr_access_freshreg_trans :
 Proof.
   intros. unfold translate_arr_access in H. repeat (unfold_match H); inv H; eauto with htlspec.
 Qed.
-Hint Resolve translate_arr_access_freshreg_trans : htlspec.
+#[local] Hint Resolve translate_arr_access_freshreg_trans : htlspec.
 
 Lemma add_instr_freshreg_trans :
   forall n n' st s r s' i,
   add_instr n n' st s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
 Proof. intros. unfold add_instr in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_instr_freshreg_trans : htlspec.
+#[local] Hint Resolve add_instr_freshreg_trans : htlspec.
 
 Lemma add_branch_instr_freshreg_trans :
   forall n n0 n1 e s r s' i,
   add_branch_instr e n n0 n1 s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
 Proof. intros. unfold add_branch_instr in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_branch_instr_freshreg_trans : htlspec.
+#[local] Hint Resolve add_branch_instr_freshreg_trans : htlspec.
 
 Lemma add_node_skip_freshreg_trans :
   forall n1 n2 s r s' i,
   add_node_skip n1 n2 s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
 Proof. intros. unfold add_node_skip in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_node_skip_freshreg_trans : htlspec.
+#[local] Hint Resolve add_node_skip_freshreg_trans : htlspec.
 
 Lemma add_instr_skip_freshreg_trans :
   forall n1 n2 s r s' i,
   add_instr_skip n1 n2 s = OK r s' i ->
   s.(st_freshreg) = s'.(st_freshreg).
 Proof. intros. unfold add_instr_skip in H. repeat (unfold_match H). inv H. auto. Qed.
-Hint Resolve add_instr_skip_freshreg_trans : htlspec.
+#[local] Hint Resolve add_instr_skip_freshreg_trans : htlspec.
 
 Lemma transf_instr_freshreg_trans :
   forall fin ret st instr s v s' i,
@@ -459,7 +459,7 @@ Proof.
     congruence.
   (*- inv EQ. apply add_node_skip_freshreg_trans in EQ0. congruence.*)
 Qed.
-Hint Resolve transf_instr_freshreg_trans : htlspec.
+#[local] Hint Resolve transf_instr_freshreg_trans : htlspec.
 
 Lemma collect_trans_instr_freshreg_trans :
   forall fin ret st l s s' i,
@@ -589,7 +589,7 @@ Proof.
     intros. specialize H1 with pc0 instr0. destruct H1. tauto. trivial.
     destruct H2. inv H2. contradiction. assumption. assumption.
 Qed.
-Hint Resolve iter_expand_instr_spec : htlspec.
+#[local] Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma create_arr_inv : forall w x y z a b c d,
     create_arr w x y z = OK (a, b) c d ->
