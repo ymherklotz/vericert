@@ -491,8 +491,7 @@ with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
 .
 
 Scheme expression_ind2 := Induction for expression Sort Prop
-  with expression_list_ind2 := Induction for expression_list Sort Prop
-.
+  with expression_list_ind2 := Induction for expression_list Sort Prop.
 
 Lemma beq_expression_correct:
   forall e1 e2, beq_expression e1 e2 = true -> e1 = e2.
@@ -502,13 +501,12 @@ Proof.
       (P := fun (e1 : expression) =>
             forall e2, beq_expression e1 e2 = true -> e1 = e2)
       (P0 := fun (e1 : expression_list) =>
-             forall e2, beq_expression_list e1 e2 = true -> e1 = e2);
+             forall e2, beq_expression_list e1 e2 = true -> e1 = e2); simplify;
   try solve [repeat match goal with
                     | [ H : context[match ?x with _ => _ end] |- _ ] => destruct x eqn:?
                     | [ H : context[if ?x then _ else _] |- _ ] => destruct x eqn:?
                     end; subst; f_equal; crush; eauto using Peqb_true_eq].
-  destruct e2; try discriminate. eauto.
-Abort.
+Qed.
 
 Definition hash_tree := PTree.t expression.
 
@@ -547,7 +545,7 @@ Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
   end.
 
-Fixpoint encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
+Definition encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
   match pe with
   | Psingle e =>
     let (p, h') := hash_expr max e h in (Pvar p, h')
@@ -568,7 +566,7 @@ Fixpoint max_pred_expr_ne (pe: pred_expr_ne) : positive :=
   | (p, e) ::| pe' => Pos.max (max_predicate p) (max_pred_expr_ne pe')
   end.
 
-Fixpoint max_pred_expr (pe: pred_expr) : positive :=
+Definition max_pred_expr (pe: pred_expr) : positive :=
   match pe with
   | Psingle _ => 1
   | Plist l => max_pred_expr_ne l
@@ -612,9 +610,122 @@ Compute (check (empty # (Reg 2) <-
                (empty # (Reg 2) <- (Plist (NE.singleton (((Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3))))),
                                                 (Ebase (Reg 3))))))).
 
-Lemma check_correct: forall (fa fb : forest),
-  check fa fb = true -> (forall x, fa # x = fb # x).
+Definition ge_preserved {A B C D: Type} (ge: Genv.t A B) (tge: Genv.t C D) : Prop :=
+  (forall sp op vl m, Op.eval_operation ge sp op vl m =
+                      Op.eval_operation tge sp op vl m)
+  /\ (forall sp addr vl, Op.eval_addressing ge sp addr vl =
+                         Op.eval_addressing tge sp addr vl).
+
+Lemma ge_preserved_same:
+  forall A B ge, @ge_preserved A B A B ge ge.
+Proof. unfold ge_preserved; auto. Qed.
+#[local] Hint Resolve ge_preserved_same : core.
+
+Inductive similar {A B} : @ctx A -> @ctx B -> Prop :=
+| similar_intro :
+    forall rs ps mem sp ge tge,
+    ge_preserved ge tge ->
+    similar (mk_ctx rs ps mem sp ge) (mk_ctx rs ps mem sp tge).
+
+Lemma unsat_correct1 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate a c = true ->
+    sat_predicate b c = false.
 Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
+  auto.
+Qed.
+
+Lemma unsat_correct2 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate b c = true ->
+    sat_predicate a c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
+Qed.
+
+Lemma unsat_not a: unsat (Pand a (Pnot a)).
+Proof. unfold unsat; simplify; auto with bool. Qed.
+
+Lemma unsat_commut a b: unsat (Pand a b) -> unsat (Pand b a).
+Proof. unfold unsat; simplify; eauto with bool. Qed.
+
+Lemma sat_dec a n b: sat_pred n a = Some b -> {sat a} + {unsat a}.
+Proof.
+  unfold sat, unsat. destruct b.
+  intros. left. destruct s.
+  exists (Sat.interp_alist x). auto.
+  intros. tauto.
+Qed.
+
+Lemma sat_equiv :
+  forall a b,
+  unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) ->
+  forall c, sat_predicate a c = sat_predicate b c.
+Proof.
+  unfold unsat. intros. specialize (H c); simplify.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+Lemma sat_equiv2 :
+  forall a b,
+  unsat (Por (Pand a (Pnot b)) (Pand b (Pnot a))) ->
+  forall c, sat_predicate a c = sat_predicate b c.
+Proof.
+  unfold unsat. intros. specialize (H c); simplify.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+Section CORRECT.
+
+  Definition fd := @fundef RTLBlock.bb.
+  Definition tfd := @fundef RTLPar.bb.
+
+  Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
+
+  Lemma check_correct_sem_value:
+    forall x x' v n,
+      beq_pred_expr n x x' = true ->
+      sem_pred_expr sem_value ictx x v ->
+      sem_pred_expr sem_value octx x' v.
+  Proof.
+    unfold beq_pred_expr. intros. repeat (destruct_match; try discriminate; []); subst.
+    unfold sat_pred_simple in *.
+    repeat destruct_match; try discriminate; []; subst.
+    assert (unsat (Por (Pand p (Pnot p0)) (Pand p0 (Pnot p)))) by eauto.
+    pose proof (sat_equiv2 _ _ H1).
+    destruct x, x'; simplify.
+    repeat destruct_match; try discriminate; []. inv Heqp0. constructor.
+    inv H0. inv Heqp.
+
+    assert (e1 = e0) by admit; subst.
+
+    assert (forall e v, sem_value ictx e v -> sem_value octx e v) by admit.
+
+    eauto.
+
+    - admit.
+    - admit.
+    - admit.
+  Admitted.
+
+  Lemma check_correct: forall (fa fb : forest) ctx ctx' i,
+    similar ctx ctx' ->
+    check fa fb = true ->
+    @sem fd ctx fa i -> @sem tfd ctx' fb i.
+  Proof.
+    intros.
+    inv H. inv H1. inv H.
   (*unfold check, get_forest; intros;
   pose proof beq_expression_correct;
   match goal with
@@ -699,51 +810,3 @@ Lemma tri1:
   forall x y,
   Reg x <> Reg y -> x <> y.
 Proof. crush. Qed.
-
-Lemma unsat_correct1 :
-  forall a b c,
-    unsat (Pand a b) ->
-    sat_predicate a c = true ->
-    sat_predicate b c = false.
-Proof.
-  unfold unsat in *. intros.
-  simplify. specialize (H c).
-  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
-  auto.
-Qed.
-
-Lemma unsat_correct2 :
-  forall a b c,
-    unsat (Pand a b) ->
-    sat_predicate b c = true ->
-    sat_predicate a c = false.
-Proof.
-  unfold unsat in *. intros.
-  simplify. specialize (H c).
-  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
-Qed.
-
-Lemma unsat_not a: unsat (Pand a (Pnot a)).
-Proof. unfold unsat; simplify; auto with bool. Qed.
-
-Lemma unsat_commut a b: unsat (Pand a b) -> unsat (Pand b a).
-Proof. unfold unsat; simplify; eauto with bool. Qed.
-
-Lemma sat_dec a n b: sat_pred n a = Some b -> {sat a} + {unsat a}.
-Proof.
-  unfold sat, unsat. destruct b.
-  intros. left. destruct s.
-  exists (Sat.interp_alist x). auto.
-  intros. tauto.
-Qed.
-
-Lemma sat_equiv :
-  forall a b,
-  unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) ->
-  forall c, sat_predicate a c = sat_predicate b c.
-Proof.
-  unfold unsat. intros. specialize (H c); simplify.
-  destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
-Qed.
