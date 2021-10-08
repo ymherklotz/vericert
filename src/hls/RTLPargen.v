@@ -30,6 +30,7 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.RTLBlockInstr.
+Require Import vericert.hls.Abstr.
 
 #[local] Open Scope positive.
 
@@ -130,7 +131,7 @@ Definition ge_preserved {A B C D: Type} (ge: Genv.t A B) (tge: Genv.t C D) : Pro
 Lemma ge_preserved_same:
   forall A B ge, @ge_preserved A B A B ge ge.
 Proof. unfold ge_preserved; auto. Qed.
-Hint Resolve ge_preserved_same : rtlpar.
+#[local] Hint Resolve ge_preserved_same : rtlpar.
 
 Ltac rtlpar_crush := crush; eauto with rtlpar.
 
@@ -151,11 +152,11 @@ Inductive match_states_ld : instr_state -> instr_state -> Prop :=
     match_states_ld (mk_instr_state rs ps m) (mk_instr_state rs' ps' m').
 
 Lemma sems_det:
-  forall A ge tge sp st f,
+  forall A ge tge sp f rs ps m,
   ge_preserved ge tge ->
   forall v v' mv mv',
-  (@sem_value A ge sp st f v /\ @sem_value A tge sp st f v' -> v = v') /\
-  (@sem_mem A ge sp st f mv /\ @sem_mem A tge sp st f mv' -> mv = mv').
+  (@sem_value A (mk_ctx rs ps m sp ge) f v /\ @sem_value A (mk_ctx rs ps m sp tge) f v' -> v = v') /\
+  (@sem_mem A (mk_ctx rs ps m sp ge) f mv /\ @sem_mem A (mk_ctx rs ps m sp tge) f mv' -> mv = mv').
 Proof. Abort.
 
 (*Lemma sem_value_det:
@@ -268,13 +269,29 @@ Definition merge'' x :=
   | ((a, e), (b, el)) => (merge''' a b, Econs e el)
   end.
 
+Definition predicated_prod {A B: Type} (p1: predicated A) (p2: predicated B) :=
+  match p1, p2 with
+  | Psingle a, Psingle b => Psingle (a, b)
+  | Psingle a, Plist b => Plist (NE.map (fun x => (fst x, (a, snd x))) b)
+  | Plist b, Psingle a => Plist (NE.map (fun x => (fst x, (snd x, a))) b)
+  | Plist a, Plist b =>
+    Plist (NE.map (fun x => match x with ((a, b), (c, d)) => (Pand a c, (b, d)) end)
+                  (NE.non_empty_prod a b))
+  end.
+
+Definition predicated_map {A B: Type} (f: A -> B) (p: predicated A): predicated B :=
+  match p with
+  | Psingle a => Psingle (f a)
+  | Plist b => Plist (NE.map (fun x => (fst x, f (snd x))) b)
+  end.
+
 (*map (fun x => (fst x, Econs (snd x) Enil)) pel*)
-Fixpoint merge' (pel: pred_expr) (tpel: predicated expression_list) :=
-  NE.map merge'' (NE.non_empty_prod pel tpel).
+Definition merge' (pel: pred_expr) (tpel: predicated expression_list) :=
+  predicated_map (uncurry Econs) (predicated_prod pel tpel).
 
 Fixpoint merge (pel: list pred_expr): predicated expression_list :=
   match pel with
-  | nil => NE.singleton (None, Enil)
+  | nil => Psingle Enil
   | a :: b => merge' a (merge b)
   end.
 
@@ -284,35 +301,50 @@ Definition map_pred_op {A B} (pf: option pred_op * (A -> B)) (pa: option pred_op
   end.
 
 Definition map_predicated {A B} (pf: predicated (A -> B)) (pa: predicated A): predicated B :=
-  NE.map (fun x => match x with ((p1, f), (p2, a)) => (merge''' p1 p2, f a) end) (NE.non_empty_prod pf pa).
+  predicated_map (fun x => (fst x) (snd x)) (predicated_prod pf pa).
 
-Definition apply1_predicated {A B} (pf: predicated (A -> B)) (pa: A): predicated B :=
-  NE.map (fun x => (fst x, (snd x) pa)) pf.
+Definition predicated_apply1 {A B} (pf: predicated (A -> B)) (pa: A): predicated B :=
+  match pf with
+  | Psingle f => Psingle (f pa)
+  | Plist pf' => Plist (NE.map (fun x => (fst x, (snd x) pa)) pf')
+  end.
 
-Definition apply2_predicated {A B C} (pf: predicated (A -> B -> C)) (pa: A) (pb: B): predicated C :=
-  NE.map (fun x => (fst x, (snd x) pa pb)) pf.
+Definition predicated_apply2 {A B C} (pf: predicated (A -> B -> C)) (pa: A) (pb: B): predicated C :=
+  match pf with
+  | Psingle f => Psingle (f pa pb)
+  | Plist pf' => Plist (NE.map (fun x => (fst x, (snd x) pa pb)) pf')
+  end.
 
-Definition apply3_predicated {A B C D} (pf: predicated (A -> B -> C -> D)) (pa: A) (pb: B) (pc: C): predicated D :=
-  NE.map (fun x => (fst x, (snd x) pa pb pc)) pf.
+Definition predicated_apply3 {A B C D} (pf: predicated (A -> B -> C -> D)) (pa: A) (pb: B) (pc: C): predicated D :=
+  match pf with
+  | Psingle f => Psingle (f pa pb pc)
+  | Plist pf' => Plist (NE.map (fun x => (fst x, (snd x) pa pb pc)) pf')
+  end.
 
 (*Compute merge (((Some (Pvar 2), Ebase (Reg 4))::nil)::((Some (Pvar 3), Ebase (Reg 3))::(Some (Pvar 1), Ebase (Reg 3))::nil)::nil).*)
+
+Definition predicated_from_opt {A: Type} (p: option pred_op) (a: A) :=
+  match p with
+  | None => Psingle a
+  | Some x => Plist (NE.singleton (x, a))
+  end.
 
 Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
   | RBop p op rl r =>
     f # (Reg r) <-
-    (map_predicated (map_predicated (NE.singleton (p, Eop op)) (merge (list_translation rl f))) (f # Mem))
+    (map_predicated (predicated_from_opt p (Eop op)) (merge (list_translation rl f)))
   | RBload p chunk addr rl r =>
     f # (Reg r) <-
     (map_predicated
-     (map_predicated (NE.singleton (p, Eload chunk addr)) (merge (list_translation rl f)))
+     (map_predicated (predicated_from_opt p (Eload chunk addr)) (merge (list_translation rl f)))
      (f # Mem))
   | RBstore p chunk addr rl r =>
     f # Mem <-
     (map_predicated
      (map_predicated
-      (apply2_predicated (map_predicated (NE.singleton (p, Estore)) (f # (Reg r))) chunk addr)
+      (predicated_apply2 (map_predicated (predicated_from_opt p Estore) (f # (Reg r))) chunk addr)
       (merge (list_translation rl f))) (f # Mem))
   | RBsetpred c addr p => f
   end.
