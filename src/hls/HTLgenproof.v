@@ -1660,6 +1660,17 @@ Section CORRECTNESS.
   Qed.
   Hint Resolve stack_base_sp_fequal : htlproof.
 
+  Lemma stack_based_undef : forall sp, reg_stack_based_pointers sp (Registers.Regmap.init Values.Vundef).
+  Proof.
+    unfold reg_stack_based_pointers.
+    intros.
+    rewrite Registers.Regmap.gi.
+    crush.
+  Qed.
+
+  Lemma init_regs_nil : forall rs, RTL.init_regs nil rs = Registers.Regmap.init Values.Vundef.
+  Proof. destruct rs; trivial. Qed.
+
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
       (m : mem) (m' : Mem.mem') (stk : Values.block),
@@ -1720,8 +1731,11 @@ Section CORRECTNESS.
       Qed.
 
       eauto using stack_base_trans.
+
     - destruct s eqn:E; eauto using stack_based_forall.
-      admit. (* Prove that arguments to main are based on its stack pointer. BUT THERE ARE NO ARGUMENTS TO MAIN *)
+      rewrite INIT_CALL_NO_ARGS by trivial.
+      rewrite init_regs_nil.
+      eapply stack_based_undef.
     - unfold arr_stack_based_pointers; intros.
       destruct (Mem.loadv _ _ _) eqn:eq_load.
       + simpl.
@@ -1748,7 +1762,7 @@ Section CORRECTNESS.
       + not_control_reg.
     Unshelve.
     all: eauto.
-  Admitted.
+  Qed.
   Hint Resolve transl_callstate_correct : htlproof.
 
   Lemma only_internal_calls : forall fd fn rs,
@@ -2230,6 +2244,7 @@ Section CORRECTNESS.
         * inv H26. inv H29.
           econstructor.
         * eauto with htlproof.
+      + crush.
       + apply Forall_map_iff.
         apply Forall_forall.
         auto.
@@ -2376,7 +2391,13 @@ Section CORRECTNESS.
         move SP_BASE0 at bottom.
         destruct s.
         * (* Return from main *)
-          admit.
+          (* TODO: simplify *)
+          replace blk0 with blk in *. eauto with htlproof.
+          destruct SP_BASE; try solve [inv H2; crush].
+          destruct SP_BASE0; try solve [inv H3].
+          inv H3. inv H2.
+          eauto with htlproof.
+          inv H21.
         * (* Return to other function *)
           inv SP_BASE; inv H2; crush.
           inv SP_BASE0. inv H2; crush.
@@ -2402,7 +2423,7 @@ Section CORRECTNESS.
         * big_tac; try not_control_reg.
           apply AssocMap.gempty.
       Unshelve. all: try exact tt; eauto.
-  Admitted.
+  Qed.
   Hint Resolve transl_returnstate_correct : htlproof.
 
   Ltac tac :=
