@@ -736,6 +736,8 @@ Section CORRECT.
 Qed.*)
   Abort.
 
+End CORRECT.
+
 Lemma get_empty:
   forall r, empty#r = Psingle (Ebase r).
 Proof.
