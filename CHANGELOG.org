@@ -7,10 +7,14 @@
 
 ** New Features
 
-- Add *RTLBlock*, a basic block intermediate language that is based on CompCert's
+- Add ~RTLBlock~, a basic block intermediate language that is based on CompCert's
   RTL.
-- Add *RTLPar*, which can execute groups of instructions in parallel.
-- Add scheduling pass to go from RTLBlock to RTLPar.
+- Add ~RTLPar~, which can execute groups of instructions in parallel.
+- Add SDC hyper-block scheduling pass to go from RTLBlock to RTLPar using.
+- Add operation chaining support to scheduler.
+- Add ~Abstr~ intermediate language for equivalence checking of schedule.
+- Add built-in verified SAT solver used for equivalence checking of
+  hyper-blocks.
 
 * 2021-10-01 - v1.2.2
 
