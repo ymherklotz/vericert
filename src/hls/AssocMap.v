@@ -29,9 +29,8 @@ Module AssocMap := Maps.PTree.
 Module AssocMapExt.
   Import AssocMap.
 
-  Hint Resolve elements_correct elements_complete
-       elements_keys_norepet : assocmap.
-  Hint Resolve gso gss : assocmap.
+  #[export] Hint Resolve elements_correct elements_complete elements_keys_norepet : assocmap.
+  #[export] Hint Resolve gso gss : assocmap.
 
   Section Operations.
 
@@ -55,7 +54,6 @@ Module AssocMapExt.
       forall am,
       merge (empty A) am = am.
     Proof. auto. Qed.
-    Hint Resolve merge_base_1 : assocmap.
 
     Lemma merge_base_2 :
       forall am,
@@ -65,7 +63,6 @@ Module AssocMapExt.
       destruct am; trivial.
       destruct o; trivial.
     Qed.
-    Hint Resolve merge_base_2 : assocmap.
 
     Lemma merge_add_assoc :
       forall r am am' v,
@@ -74,7 +71,6 @@ Module AssocMapExt.
       induction r; intros; destruct am; destruct am'; try (destruct o); simpl;
         try rewrite IHr; try reflexivity.
     Qed.
-    Hint Resolve merge_add_assoc : assocmap.
 
     Lemma merge_correct_1 :
       forall am bm k v,
@@ -84,7 +80,6 @@ Module AssocMapExt.
       induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
         try rewrite gempty in H; try discriminate; try assumption; auto.
     Qed.
-    Hint Resolve merge_correct_1 : assocmap.
 
     Lemma merge_correct_2 :
       forall am bm k v,
@@ -95,7 +90,6 @@ Module AssocMapExt.
       induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
         try rewrite gempty in H; try discriminate; try assumption; auto.
     Qed.
-    Hint Resolve merge_correct_2 : assocmap.
 
     Lemma merge_correct_3 :
       forall am bm k,
@@ -106,7 +100,6 @@ Module AssocMapExt.
       induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
         try rewrite gempty in H; try discriminate; try assumption; auto.
     Qed.
-    Hint Resolve merge_correct_3 : assocmap.
 
     Definition merge_fold (am bm : t A) : t A :=
       fold_right (fun p a => set (fst p) (snd p) a) bm (elements am).
@@ -130,7 +123,6 @@ Module AssocMapExt.
           apply IHl. contradiction. contradiction.
           simpl. rewrite gso; try assumption. apply IHl. assumption. inversion H0. subst. assumption.
     Qed.
-    Hint Resolve add_assoc : assocmap.
 
     Lemma not_in_assoc :
       forall k v l bm,
@@ -145,7 +137,6 @@ Module AssocMapExt.
           simpl in *; apply Decidable.not_or in H; destruct H. contradiction.
         rewrite AssocMap.gso; auto.
     Qed.
-    Hint Resolve not_in_assoc : assocmap.
 
     Lemma elements_iff :
       forall am k,
@@ -158,14 +149,22 @@ Module AssocMapExt.
       exists (snd x). apply elements_complete. assert (x = (fst x, snd x)) by apply surjective_pairing.
       rewrite H in H0; assumption.
     Qed.
-    Hint Resolve elements_iff : assocmap.
+
+    #[local] Hint Resolve merge_base_1 : core.
+    #[local] Hint Resolve merge_base_2 : core.
+    #[local] Hint Resolve merge_add_assoc : core.
+    #[local] Hint Resolve merge_correct_1 : core.
+    #[local] Hint Resolve merge_correct_2 : core.
+    #[local] Hint Resolve merge_correct_3 : core.
+    #[local] Hint Resolve add_assoc : core.
+    #[local] Hint Resolve not_in_assoc : core.
+    #[local] Hint Resolve elements_iff : core.
 
     Lemma elements_correct' :
       forall am k,
       ~ (exists v, get k am = Some v) <->
       ~ List.In k (List.map (@fst _ A) (elements am)).
-    Proof. auto using not_iff_compat with assocmap. Qed.
-    Hint Resolve elements_correct' : assocmap.
+    Proof. auto using not_iff_compat. Qed.
 
     Lemma elements_correct_none :
       forall am k,
@@ -175,30 +174,45 @@ Module AssocMapExt.
       intros. apply elements_correct'. unfold not. intros.
       destruct H0. rewrite H in H0. discriminate.
     Qed.
-    Hint Resolve elements_correct_none : assocmap.
 
     Lemma merge_fold_add :
       forall k v am bm,
       am ! k = Some v ->
       (merge_fold am bm) ! k = Some v.
     Proof. unfold merge_fold; auto with assocmap. Qed.
-    Hint Resolve merge_fold_add : assocmap.
+
+    #[local] Hint Resolve elements_correct' : core.
+    #[local] Hint Resolve elements_correct_none : core.
+    #[local] Hint Resolve merge_fold_add : core.
 
     Lemma merge_fold_not_in :
       forall k v am bm,
       get k am = None ->
       get k bm = Some v ->
       get k (merge_fold am bm) = Some v.
-    Proof. intros. apply not_in_assoc; auto with assocmap. Qed.
-    Hint Resolve merge_fold_not_in : assocmap.
+    Proof. intros. apply not_in_assoc; auto. Qed.
 
     Lemma merge_fold_base :
       forall am,
       merge_fold (empty A) am = am.
     Proof. auto. Qed.
-    Hint Resolve merge_fold_base : assocmap.
 
   End Operations.
+
+  #[export] Hint Resolve merge_base_1 : assocmap.
+  #[export] Hint Resolve merge_base_2 : assocmap.
+  #[export] Hint Resolve merge_add_assoc : assocmap.
+  #[export] Hint Resolve merge_correct_1 : assocmap.
+  #[export] Hint Resolve merge_correct_2 : assocmap.
+  #[export] Hint Resolve merge_correct_3 : assocmap.
+  #[export] Hint Resolve add_assoc : assocmap.
+  #[export] Hint Resolve not_in_assoc : assocmap.
+  #[export] Hint Resolve elements_iff : assocmap.
+  #[export] Hint Resolve elements_correct' : assocmap.
+  #[export] Hint Resolve merge_fold_not_in : assocmap.
+  #[export] Hint Resolve merge_fold_base : assocmap.
+  #[export] Hint Resolve elements_correct_none : assocmap.
+  #[export] Hint Resolve merge_fold_add : assocmap.
 
 End AssocMapExt.
 Import AssocMapExt.

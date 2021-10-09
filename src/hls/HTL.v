@@ -227,7 +227,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       mst = mod_st m ->
       step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
            (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
-Hint Constructors step : htl.
+#[export] Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b m0 m,

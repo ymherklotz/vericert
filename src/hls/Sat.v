@@ -146,7 +146,7 @@ Lemma contradictory_assignment : forall s l cl a,
   tauto.
 Qed.
 
-Local Hint Resolve contradictory_assignment : core.
+#[local] Hint Resolve contradictory_assignment : core.
 
 (** Augment an assignment with a new mapping. *)
 Definition upd (a : asgn) (l : lit) : asgn :=
@@ -163,7 +163,7 @@ Lemma satLit_upd_eq : forall l a,
   destruct (eq_nat_dec (snd l) (snd l)); tauto.
 Qed.
 
-Local Hint Resolve satLit_upd_eq : core.
+#[local] Hint Resolve satLit_upd_eq : core.
 
 Lemma satLit_upd_neq : forall v l s a,
   v <> snd l
@@ -173,7 +173,7 @@ Lemma satLit_upd_neq : forall v l s a,
   destruct (eq_nat_dec v (snd l)); tauto.
 Qed.
 
-Local Hint Resolve satLit_upd_neq : core.
+#[local] Hint Resolve satLit_upd_neq : core.
 
 Lemma satLit_upd_neq2 : forall v l s a,
   v <> snd l
@@ -183,7 +183,7 @@ Lemma satLit_upd_neq2 : forall v l s a,
   destruct (eq_nat_dec v (snd l)); tauto.
 Qed.
 
-Local Hint Resolve satLit_upd_neq2 : core.
+#[local] Hint Resolve satLit_upd_neq2 : core.
 
 Lemma satLit_contra : forall s l a cl,
   s <> fst l
@@ -194,7 +194,7 @@ Lemma satLit_contra : forall s l a cl,
   assert False; intuition.
 Qed.
 
-Local Hint Resolve satLit_contra : core.
+#[local] Hint Resolve satLit_contra : core.
 
 (** Here's the tactic that I used to discharge #<i>#all#</i># proof obligations
   in my implementations of the four functions you will define.
@@ -288,7 +288,7 @@ Lemma satLit_idem_lit : forall l a l',
   destruct (eq_nat_dec (snd l') (snd l)); congruence.
 Qed.
 
-Local Hint Resolve satLit_idem_lit : core.
+#[local] Hint Resolve satLit_idem_lit : core.
 
 Lemma satLit_idem_clause : forall l a cl,
   satLit l a
@@ -297,7 +297,7 @@ Lemma satLit_idem_clause : forall l a cl,
   induction cl; simpl; intuition.
 Qed.
 
-Local Hint Resolve satLit_idem_clause : core.
+#[local] Hint Resolve satLit_idem_clause : core.
 
 Lemma satLit_idem_formula : forall l a fm,
   satLit l a
@@ -306,7 +306,7 @@ Lemma satLit_idem_formula : forall l a fm,
   induction fm; simpl; intuition.
 Qed.
 
-Local Hint Resolve satLit_idem_formula : core.
+#[local] Hint Resolve satLit_idem_formula : core.
 
 (** Challenge 2: Write this function that updates an entire formula to reflect
   setting a literal to true.
@@ -349,7 +349,7 @@ Eval compute in setFormulaSimple (((false, 1) :: nil) :: nil) (true, 0).
 Eval compute in setFormulaSimple (((false, 1) :: (true, 0) :: nil) :: nil) (true, 0).
 Eval compute in setFormulaSimple (((false, 1) :: (false, 0) :: nil) :: nil) (true, 0).*)
 
-Local Hint Extern 1 False => discriminate : core.
+#[local] Hint Extern 1 False => discriminate : core.
 
 Local Hint Extern 1 False =>
   match goal with
@@ -366,7 +366,7 @@ Definition findUnitClause : forall (fm: formula),
             match fm with
             | nil => inright _
             | (l :: nil) :: fm' => inleft (exist _ l _)
-            | cl :: fm' =>
+            | _ :: fm' =>
               match findUnitClause fm' with
               | inleft (exist _ l _) => inleft (exist _ l _)
               | inright H => inright _
@@ -387,7 +387,7 @@ Lemma unitClauseTrue : forall l a fm,
   inversion H; subst; simpl in H0; intuition.
 Qed.
 
-Local Hint Resolve unitClauseTrue : core.
+#[local] Hint Resolve unitClauseTrue : core.
 
 (** Final challenge: Implement unit propagation.  The return type of
   [unitPropagate] signifies that three results are possible:
@@ -447,7 +447,7 @@ Definition chooseSplit (fm : formula) :=
 
 Definition negate (l : lit) := (negb (fst l), snd l).
 
-Local Hint Unfold satFormula : core.
+#[local] Hint Unfold satFormula : core.
 
 Lemma satLit_dec : forall l a,
   {satLit l a} + {satLit (negate l) a}.
