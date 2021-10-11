@@ -707,7 +707,31 @@ Definition main_is_internal (p : RTL.program) : bool :=
   | _ => false
   end.
 
+Definition only_main_has_stack (p : RTL.program) : Prop :=
+  Forall (fun '(name, def) =>
+            match def with
+            | AST.Gfun (Internal f) => name <> (AST.prog_main p) -> RTL.fn_stacksize f = 0
+            | _ => True
+            end)
+         (PTree.elements (Globalenvs.Genv.genv_defs (Globalenvs.Genv.globalenv p))).
+
+Definition only_main_has_stack_dec (p : RTL.program) : {only_main_has_stack p} + {~ only_main_has_stack p}.
+Proof.
+  refine (Forall_dec _
+                     (fun '(name, def) => match def with
+                                       | AST.Gfun (Internal f) =>
+                                         if (Pos.eq_dec (prog_main p) name)
+                                         then left _
+                                         else if (Z.eq_dec (fn_stacksize f) 0)
+                                              then left _
+                                              else right _
+                                       | _ => left _
+                                       end)
+                     _).
+  all: crush.
+Qed.
+
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
-  if main_is_internal p
+  if main_is_internal p && only_main_has_stack_dec p
   then transform_partial_program (transl_fundef p) p
   else Errors.Error (Errors.msg "Main function is not Internal.").

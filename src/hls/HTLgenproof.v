@@ -213,24 +213,35 @@ Hint Constructors match_states : htlproof.
 
 Definition match_prog (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef p f = Errors.OK tf) eq p tp /\
-  main_is_internal p = true.
+  main_is_internal p = true /\
+  only_main_has_stack p.
 
 Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
   TransfLink (fun (p1: RTL.program) (p2: HTL.program) => match_prog p1 p2).
 Proof.
-  red. intros. exfalso. destruct (link_linkorder _ _ _ H) as [LO1 LO2].
+  red. intros. exfalso.
+  destruct (link_linkorder _ _ _ H) as [LO1 LO2].
   apply link_prog_inv in H.
 
-  unfold match_prog in *.
-  unfold main_is_internal in *. simplify. repeat (unfold_match H4).
-  repeat (unfold_match H3). simplify.
-  subst. rewrite H0 in *. specialize (H (AST.prog_main p2)).
+  unfold match_prog, main_is_internal in *.
+
+  simplify.
+  repeat (unfold_match H0).
+  repeat (unfold_match H1).
+  simplify.
+
+  subst.
+  rewrite H5 in *.
+  specialize (H (AST.prog_main p2)).
+
   exploit H.
-  apply Genv.find_def_symbol. exists b. split.
-  assumption. apply Genv.find_funct_ptr_iff. eassumption.
-  apply Genv.find_def_symbol. exists b0. split.
-  assumption. apply Genv.find_funct_ptr_iff. eassumption.
-  intros. inv H3. inv H5. destruct H6. inv H5.
+  - apply Genv.find_def_symbol. exists b. split.
+    + assumption.
+    + apply Genv.find_funct_ptr_iff. eassumption.
+  - apply Genv.find_def_symbol. exists b0. split.
+    + assumption.
+    + apply Genv.find_funct_ptr_iff. eassumption.
+  - crush.
 Qed.
 
 Definition match_prog' (p: RTL.program) (tp: HTL.program) :=
