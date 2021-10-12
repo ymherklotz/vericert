@@ -741,15 +741,6 @@ Lemma sat_predicate_Pvar_inj :
     (forall c, sat_predicate (Pvar p1) c = sat_predicate (Pvar p2) c) -> p1 = p2.
 Proof. simplify. apply Pos2Nat.inj. eapply inj_asgn. eauto. Qed.
 
-Lemma hash_present_eq :
-  forall m e1 e2 p1 h h',
-    hash_value m e2 h = (p1, h') ->
-    h ! p1 = Some e1 ->
-    e1 = e2.
-Proof.
-  intros. unfold hash_value in *. destruct_match.
-  - inv H.
-
 Section CORRECT.
 
   Definition fd := @fundef RTLBlock.bb.
@@ -776,7 +767,7 @@ Section CORRECT.
 
     apply sat_predicate_Pvar_inj in H2; subst.
 
-    assert (e1 = e0) by admit; subst.
+    assert (e0 = e1) by (eapply hash_present_eq; eauto); subst.
 
     assert (forall e v v', sem_value ictx e v -> sem_value octx e v' -> v = v') by admit.
 

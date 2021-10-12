@@ -61,6 +61,13 @@ Proof.
   eapply in_map with (f := fst) in H. auto.
 Qed.
 
+Lemma max_not_present :
+  forall A k (h: PTree.t A), k > max_key h -> h ! k = None.
+Proof.
+  intros. destruct (h ! k) eqn:?; auto.
+  apply max_key_correct in Heqo. lia.
+Qed.
+
 Lemma filter_none :
   forall A f l (x: A), filter f l = nil -> In x l -> f x = false.
 Proof. induction l; crush; inv H0; subst; destruct_match; crush. Qed.
@@ -408,6 +415,35 @@ Module HashTree(H: Hashable).
     inv H0.
     pose proof H. apply max_key_correct in H0.
     rewrite PTree.gso; solve [eauto | lia].
+  Qed.
+
+  Lemma find_tree_Some :
+    forall el h v,
+      find_tree el h = Some v ->
+      h ! v = Some el.
+  Proof.
+    intros. unfold find_tree in *.
+    destruct_match; crush. destruct p.
+    destruct_match; crush.
+    match goal with
+    | H: filter ?f ?el = ?x::?xs |- _ =>
+      assert (In x (filter f el)) by (rewrite H; crush)
+    end.
+    apply PTree.elements_complete.
+    apply filter_In in H. inv H.
+    destruct_match; crush.
+  Qed.
+
+  Lemma hash_present_eq :
+    forall m e1 e2 p1 h h',
+      hash_value m e2 h = (p1, h') ->
+      h ! p1 = Some e1 -> e1 = e2.
+  Proof.
+    intros. unfold hash_value in *. destruct_match.
+    - inv H. apply find_tree_Some in Heqo.
+      rewrite Heqo in H0. inv H0. auto.
+    - inv H. assert (h ! (Pos.max m (max_key h) + 1) = None)
+        by (apply max_not_present; lia). crush.
   Qed.
 
 End HashTree.
