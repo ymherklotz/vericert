@@ -748,6 +748,18 @@ Section CORRECT.
 
   Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
 
+  Lemma sem_value_det:
+    forall e v v', sem_value ictx e v -> sem_value octx e v' -> v = v'.
+  Proof.
+    induction e using expression_ind2
+      with (P0 := fun p => forall v, sem_val_list ictx p v -> sem_val_list octx p v);
+    try solve [inversion 1];
+    simplify; inv HSIM.
+    - inv H0. inv H. eauto.
+    - inv H0. inv H. simplify.
+      simplify. unfold ge_preserved in *; crush.
+    - inv H. simplify. econstructor.
+
   Lemma check_correct_sem_value:
     forall x x' v v' n,
       beq_pred_expr n x x' = true ->
