@@ -16,20 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import compcert.backend.Registers.
-Require Import compcert.common.AST.
-Require Import compcert.common.Globalenvs.
-Require Import compcert.common.Memory.
-Require Import compcert.common.Values.
-Require Import compcert.lib.Floats.
-Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
-Require compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlock.
-Require Import vericert.hls.RTLPar.
-Require Import vericert.hls.RTLBlockInstr.
 
 #[local] Open Scope positive.
 
