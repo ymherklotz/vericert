@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.RTLBlockInstr.
+Require Import vericert.hls.HashTree.
 
 #[local] Open Scope positive.
 
@@ -508,13 +509,57 @@ Proof.
                     end; subst; f_equal; crush; eauto using Peqb_true_eq].
 Qed.
 
-Definition hash_tree := PTree.t expression.
+Lemma beq_expression_refl: forall e, beq_expression e e = true.
+Proof.
+  intros.
+  induction e using expression_ind2 with (P0 := fun el => beq_expression_list el el = true);
+  crush; repeat (destruct_match; crush); [].
+  crush. rewrite IHe. rewrite IHe0. auto.
+Qed.
 
-Definition find_tree (el: expression) (h: hash_tree) : option positive :=
-  match filter (fun x => beq_expression el (snd x)) (PTree.elements h) with
-  | (p, _) :: nil => Some p
-  | _ => None
-  end.
+Lemma beq_expression_list_refl: forall e, beq_expression_list e e = true.
+Proof. induction e; auto. simplify. rewrite beq_expression_refl. auto. Qed.
+
+Lemma beq_expression_correct2:
+  forall e1 e2, beq_expression e1 e2 = false -> e1 <> e2.
+Proof.
+  induction e1 using expression_ind2
+    with (P0 := fun el1 => forall el2, beq_expression_list el1 el2 = false -> el1 <> el2).
+  - intros. simplify. repeat (destruct_match; crush).
+  - intros. simplify. repeat (destruct_match; crush). subst. apply IHe1 in H.
+    unfold not in *. intros. apply H. inv H0. auto.
+  - intros. simplify. repeat (destruct_match; crush); subst.
+    unfold not in *; intros. inv H0. rewrite beq_expression_refl in H.
+    discriminate.
+    unfold not in *; intros. inv H. rewrite beq_expression_list_refl in Heqb. discriminate.
+  - simplify. repeat (destruct_match; crush); subst;
+    unfold not in *; intros.
+    inv H0. rewrite beq_expression_refl in H; crush.
+    inv H. rewrite beq_expression_refl in Heqb0; crush.
+    inv H. rewrite beq_expression_list_refl in Heqb; crush.
+  - simplify. repeat (destruct_match; crush); subst.
+    unfold not in *; intros. inv H0. rewrite beq_expression_list_refl in H; crush.
+  - simplify. repeat (destruct_match; crush); subst.
+  - simplify. repeat (destruct_match; crush); subst.
+    apply andb_false_iff in H. inv H. unfold not in *; intros.
+    inv H. rewrite beq_expression_refl in H0; discriminate.
+    unfold not in *; intros. inv H. rewrite beq_expression_list_refl in H0; discriminate.
+Qed.
+
+Lemma expression_dec: forall e1 e2: expression, {e1 = e2} + {e1 <> e2}.
+Proof.
+  intros.
+  destruct (beq_expression e1 e2) eqn:?. apply beq_expression_correct in Heqb. auto.
+  apply beq_expression_correct2 in Heqb. auto.
+Defined.
+
+Module HashExpr <: Hashable.
+  Definition t := expression.
+  Definition eq_dec := expression_dec.
+End HashExpr.
+
+Module HT := HashTree(HashExpr).
+Import HT.
 
 Definition combine_option {A} (a b: option A) : option A :=
   match a, b with
@@ -523,24 +568,13 @@ Definition combine_option {A} (a b: option A) : option A :=
   | _, _ => None
   end.
 
-Definition max_key {A} (t: PTree.t A) :=
-  fold_right Pos.max 1%positive (map fst (PTree.elements t)).
-
-Definition hash_expr (max: predicate) (e: expression) (h: hash_tree): predicate * hash_tree :=
-  match find_tree e h with
-  | Some p => (p, h)
-  | None =>
-    let nkey := Pos.max max (max_key h) + 1 in
-    (nkey, PTree.set nkey e h)
-  end.
-
 Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree): pred_op * hash_tree :=
   match pe with
   | NE.singleton (p, e) =>
-    let (p', h') := hash_expr max e h in
+    let (p', h') := hash_value max e h in
     (Por (Pnot p) (Pvar p'), h')
   | (p, e) ::| pr =>
-    let (p', h') := hash_expr max e h in
+    let (p', h') := hash_value max e h in
     let (p'', h'') := encode_expression_ne max pr h' in
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
   end.
@@ -548,7 +582,7 @@ Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
 Definition encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
   match pe with
   | Psingle e =>
-    let (p, h') := hash_expr max e h in (Pvar p, h')
+    let (p, h') := hash_value max e h in (Pvar p, h')
   | Plist l => encode_expression_ne max l h
   end.
 
@@ -686,6 +720,36 @@ Proof.
   crush.
 Qed.
 
+Definition inj_asgn_f a b := if (a =? b)%nat then true else false.
+
+Lemma inj_asgn_eg :
+  forall a b,
+    inj_asgn_f a b = inj_asgn_f a a -> a = b.
+Proof.
+  intros. destruct (Nat.eq_dec a b); subst.
+  auto. unfold inj_asgn_f in H. apply Nat.eqb_neq in n.
+  rewrite n in H. rewrite Nat.eqb_refl in H. discriminate.
+Qed.
+
+Lemma inj_asgn :
+  forall a b,
+    (forall (f: nat -> bool), f a = f b) -> a = b.
+Proof. intros. apply inj_asgn_eg. eauto. Qed.
+
+Lemma sat_predicate_Pvar_inj :
+  forall p1 p2,
+    (forall c, sat_predicate (Pvar p1) c = sat_predicate (Pvar p2) c) -> p1 = p2.
+Proof. simplify. apply Pos2Nat.inj. eapply inj_asgn. eauto. Qed.
+
+Lemma hash_present_eq :
+  forall m e1 e2 p1 h h',
+    hash_value m e2 h = (p1, h') ->
+    h ! p1 = Some e1 ->
+    e1 = e2.
+Proof.
+  intros. unfold hash_value in *. destruct_match.
+  - inv H.
+
 Section CORRECT.
 
   Definition fd := @fundef RTLBlock.bb.
@@ -694,25 +758,29 @@ Section CORRECT.
   Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
 
   Lemma check_correct_sem_value:
-    forall x x' v n,
+    forall x x' v v' n,
       beq_pred_expr n x x' = true ->
       sem_pred_expr sem_value ictx x v ->
-      sem_pred_expr sem_value octx x' v.
+      sem_pred_expr sem_value octx x' v' ->
+      v = v'.
   Proof.
+    #[local] Opaque PTree.set.
     unfold beq_pred_expr. intros. repeat (destruct_match; try discriminate; []); subst.
     unfold sat_pred_simple in *.
     repeat destruct_match; try discriminate; []; subst.
-    assert (unsat (Por (Pand p (Pnot p0)) (Pand p0 (Pnot p)))) by eauto.
-    pose proof (sat_equiv2 _ _ H1).
+    assert (X: unsat (Por (Pand p (Pnot p0)) (Pand p0 (Pnot p)))) by eauto.
+    pose proof (sat_equiv2 _ _ X).
     destruct x, x'; simplify.
-    repeat destruct_match; try discriminate; []. inv Heqp0. constructor.
-    inv H0. inv Heqp.
+    repeat destruct_match; try discriminate; []. inv Heqp0. inv H0. inv H1.
+    inv Heqp.
+
+    apply sat_predicate_Pvar_inj in H2; subst.
 
     assert (e1 = e0) by admit; subst.
 
-    assert (forall e v, sem_value ictx e v -> sem_value octx e v) by admit.
+    assert (forall e v v', sem_value ictx e v -> sem_value octx e v' -> v = v') by admit.
 
-    eauto.
+    eapply H; eauto.
 
     - admit.
     - admit.
