@@ -290,7 +290,7 @@ Import NE.NonEmptyNotation.
 
 Definition predicated_ne A := NE.non_empty (pred_op * A).
 
-Inductive predicated A :=
+Variant predicated A :=
 | Psingle : A -> predicated A
 | Plist : predicated_ne A -> predicated A.
 
@@ -666,8 +666,8 @@ Qed.
 
 Lemma sat_equiv :
   forall a b,
-  unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) ->
-  forall c, sat_predicate a c = sat_predicate b c.
+    unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) ->
+    forall c, sat_predicate a c = sat_predicate b c.
 Proof.
   unfold unsat. intros. specialize (H c); simplify.
   destruct (sat_predicate b c) eqn:X;
@@ -677,8 +677,8 @@ Qed.
 
 Lemma sat_equiv2 :
   forall a b,
-  unsat (Por (Pand a (Pnot b)) (Pand b (Pnot a))) ->
-  forall c, sat_predicate a c = sat_predicate b c.
+    unsat (Por (Pand a (Pnot b)) (Pand b (Pnot a))) ->
+    forall c, sat_predicate a c = sat_predicate b c.
 Proof.
   unfold unsat. intros. specialize (H c); simplify.
   destruct (sat_predicate b c) eqn:X;
