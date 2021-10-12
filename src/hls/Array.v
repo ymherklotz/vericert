@@ -51,7 +51,7 @@ Lemma list_set_spec1 {A : Type} :
 Proof.
   induction l; intros; destruct i; crush; firstorder. intuition.
 Qed.
-Hint Resolve list_set_spec1 : array.
+#[export] Hint Resolve list_set_spec1 : array.
 
 Lemma list_set_spec2 {A : Type} :
   forall l i (x : A) d,
@@ -59,7 +59,7 @@ Lemma list_set_spec2 {A : Type} :
 Proof.
   induction l; intros; destruct i; crush; firstorder. intuition.
 Qed.
-Hint Resolve list_set_spec2 : array.
+#[export] Hint Resolve list_set_spec2 : array.
 
 Lemma list_set_spec3 {A : Type} :
   forall l i1 i2 (x : A),
@@ -68,7 +68,7 @@ Lemma list_set_spec3 {A : Type} :
 Proof.
   induction l; intros; destruct i1; destruct i2; crush; firstorder.
 Qed.
-Hint Resolve list_set_spec3 : array.
+#[export] Hint Resolve list_set_spec3 : array.
 
 Lemma array_set_wf {A : Type} :
   forall l ln i (x : A),
@@ -95,7 +95,7 @@ Proof.
   unfold array_set. crush.
   eauto with array.
 Qed.
-Hint Resolve array_set_spec1 : array.
+#[export] Hint Resolve array_set_spec1 : array.
 
 Lemma array_set_spec2 {A : Type} :
   forall a i (x : A) d,
@@ -107,7 +107,7 @@ Proof.
   unfold array_set. crush.
   eauto with array.
 Qed.
-Hint Resolve array_set_spec2 : array.
+#[export] Hint Resolve array_set_spec2 : array.
 
 Lemma array_set_len {A : Type} :
   forall a i (x : A),

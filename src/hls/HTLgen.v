@@ -33,11 +33,11 @@ Require Import vericert.hls.HTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 
-Hint Resolve AssocMap.gempty : htlh.
-Hint Resolve AssocMap.gso : htlh.
-Hint Resolve AssocMap.gss : htlh.
-Hint Resolve Ple_refl : htlh.
-Hint Resolve Ple_succ : htlh.
+#[local] Hint Resolve AssocMap.gempty : htlh.
+#[local] Hint Resolve AssocMap.gso : htlh.
+#[local] Hint Resolve AssocMap.gss : htlh.
+#[local] Hint Resolve Ple_refl : htlh.
+#[local] Hint Resolve Ple_succ : htlh.
 
 Record state: Type := mkstate {
   st_st : reg;
@@ -74,10 +74,10 @@ Module HTLState <: State.
             s1.(st_controllogic)!n = None
             \/ s2.(st_controllogic)!n = s1.(st_controllogic)!n) ->
         st_incr s1 s2.
-  Hint Constructors st_incr : htlh.
+  #[export] Hint Constructors st_incr : htlh.
 
   Definition st_prop := st_incr.
-  Hint Unfold st_prop : htlh.
+  #[export] Hint Unfold st_prop : htlh.
 
   Lemma st_refl : forall s, st_prop s s. Proof. auto with htlh. Qed.
 

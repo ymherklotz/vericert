@@ -115,7 +115,7 @@ Lemma Zle_relax :
   p < q <= r ->
   p <= q <= r.
 Proof. lia. Qed.
-Hint Resolve Zle_relax : verilogproof.
+#[local] Hint Resolve Zle_relax : verilogproof.
 
 Lemma transl_in :
   forall l p,
@@ -202,7 +202,7 @@ Proof.
     eapply IHl. auto. inv NOREP. auto. eassumption. inv IN. inv H. contradiction. apply H.
     trivial. assumption.
 Qed.
-Hint Resolve transl_list_correct : verilogproof.
+#[local] Hint Resolve transl_list_correct : verilogproof.
 
 Lemma pc_wf :
   forall A m p v,
@@ -223,7 +223,7 @@ Proof.
   - intros. constructor.
   - intros. simplify. econstructor. constructor. auto.
 Qed.
-Hint Resolve mis_stepp_decl : verilogproof.
+#[local] Hint Resolve mis_stepp_decl : verilogproof.
 
 Lemma mis_stepp_negedge_decl :
   forall l asr asa f,
@@ -233,7 +233,7 @@ Proof.
   - intros. constructor.
   - intros. simplify. econstructor. constructor. auto.
 Qed.
-Hint Resolve mis_stepp_negedge_decl : verilogproof.
+#[local] Hint Resolve mis_stepp_negedge_decl : verilogproof.
 
 Lemma mod_entrypoint_equiv m : mod_entrypoint (transl_module m) = HTL.mod_entrypoint m.
 Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
@@ -348,7 +348,7 @@ Section CORRECTNESS.
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
   Proof. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
-  Hint Resolve symbols_preserved : verilogproof.
+  #[local] Hint Resolve symbols_preserved : verilogproof.
 
   Lemma function_ptr_translated:
     forall (b: Values.block) (f: HTL.fundef),
@@ -359,7 +359,7 @@ Section CORRECTNESS.
     intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
-  Hint Resolve function_ptr_translated : verilogproof.
+  #[local] Hint Resolve function_ptr_translated : verilogproof.
 
   Lemma functions_translated:
     forall (v: Values.val) (f: HTL.fundef),
@@ -370,14 +370,14 @@ Section CORRECTNESS.
     intros. exploit (Genv.find_funct_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
   Qed.
-  Hint Resolve functions_translated : verilogproof.
+  #[local] Hint Resolve functions_translated : verilogproof.
 
   Lemma senv_preserved:
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
   Proof.
     intros. eapply (Genv.senv_match TRANSL).
   Qed.
-  Hint Resolve senv_preserved : verilogproof.
+  #[local] Hint Resolve senv_preserved : verilogproof.
 
   Ltac unfold_replace :=
     match goal with
@@ -502,7 +502,7 @@ Section CORRECTNESS.
     - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
       repeat rewrite_eq. apply match_state. assumption.
   Qed.
-  Hint Resolve transl_step_correct : verilogproof.
+  #[local] Hint Resolve transl_step_correct : verilogproof.
 
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (HTL.semantics prog),
@@ -520,7 +520,7 @@ Section CORRECTNESS.
     inv B. eauto.
     constructor.
   Qed.
-  Hint Resolve transl_initial_states : verilogproof.
+  #[local] Hint Resolve transl_initial_states : verilogproof.
 
   Lemma transl_final_states :
     forall (s1 : Smallstep.state (HTL.semantics prog))
@@ -532,7 +532,7 @@ Section CORRECTNESS.
   Proof.
     intros. inv H0. inv H. inv H3. constructor. reflexivity.
   Qed.
-  Hint Resolve transl_final_states : verilogproof.
+  #[local] Hint Resolve transl_final_states : verilogproof.
 
   Theorem transf_program_correct:
     forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).

@@ -34,7 +34,7 @@ Require Import vericert.common.Show.
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
 
-Local Open Scope Z_scope.
+#[local] Open Scope Z_scope.
 
 (* This tactic due to Clement Pit-Claudel with some minor additions by JDP to
    allow the result to be named: https://pit-claudel.fr/clement/MSc/#org96a1b5f *)
@@ -190,8 +190,8 @@ Ltac liapp :=
 Ltac crush := simplify; try discriminate; try congruence; try lia; liapp;
               try assumption; try (solve [auto]).
 
-Global Opaque Nat.div.
-Global Opaque Z.mul.
+#[global] Opaque Nat.div.
+#[global] Opaque Z.mul.
 
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
@@ -231,7 +231,7 @@ Definition join {A : Type} (a : option (option A)) : option A :=
 
 Module Notation.
 Notation "'do' X <- A ; B" := (bind A (fun X => B))
-   (at level 200, X ident, A at level 100, B at level 200).
+   (at level 200, X name, A at level 100, B at level 200).
 End Notation.
 
 End Option.

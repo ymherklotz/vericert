@@ -12,13 +12,13 @@ all: $(TESTS)
 	@./$< ; echo "$$?" >$@
 
 %.o: %.c
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c -o $@ $<
 
 %.gcc: %.o
-	@$(CC) $(CFLAGS) $< -o $@
+	@$(CC) $(CFLAGS) -o $@ $<
 
 %.v: %.c
-	@$(VERICERT) $(VERICERT_OPTS) $< -o $@
+	@$(VERICERT) $(VERICERT_OPTS) -o $@ $<
 
 %.iver: %.v
 	@$(IVERILOG) $(IVERILOG_OPTS) -o $@ -- $<
