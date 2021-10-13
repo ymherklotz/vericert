@@ -748,7 +748,7 @@ Section CORRECT.
 
   Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
 
-  Lemma sem_value_det:
+  Lemma sem_value_mem_det:
     forall e v v' m m',
       (sem_value ictx e v -> sem_value octx e v' -> v = v')
       /\ (sem_mem ictx e m -> sem_mem octx e m' -> m = m').
@@ -756,50 +756,67 @@ Section CORRECT.
     induction e using expression_ind2
       with (P0 := fun p => forall v v',
                     sem_val_list ictx p v -> sem_val_list octx p v' -> v = v');
-    try solve [inversion 1];
-    simplify; inv HSIM; simplify.
-    - inv H0. inv H1. auto.
-    - inv H0. inv H1. auto.
-    - inv H0. inv H1. simplify.
-      assert (lv = lv0). apply IHe; eauto. subst.
-      inv H. rewrite H0 in H7; crush.
-    - inv H0.
+    inv HSIM; repeat progress simplify;
+    try solve [match goal with
+               | H: sem_value _ _ _, H2: sem_value _ _ _ |- _ => inv H; inv H2; auto
+               | H: sem_mem _ _ _, H2: sem_mem _ _ _ |- _ => inv H; inv H2; auto
+               | H: sem_val_list _ _ _, H2: sem_val_list _ _ _ |- _ => inv H; inv H2; auto
+               end].
+    - repeat match goal with
+             | H: sem_value _ _ _ |- _ => inv H
+             | H: sem_val_list {| ctx_ge := ge; |} ?e ?l1,
+               H2: sem_val_list {| ctx_ge := tge |} ?e ?l2,
+               IH: forall _ _, sem_val_list _ _ _ -> sem_val_list _ _ _ -> _ = _ |- _ =>
+               assert (X: l1 = l2) by (apply IH; auto)
+             | H: ge_preserved _ _ |- _ => inv H
+             end; crush.
     - inv H1. inv H0. simplify.
       assert (lv0 = lv). apply IHe; eauto. subst.
       inv H. rewrite H1 in H13.
       assert (a0 = a1) by crush. subst.
       assert (m'1 = m'0). apply IHe0; eauto. subst.
       crush.
-    - inv H0.
-    - inv H0.
     - inv H0. inv H1. simplify.
       assert (lv = lv0). { apply IHe2; eauto. } subst.
       assert (a1 = a0). { inv H.  rewrite H1 in H12. crush. } subst.
       assert (v0 = v1). { apply IHe1; auto. } subst.
       assert (m'0 = m'1). { apply IHe3; auto. } subst.
       crush.
-    - inv H0.
-    - inv H0.
-    - inv H0. inv H. auto.
-    - inv H0. inv H. f_equal. apply IHe; auto.
+    - inv H0. inv H1. f_equal. apply IHe; auto.
       apply IHe0; auto.
+  Qed.
+
+  Lemma sem_value_det:
+    forall e v v',
+      sem_value ictx e v -> sem_value octx e v' -> v = v'.
+  Proof using HSIM.
+    intros. eapply sem_value_mem_det; eauto; apply Mem.empty.
+  Qed.
+
+  Lemma sem_mem_det:
+    forall e v v',
+      sem_mem ictx e v -> sem_mem octx e v' -> v = v'.
+  Proof using HSIM.
+    intros. eapply sem_value_mem_det; eauto; apply (Vint (Int.repr 0%Z)).
+  Qed.
+
+  Lemma sem_val_list_det:
+    forall e l l',
+      sem_val_list ictx e l -> sem_val_list octx e l' -> l = l'.
+  Proof using HSIM.
+    induction e; simplify.
+    - inv H; inv H0; auto.
+    - inv H; inv H0. f_equal. eapply sem_value_det; eauto; try apply Mem.empty.
+      apply IHe; eauto.
   Qed.
 
   Lemma sem_pred_det:
     forall e v v',
       sem_pred ictx e v -> sem_pred octx e v' -> v = v'.
-  Proof.
-    induction e using expression_ind2
-      with (P0 := fun p => forall v v',
-                    sem_val_list ictx p v -> sem_val_list octx p v' -> v = v');
-    try solve [inversion 1]; inv HSIM; simplify.
-    - inv H0. inv H1. auto.
-    - inv H0. inv H1. simplify.
-      assert (lv = lv0). { apply IHe; auto. } subst.
-      crush.
-    - inv H0; inv H1; auto.
-    - inv H0; inv H1; f_equal.
-      eapply sem_value_det.
+  Proof using HSIM.
+    try solve [inversion 1]; pose proof sem_value_det; pose proof sem_val_list_det; inv HSIM; simplify.
+    inv H2; inv H3; auto. assert (lv = lv0) by (eapply H0; eauto). crush.
+  Qed.
 
   Lemma check_correct_sem_value:
     forall x x' v v' n,
