@@ -794,7 +794,12 @@ Section CORRECT.
                     sem_val_list ictx p v -> sem_val_list octx p v' -> v = v');
     try solve [inversion 1]; inv HSIM; simplify.
     - inv H0. inv H1. auto.
-    - inv H0. inv H1.
+    - inv H0. inv H1. simplify.
+      assert (lv = lv0). { apply IHe; auto. } subst.
+      crush.
+    - inv H0; inv H1; auto.
+    - inv H0; inv H1; f_equal.
+      eapply sem_value_det.
 
   Lemma check_correct_sem_value:
     forall x x' v v' n,
