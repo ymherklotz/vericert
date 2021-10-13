@@ -749,16 +749,52 @@ Section CORRECT.
   Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
 
   Lemma sem_value_det:
-    forall e v v', sem_value ictx e v -> sem_value octx e v' -> v = v'.
+    forall e v v' m m',
+      (sem_value ictx e v -> sem_value octx e v' -> v = v')
+      /\ (sem_mem ictx e m -> sem_mem octx e m' -> m = m').
+  Proof using HSIM.
+    induction e using expression_ind2
+      with (P0 := fun p => forall v v',
+                    sem_val_list ictx p v -> sem_val_list octx p v' -> v = v');
+    try solve [inversion 1];
+    simplify; inv HSIM; simplify.
+    - inv H0. inv H1. auto.
+    - inv H0. inv H1. auto.
+    - inv H0. inv H1. simplify.
+      assert (lv = lv0). apply IHe; eauto. subst.
+      inv H. rewrite H0 in H7; crush.
+    - inv H0.
+    - inv H1. inv H0. simplify.
+      assert (lv0 = lv). apply IHe; eauto. subst.
+      inv H. rewrite H1 in H13.
+      assert (a0 = a1) by crush. subst.
+      assert (m'1 = m'0). apply IHe0; eauto. subst.
+      crush.
+    - inv H0.
+    - inv H0.
+    - inv H0. inv H1. simplify.
+      assert (lv = lv0). { apply IHe2; eauto. } subst.
+      assert (a1 = a0). { inv H.  rewrite H1 in H12. crush. } subst.
+      assert (v0 = v1). { apply IHe1; auto. } subst.
+      assert (m'0 = m'1). { apply IHe3; auto. } subst.
+      crush.
+    - inv H0.
+    - inv H0.
+    - inv H0. inv H. auto.
+    - inv H0. inv H. f_equal. apply IHe; auto.
+      apply IHe0; auto.
+  Qed.
+
+  Lemma sem_pred_det:
+    forall e v v',
+      sem_pred ictx e v -> sem_pred octx e v' -> v = v'.
   Proof.
     induction e using expression_ind2
-      with (P0 := fun p => forall v, sem_val_list ictx p v -> sem_val_list octx p v);
-    try solve [inversion 1];
-    simplify; inv HSIM.
-    - inv H0. inv H. eauto.
-    - inv H0. inv H. simplify.
-      simplify. unfold ge_preserved in *; crush.
-    - inv H. simplify. econstructor.
+      with (P0 := fun p => forall v v',
+                    sem_val_list ictx p v -> sem_val_list octx p v' -> v = v');
+    try solve [inversion 1]; inv HSIM; simplify.
+    - inv H0. inv H1. auto.
+    - inv H0. inv H1.
 
   Lemma check_correct_sem_value:
     forall x x' v v' n,
