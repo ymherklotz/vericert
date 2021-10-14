@@ -38,13 +38,25 @@ Definition predicate := positive.
 
 Inductive pred_op : Type :=
 | Pvar: predicate -> pred_op
+| Ptrue: pred_op
+| Pfalse: pred_op
 | Pnot: pred_op -> pred_op
 | Pand: pred_op -> pred_op -> pred_op
 | Por: pred_op -> pred_op -> pred_op.
 
+Declare Scope pred_op.
+
+Notation "A ∧ B" := (Pand A B) (at level 20) : pred_op.
+Notation "A ∨ B" := (Por A B) (at level 25) : pred_op.
+Notation "⟂" := (Pfalse) : pred_op.
+Notation "'T'" := (Ptrue) : pred_op.
+Notation "¬ A" := (Pnot A) (at level 15) : pred_op.
+
 Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   match p with
   | Pvar p' => a (Pos.to_nat p')
+  | Ptrue => true
+  | Pfalse => false
   | Pnot p' => negb (sat_predicate p' a)
   | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
   | Por p1 p2 => sat_predicate p1 a || sat_predicate p2 a
@@ -153,6 +165,8 @@ Fixpoint trans_pred_temp (bound: nat) (p: pred_op) : option formula :=
   | S n =>
     match p with
     | Pvar p' => Some (((true, Pos.to_nat p') :: nil) :: nil)
+    | Ptrue => Some nil
+    | Pfalse => Some (nil::nil)
     | Pand p1 p2 =>
       match trans_pred_temp n p1, trans_pred_temp n p2 with
       | Some p1', Some p2' =>
@@ -165,6 +179,8 @@ Fixpoint trans_pred_temp (bound: nat) (p: pred_op) : option formula :=
         Some (mult p1' p2')
       | _, _ => None
       end
+    | Pnot Pfalse => Some nil
+    | Pnot Ptrue => Some (nil::nil)
     | Pnot (Pvar p') => Some (((false, Pos.to_nat p') :: nil) :: nil)
     | Pnot (Pnot p) => trans_pred_temp n p
     | Pnot (Pand p1 p2) => trans_pred_temp n (Por (Pnot p1) (Pnot p2))
@@ -181,6 +197,8 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
    | S n =>
      match p with
      | Pvar p' => Some (exist _ (((true, Pos.to_nat p') :: nil) :: nil) _)
+     | Ptrue => Some (exist _ nil _)
+     | Pfalse => Some (exist _ (nil::nil) _)
      | Pand p1 p2 =>
       match trans_pred n p1, trans_pred n p2 with
       | Some (exist _ p1' _), Some (exist _ p2' _) =>
@@ -194,6 +212,8 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
       | _, _ => None
       end
      | Pnot (Pvar p') => Some (exist _ (((false, Pos.to_nat p') :: nil) :: nil) _)
+     | Pnot Ptrue => Some (exist _ (nil::nil) _)
+     | Pnot Pfalse => Some (exist _ nil _)
      | Pnot (Pnot p') =>
        match trans_pred n p' with
        | Some (exist _ p1' _) => Some (exist _ p1' _)
@@ -210,7 +230,7 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
        | None => None
        end
      end
-   end); split; intros; simpl in *; auto.
+   end); split; intros; simpl in *; auto; try solve [crush].
   - inv H. inv H0; auto.
   - split; auto. destruct (a (Pos.to_nat p')) eqn:?; crush.
   - inv H. inv H0. unfold satLit in H. simplify. rewrite H. auto.
@@ -336,6 +356,8 @@ Definition predset := PMap.t bool.
 Fixpoint eval_predf (pr: predset) (p: pred_op) {struct p} :=
   match p with
   | Pvar p' => PMap.get p' pr
+  | Ptrue => true
+  | Pfalse => false
   | Pnot p' => negb (eval_predf pr p')
   | Pand p' p'' => (eval_predf pr p') && (eval_predf pr p'')
   | Por p' p'' => (eval_predf pr p') || (eval_predf pr p'')
