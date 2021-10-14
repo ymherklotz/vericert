@@ -655,11 +655,12 @@ Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
       (AssocMap.set n st s.(st_controllogic)))
    (add_control_instr_force_state_incr s n st).
 
-
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with
   | Pvar pred =>
     Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
+  | Ptrue => Vlit (ZToValue 1)
+  | Pfalse => Vlit (ZToValue 0)
   | Pnot pred =>
     Vunop Vnot (pred_expr preg pred)
   | Pand p1 p2 =>

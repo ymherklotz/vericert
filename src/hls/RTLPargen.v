@@ -33,6 +33,7 @@ Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.Abstr.
 
 #[local] Open Scope positive.
+#[local] Open Scope forest.
 
 (*Parameter op_le : Op.operation -> Op.operation -> bool.
 Parameter chunk_le : AST.memory_chunk -> AST.memory_chunk -> bool.
