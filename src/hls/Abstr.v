@@ -33,6 +33,7 @@ Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.HashTree.
 
 #[local] Open Scope positive.
+#[local] Open Scope pred_op.
 
 (*|
 Schedule Oracle
@@ -282,6 +283,10 @@ Fixpoint of_list {A} (l: list A): option (non_empty A) :=
   | nil => None
   end.
 
+Inductive In {A: Type} (x: A) : non_empty A -> Prop :=
+| In_cons : forall a b, x = a \/ In x b -> In x (a ::| b)
+| In_single : In x (singleton x).
+
 End NonEmpty.
 
 Module NE := NonEmpty.
@@ -328,8 +333,12 @@ Definition get_forest v (f: forest) :=
   | Some v' => v'
   end.
 
-Notation "a # b" := (get_forest b a) (at level 1).
-Notation "a # b <- c" := (Rtree.set b c a) (at level 1, b at next level).
+Declare Scope forest.
+
+Notation "a # b" := (get_forest b a) (at level 1) : forest.
+Notation "a # b <- c" := (Rtree.set b c a) (at level 1, b at next level) : forest.
+
+#[local] Open Scope forest.
 
 Definition maybe {A: Type} (vo: A) (pr: predset) p (v: A) :=
   match p with
@@ -568,7 +577,29 @@ Definition combine_option {A} (a b: option A) : option A :=
   | _, _ => None
   end.
 
-Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree): pred_op * hash_tree :=
+Fixpoint norm_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
+  : (PTree.t pred_op) * hash_tree :=
+  match pe with
+  | NE.singleton (p, e) =>
+    let (p', h') := hash_value max e h in
+    (PTree.set p' p (PTree.empty _), h')
+  | (p, e) ::| pr =>
+    let (p', h') := hash_value max e h in
+    let (p'', h'') := norm_expression_ne max pr h' in
+    match p'' ! p' with
+    | Some pr_op =>
+      (PTree.set p' (pr_op ∨ p) p'', h'')
+    | None =>
+      (PTree.set p' p p'', h'')
+    end
+  end.
+
+Definition encode_expression_ne max pe h :=
+  let (tree, h) := norm_expression_ne max pe h in
+  (PTree.fold (fun pr_op e p_e => (¬ p_e ∨ Pvar e) ∧ pr_op) tree T, h).
+
+(*Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
+  : (PTree.t pred_op) * hash_tree :=
   match pe with
   | NE.singleton (p, e) =>
     let (p', h') := hash_value max e h in
@@ -577,7 +608,7 @@ Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
     let (p', h') := hash_value max e h in
     let (p'', h'') := encode_expression_ne max pr h' in
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
-  end.
+  end.*)
 
 Definition encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
   match pe with
@@ -589,6 +620,8 @@ Definition encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pr
 Fixpoint max_predicate (p: pred_op) : positive :=
   match p with
   | Pvar p => p
+  | Ptrue => 1
+  | Pfalse => 1
   | Pand a b => Pos.max (max_predicate a) (max_predicate b)
   | Por a b => Pos.max (max_predicate a) (max_predicate b)
   | Pnot a => max_predicate a
@@ -818,6 +851,8 @@ Section CORRECT.
     inv H2; inv H3; auto. assert (lv = lv0) by (eapply H0; eauto). crush.
   Qed.
 
+  #[local] Opaque PTree.set.
+
   Lemma check_correct_sem_value:
     forall x x' v v' n,
       beq_pred_expr n x x' = true ->
@@ -825,7 +860,6 @@ Section CORRECT.
       sem_pred_expr sem_value octx x' v' ->
       v = v'.
   Proof.
-    #[local] Opaque PTree.set.
     unfold beq_pred_expr. intros. repeat (destruct_match; try discriminate; []); subst.
     unfold sat_pred_simple in *.
     repeat destruct_match; try discriminate; []; subst.
@@ -838,11 +872,7 @@ Section CORRECT.
     apply sat_predicate_Pvar_inj in H2; subst.
 
     assert (e0 = e1) by (eapply hash_present_eq; eauto); subst.
-
-    assert (forall e v v', sem_value ictx e v -> sem_value octx e v' -> v = v') by admit.
-
-    eapply H; eauto.
-
+    eauto using sem_value_det.
     - admit.
     - admit.
     - admit.
