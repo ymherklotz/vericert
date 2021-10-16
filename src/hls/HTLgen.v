@@ -22,7 +22,7 @@ Require Import Coq.micromega.Lia.
 Require Import compcert.lib.Maps.
 Require compcert.common.Errors.
 Require Import compcert.lib.Integers.
-Require compcert.common.Globalenvs.
+Require Import compcert.common.Globalenvs.
 Require compcert.lib.Integers.
 Require Import compcert.common.AST.
 Require Import compcert.backend.RTL.
@@ -707,31 +707,77 @@ Definition main_is_internal (p : RTL.program) : bool :=
   | _ => false
   end.
 
-Definition only_main_has_stack (p : RTL.program) : Prop :=
-  Forall (fun '(name, def) =>
-            match def with
-            | AST.Gfun (Internal f) => name <> (AST.prog_main p) -> RTL.fn_stacksize f = 0
+Definition ainstack_instr i :=
+  match i with
+  | Iop (Op.Olea (Op.Ainstack _)) _ _ _ => True
+  | Iop (Op.Oleal (Op.Ainstack _)) _ _ _ => True
+  | _ => False
+  end.
+
+Definition ainstack_instr_dec : forall i, {ainstack_instr i} + {~ ainstack_instr i}.
+Proof. destruct i; crush. destruct o; crush; destruct a; crush. Defined.
+
+Definition no_ainstack (c : code) : Prop :=
+  Forall (fun '(_, i) => ~ ainstack_instr i) (PTree.elements c).
+
+Definition no_ainstack_dec (c : code) : {no_ainstack c} + {~ no_ainstack c}.
+Proof.
+  apply Forall_dec.
+  intros [? ?].
+  destruct (ainstack_instr_dec i); auto.
+Defined.
+
+Definition only_main_has_ainstack (p : RTL.program) : Prop :=
+  Forall (fun '(name, blk) =>
+            forall f,
+              name <> (AST.prog_main p) ->
+              Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
+              no_ainstack (fn_code f))
+         (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+
+Definition only_main_has_ainstack_dec (p : RTL.program) : {only_main_has_ainstack p} + {~ only_main_has_ainstack p}.
+Proof.
+  apply Forall_dec. intros [? ?].
+  destruct (peq i (prog_main p)); try solve [left; crush].
+  destruct (Genv.find_funct_ptr (Genv.globalenv p) b); try solve [left; crush].
+  destruct f; try solve [left; crush].
+  destruct (no_ainstack_dec (fn_code f)).
+  all: solve [ constructor; crush ].
+Defined.
+
+Definition no_calls_to (name : AST.ident) (c : RTL.code) : Prop :=
+  Forall (fun '(_, instr) =>
+            match instr with
+            | Icall _ (inr name') _ _ _ => name <> name'
             | _ => True
             end)
-         (PTree.elements (Globalenvs.Genv.genv_defs (Globalenvs.Genv.globalenv p))).
+         (PTree.elements c).
 
-Definition only_main_has_stack_dec (p : RTL.program) : {only_main_has_stack p} + {~ only_main_has_stack p}.
+Definition no_calls_to_dec (name : AST.ident) (c : RTL.code) : {no_calls_to name c} + {~ no_calls_to name c}.
 Proof.
-  refine (Forall_dec _
-                     (fun '(name, def) => match def with
-                                       | AST.Gfun (Internal f) =>
-                                         if (Pos.eq_dec (prog_main p) name)
-                                         then left _
-                                         else if (Z.eq_dec (fn_stacksize f) 0)
-                                              then left _
-                                              else right _
-                                       | _ => left _
-                                       end)
-                     _).
-  all: crush.
+  apply Forall_dec. intros [? ?].
+  destruct i; crush.
+  destruct s0; crush.
+  destruct (Pos.eq_dec name i); crush.
+Qed.
+
+Definition main_not_called (p : RTL.program) : Prop :=
+  Forall (fun '(_, blk) =>
+            forall f,
+              Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
+              no_calls_to (AST.prog_main p) (fn_code f))
+         (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+
+Definition main_not_called_dec (p : RTL.program) : {main_not_called p} + {~ main_not_called p}.
+Proof.
+  apply Forall_dec. intros [? ?].
+  destruct (Genv.find_funct_ptr (Genv.globalenv p) b); try solve [left; crush].
+  destruct f; try solve [left; crush].
+  destruct (no_calls_to_dec (prog_main p) (fn_code f)).
+  all: solve [constructor; crush].
 Qed.
 
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
-  if main_is_internal p && only_main_has_stack_dec p
+  if main_is_internal p && only_main_has_ainstack_dec p && main_not_called_dec p
   then transform_partial_program (transl_fundef p) p
   else Errors.Error (Errors.msg "Main function is not Internal.").
