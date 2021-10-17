@@ -779,6 +779,7 @@ Section CORRECTNESS.
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
                (Verilog.Vnonblock (Verilog.Vvar res0) e)
                (state_goto st pc') ->
+      (sp = Values.Vptr blk Ptrofs.zero \/ ~ ainstack_instr (RTL.Iop op args res0 pc')) ->
       reg_stack_based_pointers blk rs ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       @Op.eval_operation F V ge sp op
@@ -811,14 +812,11 @@ Section CORRECTNESS.
       | |- context[match ?g with _ => _ end] => destruct g; try discriminate
       | |- _ => simplify; solve [auto]
       end.
-    intros * INSTR RSBP SEL EVAL.
+    intros * INSTR AINSTACK RSBP SEL EVAL.
     inversion INSTR. subst. unfold translate_instr in H5.
     unfold_match H5; repeat (unfold_match H5); repeat (simplify; solve_no_ptr).
-    (** Ainstack *) {
-      (** rtl_stk = stk_hd::stk_tl, should be impossible *)
-      admit.
-    }
-  Admitted.
+    destruct AINSTACK; crush.
+  Qed.
 
   Lemma int_inj :
     forall x y,
@@ -1514,6 +1512,42 @@ Section CORRECTNESS.
       [eauto; crush; shelve | eauto; crush; try trans_match_externctrl]
     ).
 
+  Ltac inv_transl :=
+    move TRANSL at bottom;
+    destruct TRANSL as [MPROG [MAIN_INTERNAL [MAIN_NOT_CALLED MAIN_ONLY_AINSTACK]]].
+
+  Lemma in_elements_iff : forall A (t : PTree.t A) k v,
+      In (k, v) (PTree.elements t) <-> t ! k = Some v.
+  Proof using Type.
+    split; auto using PTree.elements_complete,PTree.elements_correct.
+  Qed.
+
+  Lemma apply_only_main_has_ainstack : forall id f pc op args res pc',
+      HTL.find_func ge id = Some (AST.Internal f) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
+      id = (AST.prog_main prog) \/ ~ ainstack_instr (RTL.Iop op args res pc').
+  Proof using TRANSL.
+    intros.
+    inv_transl.
+    destruct (Pos.eq_dec id (AST.prog_main prog)); crush.
+    right.
+    unfold HTL.find_func in H. unfold_match H.
+    unfold only_main_has_ainstack in MAIN_ONLY_AINSTACK.
+    rewrite Forall_forall in MAIN_ONLY_AINSTACK.
+    exploit MAIN_ONLY_AINSTACK.
+    + unfold Genv.find_symbol in *.
+      rewrite in_elements_iff.
+      eassumption.
+    + simpl.
+      let H := fresh "H" in intro H; exploit H; try solve [eauto; crush].
+      intro Hno_ainstack.
+      unfold no_ainstack in Hno_ainstack.
+      rewrite Forall_forall in Hno_ainstack.
+      exploit Hno_ainstack.
+      * eapply in_elements_iff. eassumption.
+      * crush.
+  Qed.
+
   Lemma transl_iop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
       (rs : Registers.Regmap.t Values.val) (m : mem) (op : Op.operation) (args : list Registers.reg)
@@ -1547,7 +1581,17 @@ Section CORRECTNESS.
       + assert (HPle: Ple res0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
         unfold Ple in HPle; lia.
-      + eauto using op_stack_based.
+      + (* TODO: Break this up into lemmas *)
+
+        inv_transl.
+        assert (sp = Values.Vptr blk Ptrofs.zero \/ ~ ainstack_instr (RTL.Iop op args res0 pc')). {
+          destruct (Pos.eq_dec mid (AST.prog_main prog)).
+          - rewrite NO_MAIN_CALLS in * by assumption.
+            inv SP_BASE; inv H12.
+            crush.
+          - edestruct apply_only_main_has_ainstack; eauto.
+        }
+        eauto using op_stack_based.
       + inv CONST. constructor; simplify.
         * rewrite AssocMap.gso. rewrite AssocMap.gso.
           assumption. lia.
