@@ -40,6 +40,7 @@ Require vericert.hls.Verilog.
 
 Require Import Lia.
 
+From Hammer Require Import Hammer.
 From Hammer Require Import Tactics.
 Set Nested Proofs Allowed.
 
@@ -1726,16 +1727,7 @@ Section CORRECTNESS.
   Qed.
   Hint Resolve stack_base_sp_fequal : htlproof.
 
-  Lemma stack_based_undef : forall sp, reg_stack_based_pointers sp (Registers.Regmap.init Values.Vundef).
-  Proof.
-    unfold reg_stack_based_pointers.
-    intros.
-    rewrite Registers.Regmap.gi.
-    crush.
-  Qed.
 
-  Lemma init_regs_nil : forall rs, RTL.init_regs nil rs = Registers.Regmap.init Values.Vundef.
-  Proof. destruct rs; trivial. Qed.
 
   Lemma transl_callstate_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (args : list Values.val)
@@ -1784,6 +1776,8 @@ Section CORRECTNESS.
       erewrite (Mem.load_alloc_same m 0 (RTL.fn_stacksize f) m' _ _ _ _ v); eauto; repeat econstructor.
     - eauto with htlproof.
     - move SP_BASE at bottom.
+      move blk at bottom.
+      move stk at bottom.
       Lemma stack_base_trans : forall s sp blk stk, nil_stack_base_sp s sp blk \/ stack_base_sp s blk ->
                                     let blk' := match s with
                                                 | nil => stk
@@ -1797,11 +1791,10 @@ Section CORRECTNESS.
       Qed.
 
       eauto using stack_base_trans.
-
-    - destruct s eqn:E; eauto using stack_based_forall.
+    - apply stack_based_forall.
+      destruct s; eauto.
       rewrite INIT_CALL_NO_ARGS by trivial.
-      rewrite init_regs_nil.
-      eapply stack_based_undef.
+      constructor.
     - unfold arr_stack_based_pointers; intros.
       destruct (Mem.loadv _ _ _) eqn:eq_load.
       + simpl.
@@ -2137,6 +2130,47 @@ Section CORRECTNESS.
   (*     Forall (fun a : Values.val => stack_based a blk) (map (fun r : positive => rs !! r) args). *)
   (* Proof. induction args; crush. Qed. *)
 
+  Lemma main_not_called_contradiction : forall id pc f fn sig args dst pc',
+      HTL.find_func ge id = Some (AST.Internal f) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Icall sig (inr fn) args dst pc') ->
+      fn <> AST.prog_main prog.
+  Proof.
+    intros.
+    unfold match_prog in TRANSL.
+    decompose record TRANSL; clear TRANSL.
+    unfold main_not_called in H2.
+    rewrite Forall_forall in H2.
+    unfold HTL.find_func in H; unfold_match H.
+    exploit H2; clear H2.
+    - apply in_elements_iff.
+      eassumption.
+    - simpl.
+      let H := fresh "H" in intro H; exploit H; eauto; clear H.
+      intro.
+      unfold no_calls_to in *.
+      rewrite Forall_forall in *.
+      exploit H2.
+      + rewrite in_elements_iff.
+        eassumption.
+      + crush.
+  Qed.
+
+  Lemma find_function_lookup : forall fn f rs,
+      RTL.find_function ge (inr fn) rs = Some (AST.Internal f) ->
+      (Genv.genv_defs ge) ! fn  = Some (AST.Gfun (AST.Internal f)).
+  Proof.
+    intros.
+    simpl in *.
+    unfold_match H.
+    unfold Genv.find_symbol in *.
+    unfold Genv.find_funct_ptr in *.
+    repeat (unfold_match H).
+    simplify.
+    unfold Genv.find_def in *.
+    destruct ge.
+    simplify.
+    replace fn with b in *; eauto.
+    eapply genv_vars_inj.
 
   Ltac not_in_params_low := eapply param_reg_lower; eauto; lia.
   Ltac not_in_params_other :=
@@ -2330,6 +2364,10 @@ Section CORRECTNESS.
              crush.
           -- crush.
           -- eauto using separate_params_reset.
+      + move FUNC_NAME at bottom.
+        move H3 at bottom.
+        enough (fn0 <> AST.prog_main prog) by crush.
+        eauto using main_not_called_contradiction.
     Unshelve.
     all: eauto; exact tt.
   Qed.
@@ -2455,19 +2493,18 @@ Section CORRECTNESS.
       + auto using match_arrs_empty.
       + move SP_BASE at bottom.
         move SP_BASE0 at bottom.
+        inv RV_BASED; crush.
+        replace blk0 with blk in *; eauto with htlproof.
+
         destruct s.
-        * (* Return from main *)
-          (* TODO: simplify *)
-          replace blk0 with blk in *. eauto with htlproof.
-          destruct SP_BASE; try solve [inv H2; crush].
-          destruct SP_BASE0; try solve [inv H3].
-          inv H3. inv H2.
-          eauto with htlproof.
-          inv H21.
-        * (* Return to other function *)
-          inv SP_BASE; inv H2; crush.
-          inv SP_BASE0. inv H2; crush.
-          replace blk0 with blk in *; eauto with htlproof.
+        * inv SP_BASE. inv H3. discriminate.
+          inv SP_BASE0.
+          -- inv H3. inv H4. inv H5. trivial.
+             inv H24.
+          -- inv H4.
+        * inv SP_BASE. inv H3. discriminate.
+          inv SP_BASE0. inv H4. discriminate.
+          inv H3. eauto using stack_base_sp_fequal.
       + (* match_constants *)
         inv CONST.
         big_tac.
