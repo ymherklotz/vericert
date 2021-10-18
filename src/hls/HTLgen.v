@@ -714,47 +714,114 @@ Definition ainstack_instr i :=
   | _ => False
   end.
 
+Definition decision P := {P} + {~ P}.
+
+Lemma in_elements_iff : forall A t k (v: A), t ! k = Some v <-> In (k, v) (PTree.elements t).
+Proof. split; auto using PTree.elements_complete, PTree.elements_correct. Qed.
+
+Lemma equiv_dec : forall P Q, (P <-> Q) -> decision P -> decision Q.
+Proof.
+  intros * equiv Pdec.
+  solve [destruct Pdec; rewrite equiv in *; constructor; trivial].
+Qed.
+
 Definition ainstack_instr_dec : forall i, {ainstack_instr i} + {~ ainstack_instr i}.
 Proof. destruct i; crush. destruct o; crush; destruct a; crush. Defined.
 
 Definition no_ainstack (c : code) : Prop :=
-  Forall (fun '(_, i) => ~ ainstack_instr i) (PTree.elements c).
+  forall n i, c ! n = Some i -> ~ ainstack_instr i.
 
-Definition no_ainstack_dec (c : code) : {no_ainstack c} + {~ no_ainstack c}.
+Definition no_ainstack_dec (c : code) : decision (no_ainstack c).
 Proof.
+  Definition no_ainstack_Forall (c : code) : Prop :=
+    Forall (fun '(n, i) => ~ ainstack_instr i) (PTree.elements c).
+  apply (equiv_dec (no_ainstack_Forall c)). {
+    unfold no_ainstack, no_ainstack_Forall.
+    split; intros.
+    - rewrite Forall_forall in H.
+      rewrite in_elements_iff in H0.
+      exploit H; eauto.
+    - rewrite Forall_forall. intros [? ?] ?.
+      rewrite <- in_elements_iff in H0.
+      eauto.
+  }
   apply Forall_dec.
   intros [? ?].
   destruct (ainstack_instr_dec i); auto.
-Defined.
+Qed.
+
+Definition find_func {F V} (ge : Genv.t F V) name :=
+  match Genv.find_symbol ge name with
+  | Some blk => Genv.find_funct_ptr ge blk
+  | None => None
+  end.
 
 Definition only_main_has_ainstack (p : RTL.program) : Prop :=
-  Forall (fun '(name, blk) =>
-            forall f,
-              name <> (AST.prog_main p) ->
-              Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
-              no_ainstack (fn_code f))
-         (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+  forall name f,
+    name <> (AST.prog_main p) ->
+    find_func (Genv.globalenv p) name = Some (AST.Internal f) ->
+    no_ainstack (fn_code f).
 
-Definition only_main_has_ainstack_dec (p : RTL.program) : {only_main_has_ainstack p} + {~ only_main_has_ainstack p}.
+Definition only_main_has_ainstack_dec (p : RTL.program) : decision (only_main_has_ainstack p).
 Proof.
+  Definition only_main_has_ainstack_Forall (p : RTL.program) : Prop :=
+    Forall (fun '(name, blk) =>
+              forall f,
+                name <> (AST.prog_main p) ->
+                Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
+                no_ainstack (fn_code f))
+           (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+
+  apply (equiv_dec (only_main_has_ainstack_Forall p)). {
+    unfold only_main_has_ainstack, only_main_has_ainstack_Forall.
+    rewrite Forall_forall.
+    split.
+    - intros H * Hname Hfind.
+      unfold find_func in Hfind. unfold_match Hfind.
+      exploit H.
+      + rewrite <- in_elements_iff. eassumption.
+      + crush.
+    - intros H [? ?] Hin * Hname Hfind_funct.
+      rewrite <- in_elements_iff in *.
+      eapply H; eauto.
+      unfold find_func, Genv.find_symbol.
+      rewrite Hin. apply Hfind_funct.
+  }
+  intros.
   apply Forall_dec. intros [? ?].
   destruct (peq i (prog_main p)); try solve [left; crush].
   destruct (Genv.find_funct_ptr (Genv.globalenv p) b); try solve [left; crush].
   destruct f; try solve [left; crush].
   destruct (no_ainstack_dec (fn_code f)).
   all: solve [ constructor; crush ].
-Defined.
+Qed.
 
 Definition no_calls_to (name : AST.ident) (c : RTL.code) : Prop :=
-  Forall (fun '(_, instr) =>
-            match instr with
-            | Icall _ (inr name') _ _ _ => name <> name'
-            | _ => True
-            end)
-         (PTree.elements c).
+  forall n name' sig args dst pc', c ! n = Some (Icall sig (inr name') args dst pc') -> name <> name'.
 
 Definition no_calls_to_dec (name : AST.ident) (c : RTL.code) : {no_calls_to name c} + {~ no_calls_to name c}.
 Proof.
+  Definition no_calls_to_Forall (name : AST.ident) (c : RTL.code) : Prop :=
+    Forall (fun '(_, instr) =>
+              match instr with
+              | Icall _ (inr name') _ _ _ => name <> name'
+              | _ => True
+              end)
+           (PTree.elements c).
+
+  apply (equiv_dec (no_calls_to_Forall name c)). {
+    unfold no_calls_to_Forall, no_calls_to.
+    rewrite Forall_forall.
+    split.
+    - intros H * Hinstr.
+      exploit H.
+      + apply in_elements_iff. eassumption.
+      + crush.
+    - intros * H [? ?] Hin.
+      rewrite <- in_elements_iff in Hin.
+      destruct i; crush. destruct s0; crush.
+      eauto.
+  }
   apply Forall_dec. intros [? ?].
   destruct i; crush.
   destruct s0; crush.
@@ -762,14 +829,34 @@ Proof.
 Qed.
 
 Definition main_not_called (p : RTL.program) : Prop :=
-  Forall (fun '(_, blk) =>
-            forall f,
-              Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
-              no_calls_to (AST.prog_main p) (fn_code f))
-         (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+  forall name f,
+    find_func (Genv.globalenv p) name = Some (AST.Internal f) ->
+    no_calls_to (AST.prog_main p) (fn_code f).
 
 Definition main_not_called_dec (p : RTL.program) : {main_not_called p} + {~ main_not_called p}.
 Proof.
+  Definition main_not_called_Forall (p : RTL.program) : Prop :=
+    Forall (fun '(_, blk) =>
+              forall f,
+                Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
+                no_calls_to (AST.prog_main p) (fn_code f))
+           (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+
+  apply (equiv_dec (main_not_called_Forall p)). {
+    unfold main_not_called_Forall, main_not_called.
+    unfold find_func, Genv.find_symbol.
+    rewrite Forall_forall.
+    split.
+    - intros H * Hfind.
+      unfold_match Hfind.
+      exploit H.
+      + eapply in_elements_iff. eassumption.
+      + eauto.
+    - intros H [? ?] Hin * Hfind.
+      eapply H.
+      apply in_elements_iff in Hin.
+      rewrite Hin. assumption.
+  }
   apply Forall_dec. intros [? ?].
   destruct (Genv.find_funct_ptr (Genv.globalenv p) b); try solve [left; crush].
   destruct f; try solve [left; crush].
@@ -777,7 +864,46 @@ Proof.
   all: solve [constructor; crush].
 Qed.
 
+Definition only_main_has_stack (p : RTL.program) :=
+  forall name f,
+    find_func (Genv.globalenv p) name = Some (AST.Internal f) ->
+    name = (AST.prog_main p) \/ (RTL.fn_stacksize f) = 0.
+
+Definition only_main_has_stack_dec (p : RTL.program) : {only_main_has_stack p} + {~ only_main_has_stack p}.
+Proof.
+  Definition only_main_has_stack_Forall (p : RTL.program) :=
+    Forall (fun '(name, blk) =>
+              forall f,
+                Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
+                name = (AST.prog_main p) \/ (RTL.fn_stacksize f) = 0)
+           (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
+
+  apply (equiv_dec (only_main_has_stack_Forall p)). {
+    unfold only_main_has_stack_Forall, only_main_has_stack.
+    unfold find_func, Genv.find_symbol.
+    rewrite Forall_forall.
+    split.
+    - intros H * Hin.
+      unfold_match Hin.
+      exploit H.
+      + apply in_elements_iff. eassumption.
+      + eauto.
+    - intros H [? ?] Hin * Hfind.
+      apply H.
+      apply in_elements_iff in Hin.
+      rewrite Hin. eassumption.
+  }
+  intros.
+  apply Forall_dec.
+  intros [? ?].
+  destruct (Genv.find_funct_ptr (Genv.globalenv p) b); try solve [left; crush].
+  destruct f; try solve [left; crush].
+  destruct (Pos.eq_dec i (prog_main p)); try solve [left; crush].
+  destruct (Z.eq_dec (fn_stacksize f) 0); try solve [left; crush].
+  right. intro contra. exploit contra; crush.
+Qed.
+
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
-  if main_is_internal p && only_main_has_ainstack_dec p && main_not_called_dec p
+  if main_is_internal p && only_main_has_ainstack_dec p && main_not_called_dec p && only_main_has_stack_dec p
   then transform_partial_program (transl_fundef p) p
   else Errors.Error (Errors.msg "Main function is not Internal.").
