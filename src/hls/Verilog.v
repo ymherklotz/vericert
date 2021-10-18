@@ -428,7 +428,7 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       expr_runp fext reg stack fs vf ->
       valueToBool vc = false ->
       expr_runp fext reg stack (Vternary c ts fs) vf.
-Hint Constructors expr_runp : verilog.
+#[export] Hint Constructors expr_runp : verilog.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
   : res A :=
@@ -526,7 +526,7 @@ Inductive stmnt_runp: fext -> reg_associations -> arr_associations ->
     stmnt_runp f asr asa
                  (Vnonblock lhs rhs)
                  asr (nonblock_arr r i asa rhsval).
-Hint Constructors stmnt_runp : verilog.
+#[export] Hint Constructors stmnt_runp : verilog.
 
 Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
                      module_item -> reg_associations -> arr_associations -> Prop :=
@@ -540,7 +540,7 @@ Inductive mi_stepp : fext -> reg_associations -> arr_associations ->
 | mi_stepp_Vdecl :
     forall f sr0 sa0 d,
     mi_stepp f sr0 sa0 (Vdeclaration d) sr0 sa0.
-Hint Constructors mi_stepp : verilog.
+#[export] Hint Constructors mi_stepp : verilog.
 
 Inductive mi_stepp_negedge : fext -> reg_associations -> arr_associations ->
                              module_item -> reg_associations -> arr_associations -> Prop :=
@@ -554,7 +554,7 @@ Inductive mi_stepp_negedge : fext -> reg_associations -> arr_associations ->
 | mi_stepp_negedge_Vdecl :
     forall f sr0 sa0 d,
     mi_stepp_negedge f sr0 sa0 (Vdeclaration d) sr0 sa0.
-Hint Constructors mi_stepp : verilog.
+#[export] Hint Constructors mi_stepp : verilog.
 
 Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
                       list module_item -> reg_associations -> arr_associations -> Prop :=
@@ -566,7 +566,7 @@ Inductive mis_stepp : fext -> reg_associations -> arr_associations ->
 | mis_stepp_Nil :
     forall f sr sa,
     mis_stepp f sr sa nil sr sa.
-Hint Constructors mis_stepp : verilog.
+#[export] Hint Constructors mis_stepp : verilog.
 
 Inductive mis_stepp_negedge : fext -> reg_associations -> arr_associations ->
                       list module_item -> reg_associations -> arr_associations -> Prop :=
@@ -578,7 +578,7 @@ Inductive mis_stepp_negedge : fext -> reg_associations -> arr_associations ->
 | mis_stepp_negedge_Nil :
     forall f sr sa,
     mis_stepp_negedge f sr sa nil sr sa.
-Hint Constructors mis_stepp : verilog.
+#[export] Hint Constructors mis_stepp : verilog.
 
 Local Close Scope error_monad_scope.
 
@@ -634,7 +634,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
     mst = mod_st m ->
     step g (Returnstate (Stackframe r m pc asr asa :: sf) i) Events.E0
          (State sf m pc ((asr # mst <- (posToValue pc)) # r <- i) asa).
-Hint Constructors step : verilog.
+#[export] Hint Constructors step : verilog.
 
 Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b m0 m,
@@ -692,7 +692,7 @@ Proof.
                 learn (H1 _ H2)
               end; crush).
 Qed.
-Hint Resolve expr_runp_determinate : verilog.
+#[export] Hint Resolve expr_runp_determinate : verilog.
 
 Lemma location_is_determinate :
   forall f asr asa e l,
@@ -741,7 +741,7 @@ Lemma stmnt_runp_determinate :
                learn (H1 _ _ H2)
               end; crush).
 Qed.
-Hint Resolve stmnt_runp_determinate : verilog.
+#[export] Hint Resolve stmnt_runp_determinate : verilog.
 
 Lemma mi_stepp_determinate :
   forall f asr0 asa0 m asr1 asa1,

@@ -54,7 +54,7 @@ doc: Makefile.coq
 extraction: src/extraction/STAMP
 
 test:
-	./test/test_all.sh ./test
+	$(MAKE) -C test
 
 compile: src/extraction/STAMP
 	@echo "OCaml bin/vericert"
@@ -73,6 +73,7 @@ Makefile.coq:
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
+	$(MAKE) -C test clean
 	rm -f Makefile.coq
 
 clean::

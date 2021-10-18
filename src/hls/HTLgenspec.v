@@ -149,16 +149,16 @@ Inductive tr_module (ge : RTL.genv) (f : RTL.function) : module -> Prop :=
       (clk > rst)%positive ->
       externctrl_ordering externctrl clk ->
       tr_module ge f m.
-Hint Constructors tr_module : htlspec.
+#[local] Hint Constructors tr_module : htlspec.
 
-Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
-Hint Resolve Maps.PTree.elements_correct : htlspec.
-Hint Resolve Maps.PTree.gss : htlspec.
-Hint Resolve PTree.elements_complete : htlspec.
-Hint Resolve -> Z.leb_le : htlspec.
+#[local] Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
+#[local] Hint Resolve Maps.PTree.elements_correct : htlspec.
+#[local] Hint Resolve Maps.PTree.gss : htlspec.
+#[local] Hint Resolve PTree.elements_complete : htlspec.
+#[local] Hint Resolve -> Z.leb_le : htlspec.
 
-Hint Unfold block : htlspec.
-Hint Unfold nonblock : htlspec.
+#[local] Hint Unfold block : htlspec.
+#[local] Hint Unfold nonblock : htlspec.
 
 Remark bind_inversion:
   forall (A B: Type) (f: mon A) (g: A -> mon B)
@@ -395,7 +395,7 @@ Proof.
     assert (n < Datatypes.length args)%nat by eauto using nth_error_length.
     eauto.
 Qed.
-Hint Resolve map_externctrl_params_spec : htlspec.
+#[local] Hint Resolve map_externctrl_params_spec : htlspec.
 
 Lemma externctrl_params_mapped_trans : forall s s' args params fn,
     externctrl_params_mapped args params (st_externctrl s) fn ->
@@ -493,7 +493,7 @@ Proof.
   - eapply IHl; eauto.
     intuition crush.
 Qed.
-Hint Resolve iter_expand_instr_spec : htlspec.
+#[local] Hint Resolve iter_expand_instr_spec : htlspec.
 
 Lemma map_incr_some : forall {A} map (s s' : st) idx (x : A),
     (map s) ! idx = Some x ->

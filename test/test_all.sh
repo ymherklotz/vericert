@@ -1,3 +1,5 @@
+#!/bin/bash
+
 mytmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t 'mytmpdir')
 echo "--------------------------------------------------"
 echo "Created working directory: $mytmpdir"
@@ -31,7 +33,7 @@ for cfile in $test_dir/*.c; do
     gcc -o $outbase.gcc $cfile >/dev/null 2>&1
     $outbase.gcc
     expected=$?
-    vericert -drtl -o $outbase.v $cfile >/dev/null 2>&1
+    vericert -fschedule -drtl -o $outbase.v $cfile >/dev/null 2>&1
     if [[ ! -f $outbase.v ]]; then
         echo "ERROR"
         continue

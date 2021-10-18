@@ -318,7 +318,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
            (State sf mid m st (asr # fin <- (ZToValue 0)) asa).
 
 
-Hint Constructors step : htl.
+#[export] Hint Constructors step : htl.
 
 Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b m0 m,

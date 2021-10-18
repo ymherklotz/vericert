@@ -34,7 +34,7 @@ Require Import vericert.common.Show.
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
 
-Local Open Scope Z_scope.
+#[local] Open Scope Z_scope.
 
 (* This tactic due to Clement Pit-Claudel with some minor additions by JDP to
    allow the result to be named: https://pit-claudel.fr/clement/MSc/#org96a1b5f *)
@@ -235,8 +235,8 @@ Ltac crush_trans :=
 
 Ltac maybe t := t + idtac.
 
-Global Opaque Nat.div.
-Global Opaque Z.mul.
+#[global] Opaque Nat.div.
+#[global] Opaque Z.mul.
 
 Inductive Ascending : list positive -> Prop :=
   | Ascending_nil : Ascending nil
@@ -320,7 +320,7 @@ Fixpoint map_option {A B : Type} (f : A -> option B) (l : list A) : list B :=
 
 Module Notation.
 Notation "'do' X <- A ; B" := (bind A (fun X => B))
-   (at level 200, X ident, A at level 100, B at level 200).
+   (at level 200, X name, A at level 100, B at level 200).
 End Notation.
 
 End Option.

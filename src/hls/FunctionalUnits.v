@@ -21,24 +21,72 @@ Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
 
-Inductive funct_unit: Type :=
-| SignedDiv (size: positive) (numer denom quot rem: reg): funct_unit
-| UnsignedDiv (size: positive) (numer denom quot rem: reg): funct_unit
-| Ram (size: positive) (addr d_in d_out wr_en: reg): funct_unit.
+#[local] Open Scope positive.
 
-Record funct_units := mk_avail_funct_units {
-    avail_sdiv: option positive;
-    avail_udiv: option positive;
-    avail_ram: option positive;
-    avail_units: PTree.t funct_unit;
+Record divider (signed: bool) : Type :=
+  mk_divider {
+    div_stages: positive;
+    div_size: positive;
+    div_numer: reg;
+    div_denom: reg;
+    div_quot: reg;
+    div_rem: reg;
+    div_ordering: (div_numer < div_denom
+                  /\ div_denom < div_quot
+                  /\ div_quot < div_rem)
   }.
 
-Definition initial_funct_units :=
-  mk_avail_funct_units None None None (PTree.empty funct_unit).
+Arguments div_stages [signed].
+Arguments div_size [signed].
+Arguments div_numer [signed].
+Arguments div_denom [signed].
+Arguments div_quot [signed].
+Arguments div_rem [signed].
+
+Record ram := mk_ram {
+  ram_size: nat;
+  ram_mem: reg;
+  ram_en: reg;
+  ram_u_en: reg;
+  ram_addr: reg;
+  ram_wr_en: reg;
+  ram_d_in: reg;
+  ram_d_out: reg;
+  ram_ordering: (ram_addr < ram_en
+                 /\ ram_en < ram_d_in
+                 /\ ram_d_in < ram_d_out
+                 /\ ram_d_out < ram_wr_en
+                 /\ ram_wr_en < ram_u_en)
+}.
+
+Inductive funct_unit: Type :=
+| SignedDiv: divider true -> funct_unit
+| UnsignedDiv: divider false -> funct_unit
+| Ram: ram -> funct_unit.
+
+Definition funct_units := PTree.t funct_unit.
+
+Record arch := mk_arch {
+  arch_div: list positive;
+  arch_sdiv: list positive;
+  arch_ram: list positive;
+}.
+
+Record resources := mk_resources {
+  res_funct_units: funct_units;
+  res_arch: arch;
+}.
+
+Definition initial_funct_units: funct_units := PTree.empty _.
+
+Definition initial_arch := mk_arch nil nil nil.
+
+Definition initial_resources :=
+  mk_resources initial_funct_units initial_arch.
 
 Definition funct_unit_stages (f: funct_unit) : positive :=
   match f with
-  | SignedDiv s _ _ _ _ => s
-  | UnsignedDiv s _ _ _ _ => s
+  | SignedDiv d => div_stages d
+  | UnsignedDiv d => div_stages d
   | _ => 1
   end.

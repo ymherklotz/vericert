@@ -387,7 +387,7 @@ Section CORRECTNESS.
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
   Proof. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
-  Hint Resolve symbols_preserved : verilogproof.
+  #[local] Hint Resolve symbols_preserved : verilogproof.
 
 (*   Lemma function_ptr_translated: *)
 (*     forall (b: Values.block) (f: HTL.fundef), *)

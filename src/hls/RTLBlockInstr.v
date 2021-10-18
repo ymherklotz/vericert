@@ -34,17 +34,29 @@ Require Import vericert.hls.Sat.
 Local Open Scope rtl.
 
 Definition node := positive.
-Definition predicate := nat.
+Definition predicate := positive.
 
 Inductive pred_op : Type :=
 | Pvar: predicate -> pred_op
+| Ptrue: pred_op
+| Pfalse: pred_op
 | Pnot: pred_op -> pred_op
 | Pand: pred_op -> pred_op -> pred_op
 | Por: pred_op -> pred_op -> pred_op.
 
+Declare Scope pred_op.
+
+Notation "A ∧ B" := (Pand A B) (at level 20) : pred_op.
+Notation "A ∨ B" := (Por A B) (at level 25) : pred_op.
+Notation "⟂" := (Pfalse) : pred_op.
+Notation "'T'" := (Ptrue) : pred_op.
+Notation "¬ A" := (Pnot A) (at level 15) : pred_op.
+
 Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   match p with
-  | Pvar p' => a p'
+  | Pvar p' => a (Pos.to_nat p')
+  | Ptrue => true
+  | Pfalse => false
   | Pnot p' => negb (sat_predicate p' a)
   | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
   | Por p1 p2 => sat_predicate p1 a || sat_predicate p2 a
@@ -152,7 +164,9 @@ Fixpoint trans_pred_temp (bound: nat) (p: pred_op) : option formula :=
   | O => None
   | S n =>
     match p with
-    | Pvar p' => Some (((true, p') :: nil) :: nil)
+    | Pvar p' => Some (((true, Pos.to_nat p') :: nil) :: nil)
+    | Ptrue => Some nil
+    | Pfalse => Some (nil::nil)
     | Pand p1 p2 =>
       match trans_pred_temp n p1, trans_pred_temp n p2 with
       | Some p1', Some p2' =>
@@ -165,7 +179,9 @@ Fixpoint trans_pred_temp (bound: nat) (p: pred_op) : option formula :=
         Some (mult p1' p2')
       | _, _ => None
       end
-    | Pnot (Pvar p') => Some (((false, p') :: nil) :: nil)
+    | Pnot Pfalse => Some nil
+    | Pnot Ptrue => Some (nil::nil)
+    | Pnot (Pvar p') => Some (((false, Pos.to_nat p') :: nil) :: nil)
     | Pnot (Pnot p) => trans_pred_temp n p
     | Pnot (Pand p1 p2) => trans_pred_temp n (Por (Pnot p1) (Pnot p2))
     | Pnot (Por p1 p2) => trans_pred_temp n (Pand (Pnot p1) (Pnot p2))
@@ -180,7 +196,9 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
    | O => None
    | S n =>
      match p with
-     | Pvar p' => Some (exist _ (((true, p') :: nil) :: nil) _)
+     | Pvar p' => Some (exist _ (((true, Pos.to_nat p') :: nil) :: nil) _)
+     | Ptrue => Some (exist _ nil _)
+     | Pfalse => Some (exist _ (nil::nil) _)
      | Pand p1 p2 =>
       match trans_pred n p1, trans_pred n p2 with
       | Some (exist _ p1' _), Some (exist _ p2' _) =>
@@ -193,7 +211,9 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
         Some (exist _ (mult p1' p2') _)
       | _, _ => None
       end
-     | Pnot (Pvar p') => Some (exist _ (((false, p') :: nil) :: nil) _)
+     | Pnot (Pvar p') => Some (exist _ (((false, Pos.to_nat p') :: nil) :: nil) _)
+     | Pnot Ptrue => Some (exist _ (nil::nil) _)
+     | Pnot Pfalse => Some (exist _ nil _)
      | Pnot (Pnot p') =>
        match trans_pred n p' with
        | Some (exist _ p1' _) => Some (exist _ p1' _)
@@ -210,9 +230,9 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
        | None => None
        end
      end
-   end); split; intros; simpl in *; auto.
+   end); split; intros; simpl in *; auto; try solve [crush].
   - inv H. inv H0; auto.
-  - split; auto. destruct (a p') eqn:?; crush.
+  - split; auto. destruct (a (Pos.to_nat p')) eqn:?; crush.
   - inv H. inv H0. unfold satLit in H. simplify. rewrite H. auto.
     crush.
   - rewrite negb_involutive in H. apply i in H. auto.
@@ -232,7 +252,7 @@ Fixpoint trans_pred (bound: nat) (p: pred_op) :
   - apply orb_true_intro.
     apply satFormula_mult2 in H. inv H. apply i in H0. auto.
     apply i0 in H0. auto.
-Qed.
+Defined.
 
 Definition sat_pred (bound: nat) (p: pred_op) :
   option ({al : alist | sat_predicate p (interp_alist al) = true}
@@ -251,7 +271,7 @@ Definition sat_pred (bound: nat) (p: pred_op) :
   - intros. specialize (n a). specialize (i a).
     destruct (sat_predicate p a). exfalso.
     apply n. apply i. auto. auto.
-Qed.
+Defined.
 
 Definition sat_pred_simple (bound: nat) (p: pred_op) :=
   match sat_pred bound p with
@@ -331,6 +351,17 @@ Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
   end.
 
 Definition regset := Regmap.t val.
+Definition predset := PMap.t bool.
+
+Fixpoint eval_predf (pr: predset) (p: pred_op) {struct p} :=
+  match p with
+  | Pvar p' => PMap.get p' pr
+  | Ptrue => true
+  | Pfalse => false
+  | Pnot p' => negb (eval_predf pr p')
+  | Pand p' p'' => (eval_predf pr p') && (eval_predf pr p'')
+  | Por p' p'' => (eval_predf pr p') || (eval_predf pr p'')
+  end.
 
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   match rl, vl with
@@ -338,11 +369,11 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | _, _ => Regmap.init Vundef
   end.
 
-Inductive instr_state : Type :=
-| InstrState:
-    forall (rs: regset)
-           (m: mem),
-    instr_state.
+Record instr_state := mk_instr_state {
+  is_rs: regset;
+  is_ps: predset;
+  is_mem: mem;
+}.
 
 Section DEFINITION.
 
@@ -379,7 +410,8 @@ Section DEFINITION.
              (f: function)         (**r calling function *)
              (sp: val)             (**r stack pointer in calling function *)
              (pc: node)            (**r program point in calling function *)
-             (rs: regset),         (**r register state in calling function *)
+             (rs: regset)          (**r register state in calling function *)
+             (pr: predset),        (**r predicate state of the calling function *)
       stackframe.
 
   Inductive state : Type :=
@@ -389,6 +421,7 @@ Section DEFINITION.
              (sp: val)                (**r stack pointer *)
              (pc: node)               (**r current program point in [c] *)
              (rs: regset)             (**r register state *)
+             (pr: predset)            (**r predicate register state *)
              (m: mem),                (**r memory state *)
       state
   | Callstate:
@@ -424,67 +457,89 @@ Section RELSEM.
       end
     end.
 
+  Inductive eval_pred: option pred_op -> instr_state -> instr_state -> instr_state -> Prop :=
+  | eval_pred_true:
+      forall (pr: predset) p rs pr m i,
+      eval_predf pr p = true ->
+      eval_pred (Some p) (mk_instr_state rs pr m) i i
+  | eval_pred_false:
+      forall (pr: predset) p rs pr m i,
+      eval_predf pr p = false ->
+      eval_pred (Some p) (mk_instr_state rs pr m) i (mk_instr_state rs pr m)
+  | eval_pred_none:
+      forall i i',
+      eval_pred None i i' i.
+
   Inductive step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
   | exec_RBnop:
-      forall rs m sp,
-      step_instr sp (InstrState rs m) RBnop (InstrState rs m)
+      forall sp ist,
+        step_instr sp ist RBnop ist
   | exec_RBop:
-      forall op v res args rs m sp p,
-      eval_operation ge sp op rs##args m = Some v ->
-      step_instr sp (InstrState rs m)
-                 (RBop p op args res)
-                 (InstrState (rs#res <- v) m)
+      forall op v res args rs m sp p ist pr,
+        eval_operation ge sp op rs##args m = Some v ->
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#res <- v) pr m) ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBop p op args res) ist
   | exec_RBload:
-      forall addr rs args a chunk m v dst sp p,
-      eval_addressing ge sp addr rs##args = Some a ->
-      Mem.loadv chunk m a = Some v ->
-      step_instr sp (InstrState rs m)
-                 (RBload p chunk addr args dst)
-                 (InstrState (rs#dst <- v) m)
+      forall addr rs args a chunk m v dst sp p pr ist,
+        eval_addressing ge sp addr rs##args = Some a ->
+        Mem.loadv chunk m a = Some v ->
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#dst <- v) pr m) ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBload p chunk addr args dst) ist
   | exec_RBstore:
-      forall addr rs args a chunk m src m' sp p,
-      eval_addressing ge sp addr rs##args = Some a ->
-      Mem.storev chunk m a rs#src = Some m' ->
-      step_instr sp (InstrState rs m)
-                 (RBstore p chunk addr args src)
-                 (InstrState rs m').
+      forall addr rs args a chunk m src m' sp p pr ist,
+        eval_addressing ge sp addr rs##args = Some a ->
+        Mem.storev chunk m a rs#src = Some m' ->
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state rs pr m') ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBstore p chunk addr args src) ist
+  | exec_RBsetpred:
+      forall sp rs pr m p c b args,
+      Op.eval_condition c rs##args m = Some b ->
+      step_instr sp (mk_instr_state rs pr m) (RBsetpred c args p)
+                 (mk_instr_state rs (PMap.set p b pr) m).
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:
-    forall s f sp rs m res fd ros sig args pc pc',
+    forall s f sp rs m res fd ros sig args pc pc' pr,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
-      step_cf_instr (State s f sp pc rs m) (RBcall sig ros args res pc')
-           E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
+      step_cf_instr (State s f sp pc rs pr m) (RBcall sig ros args res pc')
+           E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
   | exec_RBtailcall:
-      forall s f stk rs m sig ros args fd m' pc,
+      forall s f stk rs m sig ros args fd m' pc pr,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs m) (RBtailcall sig ros args)
+      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs pr m) (RBtailcall sig ros args)
         E0 (Callstate s fd rs##args m')
   | exec_RBbuiltin:
-      forall s f sp rs m ef args res pc' vargs t vres m' pc,
+      forall s f sp rs m ef args res pc' vargs t vres m' pc pr,
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
-      step_cf_instr (State s f sp pc rs m) (RBbuiltin ef args res pc')
-         t (State s f sp pc' (regmap_setres res vres rs) m')
+      step_cf_instr (State s f sp pc rs pr m) (RBbuiltin ef args res pc')
+         t (State s f sp pc' (regmap_setres res vres rs) pr m')
   | exec_RBcond:
-      forall s f sp rs m cond args ifso ifnot b pc pc',
+      forall s f sp rs m cond args ifso ifnot b pc pc' pr,
       eval_condition cond rs##args m = Some b ->
       pc' = (if b then ifso else ifnot) ->
-      step_cf_instr (State s f sp pc rs m) (RBcond cond args ifso ifnot)
-        E0 (State s f sp pc' rs m)
+      step_cf_instr (State s f sp pc rs pr m) (RBcond cond args ifso ifnot)
+        E0 (State s f sp pc' rs pr m)
   | exec_RBjumptable:
-      forall s f sp rs m arg tbl n pc pc',
+      forall s f sp rs m arg tbl n pc pc' pr,
       rs#arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some pc' ->
-      step_cf_instr (State s f sp pc rs m) (RBjumptable arg tbl)
-        E0 (State s f sp pc' rs m)
-  | exec_Ireturn:
-      forall s f stk rs m or pc m',
+      step_cf_instr (State s f sp pc rs pr m) (RBjumptable arg tbl)
+        E0 (State s f sp pc' rs pr m)
+  | exec_RBreturn:
+      forall s f stk rs m or pc m' pr,
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs m) (RBreturn or)
-        E0 (Returnstate s (regmap_optget or Vundef rs) m').
+      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs pr m) (RBreturn or)
+        E0 (Returnstate s (regmap_optget or Vundef rs) m')
+  | exec_RBgoto:
+      forall s f sp pc rs pr m pc',
+      step_cf_instr (State s f sp pc rs pr m) (RBgoto pc') E0 (State s f sp pc' rs pr m)
+  | exec_RBpred_cf:
+      forall s f sp pc rs pr m cf1 cf2 st' p t,
+      step_cf_instr (State s f sp pc rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
+      step_cf_instr (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
 
 End RELSEM.

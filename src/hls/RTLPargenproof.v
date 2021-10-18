@@ -38,34 +38,29 @@ Inductive match_stackframes: RTLBlock.stackframe -> RTLPar.stackframe -> Prop :=
 | match_stackframe:
     forall f tf res sp pc rs rs',
       transl_function f = OK tf ->
-      regs_lessdef rs rs' ->
+      (forall x, rs !! x = rs' !! x) ->
       match_stackframes (Stackframe res f sp pc rs)
                         (Stackframe res tf sp pc rs').
 
 Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
 | match_state:
-    forall sf f sp pc rs rs' m m' sf' tf
+    forall sf f sp pc rs rs' m sf' tf
       (TRANSL: transl_function f = OK tf)
       (STACKS: list_forall2 match_stackframes sf sf')
-      (REG: regs_lessdef rs rs')
-      (MEM: Mem.extends m m'),
+      (REG: forall x, rs !! x = rs' !! x),
       match_states (State sf f sp pc rs m)
-                   (State sf' tf sp pc rs' m')
+                   (State sf' tf sp pc rs' m)
 | match_returnstate:
-    forall stack stack' v v' m m'
-      (STACKS: list_forall2 match_stackframes stack stack')
-      (MEM: Mem.extends m m')
-      (LD: Val.lessdef v v'),
+    forall stack stack' v m
+      (STACKS: list_forall2 match_stackframes stack stack'),
       match_states (Returnstate stack v m)
-                   (Returnstate stack' v' m')
+                   (Returnstate stack' v m)
 | match_callstate:
-    forall stack stack' f tf args args' m m'
+    forall stack stack' f tf args m
       (TRANSL: transl_fundef f = OK tf)
-      (STACKS: list_forall2 match_stackframes stack stack')
-      (LD: Val.lessdef_list args args')
-      (MEM: Mem.extends m m'),
+      (STACKS: list_forall2 match_stackframes stack stack'),
       match_states (Callstate stack f args m)
-                   (Callstate stack' tf args' m').
+                   (Callstate stack' tf args m).
 
 Section CORRECTNESS.
 
@@ -121,7 +116,7 @@ Section CORRECTNESS.
 
   Lemma find_function_translated:
     forall ros rs rs' f,
-      regs_lessdef rs rs' ->
+      (forall x, rs !! x = rs' !! x) ->
       find_function ge ros rs = Some f ->
       exists tf, find_function tge ros rs' = Some tf
                  /\ transl_fundef f = OK tf.
@@ -134,7 +129,7 @@ Section CORRECTNESS.
                  | [ H: Genv.find_funct _ Vundef = Some _ |- _] => solve [inv H]
                  | _ => solve [exploit functions_translated; eauto]
                  end.
-    unfold regs_lessdef; destruct ros; simplify; try rewrite <- H;
+    destruct ros; simplify; try rewrite <- H;
     [| rewrite symbols_preserved; destruct_match;
       try (apply function_ptr_translated); crush ];
     intros;
@@ -160,8 +155,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma eval_op_eq:
-    forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val),
-      Op.eval_operation ge sp0 op vl = Op.eval_operation tge sp0 op vl.
+    forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
+      Op.eval_operation ge sp0 op vl m = Op.eval_operation tge sp0 op vl m.
   Proof using TRANSL.
     intros.
     destruct op; auto; unfold Op.eval_operation, Genv.symbol_address, Op.eval_addressing32;
@@ -197,6 +192,16 @@ Section CORRECTNESS.
   Proof using. destruct or; crush. Qed.
   Hint Resolve lessdef_regmap_optget : rtlgp.
 
+  Lemma regmap_equiv_lessdef:
+    forall rs rs',
+      (forall x, rs !! x = rs' !! x) ->
+      regs_lessdef rs rs'.
+  Proof using.
+    intros; unfold regs_lessdef; intros.
+    rewrite H. apply Val.lessdef_refl.
+  Qed.
+  Hint Resolve regmap_equiv_lessdef : rtlgp.
+
   Lemma int_lessdef:
     forall rs rs',
       regs_lessdef rs rs' ->
@@ -227,8 +232,8 @@ Section CORRECTNESS.
       let H2 := fresh "SCHED" in
       learn H as H2;
       apply schedule_oracle_nil in H2
-    | [ H: find_function _ _ _ = Some _ |- _ ] =>
-      learn H; exploit find_function_translated; eauto; inversion 1
+    | [ H: find_function _ _ _ = Some _, H2: forall x, ?rs !! x = ?rs' !! x |- _ ] =>
+      learn H; exploit find_function_translated; try apply H2; eauto; inversion 1
     | [ H: Mem.free ?m _ _ _ = Some ?m', H2: Mem.extends ?m ?m'' |- _ ] =>
       learn H; exploit Mem.free_parallel_extends; eauto; intros
     | [ H: Events.eval_builtin_args _ _ _ _ _ _, H2: regs_lessdef ?rs ?rs' |- _ ] =>
@@ -249,6 +254,29 @@ Section CORRECTNESS.
   Hint Resolve set_reg_lessdef : rtlgp.
   Hint Resolve Op.eval_condition_lessdef : rtlgp.
 
+  Hint Constructors Events.eval_builtin_arg: barg.
+
+  Lemma eval_builtin_arg_eq:
+    forall A ge a v1 m1 e1 e2 sp,
+      (forall x, e1 x = e2 x) ->
+      @Events.eval_builtin_arg A ge e1 sp m1 a v1 ->
+      Events.eval_builtin_arg ge e2 sp m1 a v1.
+Proof. induction 2; try rewrite H; eauto with barg. Qed.
+
+  Lemma eval_builtin_args_eq:
+    forall A ge e1 sp m1 e2 al vl1,
+      (forall x, e1 x = e2 x) ->
+      @Events.eval_builtin_args A ge e1 sp m1 al vl1 ->
+      Events.eval_builtin_args ge e2 sp m1 al vl1.
+  Proof.
+    induction 2.
+    - econstructor; split.
+    - exploit eval_builtin_arg_eq; eauto. intros.
+      destruct IHlist_forall2 as [| y]. constructor; eauto.
+      constructor. constructor; auto.
+      constructor; eauto.
+  Qed.
+
   Lemma step_cf_instr_correct:
     forall cfi t s s',
       step_cf_instr ge s cfi t s' ->
@@ -257,7 +285,22 @@ Section CORRECTNESS.
         exists r', step_cf_instr tge r cfi t r' /\ match_states s' r'.
   Proof using TRANSL.
     induction 1; repeat semantics_simpl;
-    repeat (econstructor; eauto with rtlgp).
+    try solve [repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp)].
+    { do 3 (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
+      eapply eval_builtin_args_eq. eapply REG.
+      eapply Events.eval_builtin_args_preserved. eapply symbols_preserved.
+      eauto.
+      intros.
+      unfold regmap_setres. destruct res.
+      destruct (Pos.eq_dec x0 x); subst.
+      repeat rewrite Regmap.gss; auto.
+      repeat rewrite Regmap.gso; auto.
+      eapply REG. eapply REG.
+    }
+    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
+      unfold regmap_optget. destruct or. rewrite REG. constructor; eauto.
+      constructor; eauto.
+    }
   Qed.
 
   Theorem transl_step_correct :
@@ -269,21 +312,69 @@ Section CORRECTNESS.
   Proof.
 
     induction 1; repeat semantics_simpl.
-    Abort.
 
-(*    { destruct bb as [bbc bbe]; destruct x as [bbc' bbe'].
-      assert (bbe = bbe') by admit.
-      rewrite H3 in H5.
-      eapply abstract_execution_correct in H5; eauto with rtlgp.
-      repeat econstructor; eauto with rtlgp. simplify.
-      exploit step_cf_instr_correct. eauto.
-      econstructor; eauto with rtlgp.
+    { destruct bb; destruct x.
+      assert (bb_exit = bb_exit0).
+      { unfold schedule_oracle in *. simplify.
+        unfold check_control_flow_instr in *.
+        destruct_match; crush.
+      }
+      subst.
+
+      exploit abstract_execution_correct; try eassumption. eapply ge_preserved_lem.
+      econstructor; eauto.
+      inv_simp. destruct x. inv H7.
+
+      exploit step_cf_instr_correct; try eassumption. econstructor; eauto.
+      inv_simp.
+
+      econstructor. econstructor. eapply Smallstep.plus_one. econstructor.
+      eauto. eauto. simplify. eauto. eauto.
     }
-    { unfold bind in *. destruct_match; try discriminate. repeat semantics_simpl. inv TRANSL0.
-      repeat econstructor; eauto. }
+    { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
+      inv H2. unfold transl_function in Heqr. destruct_match; crush.
+      inv Heqr. 
+      repeat econstructor; eauto.
+      unfold bind in *. destruct_match; crush.
+    }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
-    { inv STACKS. inv H2. repeat econstructor; eauto. }
-  Qed.*)
+    { inv STACKS. inv H2. repeat econstructor; eauto.
+      intros. apply PTree_matches; eauto.
+    }
+  Qed.
+
+  Lemma transl_initial_states:
+    forall S,
+      RTLBlock.initial_state prog S ->
+      exists R, RTLPar.initial_state tprog R /\ match_states S R.
+  Proof.
+    induction 1.
+    exploit function_ptr_translated; eauto. intros [tf [A B]].
+    econstructor; split.
+    econstructor. apply (Genv.init_mem_transf_partial TRANSL); eauto.
+    replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+    symmetry; eapply match_program_main; eauto.
+    eexact A.
+    rewrite <- H2. apply sig_transl_function; auto.
+    constructor. auto. constructor.
+  Qed.
+
+  Lemma transl_final_states:
+    forall S R r,
+      match_states S R -> RTLBlock.final_state S r -> RTLPar.final_state R r.
+  Proof.
+    intros. inv H0. inv H. inv STACKS. constructor.
+  Qed.
+
+  Theorem transf_program_correct:
+    Smallstep.forward_simulation (RTLBlock.semantics prog) (RTLPar.semantics tprog).
+  Proof.
+    eapply Smallstep.forward_simulation_plus.
+    apply senv_preserved.
+    eexact transl_initial_states.
+    eexact transl_final_states.
+    exact transl_step_correct.
+  Qed.
 
 End CORRECTNESS.
 *)

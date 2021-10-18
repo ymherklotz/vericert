@@ -65,6 +65,8 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintClight.destination option_dclight ".light.c";
   set_dest Vericert.PrintCminor.destination option_dcminor ".cm";
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
+  set_dest Vericert.PrintRTLBlock.destination option_drtlblock ".rtlblock";
+  set_dest Vericert.PrintRTLPar.destination option_drtlpar ".rtlpar";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
@@ -92,7 +94,7 @@ let compile_c_file sourcename ifile ofile =
   end else begin
     let verilog =
       let translation = if !option_hls_schedule
-                        then Vericert.Compiler0.transf_hls
+                        then Vericert.Compiler0.transf_hls_temp
                         else Vericert.Compiler0.transf_hls
       in
       match translation csyntax with
@@ -390,6 +392,7 @@ let cmdline_actions =
   Exact "-dcminor", Set option_dcminor;
   Exact "-drtl", Set option_drtl;
   Exact "-drtlblock", Set option_drtlblock;
+  Exact "-drtlpar", Set option_drtlpar;
   Exact "-dhtl", Set option_dhtl;
   Exact "-dltl", Set option_dltl;
   Exact "-dalloctrace", Set option_dalloctrace;
@@ -403,6 +406,7 @@ let cmdline_actions =
     option_dcminor := true;
     option_drtl := true;
     option_drtlblock := true;
+    option_drtlpar := true;
     option_dhtl := true;
     option_dltl := true;
     option_dalloctrace := true;

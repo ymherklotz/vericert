@@ -1,42 +1,65 @@
 # -*- fill-column: 80 -*-
+#+title: Vericert Changelog
+#+author: Yann Herklotz
+#+email: git@ymhg.org
 
-* Vericert Changelog
+* Unreleased
 
-** Unreleased
+** New Features
 
-*** New Features
-
-- Add *RTLBlock*, a basic block intermediate language that is based on CompCert's
+- Add ~RTLBlock~, a basic block intermediate language that is based on CompCert's
   RTL.
-- Add *RTLPar*, which can execute groups of instructions in parallel.
-- Add scheduling pass to go from RTLBlock to RTLPar.
+- Add ~RTLPar~, which can execute groups of instructions in parallel.
+- Add SDC hyper-block scheduling pass to go from RTLBlock to RTLPar using.
+- Add operation chaining support to scheduler.
+- Add ~Abstr~ intermediate language for equivalence checking of schedule.
+- Add built-in verified SAT solver used for equivalence checking of
+  hyper-blocks.
 
-** v1.1.0 - 2020-12-17
+* 2021-10-01 - v1.2.2
+
+Mainly fix some documentation and remove any ~Admitted~ theorems, even though
+these were in parts of the compiler that were never used.
+
+* 2021-07-12 - v1.2.1
+
+Main release for OOPSLA'21 paper.
+
+- Add better documentation on how to run Vericert.
+- Add =Dockerfile= with instructions on how to get figures of the paper.
+
+* 2021-04-07 - v1.2.0
+
+** New Features
+
+- Add memory inference capabilities in generated hardware.
+
+* 2020-12-17 - v1.1.0
 
 Add a stable release with all proofs completed.
 
-** v1.0.1 - 2020-08-14
+* 2020-08-14 - v1.0.1
 
 Release a new minor version fixing all proofs and fixing scripts to generate the
 badges.
 
-*** Bug Fixes
+** Fixes
 
 - Fix some of the proofs which were not passing.
 
-** v1.0.0 - 2020-08-13
+* 2020-08-13 - v1.0.0
 
 First release of a fully verified version of Vericert with support for the
 translation of many C constructs to Verilog.
 
-*** New Features
+** New Features
 
 - Most int instructions and operators.
 - Non-recursive function calls.
 - Local arrays, structs and unions of type int.
 - Pointer arithmetic with int.
 
-** v0.1.0 - 2020-04-03
+* 2020-04-03 - v0.1.0
 
 This is the first release with working HLS but without any proofs associated
 with it.
