@@ -707,10 +707,12 @@ Definition main_is_internal (p : RTL.program) : bool :=
   | _ => false
   end.
 
-Definition ainstack_instr i :=
+Definition main_only_instr i :=
   match i with
   | Iop (Op.Olea (Op.Ainstack _)) _ _ _ => True
   | Iop (Op.Oleal (Op.Ainstack _)) _ _ _ => True
+  | Iload _ _ _ _ _ => True
+  | Istore _ _ _ _ _ => True
   | _ => False
   end.
 
@@ -725,18 +727,22 @@ Proof.
   solve [destruct Pdec; rewrite equiv in *; constructor; trivial].
 Qed.
 
-Definition ainstack_instr_dec : forall i, {ainstack_instr i} + {~ ainstack_instr i}.
-Proof. destruct i; crush. destruct o; crush; destruct a; crush. Defined.
-
-Definition no_ainstack (c : code) : Prop :=
-  forall n i, c ! n = Some i -> ~ ainstack_instr i.
-
-Definition no_ainstack_dec (c : code) : decision (no_ainstack c).
+Definition main_only_instr_dec : forall i, decision (main_only_instr i).
 Proof.
-  Definition no_ainstack_Forall (c : code) : Prop :=
-    Forall (fun '(n, i) => ~ ainstack_instr i) (PTree.elements c).
-  apply (equiv_dec (no_ainstack_Forall c)). {
-    unfold no_ainstack, no_ainstack_Forall.
+  unfold decision.
+  destruct i; crush.
+  destruct o; crush; destruct a; crush.
+Qed.
+
+Definition no_main_only_instrs (c : code) : Prop :=
+  forall n i, c ! n = Some i -> ~ main_only_instr i.
+
+Definition no_main_only_instrs_dec (c : code) : decision (no_main_only_instrs c).
+Proof.
+  Definition no_main_only_instrs_Forall (c : code) : Prop :=
+    Forall (fun '(n, i) => ~ main_only_instr i) (PTree.elements c).
+  apply (equiv_dec (no_main_only_instrs_Forall c)). {
+    unfold no_main_only_instrs, no_main_only_instrs_Forall.
     split; intros.
     - rewrite Forall_forall in H.
       rewrite in_elements_iff in H0.
@@ -747,7 +753,7 @@ Proof.
   }
   apply Forall_dec.
   intros [? ?].
-  destruct (ainstack_instr_dec i); auto.
+  destruct (main_only_instr_dec i); auto.
 Qed.
 
 Definition find_func {F V} (ge : Genv.t F V) name :=
@@ -756,24 +762,24 @@ Definition find_func {F V} (ge : Genv.t F V) name :=
   | None => None
   end.
 
-Definition only_main_has_ainstack (p : RTL.program) : Prop :=
+Definition only_allowed_instrs (p : RTL.program) : Prop :=
   forall name f,
     name <> (AST.prog_main p) ->
     find_func (Genv.globalenv p) name = Some (AST.Internal f) ->
-    no_ainstack (fn_code f).
+    no_main_only_instrs (fn_code f).
 
-Definition only_main_has_ainstack_dec (p : RTL.program) : decision (only_main_has_ainstack p).
+Definition only_allowed_instrs_dec (p : RTL.program) : decision (only_allowed_instrs p).
 Proof.
-  Definition only_main_has_ainstack_Forall (p : RTL.program) : Prop :=
+  Definition only_allowed_instrs_Forall (p : RTL.program) : Prop :=
     Forall (fun '(name, blk) =>
               forall f,
                 name <> (AST.prog_main p) ->
                 Genv.find_funct_ptr (Genv.globalenv p) blk = Some (AST.Internal f) ->
-                no_ainstack (fn_code f))
+                no_main_only_instrs (fn_code f))
            (PTree.elements (Genv.genv_symb (Genv.globalenv p))).
 
-  apply (equiv_dec (only_main_has_ainstack_Forall p)). {
-    unfold only_main_has_ainstack, only_main_has_ainstack_Forall.
+  apply (equiv_dec (only_allowed_instrs_Forall p)). {
+    unfold only_allowed_instrs, only_allowed_instrs_Forall.
     rewrite Forall_forall.
     split.
     - intros H * Hname Hfind.
@@ -792,19 +798,19 @@ Proof.
   destruct (peq i (prog_main p)); try solve [left; crush].
   destruct (Genv.find_funct_ptr (Genv.globalenv p) b); try solve [left; crush].
   destruct f; try solve [left; crush].
-  destruct (no_ainstack_dec (fn_code f)).
+  destruct (no_main_only_instrs_dec (fn_code f)).
   all: solve [ constructor; crush ].
 Qed.
 
 Definition no_calls_to (name : AST.ident) (c : RTL.code) : Prop :=
-  forall n name' sig args dst pc', c ! n = Some (Icall sig (inr name') args dst pc') -> name <> name'.
+  forall n name' sig args dst pc', c ! n = Some (Icall sig (inr name') args dst pc') -> name' <> name.
 
 Definition no_calls_to_dec (name : AST.ident) (c : RTL.code) : {no_calls_to name c} + {~ no_calls_to name c}.
 Proof.
   Definition no_calls_to_Forall (name : AST.ident) (c : RTL.code) : Prop :=
     Forall (fun '(_, instr) =>
               match instr with
-              | Icall _ (inr name') _ _ _ => name <> name'
+              | Icall _ (inr name') _ _ _ => name' <> name
               | _ => True
               end)
            (PTree.elements c).
@@ -904,6 +910,6 @@ Proof.
 Qed.
 
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
-  if main_is_internal p && only_main_has_ainstack_dec p && main_not_called_dec p && only_main_has_stack_dec p
+  if main_is_internal p && only_allowed_instrs_dec p && main_not_called_dec p && only_main_has_stack_dec p
   then transform_partial_program (transl_fundef p) p
   else Errors.Error (Errors.msg "Main function is not Internal.").

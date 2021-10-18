@@ -164,7 +164,7 @@ Inductive match_frames (prog : RTL.program) (current_id : HTL.ident) (mem : Memo
       (EXTERN_CALLER : has_externctrl m current_id ret rst fin)
       (MEXTERNCTRL : match_externctrl m asr)
       (NO_MAIN_CALLS : (mid = (AST.prog_main prog) -> rtl_tl = nil))
-      (FUNC_NAME : HTL.find_func (Genv.globalenv prog) mid = Some (AST.Internal f))
+      (FUNC_NAME : find_func (Genv.globalenv prog) mid = Some (AST.Internal f))
       (JOIN_CTRL : (HTL.mod_controllogic m)!st = Some (state_wait (HTL.mod_st m) fin pc))
       (JOIN_DATA : (HTL.mod_datapath m)!st = Some (join fin rst ret dst))
       (TAILS : match_frames prog mid mem rtl_tl htl_tl)
@@ -190,7 +190,7 @@ Inductive match_states (prog : RTL.program) : RTL.state -> HTL.state -> Prop :=
     (CONST : match_constants m asr)
     (MEXTERNCTRL : match_externctrl m asr)
     (NO_MAIN_CALLS : (mid = (AST.prog_main prog) -> rtl_stk = nil))
-    (FUNC_NAME : HTL.find_func (Genv.globalenv prog) mid = Some (AST.Internal f)),
+    (FUNC_NAME : find_func (Genv.globalenv prog) mid = Some (AST.Internal f)),
     match_states prog
                  (RTL.State rtl_stk     f sp st rs      mem)
                  (HTL.State htl_stk mid m    st asr asa    )
@@ -212,7 +212,7 @@ Inductive match_states (prog : RTL.program) : RTL.state -> HTL.state -> Prop :=
     (ARGS_BASED : Forall (fun a => stack_based a blk) rtl_args)
     (MARGS : list_forall2 val_value_lessdef rtl_args htl_args)
     (NO_MAIN_CALLS : (mid = (AST.prog_main prog) -> rtl_stk = nil))
-    (FUNC_NAME : HTL.find_func (Genv.globalenv prog) mid = Some (AST.Internal f)),
+    (FUNC_NAME : find_func (Genv.globalenv prog) mid = Some (AST.Internal f)),
       match_states prog
                    (RTL.Callstate rtl_stk     (AST.Internal f) rtl_args mem)
                    (HTL.Callstate htl_stk mid m                htl_args).
@@ -222,7 +222,8 @@ Definition match_prog (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef p f = Errors.OK tf) eq p tp /\
   main_is_internal p = true /\
   main_not_called p /\
-  only_main_has_ainstack p.
+  only_allowed_instrs p /\
+  only_main_has_stack p.
 
 Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
   TransfLink (fun (p1: RTL.program) (p2: HTL.program) => match_prog p1 p2).
@@ -266,8 +267,9 @@ Lemma transf_program_match:
 Proof.
   intros. unfold transl_program in H.
   destruct (main_is_internal p) eqn:?; try discriminate.
-  destruct (only_main_has_ainstack_dec p); try discriminate.
+  destruct (only_allowed_instrs_dec p); try discriminate.
   destruct (main_not_called_dec p); try discriminate.
+  destruct (only_main_has_stack_dec p); try discriminate.
   unfold match_prog.
   crush.
   apply Linking.match_transform_partial_program. assumption.
@@ -568,6 +570,10 @@ Section CORRECTNESS.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
+  Ltac inv_transl :=
+    move TRANSL at bottom;
+    destruct TRANSL as [MPROG [MAIN_INTERNAL [MAIN_NOT_CALLED [ONLY_ALLOWED_INSTRS MAIN_ONLY_STACK]]]].
+
   (** The following are assumed to be guaranteed by an inlining pass previous to
       this translation. [ only_main_stores ] should be a direct result of that
       inlining.
@@ -575,18 +581,38 @@ Section CORRECTNESS.
       [ no_stack_functions ] and [ no_stack_calls ] might be provable as
       corollaries of [ only_main_stores ]
    *)
-  Axiom only_main_stores : forall rtl_stk f sp pc pc' rs mem htl_stk mid m asr asa a b c d,
+  Lemma only_main_stores : forall rtl_stk f sp pc pc' rs mem htl_stk mid m asr asa a b c d,
       match_states prog (RTL.State rtl_stk f sp pc rs mem) (HTL.State htl_stk mid m pc asr asa) ->
       (RTL.fn_code f) ! pc = Some (RTL.Istore a b c d pc') ->
       (rtl_stk = nil /\ htl_stk = nil).
+  Proof.
+    intros.
+    inv H. inv_transl.
+    destruct (Pos.eq_dec mid (AST.prog_main prog)).
+    - exploit NO_MAIN_CALLS; crush.
+      inv MF; crush.
+    - exfalso.
+      unfold only_allowed_instrs, no_main_only_instrs in *.
+      eapply ONLY_ALLOWED_INSTRS; eauto; crush.
+  Qed.
 
-  Axiom no_stack_functions : forall f sp rs mem st rtl_stk S,
+  Lemma no_stack_functions : forall f sp rs mem st rtl_stk S,
       match_states prog (RTL.State rtl_stk f sp st rs mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+  Proof.
+    intros * MATCH.
+    inv MATCH. inv_transl.
+    edestruct MAIN_ONLY_STACK; eauto; crush.
+  Qed.
 
-  Axiom no_stack_calls : forall f mem args rtl_stk S,
+  Lemma no_stack_calls : forall f mem args rtl_stk S,
       match_states prog (RTL.Callstate rtl_stk (AST.Internal f) args mem) S ->
       (RTL.fn_stacksize f) = 0 \/ rtl_stk = nil.
+  Proof.
+    intros * MATCH.
+    inv MATCH. inv_transl.
+    edestruct MAIN_ONLY_STACK; eauto; crush.
+  Qed.
 
   Lemma mem_free_zero_match_frames : forall rtl_stk htl_stk mem mem' blk id,
       Mem.free mem blk 0 0 = Some mem' ->
@@ -753,14 +779,14 @@ Section CORRECTNESS.
 
   Lemma match_find_function : forall fn rs f m,
       RTL.find_function ge (inr fn) rs = Some (AST.Internal f) ->
-      HTL.find_func tge fn = Some (AST.Internal m) ->
+      find_func tge fn = Some (AST.Internal m) ->
       tr_module ge f m.
   Proof.
     intros * Hrtl Hhtl.
     destruct TRANSL as [MATCH _].
 
     unfold RTL.find_function in *. unfold_match Hrtl.
-    unfold HTL.find_func in *. unfold_match Hhtl.
+    unfold find_func in *. unfold_match Hhtl.
     replace b0 with b in *. clear b0.
 
     destruct (function_ptr_translated _ _ Hrtl) as [tf [? ?]].
@@ -775,12 +801,19 @@ Section CORRECTNESS.
     - scongruence use: symbols_preserved.
   Qed.
 
+  Definition is_ainstack_op op :=
+    match op with
+    | Op.Olea (Op.Ainstack _) => True
+    | Op.Oleal (Op.Ainstack _) => True
+    | _ => False
+    end.
+
   Lemma op_stack_based :
     forall F V sp blk v m args rs op ge pc' res0 pc f e fin rtrn st stk,
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
                (Verilog.Vnonblock (Verilog.Vvar res0) e)
                (state_goto st pc') ->
-      (sp = Values.Vptr blk Ptrofs.zero \/ ~ ainstack_instr (RTL.Iop op args res0 pc')) ->
+      (sp = Values.Vptr blk Ptrofs.zero \/ ~ is_ainstack_op op) ->
       reg_stack_based_pointers blk rs ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
       @Op.eval_operation F V ge sp op
@@ -1513,41 +1546,45 @@ Section CORRECTNESS.
       [eauto; crush; shelve | eauto; crush; try trans_match_externctrl]
     ).
 
-  Ltac inv_transl :=
-    move TRANSL at bottom;
-    destruct TRANSL as [MPROG [MAIN_INTERNAL [MAIN_NOT_CALLED MAIN_ONLY_AINSTACK]]].
-
   Lemma in_elements_iff : forall A (t : PTree.t A) k v,
       In (k, v) (PTree.elements t) <-> t ! k = Some v.
   Proof using Type.
     split; auto using PTree.elements_complete,PTree.elements_correct.
   Qed.
 
-  Lemma apply_only_main_has_ainstack : forall id f pc op args res pc',
-      HTL.find_func ge id = Some (AST.Internal f) ->
-      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
-      id = (AST.prog_main prog) \/ ~ ainstack_instr (RTL.Iop op args res pc').
-  Proof using TRANSL.
-    intros.
-    inv_transl.
-    destruct (Pos.eq_dec id (AST.prog_main prog)); crush.
-    right.
-    unfold HTL.find_func in H. unfold_match H.
-    unfold only_main_has_ainstack in MAIN_ONLY_AINSTACK.
-    rewrite Forall_forall in MAIN_ONLY_AINSTACK.
-    exploit MAIN_ONLY_AINSTACK.
-    + unfold Genv.find_symbol in *.
-      rewrite in_elements_iff.
-      eassumption.
-    + simpl.
-      let H := fresh "H" in intro H; exploit H; try solve [eauto; crush].
-      intro Hno_ainstack.
-      unfold no_ainstack in Hno_ainstack.
-      rewrite Forall_forall in Hno_ainstack.
-      exploit Hno_ainstack.
-      * eapply in_elements_iff. eassumption.
-      * crush.
-  Qed.
+  (* Lemma apply_only_main_has_ainstack : forall id f pc op args res pc', *)
+  (*     find_func ge id = Some (AST.Internal f) -> *)
+  (*     (RTL.fn_code f) ! pc = Some i -> *)
+  (*     id = (AST.prog_main prog) \/ ~ ainstack_instr i. *)
+  (* Proof using TRANSL. *)
+  (*   intros. *)
+  (*   inv_transl. *)
+  (*   destruct (Pos.eq_dec id (AST.prog_main prog)); try solve [crush]. *)
+  (*   red in ONLY_ALLOWED_INSTRS. *)
+  (*   exploit ONLY_ALLOWED_INSTRS. *)
+  (*   - eauto. *)
+  (*   - eauto. *)
+  (*   - eauto. *)
+  (*   - eauto. *)
+  (*   -  *)
+
+  (*   right. *)
+  (*   unfold find_func in H. unfold_match H. *)
+  (*   unfold only_main_has_ainstack in ONLY_ALLOWED_INSTRS. *)
+  (*   rewrite Forall_forall in ONLY_ALLOWED_INSTRS. *)
+  (*   exploit ONLY_ALLOWED_INSTRS. *)
+  (*   + unfold Genv.find_symbol in *. *)
+  (*     rewrite in_elements_iff. *)
+  (*     eassumption. *)
+  (*   + simpl. *)
+  (*     let H := fresh "H" in intro H; exploit H; try solve [eauto; crush]. *)
+  (*     intro Hno_ainstack. *)
+  (*     unfold no_ainstack in Hno_ainstack. *)
+  (*     rewrite Forall_forall in Hno_ainstack. *)
+  (*     exploit Hno_ainstack. *)
+  (*     * eapply in_elements_iff. eassumption. *)
+  (*     * crush. *)
+  (* Qed. *)
 
   Lemma transl_iop_correct:
     forall (s : list RTL.stackframe) (f : RTL.function) (sp : Values.val) (pc : positive)
@@ -1585,12 +1622,13 @@ Section CORRECTNESS.
       + (* TODO: Break this up into lemmas *)
 
         inv_transl.
-        assert (sp = Values.Vptr blk Ptrofs.zero \/ ~ ainstack_instr (RTL.Iop op args res0 pc')). {
+        assert (sp = Values.Vptr blk Ptrofs.zero \/ ~ is_ainstack_op op). {
           destruct (Pos.eq_dec mid (AST.prog_main prog)).
           - rewrite NO_MAIN_CALLS in * by assumption.
             inv SP_BASE; inv H12.
             crush.
-          - edestruct apply_only_main_has_ainstack; eauto.
+          - unfold only_allowed_instrs, no_main_only_instrs in ONLY_ALLOWED_INSTRS.
+            enough (~ main_only_instr (RTL.Iop op args res0 pc')); eauto.
         }
         eauto using op_stack_based.
       + inv CONST. constructor; simplify.
@@ -1826,11 +1864,11 @@ Section CORRECTNESS.
 
   Lemma only_internal_calls : forall fd fn rs,
       RTL.find_function ge (inr fn) rs = Some fd ->
-      (exists f : RTL.function, HTL.find_func ge fn = Some (AST.Internal f)) ->
+      (exists f : RTL.function, find_func ge fn = Some (AST.Internal f)) ->
       (exists f, fd = AST.Internal f).
   Proof.
     intros * ? [? ?].
-    unfold HTL.find_func in *.
+    unfold find_func in *.
     unfold RTL.find_function in *.
     destruct (Genv.find_symbol ge fn); try discriminate.
     exists x. crush.
@@ -1917,12 +1955,12 @@ Section CORRECTNESS.
   Qed.
 
   Lemma transl_find : forall fn f,
-      HTL.find_func ge fn = Some (AST.Internal f) ->
+      find_func ge fn = Some (AST.Internal f) ->
       match_prog prog tprog ->
-      (exists f', HTL.find_func tge fn = Some (AST.Internal f')).
+      (exists f', find_func tge fn = Some (AST.Internal f')).
   Proof.
     intros.
-    unfold HTL.find_func in *.
+    unfold find_func in *.
     rewrite symbols_preserved.
     destruct (Genv.find_symbol ge fn); try discriminate.
     destruct (function_ptr_translated _ _ H) as [? [? ?]].
@@ -2129,31 +2167,6 @@ Section CORRECTNESS.
   (*     reg_stack_based_pointers blk rs -> *)
   (*     Forall (fun a : Values.val => stack_based a blk) (map (fun r : positive => rs !! r) args). *)
   (* Proof. induction args; crush. Qed. *)
-
-  Lemma main_not_called_contradiction : forall id pc f fn sig args dst pc',
-      HTL.find_func ge id = Some (AST.Internal f) ->
-      (RTL.fn_code f) ! pc = Some (RTL.Icall sig (inr fn) args dst pc') ->
-      fn <> AST.prog_main prog.
-  Proof.
-    intros.
-    unfold match_prog in TRANSL.
-    decompose record TRANSL; clear TRANSL.
-    unfold main_not_called in H2.
-    rewrite Forall_forall in H2.
-    unfold HTL.find_func in H; unfold_match H.
-    exploit H2; clear H2.
-    - apply in_elements_iff.
-      eassumption.
-    - simpl.
-      let H := fresh "H" in intro H; exploit H; eauto; clear H.
-      intro.
-      unfold no_calls_to in *.
-      rewrite Forall_forall in *.
-      exploit H2.
-      + rewrite in_elements_iff.
-        eassumption.
-      + crush.
-  Qed.
 
   Lemma find_function_lookup : forall fn f rs,
       RTL.find_function ge (inr fn) rs = Some (AST.Internal f) ->
@@ -2364,10 +2377,9 @@ Section CORRECTNESS.
              crush.
           -- crush.
           -- eauto using separate_params_reset.
-      + move FUNC_NAME at bottom.
-        move H3 at bottom.
-        enough (fn0 <> AST.prog_main prog) by crush.
-        eauto using main_not_called_contradiction.
+      + enough (fn0 <> AST.prog_main prog) by crush.
+        inv_transl. unfold main_not_called, no_calls_to in MAIN_NOT_CALLED.
+        eauto.
     Unshelve.
     all: eauto; exact tt.
   Qed.
