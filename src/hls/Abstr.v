@@ -16,6 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+Require Import Coq.Classes.RelationClasses.
+Require Import Coq.Classes.DecidableClass.
+
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
@@ -294,29 +297,9 @@ Import NE.NonEmptyNotation.
 
 #[local] Open Scope non_empty_scope.
 
-Definition predicated_ne A := NE.non_empty (pred_op * A).
+Definition predicated A := NE.non_empty (pred_op * A).
 
-Variant predicated A :=
-| Psingle : A -> predicated A
-| Plist : predicated_ne A -> predicated A.
-
-Arguments Psingle [A].
-Arguments Plist [A].
-
-Definition pred_expr_ne := predicated_ne expression.
 Definition pred_expr := predicated expression.
-
-Inductive predicated_wf A : predicated A -> Prop :=
-| Psingle_wf :
-  forall a, predicated_wf A (Psingle a)
-| Plist_wf :
-  forall a b l,
-    In a (map fst (NE.to_list l)) ->
-    In b (map fst (NE.to_list l)) ->
-    a <> b ->
-    unsat (Pand a b) ->
-    predicated_wf A (Plist l)
-.
 
 (*|
 Using IMap we can create a map from resources to any other type, as resources can be uniquely
@@ -329,7 +312,7 @@ Definition forest : Type := Rtree.t pred_expr.
 
 Definition get_forest v (f: forest) :=
   match Rtree.get v f with
-  | None => Psingle (Ebase v)
+  | None => NE.singleton (T, (Ebase v))
   | Some v' => v'
   end.
 
@@ -420,29 +403,25 @@ with sem_val_list : ctx -> expression_list -> list val -> Prop :=
 
 Inductive sem_pred_expr {B: Type} (sem: ctx -> expression -> B -> Prop):
   ctx -> pred_expr -> B -> Prop :=
-| sem_pred_expr_base :
-  forall ctx e v,
-    sem ctx e v ->
-    sem_pred_expr sem ctx (Psingle e) v
 | sem_pred_expr_cons_true :
   forall ctx e pr p' v,
     eval_predf (ctx_ps ctx) pr = true ->
     sem ctx e v ->
-    sem_pred_expr sem ctx (Plist ((pr, e) ::| p')) v
+    sem_pred_expr sem ctx ((pr, e) ::| p') v
 | sem_pred_expr_cons_false :
   forall ctx e pr p' v,
     eval_predf (ctx_ps ctx) pr = false ->
-    sem_pred_expr sem ctx (Plist p') v ->
-    sem_pred_expr sem ctx (Plist ((pr, e) ::| p')) v
+    sem_pred_expr sem ctx p' v ->
+    sem_pred_expr sem ctx ((pr, e) ::| p') v
 | sem_pred_expr_single :
   forall ctx e pr v,
     eval_predf (ctx_ps ctx) pr = true ->
-    sem_pred_expr sem ctx (Plist (NE.singleton (pr, e))) v
+    sem_pred_expr sem ctx (NE.singleton (pr, e)) v
 .
 
 Definition collapse_pe (p: pred_expr) : option expression :=
   match p with
-  | Psingle p => Some p
+  | NE.singleton (T, p) => Some p
   | _ => None
   end.
 
@@ -577,7 +556,7 @@ Definition combine_option {A} (a b: option A) : option A :=
   | _, _ => None
   end.
 
-Fixpoint norm_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
+Fixpoint norm_expression (max: predicate) (pe: pred_expr) (h: hash_tree)
   : (PTree.t pred_op) * hash_tree :=
   match pe with
   | NE.singleton (p, e) =>
@@ -585,7 +564,7 @@ Fixpoint norm_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
     (PTree.set p' p (PTree.empty _), h')
   | (p, e) ::| pr =>
     let (p', h') := hash_value max e h in
-    let (p'', h'') := norm_expression_ne max pr h' in
+    let (p'', h'') := norm_expression max pr h' in
     match p'' ! p' with
     | Some pr_op =>
       (PTree.set p' (pr_op ∨ p) p'', h'')
@@ -594,9 +573,15 @@ Fixpoint norm_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
     end
   end.
 
-Definition encode_expression_ne max pe h :=
-  let (tree, h) := norm_expression_ne max pe h in
-  (PTree.fold (fun pr_op e p_e => (¬ p_e ∨ Pvar e) ∧ pr_op) tree T, h).
+Definition mk_pred_stmnt' pr_op e p_e := (¬ p_e ∨ Pvar e) ∧ pr_op.
+
+Definition mk_pred_stmnt t := PTree.fold mk_pred_stmnt' t T.
+
+Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) := fold_left (fun x => uncurry (mk_pred_stmnt' x)) t T.
+
+Definition encode_expression max pe h :=
+  let (tree, h) := norm_expression max pe h in
+  (mk_pred_stmnt tree, h).
 
 (*Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
   : (PTree.t pred_op) * hash_tree :=
@@ -610,13 +595,6 @@ Definition encode_expression_ne max pe h :=
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
   end.*)
 
-Definition encode_expression (max: predicate) (pe: pred_expr) (h: hash_tree): pred_op * hash_tree :=
-  match pe with
-  | Psingle e =>
-    let (p, h') := hash_value max e h in (Pvar p, h')
-  | Plist l => encode_expression_ne max l h
-  end.
-
 Fixpoint max_predicate (p: pred_op) : positive :=
   match p with
   | Pvar p => p
@@ -627,55 +605,13 @@ Fixpoint max_predicate (p: pred_op) : positive :=
   | Pnot a => max_predicate a
   end.
 
-Fixpoint max_pred_expr_ne (pe: pred_expr_ne) : positive :=
+Fixpoint max_pred_expr (pe: pred_expr) : positive :=
   match pe with
   | NE.singleton (p, e) => max_predicate p
-  | (p, e) ::| pe' => Pos.max (max_predicate p) (max_pred_expr_ne pe')
-  end.
-
-Definition max_pred_expr (pe: pred_expr) : positive :=
-  match pe with
-  | Psingle _ => 1
-  | Plist l => max_pred_expr_ne l
-  end.
-
-Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
-  match pe1, pe2 with
-  (*| PEsingleton None e1, PEsingleton None e2 => beq_expression e1 e2
-  | PEsingleton (Some p1) e1, PEsingleton (Some p2) e2 =>
-    if beq_expression e1 e2
-    then match sat_pred_simple bound (Por (Pand p1 (Pnot p2)) (Pand p2 (Pnot p1))) with
-         | Some None => true
-         | _ => false
-         end
-    else false
-  | PEsingleton (Some p) e1, PEsingleton None e2
-  | PEsingleton None e1, PEsingleton (Some p) e2 =>
-    if beq_expression e1 e2
-    then match sat_pred_simple bound (Pnot p) with
-         | Some None => true
-         | _ => false
-         end
-    else false*)
-  | pe1, pe2 =>
-    let max := Pos.max (max_pred_expr pe1) (max_pred_expr pe2) in
-    let (p1, h) := encode_expression max pe1 (PTree.empty _) in
-    let (p2, h') := encode_expression max pe2 h in
-    match sat_pred_simple bound (Por (Pand p1 (Pnot p2)) (Pand p2 (Pnot p1))) with
-    | Some None => true
-    | _ => false
-    end
+  | (p, e) ::| pe' => Pos.max (max_predicate p) (max_pred_expr pe')
   end.
 
 Definition empty : forest := Rtree.empty _.
-
-Definition check := Rtree.beq (beq_pred_expr 10000).
-
-Compute (check (empty # (Reg 2) <-
-                (Plist ((((Pand (Pvar 4) (Pnot (Pvar 4)))), (Ebase (Reg 9))) ::|
-                        (NE.singleton (((Pvar 2)), (Ebase (Reg 3)))))))
-               (empty # (Reg 2) <- (Plist (NE.singleton (((Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3))))),
-                                                (Ebase (Reg 3))))))).
 
 Definition ge_preserved {A B C D: Type} (ge: Genv.t A B) (tge: Genv.t C D) : Prop :=
   (forall sp op vl m, Op.eval_operation ge sp op vl m =
@@ -731,12 +667,28 @@ Proof.
   intros. tauto.
 Qed.
 
+Definition equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
+
+Lemma equiv_symm : forall a b, equiv a b -> equiv b a.
+Proof. crush. Qed.
+
+Lemma equiv_trans : forall a b c, equiv a b -> equiv b c -> equiv a c.
+Proof. crush. Qed.
+
+Lemma equiv_refl : forall a, equiv a a.
+Proof. crush. Qed.
+
+Instance Equivalence_SAT : Equivalence equiv :=
+  { Equivalence_Reflexive := equiv_refl ;
+    Equivalence_Symmetric := equiv_symm ;
+    Equivalence_Transitive := equiv_trans ;
+  }.
+
 Lemma sat_equiv :
   forall a b,
-    unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) ->
-    forall c, sat_predicate a c = sat_predicate b c.
+    unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) -> equiv a b.
 Proof.
-  unfold unsat. intros. specialize (H c); simplify.
+  unfold unsat, equiv. intros. specialize (H c); simplify.
   destruct (sat_predicate b c) eqn:X;
   destruct (sat_predicate a c) eqn:X2;
   crush.
@@ -744,14 +696,63 @@ Qed.
 
 Lemma sat_equiv2 :
   forall a b,
-    unsat (Por (Pand a (Pnot b)) (Pand b (Pnot a))) ->
-    forall c, sat_predicate a c = sat_predicate b c.
+    unsat (Por (Pand a (Pnot b)) (Pand b (Pnot a))) -> equiv a b.
 Proof.
-  unfold unsat. intros. specialize (H c); simplify.
+  unfold unsat, equiv. intros. specialize (H c); simplify.
   destruct (sat_predicate b c) eqn:X;
   destruct (sat_predicate a c) eqn:X2;
   crush.
 Qed.
+
+Definition equiv_check n p1 p2 :=
+  match sat_pred_simple n (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1) with
+  | Some None => true
+  | _ => false
+  end.
+
+Lemma equiv_check_correct :
+  forall n p1 p2, equiv_check n p1 p2 = true -> equiv p1 p2.
+Proof.
+  unfold equiv_check. unfold sat_pred_simple. intros.
+  destruct_match; [|discriminate].
+  destruct_match; [discriminate|].
+  destruct_match; [|discriminate].
+  destruct_match. destruct_match; discriminate.
+  eapply sat_equiv2; eauto.
+Qed.
+
+Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
+  match pe1, pe2 with
+  (*| PEsingleton None e1, PEsingleton None e2 => beq_expression e1 e2
+  | PEsingleton (Some p1) e1, PEsingleton (Some p2) e2 =>
+    if beq_expression e1 e2
+    then match sat_pred_simple bound (Por (Pand p1 (Pnot p2)) (Pand p2 (Pnot p1))) with
+         | Some None => true
+         | _ => false
+         end
+    else false
+  | PEsingleton (Some p) e1, PEsingleton None e2
+  | PEsingleton None e1, PEsingleton (Some p) e2 =>
+    if beq_expression e1 e2
+    then match sat_pred_simple bound (Pnot p) with
+         | Some None => true
+         | _ => false
+         end
+    else false*)
+  | pe1, pe2 =>
+    let max := Pos.max (max_pred_expr pe1) (max_pred_expr pe2) in
+    let (p1, h) := encode_expression max pe1 (PTree.empty _) in
+    let (p2, h') := encode_expression max pe2 h in
+    equiv_check bound p1 p2
+  end.
+
+Definition check := Rtree.beq (beq_pred_expr 10000).
+
+Compute (check (empty # (Reg 2) <-
+                ((((Pand (Pvar 4) (Pnot (Pvar 4)))), (Ebase (Reg 9))) ::|
+                                                                      (NE.singleton (((Pvar 2)), (Ebase (Reg 3))))))
+               (empty # (Reg 2) <- (NE.singleton (((Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3))))),
+                                                  (Ebase (Reg 3)))))).
 
 Definition inj_asgn_f a b := if (a =? b)%nat then true else false.
 
@@ -765,14 +766,66 @@ Proof.
 Qed.
 
 Lemma inj_asgn :
-  forall a b,
-    (forall (f: nat -> bool), f a = f b) -> a = b.
+  forall a b, (forall (f: nat -> bool), f a = f b) -> a = b.
 Proof. intros. apply inj_asgn_eg. eauto. Qed.
 
 Lemma sat_predicate_Pvar_inj :
   forall p1 p2,
-    (forall c, sat_predicate (Pvar p1) c = sat_predicate (Pvar p2) c) -> p1 = p2.
-Proof. simplify. apply Pos2Nat.inj. eapply inj_asgn. eauto. Qed.
+    equiv (Pvar p1) (Pvar p2) -> p1 = p2.
+Proof. unfold equiv. simplify. apply Pos2Nat.inj. eapply inj_asgn. eauto. Qed.
+
+Definition ind_preds t :=
+  forall e1 e2 p1 p2 c,
+    e1 <> e2 ->
+    t ! e1 = Some p1 ->
+    t ! e2 = Some p2 ->
+    sat_predicate p1 c = true ->
+    sat_predicate p2 c = false.
+
+Definition ind_preds_l t :=
+  forall (e1: predicate) e2 p1 p2 c,
+    e1 <> e2 ->
+    In (e1, p1) t ->
+    In (e2, p2) t ->
+    sat_predicate p1 c = true ->
+    sat_predicate p2 c = false.
+
+Definition sat_predictable :
+  forall a b c n,
+  sat_pred_simple n (a ∧ b) = Some c ->
+  exists d e, sat_pred_simple n a = Some e /\ sat_pred_simple n a = Some d.
+Proof.
+  intros. unfold sat_pred_simple in H. destruct_match; try discriminate.
+  destruct_match. unfold sat_pred in *. simplify.
+
+Lemma pred_equivalence_Some :
+  forall (ta tb: PTree.t pred_op) e pe pe',
+    ta ! e = Some pe ->
+    tb ! e = Some pe' ->
+    equiv (mk_pred_stmnt ta) (mk_pred_stmnt tb) ->
+    equiv pe pe'.
+Proof.
+  intros * SMEA SMEB EQ.
+
+
+Lemma pred_equivalence_None :
+  forall (ta tb: PTree.t pred_op) e pe,
+    equiv (mk_pred_stmnt ta) (mk_pred_stmnt tb) ->
+    ta ! e = Some pe ->
+    tb ! e = None ->
+    equiv pe ⟂.
+Admitted.
+
+Lemma pred_equivalence :
+  forall (ta tb: PTree.t pred_op) e pe,
+    equiv (mk_pred_stmnt ta) (mk_pred_stmnt tb) ->
+    ta ! e = Some pe ->
+    equiv pe ⟂ \/ (exists pe', tb ! e = Some pe' /\ equiv pe pe').
+Proof.
+  intros * EQ SME. destruct (tb ! e) eqn:HTB.
+  { right. econstructor. split; eauto. eapply pred_equivalence_Some; eauto. }
+  { left. eapply pred_equivalence_None; eauto. }
+Qed.
 
 Section CORRECT.
 
@@ -867,7 +920,7 @@ Section CORRECT.
     pose proof (sat_equiv2 _ _ X).
     destruct x, x'; simplify.
     repeat destruct_match; try discriminate; []. inv Heqp0. inv H0. inv H1.
-    inv Heqp.
+    inv Heqp
 
     apply sat_predicate_Pvar_inj in H2; subst.
 

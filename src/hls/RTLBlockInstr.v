@@ -159,35 +159,6 @@ Proof.
   apply satFormula_mult2' in H1. inv H1; crush.
 Qed.
 
-Fixpoint trans_pred_temp (bound: nat) (p: pred_op) : option formula :=
-  match bound with
-  | O => None
-  | S n =>
-    match p with
-    | Pvar p' => Some (((true, Pos.to_nat p') :: nil) :: nil)
-    | Ptrue => Some nil
-    | Pfalse => Some (nil::nil)
-    | Pand p1 p2 =>
-      match trans_pred_temp n p1, trans_pred_temp n p2 with
-      | Some p1', Some p2' =>
-        Some (p1' ++ p2')
-      | _, _ => None
-      end
-    | Por p1 p2 =>
-      match trans_pred_temp n p1, trans_pred_temp n p2 with
-      | Some p1', Some p2' =>
-        Some (mult p1' p2')
-      | _, _ => None
-      end
-    | Pnot Pfalse => Some nil
-    | Pnot Ptrue => Some (nil::nil)
-    | Pnot (Pvar p') => Some (((false, Pos.to_nat p') :: nil) :: nil)
-    | Pnot (Pnot p) => trans_pred_temp n p
-    | Pnot (Pand p1 p2) => trans_pred_temp n (Por (Pnot p1) (Pnot p2))
-    | Pnot (Por p1 p2) => trans_pred_temp n (Pand (Pnot p1) (Pnot p2))
-    end
-  end.
-
 Fixpoint trans_pred (bound: nat) (p: pred_op) :
   option {fm: formula | forall a,
            sat_predicate p a = true <-> satFormula fm a}.
