@@ -790,14 +790,6 @@ Definition ind_preds_l t :=
     sat_predicate p1 c = true ->
     sat_predicate p2 c = false.
 
-Definition sat_predictable :
-  forall a b c n,
-  sat_pred_simple n (a ∧ b) = Some c ->
-  exists d e, sat_pred_simple n a = Some e /\ sat_pred_simple n a = Some d.
-Proof.
-  intros. unfold sat_pred_simple in H. destruct_match; try discriminate.
-  destruct_match. unfold sat_pred in *. simplify.
-
 Lemma pred_equivalence_Some :
   forall (ta tb: PTree.t pred_op) e pe pe',
     ta ! e = Some pe ->

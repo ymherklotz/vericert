@@ -251,12 +251,6 @@ Definition sat_pred_simple (bound: nat) (p: pred_op) :=
   | None => None
   end.
 
-Definition sat_pred_temp (bound: nat) (p: pred_op) :=
-  match trans_pred_temp bound p with
-  | Some fm => boundedSatSimple bound fm
-  | None => None
-  end.
-
 Inductive instr : Type :=
 | RBnop : instr
 | RBop : option pred_op -> operation -> list reg -> reg -> instr
