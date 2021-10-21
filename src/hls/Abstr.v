@@ -34,6 +34,7 @@ Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.HashTree.
+Require Import vericert.hls.Predicate.
 
 #[local] Open Scope positive.
 #[local] Open Scope pred_op.
@@ -573,7 +574,7 @@ Fixpoint norm_expression (max: predicate) (pe: pred_expr) (h: hash_tree)
     end
   end.
 
-Definition mk_pred_stmnt' pr_op e p_e := (¬ p_e ∨ Pvar e) ∧ pr_op.
+Definition mk_pred_stmnt' pr_op e p_e := (¬ p_e ∨ Pvar (true, e)) ∧ pr_op.
 
 Definition mk_pred_stmnt t := PTree.fold mk_pred_stmnt' t T.
 
@@ -597,12 +598,11 @@ Definition encode_expression max pe h :=
 
 Fixpoint max_predicate (p: pred_op) : positive :=
   match p with
-  | Pvar p => p
+  | Pvar (b, p) => p
   | Ptrue => 1
   | Pfalse => 1
   | Pand a b => Pos.max (max_predicate a) (max_predicate b)
   | Por a b => Pos.max (max_predicate a) (max_predicate b)
-  | Pnot a => max_predicate a
   end.
 
 Fixpoint max_pred_expr (pe: pred_expr) : positive :=
@@ -653,15 +653,20 @@ Proof.
   apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
 Qed.
 
-Lemma unsat_not a: unsat (Pand a (Pnot a)).
-Proof. unfold unsat; simplify; auto with bool. Qed.
+Lemma unsat_not a: unsat (a ∧ (¬ a)).
+Proof.
+  unfold unsat; simplify.
+  rewrite negate_correct.
+  auto with bool.
+Qed.
 
-Lemma unsat_commut a b: unsat (Pand a b) -> unsat (Pand b a).
+Lemma unsat_commut a b: unsat (a ∧ b) -> unsat (b ∧ a).
 Proof. unfold unsat; simplify; eauto with bool. Qed.
 
-Lemma sat_dec a n b: sat_pred n a = Some b -> {sat a} + {unsat a}.
+Lemma sat_dec a: {sat a} + {unsat a}.
 Proof.
-  unfold sat, unsat. destruct b.
+  unfold sat, unsat.
+  destruct (sat_pred a).
   intros. left. destruct s.
   exists (Sat.interp_alist x). auto.
   intros. tauto.
@@ -686,39 +691,86 @@ Instance Equivalence_SAT : Equivalence equiv :=
 
 Lemma sat_equiv :
   forall a b,
-    unsat (Por (Pand a (Pnot b)) (Pand (Pnot a) b)) -> equiv a b.
+    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> equiv a b.
 Proof.
   unfold unsat, equiv. intros. specialize (H c); simplify.
+  rewrite negate_correct in *.
   destruct (sat_predicate b c) eqn:X;
   destruct (sat_predicate a c) eqn:X2;
   crush.
 Qed.
+
+Lemma sat_predicate_and :
+  forall a b c,
+    sat_predicate (a ∧ b) c = sat_predicate a c && sat_predicate b c.
+Proof. crush. Qed.
+
+Lemma sat_predicate_or :
+  forall a b c,
+    sat_predicate (a ∨ b) c = sat_predicate a c || sat_predicate b c.
+Proof. crush. Qed.
 
 Lemma sat_equiv2 :
   forall a b,
-    unsat (Por (Pand a (Pnot b)) (Pand b (Pnot a))) -> equiv a b.
+    equiv a b -> unsat (a ∧ ¬ b ∨ ¬ a ∧ b).
+Proof.
+  unfold unsat, equiv; simplify.
+  repeat rewrite negate_correct.
+  repeat rewrite H.
+  rewrite andb_negb_r.
+  rewrite andb_negb_l. auto.
+Qed.
+
+Lemma sat_equiv3 :
+  forall a b,
+    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> equiv a b.
 Proof.
   unfold unsat, equiv. intros. specialize (H c); simplify.
+  rewrite negate_correct in *.
   destruct (sat_predicate b c) eqn:X;
   destruct (sat_predicate a c) eqn:X2;
   crush.
 Qed.
 
-Definition equiv_check n p1 p2 :=
-  match sat_pred_simple n (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1) with
-  | Some None => true
+Lemma sat_equiv4 :
+  forall a b,
+    equiv a b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
+Proof.
+  unfold unsat, equiv; simplify.
+  repeat rewrite negate_correct.
+  repeat rewrite H.
+  rewrite andb_negb_r. auto.
+Qed.
+
+Definition equiv_check p1 p2 :=
+  match sat_pred_simple (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1) with
+  | None => true
   | _ => false
   end.
 
 Lemma equiv_check_correct :
-  forall n p1 p2, equiv_check n p1 p2 = true -> equiv p1 p2.
+  forall p1 p2, equiv_check p1 p2 = true -> equiv p1 p2.
 Proof.
   unfold equiv_check. unfold sat_pred_simple. intros.
-  destruct_match; [|discriminate].
-  destruct_match; [discriminate|].
-  destruct_match; [|discriminate].
-  destruct_match. destruct_match; discriminate.
-  eapply sat_equiv2; eauto.
+  destruct_match; try discriminate; [].
+  destruct_match. destruct_match. discriminate.
+  eapply sat_equiv3; eauto.
+Qed.
+
+Lemma equiv_check_correct2 :
+  forall p1 p2, equiv p1 p2 -> equiv_check p1 p2 = true.
+Proof.
+  unfold equiv_check, equiv, sat_pred_simple. intros.
+  destruct_match; auto. destruct_match; try discriminate. destruct_match.
+  simplify.
+  apply sat_equiv4 in H. unfold unsat in H. simplify.
+  clear Heqs. rewrite H in e. discriminate.
+Qed.
+
+Lemma equiv_check_dec :
+  forall p1 p2, equiv_check p1 p2 = true <-> equiv p1 p2.
+Proof.
+  intros; split; eauto using equiv_check_correct, equiv_check_correct2.
 Qed.
 
 Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
@@ -743,25 +795,23 @@ Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
     let max := Pos.max (max_pred_expr pe1) (max_pred_expr pe2) in
     let (p1, h) := encode_expression max pe1 (PTree.empty _) in
     let (p2, h') := encode_expression max pe2 h in
-    equiv_check bound p1 p2
+    equiv_check p1 p2
   end.
 
 Definition check := Rtree.beq (beq_pred_expr 10000).
 
 Compute (check (empty # (Reg 2) <-
-                ((((Pand (Pvar 4) (Pnot (Pvar 4)))), (Ebase (Reg 9))) ::|
-                                                                      (NE.singleton (((Pvar 2)), (Ebase (Reg 3))))))
-               (empty # (Reg 2) <- (NE.singleton (((Por (Pvar 2) (Pand (Pvar 3) (Pnot (Pvar 3))))),
+                ((((Pand (Pvar (true, 4)) (¬ (Pvar (true, 4))))), (Ebase (Reg 9))) ::|
+                                                                      (NE.singleton (((Pvar (true, 2))), (Ebase (Reg 3))))))
+               (empty # (Reg 2) <- (NE.singleton (((Por (Pvar (true, 2)) (Pand (Pvar (true, 3)) (¬ (Pvar (true, 3)))))),
                                                   (Ebase (Reg 3)))))).
-
-Definition inj_asgn_f a b := if (a =? b)%nat then true else false.
 
 Lemma inj_asgn_eg :
   forall a b,
-    inj_asgn_f a b = inj_asgn_f a a -> a = b.
+    (a =? b)%nat = (a =? a)%nat -> a = b.
 Proof.
   intros. destruct (Nat.eq_dec a b); subst.
-  auto. unfold inj_asgn_f in H. apply Nat.eqb_neq in n.
+  auto. apply Nat.eqb_neq in n.
   rewrite n in H. rewrite Nat.eqb_refl in H. discriminate.
 Qed.
 
@@ -769,10 +819,30 @@ Lemma inj_asgn :
   forall a b, (forall (f: nat -> bool), f a = f b) -> a = b.
 Proof. intros. apply inj_asgn_eg. eauto. Qed.
 
+Lemma inj_asgn_false:
+  forall n1 n2 , ~ (forall c: nat -> bool, c n1 = negb (c n2)).
+Proof.
+  unfold not; intros. specialize (H (fun x => true)).
+  simplify. discriminate.
+Qed.
+
+Lemma negb_inj:
+  forall a b,
+    negb a = negb b -> a = b.
+Proof. destruct a, b; crush. Qed.
+
 Lemma sat_predicate_Pvar_inj :
   forall p1 p2,
     equiv (Pvar p1) (Pvar p2) -> p1 = p2.
-Proof. unfold equiv. simplify. apply Pos2Nat.inj. eapply inj_asgn. eauto. Qed.
+Proof.
+  unfold equiv. simplify. destruct p1, p2.
+  destruct b, b0.
+  assert (p = p0).
+  apply Pos2Nat.inj. eapply inj_asgn. eauto. rewrite H0; auto.
+  admit.
+  assert (p = p0). apply Pos2Nat.inj. eapply inj_asgn. intros. specialize (H f).
+  apply negb_inj in H. auto. rewrite H0; auto.
+Qed.
 
 Definition ind_preds t :=
   forall e1 e2 p1 p2 c,
@@ -798,7 +868,6 @@ Lemma pred_equivalence_Some :
     equiv pe pe'.
 Proof.
   intros * SMEA SMEB EQ.
-
 
 Lemma pred_equivalence_None :
   forall (ta tb: PTree.t pred_op) e pe,

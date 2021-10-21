@@ -28,6 +28,7 @@ Require Import vericert.common.Statemonad.
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
+Require Import vericert.hls.Predicate.
 Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.ValueInt.
@@ -657,12 +658,12 @@ Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
 
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with
-  | Pvar pred =>
-    Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
+  | Pvar (b, pred) =>
+    if b
+    then Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
+    else Vunop Vnot (Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred)))
   | Ptrue => Vlit (ZToValue 1)
   | Pfalse => Vlit (ZToValue 0)
-  | Pnot pred =>
-    Vunop Vnot (pred_expr preg pred)
   | Pand p1 p2 =>
     Vbinop Vand (pred_expr preg p1) (pred_expr preg p2)
   | Por p1 p2 =>
@@ -695,7 +696,7 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
     translate_predicate a preg p dst (Vvar src)
   | RBsetpred c args p =>
     do cond <- translate_condition c args;
-    ret (a (pred_expr preg (Pvar p)) cond)
+    ret (a (pred_expr preg (Pvar (true, p))) cond)
   end.
 
 Lemma create_new_state_state_incr:

@@ -10,10 +10,12 @@ Require Coq.MSets.MSetList.
 Require Import Coq.Structures.OrderedTypeEx.
 Require Import Coq.Structures.OrdersAlt.
 Require Import Coq.Program.Wf.
+Require Import Vericertlib.
 
 Module Nat_OT := Update_OT Nat_as_OT.
 Module NSet := MSetList.Make Nat_OT.
 
+#[local] Open Scope nat.
 
 (** * Problem Definition *)
 
@@ -481,7 +483,7 @@ Definition lit_set_cl (cl: clause) :=
 Definition lit_set (fm: formula) :=
   fold_right NSet.union NSet.empty (map lit_set_cl fm).
 
-Compute lit_set (((true, 1)::(true, 2)::(true, 1)::nil)::nil).
+Compute NSet.cardinal (lit_set (((true, 1)::(true, 1)::(true, 1)::nil)::nil)).
 
 Definition sat_measure (fm: formula) := NSet.cardinal (lit_set fm).
 
@@ -497,28 +499,71 @@ Proof.
   inversion H0. rewrite H1 in Heqs. discriminate.
 Qed.
 
+Lemma sat_measure_setClause' :
+  forall cl cl' l A,
+    setClause cl l = inleft (exist _ cl' A) ->
+    ~ In (snd l) (map snd cl').
+Proof.
+  induction cl; intros.
+  { simpl in *. inv H. unfold not in *. intros. inv H. }
+  { simpl in H.
+    repeat (destruct_match; crush; []). destruct_match.
+    repeat (destruct_match; crush; []). inv H. eapply IHcl; eauto.
+    inv H. unfold not. intros. inv H. contradiction. eapply IHcl; eauto.
+  }
+Qed.
+
+Lemma sat_measure_setClause'' :
+  forall cl cl' l A,
+    setClause cl l = inleft (exist _ cl' A) ->
+    forall l',
+      l' <> snd l ->
+      In l' (map snd cl) ->
+      In l' (map snd cl').
+Proof.
+  induction cl; intros.
+  { inversion H1. }
+  { inversion H1. subst. simpl in H.
+    repeat (destruct_match; crush; []). inv H. simpl.
+    inv H1. eauto. right. eapply IHcl; eauto.
+    simpl in H. repeat (destruct_match; crush; []). destruct_match.
+    repeat (destruct_match; crush; []). inv H. eapply IHcl; eauto.
+    inv H1; crush. inv H. simplify. auto.
+    inv H. simpl. right. eapply IHcl; eauto.
+  }
+Qed.
+
+Lemma sat_measure_setClause :
+  forall cl cl' l A,
+    In (snd l) (map snd cl) ->
+    setClause cl l = inleft (exist _ cl' A) ->
+    NSet.cardinal (lit_set_cl cl') < NSet.cardinal (lit_set_cl cl).
+Proof.
+  intros. pose proof H0. apply sat_measure_setClause' in H0.
+  pose proof (sat_measure_setClause'' _ _ _ _ H1). admit.
+Admitted.
+
+Definition InFm l (fm: formula) := exists cl, In cl fm /\ In l cl.
+
+Lemma sat_measure_setFormula :
+  forall fm fm' l A,
+    InFm l fm ->
+    setFormula fm l = inleft (exist _ fm' A) ->
+    sat_measure fm' < sat_measure fm.
+Proof. Admitted.
+
 Lemma sat_measure_propagate_unit :
-  forall fm' fm l
-         (i: forall a : asgn, satFormula fm (upd a l) <-> satFormula fm' a)
-         (s: forall a : asgn, satFormula fm a -> satLit l a),
-    Some
-      (inleft
-         (existT
-            (fun fm' : formula =>
-               {l : lit
-                 | (forall a : asgn, satFormula fm a -> satLit l a) /\
-                   (forall a : asgn, satFormula fm (upd a l) <-> satFormula fm' a)}) fm'
-            (exist
-               (fun l : lit =>
-                  (forall a : asgn, satFormula fm a -> satLit l a) /\
-                  (forall a : asgn, satFormula fm (upd a l) <-> satFormula fm' a)) l
-               (conj s i)))) = unitPropagate fm ->
+  forall fm' fm H,
+    unitPropagate fm = Some (inleft (existT _ fm' H)) ->
     sat_measure fm' < sat_measure fm.
 Proof.
-  induction fm.
-  - intros. simpl in *. discriminate.
-  - intros.
-    Admitted.
+  induction fm; crush.
+  repeat (destruct_match; crush; []).
+  destruct_match.
+  repeat (destruct_match; crush; []).
+  inv Heqs1.
+  unfold sat_measure.
+  Admitted.
 
 Program Fixpoint satSolve (fm: formula) { measure (sat_measure fm) }:
   {al : alist | satFormula fm (interp_alist al)} + {forall a, ~satFormula fm a} :=
