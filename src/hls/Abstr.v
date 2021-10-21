@@ -18,6 +18,9 @@
 
 Require Import Coq.Classes.RelationClasses.
 Require Import Coq.Classes.DecidableClass.
+Require Import Coq.Setoids.Setoid.
+Require Import Coq.Classes.SetoidClass.
+Require Import Coq.Classes.SetoidDec.
 
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
@@ -672,28 +675,31 @@ Proof.
   intros. tauto.
 Qed.
 
-Definition equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
+Definition sat_equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
 
-Lemma equiv_symm : forall a b, equiv a b -> equiv b a.
+Lemma equiv_symm : forall a b, sat_equiv a b -> sat_equiv b a.
 Proof. crush. Qed.
 
-Lemma equiv_trans : forall a b c, equiv a b -> equiv b c -> equiv a c.
+Lemma equiv_trans : forall a b c, sat_equiv a b -> sat_equiv b c -> sat_equiv a c.
 Proof. crush. Qed.
 
-Lemma equiv_refl : forall a, equiv a a.
+Lemma equiv_refl : forall a, sat_equiv a a.
 Proof. crush. Qed.
 
-Instance Equivalence_SAT : Equivalence equiv :=
+Instance Equivalence_SAT : Equivalence sat_equiv :=
   { Equivalence_Reflexive := equiv_refl ;
     Equivalence_Symmetric := equiv_symm ;
     Equivalence_Transitive := equiv_trans ;
   }.
 
-Lemma sat_equiv :
+Instance Setoid_SAT : Setoid pred_op :=
+  { equiv := sat_equiv; }.
+
+Lemma sat_imp_equiv :
   forall a b,
-    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> equiv a b.
+    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> sat_equiv a b.
 Proof.
-  unfold unsat, equiv. intros. specialize (H c); simplify.
+  unfold unsat, sat_equiv. intros. specialize (H c); simplify.
   rewrite negate_correct in *.
   destruct (sat_predicate b c) eqn:X;
   destruct (sat_predicate a c) eqn:X2;
@@ -723,9 +729,9 @@ Qed.
 
 Lemma sat_equiv3 :
   forall a b,
-    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> equiv a b.
+    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> sat_equiv a b.
 Proof.
-  unfold unsat, equiv. intros. specialize (H c); simplify.
+  unfold unsat, sat_equiv. intros. specialize (H c); simplify.
   rewrite negate_correct in *.
   destruct (sat_predicate b c) eqn:X;
   destruct (sat_predicate a c) eqn:X2;
@@ -734,7 +740,7 @@ Qed.
 
 Lemma sat_equiv4 :
   forall a b,
-    equiv a b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
+    a == b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
 Proof.
   unfold unsat, equiv; simplify.
   repeat rewrite negate_correct.
@@ -836,10 +842,10 @@ Lemma sat_predicate_Pvar_inj :
     equiv (Pvar p1) (Pvar p2) -> p1 = p2.
 Proof.
   unfold equiv. simplify. destruct p1, p2.
-  destruct b, b0.
-  assert (p = p0).
-  apply Pos2Nat.inj. eapply inj_asgn. eauto. rewrite H0; auto.
-  admit.
+  destruct b, b0. assert (p = p0).
+  { apply Pos2Nat.inj. eapply inj_asgn. eauto. } solve [subst; auto].
+  exfalso; eapply inj_asgn_false; eauto.
+  exfalso; eapply inj_asgn_false; eauto.
   assert (p = p0). apply Pos2Nat.inj. eapply inj_asgn. intros. specialize (H f).
   apply negb_inj in H. auto. rewrite H0; auto.
 Qed.
