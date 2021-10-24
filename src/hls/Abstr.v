@@ -16,12 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import Coq.Classes.RelationClasses.
-Require Import Coq.Classes.DecidableClass.
-Require Import Coq.Setoids.Setoid.
-Require Import Coq.Classes.SetoidClass.
-Require Import Coq.Classes.SetoidDec.
-
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
@@ -217,9 +211,6 @@ the results of the operations as general expressions that will be present in tho
 Then, to make recursion over expressions easier, expression_list is also defined in the datatype, as
 that enables mutual recursive definitions over the datatypes.
 |*)
-
-Definition unsat p := forall a, sat_predicate p a = false.
-Definition sat p := exists a, sat_predicate p a = true.
 
 Inductive expression : Type :=
 | Ebase : resource -> expression
@@ -420,6 +411,7 @@ Inductive sem_pred_expr {B: Type} (sem: ctx -> expression -> B -> Prop):
 | sem_pred_expr_single :
   forall ctx e pr v,
     eval_predf (ctx_ps ctx) pr = true ->
+    sem ctx e v ->
     sem_pred_expr sem ctx (NE.singleton (pr, e)) v
 .
 
@@ -577,11 +569,11 @@ Fixpoint norm_expression (max: predicate) (pe: pred_expr) (h: hash_tree)
     end
   end.
 
-Definition mk_pred_stmnt' pr_op e p_e := (¬ p_e ∨ Pvar (true, e)) ∧ pr_op.
+Definition mk_pred_stmnt' e p_e := ¬ p_e ∨ Plit (true, e).
 
-Definition mk_pred_stmnt t := PTree.fold mk_pred_stmnt' t T.
+Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
 
-Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) := fold_left (fun x => uncurry (mk_pred_stmnt' x)) t T.
+Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) := fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
 
 Definition encode_expression max pe h :=
   let (tree, h) := norm_expression max pe h in
@@ -601,7 +593,7 @@ Definition encode_expression max pe h :=
 
 Fixpoint max_predicate (p: pred_op) : positive :=
   match p with
-  | Pvar (b, p) => p
+  | Plit (b, p) => p
   | Ptrue => 1
   | Pfalse => 1
   | Pand a b => Pos.max (max_predicate a) (max_predicate b)
@@ -633,153 +625,7 @@ Inductive similar {A B} : @ctx A -> @ctx B -> Prop :=
     ge_preserved ge tge ->
     similar (mk_ctx rs ps mem sp ge) (mk_ctx rs ps mem sp tge).
 
-Lemma unsat_correct1 :
-  forall a b c,
-    unsat (Pand a b) ->
-    sat_predicate a c = true ->
-    sat_predicate b c = false.
-Proof.
-  unfold unsat in *. intros.
-  simplify. specialize (H c).
-  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
-  auto.
-Qed.
-
-Lemma unsat_correct2 :
-  forall a b c,
-    unsat (Pand a b) ->
-    sat_predicate b c = true ->
-    sat_predicate a c = false.
-Proof.
-  unfold unsat in *. intros.
-  simplify. specialize (H c).
-  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
-Qed.
-
-Lemma unsat_not a: unsat (a ∧ (¬ a)).
-Proof.
-  unfold unsat; simplify.
-  rewrite negate_correct.
-  auto with bool.
-Qed.
-
-Lemma unsat_commut a b: unsat (a ∧ b) -> unsat (b ∧ a).
-Proof. unfold unsat; simplify; eauto with bool. Qed.
-
-Lemma sat_dec a: {sat a} + {unsat a}.
-Proof.
-  unfold sat, unsat.
-  destruct (sat_pred a).
-  intros. left. destruct s.
-  exists (Sat.interp_alist x). auto.
-  intros. tauto.
-Qed.
-
-Definition sat_equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
-
-Lemma equiv_symm : forall a b, sat_equiv a b -> sat_equiv b a.
-Proof. crush. Qed.
-
-Lemma equiv_trans : forall a b c, sat_equiv a b -> sat_equiv b c -> sat_equiv a c.
-Proof. crush. Qed.
-
-Lemma equiv_refl : forall a, sat_equiv a a.
-Proof. crush. Qed.
-
-Instance Equivalence_SAT : Equivalence sat_equiv :=
-  { Equivalence_Reflexive := equiv_refl ;
-    Equivalence_Symmetric := equiv_symm ;
-    Equivalence_Transitive := equiv_trans ;
-  }.
-
-Instance Setoid_SAT : Setoid pred_op :=
-  { equiv := sat_equiv; }.
-
-Lemma sat_imp_equiv :
-  forall a b,
-    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> sat_equiv a b.
-Proof.
-  unfold unsat, sat_equiv. intros. specialize (H c); simplify.
-  rewrite negate_correct in *.
-  destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
-Qed.
-
-Lemma sat_predicate_and :
-  forall a b c,
-    sat_predicate (a ∧ b) c = sat_predicate a c && sat_predicate b c.
-Proof. crush. Qed.
-
-Lemma sat_predicate_or :
-  forall a b c,
-    sat_predicate (a ∨ b) c = sat_predicate a c || sat_predicate b c.
-Proof. crush. Qed.
-
-Lemma sat_equiv2 :
-  forall a b,
-    equiv a b -> unsat (a ∧ ¬ b ∨ ¬ a ∧ b).
-Proof.
-  unfold unsat, equiv; simplify.
-  repeat rewrite negate_correct.
-  repeat rewrite H.
-  rewrite andb_negb_r.
-  rewrite andb_negb_l. auto.
-Qed.
-
-Lemma sat_equiv3 :
-  forall a b,
-    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> sat_equiv a b.
-Proof.
-  unfold unsat, sat_equiv. intros. specialize (H c); simplify.
-  rewrite negate_correct in *.
-  destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
-Qed.
-
-Lemma sat_equiv4 :
-  forall a b,
-    a == b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
-Proof.
-  unfold unsat, equiv; simplify.
-  repeat rewrite negate_correct.
-  repeat rewrite H.
-  rewrite andb_negb_r. auto.
-Qed.
-
-Definition equiv_check p1 p2 :=
-  match sat_pred_simple (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1) with
-  | None => true
-  | _ => false
-  end.
-
-Lemma equiv_check_correct :
-  forall p1 p2, equiv_check p1 p2 = true -> equiv p1 p2.
-Proof.
-  unfold equiv_check. unfold sat_pred_simple. intros.
-  destruct_match; try discriminate; [].
-  destruct_match. destruct_match. discriminate.
-  eapply sat_equiv3; eauto.
-Qed.
-
-Lemma equiv_check_correct2 :
-  forall p1 p2, equiv p1 p2 -> equiv_check p1 p2 = true.
-Proof.
-  unfold equiv_check, equiv, sat_pred_simple. intros.
-  destruct_match; auto. destruct_match; try discriminate. destruct_match.
-  simplify.
-  apply sat_equiv4 in H. unfold unsat in H. simplify.
-  clear Heqs. rewrite H in e. discriminate.
-Qed.
-
-Lemma equiv_check_dec :
-  forall p1 p2, equiv_check p1 p2 = true <-> equiv p1 p2.
-Proof.
-  intros; split; eauto using equiv_check_correct, equiv_check_correct2.
-Qed.
-
-Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
+Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
   match pe1, pe2 with
   (*| PEsingleton None e1, PEsingleton None e2 => beq_expression e1 e2
   | PEsingleton (Some p1) e1, PEsingleton (Some p2) e2 =>
@@ -804,17 +650,76 @@ Definition beq_pred_expr (bound: nat) (pe1 pe2: pred_expr) : bool :=
     equiv_check p1 p2
   end.
 
-Definition check := Rtree.beq (beq_pred_expr 10000).
+Definition forall_ptree {A:Type} (f:positive->A->bool) (m:Maps.PTree.t A) : bool :=
+  Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true.
+
+Ltac boolInv :=
+  match goal with
+  | [ H: _ && _ = true |- _ ] =>
+      destruct (andb_prop _ _ H); clear H; boolInv
+  | [ H: proj_sumbool _ = true |- _ ] =>
+      generalize (proj_sumbool_true _ H); clear H;
+      let EQ := fresh in (intro EQ; try subst; boolInv)
+  | _ =>
+      idtac
+  end.
+
+Remark ptree_forall:
+  forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
+  Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true = true ->
+  forall i x, Maps.PTree.get i m = Some x -> f i x = true.
+Proof.
+  intros.
+  set (f' := fun (res: bool) (i: positive) (x: A) => res && f i x).
+  set (P := fun (m: Maps.PTree.t A) (res: bool) =>
+              res = true -> Maps.PTree.get i m = Some x -> f i x = true).
+  assert (P m true).
+  rewrite <- H. fold f'. apply Maps.PTree_Properties.fold_rec.
+  unfold P; intros. rewrite <- H1 in H4. auto.
+  red; intros. rewrite Maps.PTree.gempty in H2. discriminate.
+  unfold P; intros. unfold f' in H4. boolInv.
+  rewrite Maps.PTree.gsspec in H5. destruct (peq i k).
+  subst. inv H5. auto.
+  apply H3; auto.
+  red in H1. auto.
+Qed.
+
+Lemma forall_ptree_true:
+  forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
+    forall_ptree f m = true ->
+    forall i x, Maps.PTree.get i m = Some x -> f i x = true.
+Proof.
+  apply ptree_forall.
+Qed.
+
+Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+  match np2 ! n with
+  | Some p' => equiv_check p p'
+  | None => equiv_check p ⟂
+  end.
+
+Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+  match np2 ! n with
+  | Some p' => true
+  | None => equiv_check p ⟂
+  end.
+
+Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
+  let max := Pos.max (max_pred_expr pe1) (max_pred_expr pe2) in
+  let (np1, h) := norm_expression max pe1 (PTree.empty _) in
+  let (np2, h') := norm_expression max pe2 h in
+  forall_ptree (tree_equiv_check_el np2) np1
+  && forall_ptree (tree_equiv_check_None_el np1) np2.
+
+Definition check := Rtree.beq beq_pred_expr.
 
 Compute (check (empty # (Reg 2) <-
-                ((((Pand (Pvar (true, 4)) (¬ (Pvar (true, 4))))), (Ebase (Reg 9))) ::|
-                                                                      (NE.singleton (((Pvar (true, 2))), (Ebase (Reg 3))))))
-               (empty # (Reg 2) <- (NE.singleton (((Por (Pvar (true, 2)) (Pand (Pvar (true, 3)) (¬ (Pvar (true, 3)))))),
+                ((((Pand (Plit (true, 4)) (¬ (Plit (true, 4))))), (Ebase (Reg 9))) ::|
+                                                                      (NE.singleton (((Plit (true, 2))), (Ebase (Reg 3))))))
+               (empty # (Reg 2) <- (NE.singleton (((Por (Plit (true, 2)) (Pand (Plit (true, 3)) (¬ (Plit (true, 3)))))),
                                                   (Ebase (Reg 3)))))).
 
-Lemma inj_asgn_eg :
-  forall a b,
-    (a =? b)%nat = (a =? a)%nat -> a = b.
+Lemma inj_asgn_eg : forall a b, (a =? b)%nat = (a =? a)%nat -> a = b.
 Proof.
   intros. destruct (Nat.eq_dec a b); subst.
   auto. apply Nat.eqb_neq in n.
@@ -837,11 +742,11 @@ Lemma negb_inj:
     negb a = negb b -> a = b.
 Proof. destruct a, b; crush. Qed.
 
-Lemma sat_predicate_Pvar_inj :
+Lemma sat_predicate_Plit_inj :
   forall p1 p2,
-    equiv (Pvar p1) (Pvar p2) -> p1 = p2.
+    Plit p1 == Plit p2 -> p1 = p2.
 Proof.
-  unfold equiv. simplify. destruct p1, p2.
+  simplify. destruct p1, p2.
   destruct b, b0. assert (p = p0).
   { apply Pos2Nat.inj. eapply inj_asgn. eauto. } solve [subst; auto].
   exfalso; eapply inj_asgn_false; eauto.
@@ -866,18 +771,33 @@ Definition ind_preds_l t :=
     sat_predicate p1 c = true ->
     sat_predicate p2 c = false.
 
+(*Lemma pred_equivalence_Some' :
+  forall ta tb e pe pe',
+    list_norepet (map fst ta) ->
+    list_norepet (map fst tb) ->
+    In (e, pe) ta ->
+    In (e, pe') tb ->
+    fold_right (fun p a => mk_pred_stmnt' (fst p) (snd p) ∧ a) T ta ==
+    fold_right (fun p a => mk_pred_stmnt' (fst p) (snd p) ∧ a) T tb ->
+    pe == pe'.
+Proof.
+  induction ta as [|hd tl Hta]; try solve [crush].
+  - intros * NRP1 NRP2 IN1 IN2 FOLD. inv NRP1. inv IN1.
+    simpl in FOLD.
+
 Lemma pred_equivalence_Some :
   forall (ta tb: PTree.t pred_op) e pe pe',
     ta ! e = Some pe ->
     tb ! e = Some pe' ->
-    equiv (mk_pred_stmnt ta) (mk_pred_stmnt tb) ->
-    equiv pe pe'.
+    mk_pred_stmnt ta == mk_pred_stmnt tb ->
+    pe == pe'.
 Proof.
-  intros * SMEA SMEB EQ.
+  intros * SMEA SMEB EQ. unfold mk_pred_stmnt in *.
+  repeat rewrite PTree.fold_spec in EQ.
 
 Lemma pred_equivalence_None :
   forall (ta tb: PTree.t pred_op) e pe,
-    equiv (mk_pred_stmnt ta) (mk_pred_stmnt tb) ->
+    (mk_pred_stmnt ta) == (mk_pred_stmnt tb) ->
     ta ! e = Some pe ->
     tb ! e = None ->
     equiv pe ⟂.
@@ -892,7 +812,7 @@ Proof.
   intros * EQ SME. destruct (tb ! e) eqn:HTB.
   { right. econstructor. split; eauto. eapply pred_equivalence_Some; eauto. }
   { left. eapply pred_equivalence_None; eauto. }
-Qed.
+Qed.*)
 
 Section CORRECT.
 
@@ -973,30 +893,90 @@ Section CORRECT.
 
   #[local] Opaque PTree.set.
 
-  Lemma check_correct_sem_value:
-    forall x x' v v' n,
-      beq_pred_expr n x x' = true ->
-      sem_pred_expr sem_value ictx x v ->
-      sem_pred_expr sem_value octx x' v' ->
-      v = v'.
+  Lemma exists_norm_expr :
+    forall x pe expr m t h h',
+      NE.In (pe, expr) x ->
+      norm_expression m x h = (t, h') ->
+      exists e, t ! e = Some pe /\ h' ! e = Some expr.
   Proof.
-    unfold beq_pred_expr. intros. repeat (destruct_match; try discriminate; []); subst.
-    unfold sat_pred_simple in *.
-    repeat destruct_match; try discriminate; []; subst.
-    assert (X: unsat (Por (Pand p (Pnot p0)) (Pand p0 (Pnot p)))) by eauto.
-    pose proof (sat_equiv2 _ _ X).
-    destruct x, x'; simplify.
-    repeat destruct_match; try discriminate; []. inv Heqp0. inv H0. inv H1.
-    inv Heqp
+    Admitted.
 
-    apply sat_predicate_Pvar_inj in H2; subst.
+  Lemma exists_norm_expr2 :
+    forall e x pe expr m t h h',
+      t ! e = Some pe ->
+      h' ! e = Some expr ->
+      norm_expression m x h = (t, h') ->
+      NE.In (pe, expr) x.
+  Proof.
+    Admitted.
 
-    assert (e0 = e1) by (eapply hash_present_eq; eauto); subst.
-    eauto using sem_value_det.
-    - admit.
-    - admit.
-    - admit.
-  Admitted.
+  Lemma exists_norm_expr3 :
+    forall e x pe expr m t h h',
+      t ! e = None ->
+      norm_expression m x h = (t, h') ->
+      ~ NE.In (pe, expr) x.
+  Proof.
+    Admitted.
+
+  Lemma norm_expr_In :
+    forall A B sem ctx x pe expr v,
+      @sem_pred_expr A B sem ctx x v ->
+      NE.In (pe, expr) x ->
+      eval_predf (ctx_ps ctx) pe = true ->
+      sem ctx expr v.
+  Proof. Admitted.
+
+  Section SEM_PRED.
+
+    Context (B: Type).
+    Context (isem: @ctx fd -> expression -> B -> Prop).
+    Context (osem: @ctx tfd -> expression -> B -> Prop).
+    Context (SEMSIM: forall e v v', isem ictx e v -> osem octx e v' -> v = v').
+
+    Lemma check_correct_sem_value:
+      forall x x' v v',
+        beq_pred_expr x x' = true ->
+        sem_pred_expr isem ictx x v ->
+        sem_pred_expr osem octx x' v' ->
+        v = v'.
+    Proof.
+      induction x.
+      - intros.
+        unfold beq_pred_expr in *. intros. repeat (destruct_match; try discriminate; []); subst.
+        inv H0.
+        pose Heqp as X.
+        eapply exists_norm_expr in X; [|constructor].
+        Opaque norm_expression. simplify. Transparent norm_expression.
+        destruct (t0 ! x) eqn:?.
+        { eapply forall_ptree_true in H0; eauto. unfold tree_equiv_check_el in *. rewrite Heqo in H0.
+          apply equiv_check_dec in H0.
+          eapply exists_norm_expr2 in Heqo.
+          3: { eauto. }
+          2: { admit. }
+          eapply norm_expr_In in Heqo; eauto.
+          inv HSIM; simplify. setoid_rewrite H0 in H3. eassumption.
+        }
+        {
+        }
+        eapply exists_norm_expr in Heqp.
+        unfold sat_pred_simple in *.
+        repeat destruct_match; try discriminate; []; subst.
+        assert (X: unsat (Por (Pand p (Pnot p0)) (Pand p0 (Pnot p)))) by eauto.
+        pose proof (sat_equiv2 _ _ X).
+        destruct x, x'; simplify.
+        repeat destruct_match; try discriminate; []. inv Heqp0. inv H0. inv H1.
+        inv Heqp
+
+            apply sat_predicate_Pvar_inj in H2; subst.
+
+        assert (e0 = e1) by (eapply hash_present_eq; eauto); subst.
+        eauto using sem_value_det.
+      - admit.
+      - admit.
+      - admit.
+    Admitted.
+
+  End SEM_PRED.
 
   Lemma check_correct: forall (fa fb : forest) ctx ctx' i,
     similar ctx ctx' ->
