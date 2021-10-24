@@ -100,14 +100,16 @@ Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
 Definition regset := Regmap.t val.
 Definition predset := PMap.t bool.
 
-Fixpoint eval_predf (pr: predset) (p: pred_op) {struct p} :=
-  match p with
-  | Pvar (b, p') => if b then PMap.get p' pr else negb (PMap.get p' pr)
-  | Ptrue => true
-  | Pfalse => false
-  | Pand p' p'' => (eval_predf pr p') && (eval_predf pr p'')
-  | Por p' p'' => (eval_predf pr p') || (eval_predf pr p'')
-  end.
+Definition eval_predf (pr: predset) (p: pred_op) :=
+  sat_predicate p (fun x => pr !! (Pos.of_nat x)).
+
+#[global]
+Instance eval_predf_Proper : Proper (eq ==> equiv ==> eq) eval_predf.
+Proof.
+  unfold Proper. simplify. unfold "==>".
+  intros.
+  unfold sat_equiv in *. intros. unfold eval_predf. subst. apply H0.
+Qed.
 
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   match rl, vl with

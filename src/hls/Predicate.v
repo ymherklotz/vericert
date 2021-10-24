@@ -1,10 +1,17 @@
+Require Import Coq.Classes.RelationClasses.
+Require Import Coq.Classes.DecidableClass.
+Require Import Coq.Setoids.Setoid.
+Require Export Coq.Classes.SetoidClass.
+Require Export Coq.Classes.SetoidDec.
+Require Import Coq.Logic.Decidable.
+
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Sat.
 
 Definition predicate : Type := positive.
 
 Inductive pred_op : Type :=
-| Pvar: (bool * predicate) -> pred_op
+| Plit: (bool * predicate) -> pred_op
 | Ptrue: pred_op
 | Pfalse: pred_op
 | Pand: pred_op -> pred_op -> pred_op
@@ -19,7 +26,7 @@ Notation "'T'" := (Ptrue) : pred_op.
 
 Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   match p with
-  | Pvar (b, p') => if b then a (Pos.to_nat p') else negb (a (Pos.to_nat p'))
+  | Plit (b, p') => if b then a (Pos.to_nat p') else negb (a (Pos.to_nat p'))
   | Ptrue => true
   | Pfalse => false
   | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
@@ -128,7 +135,7 @@ Fixpoint trans_pred (p: pred_op) :
       sat_predicate p a = true <-> satFormula fm a}.
   refine
   (match p with
-     | Pvar (b, p') => exist _ (((b, Pos.to_nat p') :: nil) :: nil) _
+     | Plit (b, p') => exist _ (((b, Pos.to_nat p') :: nil) :: nil) _
      | Ptrue => exist _ nil _
      | Pfalse => exist _ (nil::nil) _
      | Pand p1 p2 =>
@@ -182,7 +189,7 @@ Definition sat_pred_simple (p: pred_op) :=
 
 Fixpoint negate (p: pred_op) :=
   match p with
-  | Pvar (b, pr) => Pvar (negb b, pr)
+  | Plit (b, pr) => Plit (negb b, pr)
   | T => ⟂
   | ⟂ => T
   | A ∧ B => negate A ∨ negate B
@@ -199,3 +206,199 @@ Proof.
   - rewrite negb_andb; crush.
   - rewrite negb_orb; crush.
 Qed.
+
+Definition unsat p := forall a, sat_predicate p a = false.
+Definition sat p := exists a, sat_predicate p a = true.
+
+Lemma unsat_correct1 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate a c = true ->
+    sat_predicate b c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
+  auto.
+Qed.
+
+Lemma unsat_correct2 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate b c = true ->
+    sat_predicate a c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
+Qed.
+
+Lemma unsat_not a: unsat (a ∧ (¬ a)).
+Proof.
+  unfold unsat; simplify.
+  rewrite negate_correct.
+  auto with bool.
+Qed.
+
+Lemma unsat_commut a b: unsat (a ∧ b) -> unsat (b ∧ a).
+Proof. unfold unsat; simplify; eauto with bool. Qed.
+
+Lemma sat_dec a: {sat a} + {unsat a}.
+Proof.
+  unfold sat, unsat.
+  destruct (sat_pred a).
+  intros. left. destruct s.
+  exists (Sat.interp_alist x). auto.
+  intros. tauto.
+Qed.
+
+Definition sat_equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
+
+Lemma equiv_symm : forall a b, sat_equiv a b -> sat_equiv b a.
+Proof. crush. Qed.
+
+Lemma equiv_trans : forall a b c, sat_equiv a b -> sat_equiv b c -> sat_equiv a c.
+Proof. crush. Qed.
+
+Lemma equiv_refl : forall a, sat_equiv a a.
+Proof. crush. Qed.
+
+#[global]
+Instance Equivalence_SAT : Equivalence sat_equiv :=
+  { Equivalence_Reflexive := equiv_refl ;
+    Equivalence_Symmetric := equiv_symm ;
+    Equivalence_Transitive := equiv_trans ;
+  }.
+
+#[global]
+Instance SATSetoid : Setoid pred_op :=
+  { equiv := sat_equiv; }.
+
+#[global]
+Instance PandProper : Proper (equiv ==> equiv ==> equiv) Pand.
+Proof.
+  unfold Proper. simplify. unfold "==>".
+  intros.
+  unfold sat_equiv in *. intros.
+  simplify. rewrite H0. rewrite H.
+  auto.
+Qed.
+
+#[global]
+Instance PorProper : Proper (equiv ==> equiv ==> equiv) Por.
+Proof.
+  unfold Proper, "==>". simplify.
+  intros.
+  unfold sat_equiv in *. intros.
+  simplify. rewrite H0. rewrite H.
+  auto.
+Qed.
+
+#[global]
+Instance sat_predicate_Proper : Proper (equiv ==> eq ==> eq) sat_predicate.
+Proof.
+  unfold Proper, "==>". simplify.
+  intros.
+  unfold sat_equiv in *. subst.
+  apply H.
+Qed.
+
+Lemma sat_imp_equiv :
+  forall a b,
+    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> a == b.
+Proof.
+  simplify; unfold unsat, sat_equiv.
+  intros. specialize (H c); simplify.
+  rewrite negate_correct in *.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+Lemma sat_predicate_and :
+  forall a b c,
+    sat_predicate (a ∧ b) c = sat_predicate a c && sat_predicate b c.
+Proof. crush. Qed.
+
+Lemma sat_predicate_or :
+  forall a b c,
+    sat_predicate (a ∨ b) c = sat_predicate a c || sat_predicate b c.
+Proof. crush. Qed.
+
+Lemma sat_equiv2 :
+  forall a b,
+    a == b -> unsat (a ∧ ¬ b ∨ ¬ a ∧ b).
+Proof.
+  unfold unsat, equiv; simplify.
+  repeat rewrite negate_correct.
+  repeat rewrite H.
+  rewrite andb_negb_r.
+  rewrite andb_negb_l. auto.
+Qed.
+
+Lemma sat_equiv3 :
+  forall a b,
+    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> a == b.
+Proof.
+  simplify. unfold unsat, sat_equiv in *; intros.
+  specialize (H c); simplify.
+  rewrite negate_correct in *.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+Lemma sat_equiv4 :
+  forall a b,
+    a == b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
+Proof.
+  unfold unsat, equiv; simplify.
+  repeat rewrite negate_correct.
+  repeat rewrite H.
+  rewrite andb_negb_r. auto.
+Qed.
+
+Definition equiv_check p1 p2 :=
+  match sat_pred_simple (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1) with
+  | None => true
+  | _ => false
+  end.
+
+Lemma equiv_check_correct :
+  forall p1 p2, equiv_check p1 p2 = true -> p1 == p2.
+Proof.
+  unfold equiv_check. unfold sat_pred_simple. intros.
+  destruct_match; try discriminate; [].
+  destruct_match. destruct_match. discriminate.
+  eapply sat_equiv3; eauto.
+Qed.
+
+Lemma equiv_check_correct2 :
+  forall p1 p2, p1 == p2 -> equiv_check p1 p2 = true.
+Proof.
+  unfold equiv_check, equiv, sat_pred_simple. intros.
+  destruct_match; auto. destruct_match; try discriminate. destruct_match.
+  simplify.
+  apply sat_equiv4 in H. unfold unsat in H. simplify.
+  clear Heqs. rewrite H in e. discriminate.
+Qed.
+
+Lemma equiv_check_dec :
+  forall p1 p2, equiv_check p1 p2 = true <-> p1 == p2.
+Proof.
+  intros; split; eauto using equiv_check_correct, equiv_check_correct2.
+Qed.
+
+Lemma equiv_check_decidable :
+  forall p1 p2, decidable (p1 == p2).
+Proof.
+  intros. destruct (equiv_check p1 p2) eqn:?.
+  unfold decidable.
+  left. apply equiv_check_dec; auto.
+  unfold decidable, not; right; intros.
+  apply equiv_check_dec in H. crush.
+Qed.
+
+#[global]
+Instance DecidableSATSetoid : DecidableSetoid SATSetoid :=
+  { setoid_decidable := equiv_check_decidable }.
