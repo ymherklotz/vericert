@@ -658,7 +658,7 @@ Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
 
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with
-  | Pvar (b, pred) =>
+  | Plit (b, pred) =>
     if b
     then Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
     else Vunop Vnot (Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred)))
@@ -696,7 +696,7 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
     translate_predicate a preg p dst (Vvar src)
   | RBsetpred c args p =>
     do cond <- translate_condition c args;
-    ret (a (pred_expr preg (Pvar (true, p))) cond)
+    ret (a (pred_expr preg (Plit (true, p))) cond)
   end.
 
 Lemma create_new_state_state_incr:

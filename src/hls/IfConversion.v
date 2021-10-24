@@ -58,10 +58,10 @@ Definition if_convert_block (c: code) (p: predicate) (bb: bblock) : bblock :=
   | RBcond cond args n1 n2 =>
     match PTree.get n1 c, PTree.get n2 c with
     | Some bb1, Some bb2 =>
-      let bb1' := List.map (map_if_convert (Pvar (true, p))) bb1.(bb_body) in
-      let bb2' := List.map (map_if_convert (Pvar (false, p))) bb2.(bb_body) in
+      let bb1' := List.map (map_if_convert (Plit (true, p))) bb1.(bb_body) in
+      let bb2' := List.map (map_if_convert (Plit (false, p))) bb2.(bb_body) in
       mk_bblock (List.concat (bb.(bb_body) :: ((RBsetpred cond args p) :: bb1') :: bb2' :: nil))
-                (RBpred_cf (Pvar (true, p)) bb1.(bb_exit) bb2.(bb_exit))
+                (RBpred_cf (Plit (true, p)) bb1.(bb_exit) bb2.(bb_exit))
     | _, _ => bb
     end
   | _ => bb
