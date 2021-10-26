@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+Require Import Coq.Logic.Decidable.
+
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
@@ -281,9 +283,32 @@ Fixpoint of_list {A} (l: list A): option (non_empty A) :=
   | nil => None
   end.
 
+Fixpoint replace {A} (f: A -> A -> bool) (a b: A) (l: non_empty A) :=
+  match l with
+  | a' ::| l' => if f a a' then b ::| replace f a b l' else a' ::| replace f a b l'
+  | singleton a' => if f a a' then singleton b else singleton a'
+  end.
+
 Inductive In {A: Type} (x: A) : non_empty A -> Prop :=
 | In_cons : forall a b, x = a \/ In x b -> In x (a ::| b)
 | In_single : In x (singleton x).
+
+Lemma in_dec:
+  forall A (a: A) (l: non_empty A),
+    (forall a b: A, {a = b} + {a <> b}) ->
+    {In a l} + {~ In a l}.
+Proof.
+  induction l; intros.
+  { specialize (X a a0). inv X.
+    left. constructor.
+    right. unfold not. intros. apply H. inv H0. auto. }
+  { pose proof X as X2.
+    specialize (X a a0). inv X.
+    left. constructor; tauto.
+    apply IHl in X2. inv X2.
+    left. constructor; tauto.
+    right. unfold not in *; intros. apply H0. inv H1. now inv H3. }
+Qed.
 
 End NonEmpty.
 
@@ -513,8 +538,7 @@ Proof.
   - intros. simplify. repeat (destruct_match; crush). subst. apply IHe1 in H.
     unfold not in *. intros. apply H. inv H0. auto.
   - intros. simplify. repeat (destruct_match; crush); subst.
-    unfold not in *; intros. inv H0. rewrite beq_expression_refl in H.
-    discriminate.
+    unfold not in *; intros. inv H0. rewrite beq_expression_refl in H. discriminate.
     unfold not in *; intros. inv H. rewrite beq_expression_list_refl in Heqb. discriminate.
   - simplify. repeat (destruct_match; crush); subst;
     unfold not in *; intros.
@@ -536,6 +560,21 @@ Proof.
   destruct (beq_expression e1 e2) eqn:?. apply beq_expression_correct in Heqb. auto.
   apply beq_expression_correct2 in Heqb. auto.
 Defined.
+
+Definition pred_expr_item_eq (pe1 pe2: pred_op * expression) : bool :=
+  @equiv_dec _ SATSetoid _ (fst pe1) (fst pe2) && beq_expression (snd pe1) (snd pe2).
+
+Lemma pred_expr_dec: forall (pe1 pe2: pred_op * expression),
+    {pred_expr_item_eq pe1 pe2 = true} + {pred_expr_item_eq pe1 pe2 = false}.
+Proof.
+  intros; destruct (pred_expr_item_eq pe1 pe2) eqn:?; unfold not; [tauto | now right].
+Qed.
+
+Lemma pred_expr_dec2: forall (pe1 pe2: pred_op * expression),
+    {pred_expr_item_eq pe1 pe2 = true} + {~ pred_expr_item_eq pe1 pe2 = true}.
+Proof.
+  intros; destruct (pred_expr_item_eq pe1 pe2) eqn:?; unfold not; [tauto | now right].
+Qed.
 
 Module HashExpr <: Hashable.
   Definition t := expression.
@@ -676,7 +715,7 @@ Proof.
   assert (P m true).
   rewrite <- H. fold f'. apply Maps.PTree_Properties.fold_rec.
   unfold P; intros. rewrite <- H1 in H4. auto.
-  red; intros. rewrite Maps.PTree.gempty in H2. discriminate.
+  red; intros. now rewrite Maps.PTree.gempty in H2.
   unfold P; intros. unfold f' in H4. boolInv.
   rewrite Maps.PTree.gsspec in H5. destruct (peq i k).
   subst. inv H5. auto.
@@ -910,13 +949,20 @@ Section CORRECT.
   Proof.
     Admitted.
 
-  Lemma exists_norm_expr3 :
+(*  Lemma exists_norm_expr3 :
     forall e x pe expr m t h h',
       t ! e = None ->
       norm_expression m x h = (t, h') ->
       ~ NE.In (pe, expr) x.
   Proof.
-    Admitted.
+    Admitted.*)
+
+  Lemma norm_expr_constant :
+    forall x m h t h' e p,
+      norm_expression m x h = (t, h') ->
+      h ! e = Some p ->
+      h' ! e = Some p.
+  Proof. Admitted.
 
   Lemma norm_expr_In :
     forall A B sem ctx x pe expr v,
@@ -926,12 +972,33 @@ Section CORRECT.
       sem ctx expr v.
   Proof. Admitted.
 
+  Lemma norm_expr_Extract :
+    forall A B sem ctx x pe expr v,
+      @sem_pred_expr A B sem ctx x v ->
+      NE.In (pe, expr) x ->
+      eval_predf (ctx_ps ctx) pe = false ->
+      @sem_pred_expr A B sem ctx (NE.replace pred_expr_item_eq (pe, expr) (⟂, expr) x) v.
+  Proof.
+    induction x.
+    { simplify. destruct_match; auto. destruct a.
+      unfold pred_expr_item_eq in Heqb. simplify.
+      destruct (equiv_dec pe p) eqn:?; try easy.
+      rewrite e0 in H1.
+      inv H. crush.
+    }
+    { simplify.
+    }
+
   Section SEM_PRED.
 
     Context (B: Type).
     Context (isem: @ctx fd -> expression -> B -> Prop).
     Context (osem: @ctx tfd -> expression -> B -> Prop).
     Context (SEMSIM: forall e v v', isem ictx e v -> osem octx e v' -> v = v').
+
+    Ltac simplify' l := intros; unfold_constants; cbn -[l] in *;
+                        repeat (nicify_hypotheses; nicify_goals; kill_bools; substpp);
+                        cbn -[l] in *.
 
     Lemma check_correct_sem_value:
       forall x x' v v',
@@ -941,39 +1008,60 @@ Section CORRECT.
         v = v'.
     Proof.
       induction x.
-      - intros.
+      - intros * BEQ SEM1 SEM2.
         unfold beq_pred_expr in *. intros. repeat (destruct_match; try discriminate; []); subst.
-        inv H0.
-        pose Heqp as X.
+        rename Heqp into HNORM1.
+        rename Heqp0 into HNORM2.
+        inv SEM1. rename H0 into HEVAL. rename H2 into ISEM.
+        pose HNORM1 as X.
         eapply exists_norm_expr in X; [|constructor].
-        Opaque norm_expression. simplify. Transparent norm_expression.
-        destruct (t0 ! x) eqn:?.
-        { eapply forall_ptree_true in H0; eauto. unfold tree_equiv_check_el in *. rewrite Heqo in H0.
-          apply equiv_check_dec in H0.
-          eapply exists_norm_expr2 in Heqo.
-          3: { eauto. }
-          2: { admit. }
-          eapply norm_expr_In in Heqo; eauto.
-          inv HSIM; simplify. setoid_rewrite H0 in H3. eassumption.
+        simplify' norm_expression.
+        rename H0 into HT1.
+        rename H1 into HH1.
+        rename H into HFORALL1.
+        rename H2 into HFORALL2.
+        destruct (t0 ! x) eqn:DSTR.
+        { eapply forall_ptree_true in HT1; eauto. unfold tree_equiv_check_el in *. rewrite DSTR in HT1.
+          apply equiv_check_dec in HT1.
+          eapply exists_norm_expr2 in DSTR; try solve [eapply norm_expr_constant; eassumption | eassumption].
+          eapply norm_expr_In in DSTR; try eassumption. eauto.
+          inv HSIM; simplify. now setoid_rewrite <- HT1.
         }
         {
+          eapply forall_ptree_true in HT1; [|eassumption].
+          unfold tree_equiv_check_el in *. rewrite DSTR in HT1. apply equiv_check_dec in HT1.
+          now setoid_rewrite HT1 in HEVAL.
         }
-        eapply exists_norm_expr in Heqp.
-        unfold sat_pred_simple in *.
-        repeat destruct_match; try discriminate; []; subst.
-        assert (X: unsat (Por (Pand p (Pnot p0)) (Pand p0 (Pnot p)))) by eauto.
-        pose proof (sat_equiv2 _ _ X).
-        destruct x, x'; simplify.
-        repeat destruct_match; try discriminate; []. inv Heqp0. inv H0. inv H1.
-        inv Heqp
-
-            apply sat_predicate_Pvar_inj in H2; subst.
-
-        assert (e0 = e1) by (eapply hash_present_eq; eauto); subst.
-        eauto using sem_value_det.
-      - admit.
-      - admit.
-      - admit.
+      - intros. unfold beq_pred_expr in H. intros. repeat (destruct_match; try discriminate; []); subst.
+        destruct a.
+        inv H0.
+        { pose Heqp as X. eapply exists_norm_expr in X; [|constructor; tauto]. simplify' norm_expression.
+          eapply forall_ptree_true in H0; [|eassumption].
+          destruct (t0 ! x0) eqn:DSTR.
+          {
+            unfold tree_equiv_check_el in H0. rewrite DSTR in H0. apply equiv_check_dec in H0.
+            eapply exists_norm_expr2 in DSTR; try solve [eapply norm_expr_constant; eassumption | eassumption].
+            eapply norm_expr_In in DSTR; try eassumption; eauto.
+            rewrite <- H0. inv HSIM; eauto.
+          }
+          {
+            unfold tree_equiv_check_el in *. rewrite DSTR in H0. apply equiv_check_dec in H0.
+            now rewrite H0 in H7.
+          }
+        }
+        { (* This is the inductive argument, which says that if the element is in the list, then
+        taking it out will result in two equivalent lists, otherwise just taking the current element
+        results in equivalent lists. *)
+          simplify' norm_expression. eapply exists_norm_expr in Heqp; [|constructor]; eauto.
+          simplify' norm_expression.
+          eapply forall_ptree_true in H0; [|eassumption].
+          unfold tree_equiv_check_el in H0.
+          destruct (t0 ! x0) eqn:DSTR.
+          {
+            apply equiv_check_dec in H0.
+            eapply exists_norm_expr2 in DSTR; try solve [eapply norm_expr_constant; eassumption | eassumption].
+          }
+        }
     Admitted.
 
   End SEM_PRED.

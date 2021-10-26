@@ -82,7 +82,7 @@ let register a =
   | Some s -> s
   | None -> sprintf "reg_%d" (P.to_int a)
 
-(*let literal l = sprintf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
+(*let literal l = s printf "%d'd%d" (Nat.to_int l.vsize) (Z.to_int (uvalueToZ l))*)
 
 let literal l =
   let l' = camlint_of_coqint l in

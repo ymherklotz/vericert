@@ -399,6 +399,21 @@ Proof.
   apply equiv_check_dec in H. crush.
 Qed.
 
+Lemma equiv_check_decidable2 :
+  forall p1 p2, {p1 == p2} + {p1 =/= p2}.
+Proof.
+  intros. destruct (equiv_check p1 p2) eqn:?.
+  unfold decidable.
+  left. apply equiv_check_dec; auto.
+  unfold decidable, not; right; intros.
+  simpl. unfold complement. intros.
+  apply not_true_iff_false in Heqb. apply Heqb.
+  apply equiv_check_dec. eauto.
+Qed.
+
 #[global]
 Instance DecidableSATSetoid : DecidableSetoid SATSetoid :=
   { setoid_decidable := equiv_check_decidable }.
+
+#[global]
+Instance SATSetoidEqDec : EqDec SATSetoid := equiv_check_decidable2.
