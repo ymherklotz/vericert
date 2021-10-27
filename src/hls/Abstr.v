@@ -743,6 +743,57 @@ Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pre
   | None => equiv_check p ⟂
   end.
 
+Variant sem_pred_tree {A B: Type} (sem: ctx -> expression -> B -> Prop):
+    @ctx A -> PTree.t expression -> PTree.t pred_op -> B -> Prop :=
+| sem_pred_tree_intro :
+    forall ctx expr e pr v et pt,
+      eval_predf (ctx_ps ctx) pr = true ->
+      sem ctx expr v ->
+      pt ! e = Some pr ->
+      et ! e = Some expr ->
+      sem_pred_tree sem ctx et pt v.
+
+Variant predicated_mutexcl {A: Type} : predicated A -> Prop :=
+| predicated_mutexcl_intros : forall pe,
+    (forall x y, NE.In x pe -> NE.In y pe -> x <> y -> fst x ⇒ ¬ fst y) ->
+    predicated_mutexcl pe.
+
+Lemma norm_expression_sem_pred :
+  forall A B sem ctx pe v,
+    sem_pred_expr sem ctx pe v ->
+    forall pt et et',
+      predicated_mutexcl pe ->
+      norm_expression (max_pred_expr pe) pe et = (pt, et') ->
+      @sem_pred_tree A B sem ctx et' pt v.
+Proof.
+  induction 1; crush; repeat (destruct_match; []); try destruct_match.
+  { inv H2. econstructor. 3: { apply PTree.gss. }
+    2: { eassumption. }
+    { unfold eval_predf in *. simplify.  rewrite H. auto with bool. }
+    { admit. }
+  }
+  { inv H2. econstructor; eauto. apply PTree.gss. admit.
+  }
+  { inv H2.
+    assert (sem_pred_tree sem0 ctx0 et' t v).
+    eapply IHsem_pred_expr.
+    admit.
+    admit.
+    admit.
+  }
+  { admit. }
+  { admit. }
+Admitted.
+
+Lemma norm_expression_sem_pred2 :
+  forall A B sem ctx v pt et et',
+    @sem_pred_tree A B sem ctx et' pt v ->
+    forall pe,
+      predicated_mutexcl pe ->
+      norm_expression (max_pred_expr pe) pe et = (pt, et') ->
+      sem_pred_expr sem ctx pe v.
+Proof. Admitted.
+
 Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
   let max := Pos.max (max_pred_expr pe1) (max_pred_expr pe2) in
   let (np1, h) := norm_expression max pe1 (PTree.empty _) in
@@ -936,18 +987,8 @@ Section CORRECT.
     forall x pe expr m t h h',
       NE.In (pe, expr) x ->
       norm_expression m x h = (t, h') ->
-      exists e, t ! e = Some pe /\ h' ! e = Some expr.
-  Proof.
-    Admitted.
-
-  Lemma exists_norm_expr2 :
-    forall e x pe expr m t h h',
-      t ! e = Some pe ->
-      h' ! e = Some expr ->
-      norm_expression m x h = (t, h') ->
-      NE.In (pe, expr) x.
-  Proof.
-    Admitted.
+      exists e pe', t ! e = Some pe' /\ pe ⇒ pe' /\ h' ! e = Some expr.
+  Proof. Admitted.
 
 (*  Lemma exists_norm_expr3 :
     forall e x pe expr m t h h',
@@ -964,6 +1005,14 @@ Section CORRECT.
       h' ! e = Some p.
   Proof. Admitted.
 
+  Lemma norm_expr_implies :
+    forall x m h t h' e expr p,
+      norm_expression m x h = (t, h') ->
+      h' ! e = Some expr ->
+      t ! e = Some p ->
+      exists p', NE.In (p', expr) x /\ p' ⇒ p.
+  Proof. Admitted.
+
   Lemma norm_expr_In :
     forall A B sem ctx x pe expr v,
       @sem_pred_expr A B sem ctx x v ->
@@ -972,22 +1021,21 @@ Section CORRECT.
       sem ctx expr v.
   Proof. Admitted.
 
-  Lemma norm_expr_Extract :
+  Lemma norm_expr_replace :
     forall A B sem ctx x pe expr v,
       @sem_pred_expr A B sem ctx x v ->
-      NE.In (pe, expr) x ->
       eval_predf (ctx_ps ctx) pe = false ->
       @sem_pred_expr A B sem ctx (NE.replace pred_expr_item_eq (pe, expr) (⟂, expr) x) v.
-  Proof.
-    induction x.
-    { simplify. destruct_match; auto. destruct a.
-      unfold pred_expr_item_eq in Heqb. simplify.
-      destruct (equiv_dec pe p) eqn:?; try easy.
-      rewrite e0 in H1.
-      inv H. crush.
-    }
-    { simplify.
-    }
+  Proof using.
+    induction x; simplify; destruct_match; auto; destruct a;
+      unfold pred_expr_item_eq in Heqb; simplify;
+      try (destruct (equiv_dec pe p) eqn:?; [|discriminate]; []).
+      - rewrite e0 in H0; inv H; crush.
+      - apply beq_expression_correct in H2; subst;
+          pose proof H0; rewrite e0 in H2;
+            apply sem_pred_expr_cons_false; auto; inv H; crush.
+      - inv H; constructor; auto; now apply sem_pred_expr_cons_false.
+  Qed.
 
   Section SEM_PRED.
 
@@ -999,6 +1047,16 @@ Section CORRECT.
     Ltac simplify' l := intros; unfold_constants; cbn -[l] in *;
                         repeat (nicify_hypotheses; nicify_goals; kill_bools; substpp);
                         cbn -[l] in *.
+
+    Lemma check_correct_sem_value:
+      forall x x' v v' t t' h h',
+        beq_pred_expr x x' = true ->
+        norm_expression (Pos.max (max_pred_expr x) (max_pred_expr x')) x (PTree.empty _) = (t, h) ->
+        norm_expression (Pos.max (max_pred_expr x) (max_pred_expr x')) x' h = (t', h') ->
+        sem_pred_tree isem ictx h' t v ->
+        sem_pred_tree osem octx h' t' v' ->
+        v = v'.
+    Proof.
 
     Lemma check_correct_sem_value:
       forall x x' v v',

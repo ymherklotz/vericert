@@ -417,3 +417,29 @@ Instance DecidableSATSetoid : DecidableSetoid SATSetoid :=
 
 #[global]
 Instance SATSetoidEqDec : EqDec SATSetoid := equiv_check_decidable2.
+
+Definition Pimplies p p' := ¬ p ∨ p'.
+
+Notation "A → B" := (Pimplies A B) (at level 30) : pred_op.
+
+Definition implies p p' :=
+  forall c, sat_predicate p c = true -> sat_predicate p' c = true.
+
+Notation "A ⇒ B" := (implies A B) (at level 35) : pred_op.
+
+Lemma Pimplies_implies: forall p p', (p → p') ∧ p ⇒ p'.
+Proof.
+  unfold "→", "⇒"; simplify.
+  apply orb_prop in H0. inv H0; auto. rewrite negate_correct in H.
+  apply negb_true_iff in H. crush.
+Qed.
+
+#[global]
+Instance PimpliesProper : Proper (equiv ==> equiv ==> equiv) Pimplies.
+Proof.
+  unfold Proper, "==>". simplify. unfold "→".
+  intros.
+  unfold sat_equiv in *. intros.
+  simplify. repeat rewrite negate_correct. rewrite H0. rewrite H.
+  auto.
+Qed.
