@@ -761,13 +761,15 @@ Variant predicated_mutexcl {A: Type} : predicated A -> Prop :=
 Lemma norm_expression_sem_pred :
   forall A B sem ctx pe v,
     sem_pred_expr sem ctx pe v ->
-    forall pt et et',
+    forall pt et et' max,
       predicated_mutexcl pe ->
-      norm_expression (max_pred_expr pe) pe et = (pt, et') ->
+      max_pred_expr pe <= max ->
+      norm_expression max pe et = (pt, et') ->
       @sem_pred_tree A B sem ctx et' pt v.
 Proof.
   induction 1; crush; repeat (destruct_match; []); try destruct_match.
-  { inv H2. econstructor. 3: { apply PTree.gss. }
+  Admitted.
+(*  { inv H2. econstructor. 3: { apply PTree.gss. }
     2: { eassumption. }
     { unfold eval_predf in *. simplify.  rewrite H. auto with bool. }
     { admit. }
@@ -783,7 +785,7 @@ Proof.
   }
   { admit. }
   { admit. }
-Admitted.
+Admitted.*)
 
 Lemma norm_expression_sem_pred2 :
   forall A B sem ctx v pt et et',
@@ -1021,7 +1023,15 @@ Section CORRECT.
       sem ctx expr v.
   Proof. Admitted.
 
-  Lemma norm_expr_replace :
+  Lemma norm_expr_forall_impl :
+    forall m x h t h' e1 e2 p1 p2,
+      predicated_mutexcl x ->
+      norm_expression m x h = (t, h') ->
+      t ! e1 = Some p1 -> t ! e2 = Some p2 -> e1 <> e2 ->
+      p1 ⇒ ¬ p2.
+    Admitted.
+
+    Lemma norm_expr_replace :
     forall A B sem ctx x pe expr v,
       @sem_pred_expr A B sem ctx x v ->
       eval_predf (ctx_ps ctx) pe = false ->
@@ -1051,12 +1061,53 @@ Section CORRECT.
     Lemma check_correct_sem_value:
       forall x x' v v' t t' h h',
         beq_pred_expr x x' = true ->
+        predicated_mutexcl x -> predicated_mutexcl x' ->
         norm_expression (Pos.max (max_pred_expr x) (max_pred_expr x')) x (PTree.empty _) = (t, h) ->
         norm_expression (Pos.max (max_pred_expr x) (max_pred_expr x')) x' h = (t', h') ->
-        sem_pred_tree isem ictx h' t v ->
+        sem_pred_tree isem ictx h t v ->
         sem_pred_tree osem octx h' t' v' ->
         v = v'.
     Proof.
+      intros. inv H4. inv H5.
+      destruct (Pos.eq_dec e e0); subst.
+      { eapply norm_expr_constant in H3; [|eassumption].
+        assert (expr = expr0) by (setoid_rewrite H3 in H12; crush); subst.
+        eapply SEMSIM; eauto. }
+      { destruct (t ! e0) eqn:?.
+        { assert (p == pr0).
+          { unfold beq_pred_expr in H. repeat (destruct_match; []). inv H2.
+            rewrite Heqp1 in H3. inv H3.
+            simplify.
+            eapply forall_ptree_true in H2. 2: { eapply Heqo. }
+            unfold tree_equiv_check_el in H2. rewrite H11 in H2.
+            now apply equiv_check_correct in H2. }
+          pose proof H0. eapply norm_expr_forall_impl in H0; [| | | |eassumption]; try eassumption.
+          unfold "⇒" in H0. unfold eval_predf in *. apply H0 in H6.
+          rewrite negate_correct in H6. apply negb_true_iff in H6.
+          inv HSIM. crush. }
+        { unfold beq_pred_expr in H. repeat (destruct_match; []). inv H2.
+          rewrite Heqp0 in H3. inv H3. simplify.
+          eapply forall_ptree_true in H3. 2: { eapply H11. }
+          unfold tree_equiv_check_None_el in H3.
+          rewrite Heqo in H3. apply equiv_check_correct in H3. rewrite H3 in H4.
+          unfold eval_predf in H4. crush. } }
+    Qed.
+
+    Lemma check_correct_sem_value2:
+      forall x x' v v',
+        beq_pred_expr x x' = true ->
+        predicated_mutexcl x ->
+        predicated_mutexcl x' ->
+        sem_pred_expr isem ictx x v ->
+        sem_pred_expr osem octx x' v' ->
+        v = v'.
+    Proof.
+      intros. pose proof H.
+      unfold beq_pred_expr in H. intros. repeat (destruct_match; try discriminate; []).
+      eapply check_correct_sem_value; try eassumption.
+      eapply norm_expression_sem_pred; eauto. lia.
+      eapply norm_expression_sem_pred; eauto. lia.
+    Qed.
 
     Lemma check_correct_sem_value:
       forall x x' v v',
