@@ -694,7 +694,7 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
   | RBstore p chunk addr args src =>
     do dst <- translate_arr_access chunk addr args stack;
     translate_predicate a preg p dst (Vvar src)
-  | RBsetpred c args p =>
+  | RBsetpred _ c args p =>
     do cond <- translate_condition c args;
     ret (a (pred_expr preg (Plit (true, p))) cond)
   end.

@@ -60,7 +60,7 @@ Definition if_convert_block (c: code) (p: predicate) (bb: bblock) : bblock :=
     | Some bb1, Some bb2 =>
       let bb1' := List.map (map_if_convert (Plit (true, p))) bb1.(bb_body) in
       let bb2' := List.map (map_if_convert (Plit (false, p))) bb2.(bb_body) in
-      mk_bblock (List.concat (bb.(bb_body) :: ((RBsetpred cond args p) :: bb1') :: bb2' :: nil))
+      mk_bblock (List.concat (bb.(bb_body) :: ((RBsetpred None cond args p) :: bb1') :: bb2' :: nil))
                 (RBpred_cf (Plit (true, p)) bb1.(bb_exit) bb2.(bb_exit))
     | _, _ => bb
     end

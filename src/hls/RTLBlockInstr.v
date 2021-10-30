@@ -38,7 +38,7 @@ Inductive instr : Type :=
 | RBop : option pred_op -> operation -> list reg -> reg -> instr
 | RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
-| RBsetpred : condition -> list reg -> predicate -> instr.
+| RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
 
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
@@ -72,7 +72,7 @@ Definition max_reg_instr (m: positive) (i: instr) :=
     fold_left Pos.max args (Pos.max dst m)
   | RBstore p chunk addr args src =>
     fold_left Pos.max args (Pos.max src m)
-  | RBsetpred c args p =>
+  | RBsetpred p' c args p =>
     fold_left Pos.max args m
   end.
 
@@ -240,9 +240,9 @@ Section RELSEM.
         eval_pred p (mk_instr_state rs pr m) (mk_instr_state rs pr m') ist ->
         step_instr sp (mk_instr_state rs pr m) (RBstore p chunk addr args src) ist
   | exec_RBsetpred:
-      forall sp rs pr m p c b args,
+      forall sp rs pr m p c b args p',
       Op.eval_condition c rs##args m = Some b ->
-      step_instr sp (mk_instr_state rs pr m) (RBsetpred c args p)
+      step_instr sp (mk_instr_state rs pr m) (RBsetpred p' c args p)
                  (mk_instr_state rs (PMap.set p b pr) m).
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
