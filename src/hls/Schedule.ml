@@ -26,6 +26,7 @@ open AST
 open Kildall
 open Op
 open RTLBlockInstr
+open Predicate
 open RTLBlock
 open HTL
 open Verilog
@@ -105,7 +106,7 @@ let print_instr = function
   | RBnop -> ""
   | RBload (_, _, _, _, r) -> sprintf "load(%s)" (reg r)
   | RBstore (_, _, _, _, r) -> sprintf "store(%s)" (reg r)
-  | RBsetpred (_, _, p) -> sprintf "setpred(%s)" (print_pred p)
+  | RBsetpred (_, _, _, p) -> sprintf "setpred(%s)" (print_pred p)
   | RBop (_, op, args, d) ->
     (match op, args with
     | Omove, _ -> "mov"
@@ -354,7 +355,7 @@ let rec find_all_next_dst_read i dst i' curr =
   | RBload (_, _, _, rs, _) :: curr' -> check_dst rs curr'
   | RBstore (_, _, _, rs, src) :: curr' -> check_dst (src :: rs) curr'
   | RBnop :: curr' -> find_all_next_dst_read i dst (i' + 1) curr'
-  | RBsetpred (_, rs, _) :: curr' -> check_dst rs curr'
+  | RBsetpred (_, _, rs, _) :: curr' -> check_dst rs curr'
 
 let drop i lst =
   let rec drop' i' lst' =
@@ -413,10 +414,11 @@ let accumulate_WAW_mem_deps instrs dfg curri =
 
 let rec in_predicate p p' =
   match p' with
-  | Pvar p'' -> P.to_int p = P.to_int p''
-  | Pnot p'' -> in_predicate p p''
+  | Plit p'' -> P.to_int p = P.to_int (snd p'')
   | Pand (p1, p2) -> in_predicate p p1 || in_predicate p p2
   | Por (p1, p2) -> in_predicate p p1 || in_predicate p p2
+  | Ptrue -> false
+  | Pfalse -> false
 
 let get_predicate = function
   | RBop (p, _, _, _) -> p
@@ -426,7 +428,7 @@ let get_predicate = function
 
 let rec next_setpred p i = function
   | [] -> None
-  | RBsetpred (_, _, p') :: rst ->
+  | RBsetpred (_, _, _, p') :: rst ->
     if in_predicate p' p then
       Some i
     else
@@ -459,7 +461,7 @@ let accumulate_RAW_pred_deps instrs dfg curri =
 let accumulate_WAR_pred_deps instrs dfg curri =
   let i, curr = curri in
   match curr with
-  | RBsetpred (_, _, p) -> (
+  | RBsetpred (_, _, _, p) -> (
       match next_preduse p 0 (take i instrs |> List.rev) with
       | None -> dfg
       | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
@@ -468,8 +470,8 @@ let accumulate_WAR_pred_deps instrs dfg curri =
 let accumulate_WAW_pred_deps instrs dfg curri =
   let i, curr = curri in
   match curr with
-  | RBsetpred (_, _, p) -> (
-      match next_setpred (Pvar p) 0 (take i instrs |> List.rev) with
+  | RBsetpred (_, _, _, p) -> (
+      match next_setpred (Plit (true, p)) 0 (take i instrs |> List.rev) with
       | None -> dfg
       | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
   | _ -> dfg
@@ -512,18 +514,18 @@ let assigned_vars vars = function
   | RBop (_, _, _, dst) -> dst :: vars
   | RBload (_, _, _, _, dst) -> dst :: vars
   | RBstore (_, _, _, _, _) -> vars
-  | RBsetpred (_, _, _) -> vars
+  | RBsetpred (_, _, _, _) -> vars
 
 let get_pred = function
   | RBnop -> None
   | RBop (op, _, _, _) -> op
   | RBload (op, _, _, _, _) -> op
   | RBstore (op, _, _, _, _) -> op
-  | RBsetpred (_, _, _) -> None
+  | RBsetpred (_, _, _, _) -> None
 
 let independant_pred p p' =
-  match sat_pred_simple (Nat.of_int 100000) (Pand (p, p')) with
-  | Some None -> true
+  match sat_pred_simple (Pand (p, p')) with
+  | None -> true
   | _ -> false
 
 let check_dependent op1 op2 =

@@ -4,6 +4,7 @@ open Datatypes
 open Maps
 open AST
 open RTLBlockInstr
+open Predicate
 open PrintAST
 
 let reg pp r =
@@ -22,10 +23,11 @@ let ros pp = function
   | Coq_inr s -> fprintf pp "\"%s\"" (extern_atom s)
 
 let rec print_pred_op pp = function
-  | Pvar p -> pred pp p
-  | Pnot p -> fprintf pp "(~ %a)" print_pred_op p
+  | Plit p -> if fst p then pred pp (snd p) else fprintf pp "~ %a" pred (snd p)
   | Pand (p1, p2) -> fprintf pp "(%a & %a)" print_pred_op p1 print_pred_op p2
   | Por (p1, p2) -> fprintf pp "(%a | %a)" print_pred_op p1 print_pred_op p2
+  | Ptrue -> fprintf pp "T"
+  | Pfalse -> fprintf pp "⟂"
 
 let print_pred_option pp = function
   | Some x -> fprintf pp "(%a)" print_pred_op x
@@ -48,8 +50,9 @@ let print_bblock_body pp i =
        (name_of_chunk chunk)
        (PrintOp.print_addressing reg) (addr, args)
        reg src
-  | RBsetpred (c, args, p) ->
-    fprintf pp "%a = %a\n"
+  | RBsetpred (p', c, args, p) ->
+    fprintf pp "%a %a = %a\n"
+      print_pred_option p'
       pred p
       (PrintOp.print_condition reg) (c, args)
 

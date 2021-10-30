@@ -25,7 +25,9 @@ From vericert Require
      RTLBlockInstr
      HTLgen
      Pipeline
-     HLSOpts.
+     HLSOpts
+     Predicate
+.
 
 From Coq Require DecidableClass.
 
@@ -192,7 +194,7 @@ Separate Extraction
          RTLBlockgen.transl_program RTLBlockInstr.successors_instr
          HTLgen.tbl_to_case_expr
          Pipeline.pipeline
-         RTLBlockInstr.sat_pred_simple
+         Predicate.sat_pred_simple
          Verilog.stmnt_to_list
 
    Compiler.transf_c_program Compiler.transf_cminor_program
