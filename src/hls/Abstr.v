@@ -449,9 +449,7 @@ Definition collapse_pe (p: pred_expr) : option expression :=
 Inductive sem_predset : ctx -> forest -> predset -> Prop :=
 | Spredset:
     forall ctx f rs',
-    (forall pe x,
-      collapse_pe (f # (Pred x)) = Some pe ->
-      sem_pred ctx pe (rs' !! x)) ->
+    (forall x, sem_pred_expr sem_pred ctx (f # (Pred x)) (rs' !! x)) ->
     sem_predset ctx f rs'.
 
 Inductive sem_regset : ctx -> forest -> regset -> Prop :=
@@ -758,6 +756,46 @@ Variant predicated_mutexcl {A: Type} : predicated A -> Prop :=
     (forall x y, NE.In x pe -> NE.In y pe -> x <> y -> fst x ⇒ ¬ fst y) ->
     predicated_mutexcl pe.
 
+Lemma hash_value_in :
+  forall max e et h h0,
+    hash_value max e et = (h, h0) ->
+    h0 ! h = Some e.
+Proof.
+  intros. unfold hash_value in *. destruct_match;
+  match goal with
+  | H: (_, _) = (_, _) |- _ => inv H
+  end.
+  - now apply find_tree_Some in Heqo.
+  - apply PTree.gss.
+Qed.
+
+Lemma norm_expr_constant :
+  forall x m h t h' e p,
+    norm_expression m x h = (t, h') ->
+    h ! e = Some p ->
+    h' ! e = Some p.
+Proof. Admitted.
+
+Lemma predicated_cons :
+  forall A (a:pred_op * A) x,
+    predicated_mutexcl (a ::| x) ->
+    predicated_mutexcl x.
+Proof.
+  intros.
+  inv H. constructor; intros.
+  apply H0; auto; constructor; tauto.
+Qed.
+
+Lemma norm_expr_mutexcl :
+  forall m pe h t h' e e' p p',
+    norm_expression m pe h = (t, h') ->
+    predicated_mutexcl pe ->
+    t ! e = Some p ->
+    t ! e' = Some p' ->
+    e <> e' ->
+    p ⇒ ¬ p'.
+Proof. Abort.
+
 Lemma norm_expression_sem_pred :
   forall A B sem ctx pe v,
     sem_pred_expr sem ctx pe v ->
@@ -767,25 +805,43 @@ Lemma norm_expression_sem_pred :
       norm_expression max pe et = (pt, et') ->
       @sem_pred_tree A B sem ctx et' pt v.
 Proof.
-  induction 1; crush; repeat (destruct_match; []); try destruct_match.
-  Admitted.
-(*  { inv H2. econstructor. 3: { apply PTree.gss. }
+  induction 1; crush; repeat (destruct_match; []); try destruct_match;
+  match goal with
+  | H: (_, _) = (_, _) |- _ => inv H
+  end.
+  { econstructor. 3: { apply PTree.gss. }
     2: { eassumption. }
     { unfold eval_predf in *. simplify.  rewrite H. auto with bool. }
-    { admit. }
+    { apply hash_value_in in Heqp. eapply norm_expr_constant in Heqp0; eauto. }
   }
-  { inv H2. econstructor; eauto. apply PTree.gss. admit.
+  { econstructor; eauto. apply PTree.gss.
+    apply hash_value_in in Heqp.
+    eapply norm_expr_constant in Heqp0; eauto.
   }
-  { inv H2.
-    assert (sem_pred_tree sem0 ctx0 et' t v).
+  { assert (sem_pred_tree sem0 ctx0 et' t v).
     eapply IHsem_pred_expr.
-    admit.
-    admit.
-    admit.
+    eapply predicated_cons; eauto.
+    instantiate (1 := max). lia.
+    eassumption.
+    inv H3.
+    destruct (Pos.eq_dec e0 h); subst. rewrite H6 in Heqo. simplify.
+    econstructor; try apply PTree.gss; eauto.
+    unfold eval_predf in *. simplify. auto with bool.
+    econstructor; eauto. now rewrite PTree.gso.
   }
-  { admit. }
-  { admit. }
-Admitted.*)
+  { assert (X: sem_pred_tree sem0 ctx0 et' t v).
+    eapply IHsem_pred_expr.
+    eapply predicated_cons; eauto.
+    instantiate (1 := max). lia.
+    eassumption.
+    inv X.
+    destruct (Pos.eq_dec e0 h); crush.
+    econstructor; eauto. now rewrite PTree.gso.
+  }
+  { econstructor; eauto. apply PTree.gss.
+    eapply hash_value_in; eassumption.
+  }
+Qed.
 
 Lemma norm_expression_sem_pred2 :
   forall A B sem ctx v pt et et',
@@ -893,7 +949,7 @@ Lemma pred_equivalence_None :
     ta ! e = Some pe ->
     tb ! e = None ->
     equiv pe ⟂.
-Admitted.
+Abort.
 
 Lemma pred_equivalence :
   forall (ta tb: PTree.t pred_op) e pe,
@@ -998,14 +1054,7 @@ Section CORRECT.
       norm_expression m x h = (t, h') ->
       ~ NE.In (pe, expr) x.
   Proof.
-    Admitted.*)
-
-  Lemma norm_expr_constant :
-    forall x m h t h' e p,
-      norm_expression m x h = (t, h') ->
-      h ! e = Some p ->
-      h' ! e = Some p.
-  Proof. Admitted.
+    Abort.*)
 
   Lemma norm_expr_implies :
     forall x m h t h' e expr p,
@@ -1109,7 +1158,7 @@ Section CORRECT.
       eapply norm_expression_sem_pred; eauto. lia.
     Qed.
 
-    Lemma check_correct_sem_value:
+    Lemma check_correct_sem_value3:
       forall x x' v v',
         beq_pred_expr x x' = true ->
         sem_pred_expr isem ictx x v ->
@@ -1130,7 +1179,7 @@ Section CORRECT.
         rename H into HFORALL1.
         rename H2 into HFORALL2.
         destruct (t0 ! x) eqn:DSTR.
-        { eapply forall_ptree_true in HT1; eauto. unfold tree_equiv_check_el in *. rewrite DSTR in HT1.
+(*        { eapply forall_ptree_true in HT1; eauto. unfold tree_equiv_check_el in *. rewrite DSTR in HT1.
           apply equiv_check_dec in HT1.
           eapply exists_norm_expr2 in DSTR; try solve [eapply norm_expr_constant; eassumption | eassumption].
           eapply norm_expr_In in DSTR; try eassumption. eauto.
@@ -1171,31 +1220,47 @@ Section CORRECT.
             eapply exists_norm_expr2 in DSTR; try solve [eapply norm_expr_constant; eassumption | eassumption].
           }
         }
-    Admitted.
+    Admitted.*) Abort.
 
   End SEM_PRED.
 
-  Lemma check_correct: forall (fa fb : forest) ctx ctx' i,
-    similar ctx ctx' ->
-    check fa fb = true ->
-    @sem fd ctx fa i -> @sem tfd ctx' fb i.
-  Proof.
+  Inductive match_instr_state : instr_state -> instr_state -> Prop :=
+  | match_instr_state_intro : forall i1 i2,
+      is_mem i1 = is_mem i2 ->
+      (forall x, (is_rs i1) !! x = (is_rs i2) !! x) ->
+      (forall x, (is_ps i1) !! x = (is_ps i2) !! x) ->
+      match_instr_state i1 i2.
+
+  Lemma check_correct: forall (fa fb : forest) i i',
+      check fa fb = true ->
+      sem ictx fa i ->
+      sem octx fb i' ->
+      match_instr_state i i'.
+  Proof using HSIM.
     intros.
-    inv H. inv H1. inv H.
-  (*unfold check, get_forest; intros;
-  pose proof beq_expression_correct;
-  match goal with
-    [ Hbeq : context[Rtree.beq], y : Rtree.elt |- _ ] =>
-    apply (Rtree.beq_sound beq_expression fa fb) with (x := y) in Hbeq
-  end;
-  repeat destruct_match; crush.
-Qed.*)
-  Abort.
+    unfold check, get_forest in *; intros;
+      pose proof beq_expression_correct.
+    pose proof (Rtree.beq_sound beq_pred_expr fa fb H).
+    inv H0; inv H1.
+    constructor; simplify.
+    { admit. }
+    { inv H0; inv H4.
+      repeat match goal with
+             | H: forall _ : reg, _ |- _ => specialize (H x)
+             | H: forall _ : Rtree.elt, _ |- _ => specialize (H (Reg x))
+             end.
+      repeat (destruct_match; try contradiction).
+      unfold "#" in *. rewrite Heqo in H0.
+      rewrite Heqo0 in H1. admit.
+      unfold "#" in H1. rewrite Heqo0 in H1.
+      unfold "#" in H0. rewrite Heqo in H0. admit.
+    }
+Admitted.
 
 End CORRECT.
 
 Lemma get_empty:
-  forall r, empty#r = Psingle (Ebase r).
+  forall r, empty#r = NE.singleton (T, Ebase r).
 Proof.
   intros; unfold get_forest;
   destruct_match; auto; [ ];
@@ -1250,7 +1315,7 @@ Qed.
 Lemma map1:
   forall w dst dst',
   dst <> dst' ->
-  (empty # dst <- w) # dst' = Psingle (Ebase dst').
+  (empty # dst <- w) # dst' = NE.singleton (T, Ebase dst').
 Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply get_empty. Qed.
 
 Lemma genmap1:
