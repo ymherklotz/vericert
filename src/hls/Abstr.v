@@ -366,12 +366,14 @@ Section SEMANTICS.
 Context {A : Type}.
 
 Record ctx : Type := mk_ctx {
-  ctx_rs: regset;
-  ctx_ps: predset;
-  ctx_mem: mem;
+  ctx_is: instr_state;
   ctx_sp: val;
   ctx_ge: Genv.t A unit;
 }.
+
+Definition ctx_rs ctx := is_rs (ctx_is ctx).
+Definition ctx_ps ctx := is_ps (ctx_is ctx).
+Definition ctx_mem ctx := is_mem (ctx_is ctx).
 
 Inductive sem_value : ctx -> expression -> val -> Prop :=
 | Sbase_reg:
@@ -656,11 +658,36 @@ Lemma ge_preserved_same:
 Proof. unfold ge_preserved; auto. Qed.
 #[local] Hint Resolve ge_preserved_same : core.
 
+Inductive match_states : instr_state -> instr_state -> Prop :=
+| match_states_intro:
+  forall ps ps' rs rs' m m',
+    (forall x, rs !! x = rs' !! x) ->
+    (forall x, ps !! x = ps' !! x) ->
+    m = m' ->
+    match_states (mk_instr_state rs ps  m) (mk_instr_state rs' ps' m').
+
+Lemma match_states_refl x : match_states x x.
+Proof. destruct x; constructor; crush. Qed.
+
+Lemma match_states_commut x y : match_states x y -> match_states y x.
+Proof. inversion 1; constructor; crush. Qed.
+
+Lemma match_states_trans x y z :
+  match_states x y -> match_states y z -> match_states x z.
+Proof. repeat inversion 1; constructor; crush. Qed.
+
+#[global]
+Instance match_states_Equivalence : Equivalence match_states :=
+  { Equivalence_Reflexive := match_states_refl ;
+    Equivalence_Symmetric := match_states_commut ;
+    Equivalence_Transitive := match_states_trans ; }.
+
 Inductive similar {A B} : @ctx A -> @ctx B -> Prop :=
 | similar_intro :
-    forall rs ps mem sp ge tge,
+    forall ist ist' sp ge tge,
     ge_preserved ge tge ->
-    similar (mk_ctx rs ps mem sp ge) (mk_ctx rs ps mem sp tge).
+    match_states ist ist' ->
+    similar (mk_ctx ist sp ge) (mk_ctx ist' sp tge).
 
 Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
   match pe1, pe2 with
@@ -977,7 +1004,7 @@ Section CORRECT.
     induction e using expression_ind2
       with (P0 := fun p => forall v v',
                     sem_val_list ictx p v -> sem_val_list octx p v' -> v = v');
-    inv HSIM; repeat progress simplify;
+    inv HSIM; match goal with H: context [match_states] |- _ => inv H end; repeat progress simplify;
     try solve [match goal with
                | H: sem_value _ _ _, H2: sem_value _ _ _ |- _ => inv H; inv H2; auto
                | H: sem_mem _ _ _, H2: sem_mem _ _ _ |- _ => inv H; inv H2; auto
@@ -990,21 +1017,52 @@ Section CORRECT.
                IH: forall _ _, sem_val_list _ _ _ -> sem_val_list _ _ _ -> _ = _ |- _ =>
                assert (X: l1 = l2) by (apply IH; auto)
              | H: ge_preserved _ _ |- _ => inv H
+             | |- context [ctx_rs] => unfold ctx_rs; cbn
+             | H: context [ctx_mem] |- _ => unfold ctx_mem in H; cbn
              end; crush.
-    - inv H1. inv H0. simplify.
-      assert (lv0 = lv). apply IHe; eauto. subst.
-      inv H. rewrite H1 in H13.
-      assert (a0 = a1) by crush. subst.
-      assert (m'1 = m'0). apply IHe0; eauto. subst.
-      crush.
-    - inv H0. inv H1. simplify.
-      assert (lv = lv0). { apply IHe2; eauto. } subst.
-      assert (a1 = a0). { inv H.  rewrite H1 in H12. crush. } subst.
-      assert (v0 = v1). { apply IHe1; auto. } subst.
-      assert (m'0 = m'1). { apply IHe3; auto. } subst.
-      crush.
-    - inv H0. inv H1. f_equal. apply IHe; auto.
+    - repeat match goal with H: sem_value _ _ _ |- _ => inv H end; simplify;
+      assert (lv0 = lv) by (apply IHe; eauto); subst;
+      match goal with H: ge_preserved _ _ |- _ => inv H end;
+      match goal with H: context [Op.eval_addressing _ _ _ _ = Op.eval_addressing _ _ _ _] |- _
+                      => rewrite H in * end;
+      assert (a0 = a1) by crush;
+      assert (m'2 = m'1) by (apply IHe0; eauto); crush.
+    - inv H0; inv H3. simplify.
+      assert (lv = lv0) by ( apply IHe2; eauto). subst.
+      assert (a1 = a0). { inv H. rewrite H3 in *. crush. }
+      assert (v0 = v1). { apply IHe1; auto. }
+      assert (m'1 = m'2). { apply IHe3; auto. } crush.
+    - inv H0. inv H3. f_equal. apply IHe; auto.
       apply IHe0; auto.
+  Qed.
+
+  Lemma sem_value_mem_corr:
+    forall e v m,
+      (sem_value ictx e v -> sem_value octx e v)
+      /\ (sem_mem ictx e m -> sem_mem octx e m).
+  Proof using HSIM.
+    induction e using expression_ind2
+      with (P0 := fun p => forall v,
+                    sem_val_list ictx p v -> sem_val_list octx p v);
+    inv HSIM; match goal with H: context [match_states] |- _ => inv H end; repeat progress simplify.
+    - inv H0. unfold ctx_rs, ctx_ps, ctx_mem in *; cbn. rewrite H1. constructor.
+    - inv H0. unfold ctx_rs, ctx_ps, ctx_mem in *; cbn. constructor.
+    - inv H0. apply IHe in H6. econstructor; try eassumption.
+      unfold ctx_rs, ctx_ps, ctx_mem in *; cbn in *. inv H. crush.
+    - inv H0.
+    - inv H0. eapply IHe in H10. eapply IHe0 in H8; auto.
+      econstructor; try eassumption.
+      unfold ctx_rs, ctx_ps, ctx_mem in *; cbn in *. inv H; crush.
+    - inv H0.
+    - inv H0.
+    - inv H0. eapply IHe1 in H11; auto. eapply IHe2 in H12; auto. eapply IHe3 in H9; auto.
+      econstructor; try eassumption.
+      unfold ctx_rs, ctx_ps, ctx_mem in *; cbn in *. inv H; crush.
+    - inv H0.
+    - inv H0.
+    - inv H0. econstructor.
+    - inv H0. eapply IHe in H6; auto. eapply IHe0 in H8.
+      econstructor; eassumption.
   Qed.
 
   Lemma sem_value_det:
@@ -1014,11 +1072,25 @@ Section CORRECT.
     intros. eapply sem_value_mem_det; eauto; apply Mem.empty.
   Qed.
 
+  Lemma sem_value_corr:
+    forall e v,
+      sem_value ictx e v -> sem_value octx e v.
+  Proof using HSIM.
+    intros. eapply sem_value_mem_corr; eauto; apply Mem.empty.
+  Qed.
+
   Lemma sem_mem_det:
     forall e v v',
       sem_mem ictx e v -> sem_mem octx e v' -> v = v'.
   Proof using HSIM.
     intros. eapply sem_value_mem_det; eauto; apply (Vint (Int.repr 0%Z)).
+  Qed.
+
+  Lemma sem_mem_corr:
+    forall e v,
+      sem_mem ictx e v -> sem_mem octx e v.
+  Proof using HSIM.
+    intros. eapply sem_value_mem_corr; eauto; apply (Vint (Int.repr 0%Z)).
   Qed.
 
   Lemma sem_val_list_det:
@@ -1031,12 +1103,34 @@ Section CORRECT.
       apply IHe; eauto.
   Qed.
 
+  Lemma sem_val_list_corr:
+    forall e l,
+      sem_val_list ictx e l -> sem_val_list octx e l.
+  Proof using HSIM.
+    induction e; simplify.
+    - inv H; constructor.
+    - inv H. apply sem_value_corr in H3; auto; try apply Mem.empty;
+      apply IHe in H5; constructor; assumption.
+  Qed.
+
   Lemma sem_pred_det:
     forall e v v',
       sem_pred ictx e v -> sem_pred octx e v' -> v = v'.
   Proof using HSIM.
-    try solve [inversion 1]; pose proof sem_value_det; pose proof sem_val_list_det; inv HSIM; simplify.
-    inv H2; inv H3; auto. assert (lv = lv0) by (eapply H0; eauto). crush.
+    try solve [inversion 1]; pose proof sem_value_det; pose proof sem_val_list_det; inv HSIM;
+      match goal with H: match_states _ _ |- _ => inv H end; simplify.
+    inv H2; inv H5; auto. assert (lv = lv0) by (eapply H0; eauto). subst. unfold ctx_mem in *.
+    crush.
+  Qed.
+
+  Lemma sem_pred_corr:
+    forall e v,
+      sem_pred ictx e v -> sem_pred octx e v.
+  Proof using HSIM.
+    try solve [inversion 1]; pose proof sem_value_corr; pose proof sem_val_list_corr; inv HSIM;
+      match goal with H: match_states _ _ |- _ => inv H end; simplify.
+    inv H2; auto. apply H0 in H5. econstructor; eauto.
+    unfold ctx_ps; cbn. rewrite H4. constructor.
   Qed.
 
   #[local] Opaque PTree.set.
@@ -1116,7 +1210,7 @@ Section CORRECT.
         sem_pred_tree isem ictx h t v ->
         sem_pred_tree osem octx h' t' v' ->
         v = v'.
-    Proof.
+    Proof using HSIM SEMSIM.
       intros. inv H4. inv H5.
       destruct (Pos.eq_dec e e0); subst.
       { eapply norm_expr_constant in H3; [|eassumption].
@@ -1133,7 +1227,11 @@ Section CORRECT.
           pose proof H0. eapply norm_expr_forall_impl in H0; [| | | |eassumption]; try eassumption.
           unfold "⇒" in H0. unfold eval_predf in *. apply H0 in H6.
           rewrite negate_correct in H6. apply negb_true_iff in H6.
-          inv HSIM. crush. }
+          inv HSIM. match goal with H: match_states _ _ |- _ => inv H end.
+          unfold ctx_ps, ctx_mem, ctx_rs in *. simplify.
+          pose proof eval_predf_pr_equiv pr0 ps ps' H17. unfold eval_predf in *.
+          rewrite H5 in H6. crush.
+        }
         { unfold beq_pred_expr in H. repeat (destruct_match; []). inv H2.
           rewrite Heqp0 in H3. inv H3. simplify.
           eapply forall_ptree_true in H3. 2: { eapply H11. }
@@ -1224,18 +1322,30 @@ Section CORRECT.
 
   End SEM_PRED.
 
-  Inductive match_instr_state : instr_state -> instr_state -> Prop :=
-  | match_instr_state_intro : forall i1 i2,
-      is_mem i1 = is_mem i2 ->
-      (forall x, (is_rs i1) !! x = (is_rs i2) !! x) ->
-      (forall x, (is_ps i1) !! x = (is_ps i2) !! x) ->
-      match_instr_state i1 i2.
+  Section SEM_PRED_CORR.
+
+    Context (B: Type).
+    Context (isem: @ctx fd -> expression -> B -> Prop).
+    Context (osem: @ctx tfd -> expression -> B -> Prop).
+    Context (SEMCORR: forall e v, isem ictx e v -> osem octx e v).
+
+    Lemma sem_pred_tree_corr:
+      forall x x' v t t' h h',
+             beq_pred_expr x x' = true ->
+             predicated_mutexcl x -> predicated_mutexcl x' ->
+             norm_expression (Pos.max (max_pred_expr x) (max_pred_expr x')) x (PTree.empty _) = (t, h) ->
+             norm_expression (Pos.max (max_pred_expr x) (max_pred_expr x')) x' h = (t', h') ->
+             sem_pred_tree isem ictx h t v ->
+             sem_pred_tree osem octx h' t' v.
+    Proof using SEMCORR. Admitted.
+
+  End SEM_PRED_CORR.
 
   Lemma check_correct: forall (fa fb : forest) i i',
       check fa fb = true ->
       sem ictx fa i ->
       sem octx fb i' ->
-      match_instr_state i i'.
+      match_states i i'.
   Proof using HSIM.
     intros.
     unfold check, get_forest in *; intros;
@@ -1256,6 +1366,13 @@ Section CORRECT.
       unfold "#" in H0. rewrite Heqo in H0. admit.
     }
 Admitted.
+
+  Lemma check_correct2:
+    forall (fa fb : forest) i,
+      check fa fb = true ->
+      sem ictx fa i ->
+      exists i', sem octx fb i' /\ match_states i i'.
+  Proof. Admitted.
 
 End CORRECT.
 
