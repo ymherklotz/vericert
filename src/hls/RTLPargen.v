@@ -386,19 +386,17 @@ Ltac solve_scheduled_trees_correct :=
   end; repeat destruct_match; crush.
 
 Lemma check_scheduled_trees_correct:
-  forall f1 f2,
+  forall f1 f2 x y1,
     check_scheduled_trees f1 f2 = true ->
-    (forall x y1,
-        PTree.get x f1 = Some y1 ->
-        exists y2, PTree.get x f2 = Some y2 /\ schedule_oracle y1 y2 = true).
+    PTree.get x f1 = Some y1 ->
+    exists y2, PTree.get x f2 = Some y2 /\ schedule_oracle y1 y2 = true.
 Proof. solve_scheduled_trees_correct; eexists; crush. Qed.
 
 Lemma check_scheduled_trees_correct2:
-  forall f1 f2,
+  forall f1 f2 x,
     check_scheduled_trees f1 f2 = true ->
-    (forall x,
-        PTree.get x f1 = None ->
-        PTree.get x f2 = None).
+    PTree.get x f1 = None ->
+    PTree.get x f2 = None.
 Proof. solve_scheduled_trees_correct. Qed.
 
 (*|
