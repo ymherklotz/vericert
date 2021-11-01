@@ -1341,18 +1341,11 @@ Section CORRECT.
 
   End SEM_PRED_CORR.
 
-  Inductive match_instr_state : instr_state -> instr_state -> Prop :=
-  | match_instr_state_intro : forall i1 i2,
-      is_mem i1 = is_mem i2 ->
-      (forall x, (is_rs i1) !! x = (is_rs i2) !! x) ->
-      (forall x, (is_ps i1) !! x = (is_ps i2) !! x) ->
-      match_instr_state i1 i2.
-
   Lemma check_correct: forall (fa fb : forest) i i',
       check fa fb = true ->
       sem ictx fa i ->
       sem octx fb i' ->
-      match_instr_state i i'.
+      match_states i i'.
   Proof using HSIM.
     intros.
     unfold check, get_forest in *; intros;
@@ -1378,7 +1371,7 @@ Admitted.
     forall (fa fb : forest) i,
       check fa fb = true ->
       sem ictx fa i ->
-      exists i', sem octx fb i' /\ match_instr_state i i'.
+      exists i', sem octx fb i' /\ match_states i i'.
   Proof. Admitted.
 
 End CORRECT.
