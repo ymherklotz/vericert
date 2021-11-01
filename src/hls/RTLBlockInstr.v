@@ -111,6 +111,29 @@ Proof.
   unfold sat_equiv in *. intros. unfold eval_predf. subst. apply H0.
 Qed.
 
+#[local] Open Scope pred_op.
+
+Lemma eval_predf_Pand :
+  forall ps p p',
+    eval_predf ps (p ∧ p') = eval_predf ps p && eval_predf ps p'.
+Proof. unfold eval_predf; split; simplify; auto with bool. Qed.
+
+Lemma eval_predf_Por :
+  forall ps p p',
+    eval_predf ps (p ∨ p') = eval_predf ps p || eval_predf ps p'.
+Proof. unfold eval_predf; split; simplify; auto with bool. Qed.
+
+Lemma eval_predf_pr_equiv :
+  forall p ps ps',
+    (forall x, ps !! x = ps' !! x) ->
+    eval_predf ps p = eval_predf ps' p.
+Proof.
+  induction p; simplify; auto;
+    try (unfold eval_predf; simplify; repeat (destruct_match; []); inv Heqp0; rewrite <- H; auto);
+  [repeat rewrite eval_predf_Pand|repeat rewrite eval_predf_Por];
+  erewrite IHp1; try eassumption; erewrite IHp2; eauto.
+Qed.
+
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   match rl, vl with
   | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
