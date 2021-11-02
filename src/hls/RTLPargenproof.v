@@ -41,7 +41,7 @@ Inductive match_stackframes: RTLBlock.stackframe -> RTLPar.stackframe -> Prop :=
       (forall x, rs !! x = rs' !! x) ->
       (forall x, ps !! x = ps' !! x) ->
       match_stackframes (Stackframe res f sp pc rs ps)
-                        (Stackframe res tf sp pc rs' ps).
+                        (Stackframe res tf sp pc rs' ps').
 
 Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
 | match_state:
@@ -286,7 +286,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         match_states s r ->
         exists r', step_cf_instr tge r cfi t r' /\ match_states s' r'.
   Proof using TRANSL.
-    (*induction 1; repeat semantics_simpl;
+    induction 1; repeat semantics_simpl;
     try solve [repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp)].
     { do 3 (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
       eapply eval_builtin_args_eq. eapply REG.
@@ -303,7 +303,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       unfold regmap_optget. destruct or. rewrite REG. constructor; eauto.
       constructor; eauto.
     }
-  Qed.*) Admitted.
+    { exploit IHstep_cf_instr; eauto. simplify.
+      repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
+      erewrite eval_predf_pr_equiv; eauto.
+    }
+  Qed.
 
   Theorem transl_step_correct :
     forall (S1 : RTLBlock.state) t S2,
@@ -325,24 +329,21 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
       exploit abstract_execution_correct; try eassumption. eapply ge_preserved_lem.
       econstructor; eauto.
-      inv_simp. destruct x. inv H7.
+      simplify. destruct x. inv H7.
 
       exploit step_cf_instr_correct; try eassumption. econstructor; eauto.
-      inv_simp.
+      simplify.
 
       econstructor. econstructor. eapply Smallstep.plus_one. econstructor.
-      eauto. eauto. simplify. eauto. eauto.
-    }
+      eauto. eauto. simplify. eauto. eauto. }
     { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
       inv H2. unfold transl_function in Heqr. destruct_match; crush.
       inv Heqr. 
       repeat econstructor; eauto.
-      unfold bind in *. destruct_match; crush.
-    }
+      unfold bind in *. destruct_match; crush. }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
     { inv STACKS. inv H2. repeat econstructor; eauto.
-      intros. apply PTree_matches; eauto.
-    }
+      intros. apply PTree_matches; eauto. }
   Qed.
 
   Lemma transl_initial_states:

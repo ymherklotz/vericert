@@ -1100,7 +1100,7 @@ Proof.
   intros.
   unfold schedule_oracle in *. simplify. unfold empty_trees in H4.
   exploit rtlblock_trans_correct; try eassumption; []; simplify.
-  exploit abstract_execution_correct';
+(*)  exploit abstract_execution_correct';
   try solve [eassumption | apply state_lessdef_match_sem; eassumption].
   apply match_states_commut. eauto. inv_simp.
   exploit rtlpar_trans_correct; try eassumption; []; inv_simp.
@@ -1108,7 +1108,7 @@ Proof.
   repeat match goal with | H: match_states _ _ |- _ => inv H end.
   do 2 econstructor; eauto.
   econstructor; congruence.
-Qed.
+Qed.*)Admitted.
 
 (*|
 Top-level functions
