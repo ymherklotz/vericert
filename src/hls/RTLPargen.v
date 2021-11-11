@@ -32,13 +32,25 @@ Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
+Import NE.NonEmptyNotation.
+
+(*|
+=================
+RTLPar Generation
+=================
+|*)
 
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
 
 (*|
-Update functions.
+Abstract Computations
+=====================
+
+Define the abstract computation using the ``update`` function, which will set each register to its
+symbolic value.  First we need to define a few helper functions to correctly translate the
+predicates.
 |*)
 
 Fixpoint list_translation (l : list reg) (f : forest) {struct l} : list pred_expr :=
@@ -65,6 +77,11 @@ Definition merge'' x :=
   | ((a, e), (b, el)) => (merge''' a b, Econs e el)
   end.
 
+Definition map_pred_op {A B} (pf: option pred_op * (A -> B)) (pa: option pred_op * A): option pred_op * B :=
+  match pa, pf with
+  | (p, a), (p', f) => (merge''' p p', f a)
+  end.
+
 Definition predicated_prod {A B: Type} (p1: predicated A) (p2: predicated B) :=
   NE.map (fun x => match x with ((a, b), (c, d)) => (Pand a c, (b, d)) end)
          (NE.non_empty_prod p1 p2).
@@ -82,11 +99,6 @@ Fixpoint merge (pel: list pred_expr): predicated expression_list :=
   | a :: b => merge' a (merge b)
   end.
 
-Definition map_pred_op {A B} (pf: option pred_op * (A -> B)) (pa: option pred_op * A): option pred_op * B :=
-  match pa, pf with
-  | (p, a), (p', f) => (merge''' p p', f a)
-  end.
-
 Definition map_predicated {A B} (pf: predicated (A -> B)) (pa: predicated A): predicated B :=
   predicated_map (fun x => (fst x) (snd x)) (predicated_prod pf pa).
 
@@ -99,32 +111,74 @@ Definition predicated_apply2 {A B C} (pf: predicated (A -> B -> C)) (pa: A) (pb:
 Definition predicated_apply3 {A B C D} (pf: predicated (A -> B -> C -> D)) (pa: A) (pb: B) (pc: C): predicated D :=
   NE.map (fun x => (fst x, (snd x) pa pb pc)) pf.
 
-(*Compute merge (((Some (Pvar 2), Ebase (Reg 4))::nil)::((Some (Pvar 3), Ebase (Reg 3))::(Some (Pvar 1), Ebase (Reg 3))::nil)::nil).*)
-
 Definition predicated_from_opt {A: Type} (p: option pred_op) (a: A) :=
   match p with
   | Some p' => NE.singleton (p', a)
   | None => NE.singleton (T, a)
   end.
 
+#[local] Open Scope non_empty_scope.
+#[local] Open Scope pred_op.
+
+Fixpoint NEfold_left {A B} (f: A -> B -> A) (l: NE.non_empty B) (a: A) : A :=
+  match l with
+  | NE.singleton a' => f a a'
+  | a' ::| b => NEfold_left f b (f a a')
+  end.
+
+Fixpoint NEapp {A} (l m: NE.non_empty A) :=
+  match l with
+  | NE.singleton a => a ::| m
+  | a ::| b => a ::| NEapp b m
+  end.
+
+Definition app_predicated {A: Type} (a b: predicated A) :=
+  let negation := ¬ (NEfold_left (fun a b => a ∨ (fst b)) b ⟂) in
+  NEapp (NE.map (fun x => (negation ∧ (fst x), snd x)) a) b.
+
+(*|
+Update Function
+---------------
+
+The ``update`` function will generate a new forest given an existing forest and a new instruction,
+so that it can evaluate a symbolic expression by folding over a list of instructions.  The main
+problem is that predicates need to be merged as well, so that:
+
+1. The predicates are *independent*.
+2. The expression assigned to the register should still be correct.
+
+This is done by multiplying the predicates together, and assigning the negation of the expression to
+the other predicates.
+|*)
+
 Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
   | RBop p op rl r =>
     f # (Reg r) <-
-    (map_predicated (predicated_from_opt p (Eop op)) (merge (list_translation rl f)))
+    (app_predicated
+       (f # (Reg r))
+       (map_predicated (predicated_from_opt p (Eop op)) (merge (list_translation rl f))))
   | RBload p chunk addr rl r =>
     f # (Reg r) <-
-    (map_predicated
-     (map_predicated (predicated_from_opt p (Eload chunk addr)) (merge (list_translation rl f)))
-     (f # Mem))
+      (app_predicated
+         (f # (Reg r))
+         (map_predicated
+            (map_predicated (predicated_from_opt p (Eload chunk addr)) (merge (list_translation rl f)))
+            (f # Mem)))
   | RBstore p chunk addr rl r =>
     f # Mem <-
-    (map_predicated
-     (map_predicated
-      (predicated_apply2 (map_predicated (predicated_from_opt p Estore) (f # (Reg r))) chunk addr)
-      (merge (list_translation rl f))) (f # Mem))
-  | RBsetpred p' c addr p => f
+      (app_predicated
+         (f # (Reg r))
+         (map_predicated
+            (map_predicated
+               (predicated_apply2 (map_predicated (predicated_from_opt p Estore) (f # (Reg r))) chunk addr)
+               (merge (list_translation rl f))) (f # Mem)))
+  | RBsetpred p' c args p =>
+    f # (Pred p) <-
+    (app_predicated
+       (f # (Pred p))
+       (map_predicated (predicated_from_opt p' (Esetpred c)) (merge (list_translation args f))))
   end.
 
 (*|
@@ -193,7 +247,7 @@ Lemma check_scheduled_trees_correct2:
 Proof. solve_scheduled_trees_correct. Qed.
 
 (*|
-Top-level functions
+Top-level Functions
 ===================
 |*)
 
