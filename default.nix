@@ -16,6 +16,7 @@ stdenv.mkDerivation {
                   python3 python3Packages.docutils python3Packages.pygments
                   python3Packages.dominate
                   python3Packages.pelican
+                  python3Packages.alectryon
                 ];
 
   enableParallelBuilding = true;
