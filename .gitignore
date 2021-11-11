@@ -130,3 +130,13 @@ benchmarks/**/*.v
 # Test
 *.check
 *.txt
+*.verilator/
+*.tmp
+*.clog
+obj_dir/
+*.[0-9]
+/*.c
+/*.sv
+/*.v
+
+.direnv/
