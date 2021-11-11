@@ -4,6 +4,9 @@ VERICERT_OPTS ?= -DSYNTHESIS -fschedule
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
+VERILATOR ?= verilator
+VERILATOR_OPTS ?= -Wno-fatal --top main --exe /home/ymherklotz/projects/vericert/driver/verilator_main.cpp
+
 TARGETS ?=
 
 %.v: %.c
@@ -15,7 +18,11 @@ TARGETS ?=
 %.gcc: %.c
 	$(CC) $(CFLAGS) $< -o $@
 
-%: %.iver %.gcc
+%.verilator: %.v
+	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $@ --cc $<
+	$(MAKE) -C $@ -f Vmain.mk
+
+%: %.iver %.gcc %.verilator
 	cp $< $@
 
 all: $(TARGETS)

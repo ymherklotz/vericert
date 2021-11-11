@@ -3,38 +3,39 @@
 rm exec.csv
 
 top=$(pwd)
- #set up
+#set up
 while read benchmark ; do
-   echo "Running "$benchmark
+   printf "%10s\t" $(echo "$benchmark" | sed -e 's|/| |g')
    ./$benchmark.gcc > $benchmark.clog
    cresult=$(cat $benchmark.clog | cut -d' ' -f2)
-   echo "C output: "$cresult
-   ./$benchmark.iver > $benchmark.tmp
+   #echo "C output: "$cresult
+   #./$benchmark.iver > $benchmark.tmp
+   ./$benchmark.verilator/Vmain > $benchmark.tmp
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
    cycles=$(tail -2 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f2)
-   echo "Verilog output: "$veriresult
-  
+   #echo "Verilog output: "$veriresult
+
    #Undefined checks
    if test -z $veriresult 
    then
-   echo "FAIL: Verilog returned nothing"
-   #exit 0
+      echo "\e[0;91mFAIL\e[0m: Verilog returned nothing"
+      #exit 0
    fi
    
    # Don't care checks
    if [ $veriresult == "x" ] 
    then
-   echo "FAIL: Verilog returned don't cares"
-   #exit 0
+      echo "\e[0;91mFAIL\e[0m: Verilog returned don't cares"
+      #exit 0
    fi
-  
-  # unequal result check
+
+   # unequal result check
    if [ $cresult -ne $veriresult ] 
    then 
-   echo "FAIL: Verilog and C output do not match!"
-   #exit 0 
+      echo -e "\e[0;91mFAIL\e[0m: Verilog and C output do not match!"
+      #exit 0
    else 
-   echo "PASS"
+      echo -e "\e[0;92mPASS\e[0m"
    fi
    name=$(echo $benchmark | awk -v FS="/" '{print $NF}')
    echo $name","$cycles >> exec.csv
