@@ -31,6 +31,23 @@ Require Import compcert.verilog.Op.
 Require Import Predicate.
 Require Import Vericertlib.
 
+(*|
+=====================
+RTLBlock Instructions
+=====================
+
+These instructions are used for ``RTLBlock`` and ``RTLPar``, so that they have consistent
+instructions, which greatly simplifies the proofs, as they will by default have the same instruction
+syntax and semantics.  The only changes are therefore at the top-level of the instructions.
+
+Instruction Definition
+======================
+
+First, we define the instructions that can be placed into a basic block, meaning they won't branch.
+The main changes to how instructions are defined in ``RTL``, is that these instructions don't have a
+next node, as they will be in a basic block, and they also have an optional predicate (``pred_op``).
+|*)
+
 Definition node := positive.
 
 Inductive instr : Type :=
@@ -39,6 +56,14 @@ Inductive instr : Type :=
 | RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
+
+(*|
+Control-Flow Instruction Definition
+===================================
+
+These are the instructions that count as control-flow, and will be placed at the end of the basic
+blocks.
+|*)
 
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
@@ -50,6 +75,11 @@ Inductive cf_instr : Type :=
 | RBreturn : option reg -> cf_instr
 | RBgoto : node -> cf_instr
 | RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
+
+(*|
+Helper functions
+================
+|*)
 
 Fixpoint successors_instr (i : cf_instr) : list node :=
   match i with
@@ -140,11 +170,28 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | _, _ => Regmap.init Vundef
   end.
 
+(*|
+Instruction State
+-----------------
+
+Definition of the instruction state, which contains the following:
+
+:is_rs: This is the current state of the registers.
+:is_ps: This is the current state of the predicate registers, which is in a separate namespace and
+        area compared to the standard registers in ``is_rs``.
+:is_mem: The current state of the memory.
+|*)
+
 Record instr_state := mk_instr_state {
   is_rs: regset;
   is_ps: predset;
   is_mem: mem;
 }.
+
+(*|
+Top-Level Type Definitions
+==========================
+|*)
 
 Section DEFINITION.
 
@@ -209,6 +256,11 @@ Section DEFINITION.
 
 End DEFINITION.
 
+(*|
+Semantics
+=========
+|*)
+
 Section RELSEM.
 
   Context {bblock_body : Type}.
@@ -230,16 +282,15 @@ Section RELSEM.
 
   Inductive eval_pred: option pred_op -> instr_state -> instr_state -> instr_state -> Prop :=
   | eval_pred_true:
-      forall (pr: predset) p rs pr m i,
-      eval_predf pr p = true ->
-      eval_pred (Some p) (mk_instr_state rs pr m) i i
+      forall i i' p,
+      eval_predf (is_ps i) p = true ->
+      eval_pred (Some p) i i' i'
   | eval_pred_false:
-      forall (pr: predset) p rs pr m i,
-      eval_predf pr p = false ->
-      eval_pred (Some p) (mk_instr_state rs pr m) i (mk_instr_state rs pr m)
+      forall i i' p,
+      eval_predf (is_ps i) p = false ->
+      eval_pred (Some p) i i' i
   | eval_pred_none:
-      forall i i',
-      eval_pred None i i' i.
+      forall i i', eval_pred None i i' i.
 
   Inductive step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
   | exec_RBnop:
@@ -263,10 +314,10 @@ Section RELSEM.
         eval_pred p (mk_instr_state rs pr m) (mk_instr_state rs pr m') ist ->
         step_instr sp (mk_instr_state rs pr m) (RBstore p chunk addr args src) ist
   | exec_RBsetpred:
-      forall sp rs pr m p c b args p',
+      forall sp rs pr m p c b args p' ist,
       Op.eval_condition c rs##args m = Some b ->
-      step_instr sp (mk_instr_state rs pr m) (RBsetpred p' c args p)
-                 (mk_instr_state rs (PMap.set p b pr) m).
+      eval_pred p' (mk_instr_state rs pr m) (mk_instr_state rs (pr#p <- b) m) ist ->
+      step_instr sp (mk_instr_state rs pr m) (RBsetpred p' c args p) ist.
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:
