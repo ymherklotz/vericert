@@ -105,10 +105,8 @@ Definition find_blocks_with_cond (c: code) : list (node * bblock) :=
               ) (PTree.elements c).
 
 Definition if_convert_code (p: nat * code) (nb: node * bblock) :=
-  let (n, bb) := nb in
-  let (p', c) := p in
-  let nbb := if_convert_block c (Pos.of_nat p') bb in
-  (S p', PTree.set n nbb c).
+  let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in
+  (S (fst p), PTree.set (fst nb) nbb (snd p)).
 
 Definition transf_function (f: function) : function :=
   let (_, c) := List.fold_left if_convert_code

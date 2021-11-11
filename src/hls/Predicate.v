@@ -443,3 +443,61 @@ Proof.
   simplify. repeat rewrite negate_correct. rewrite H0. rewrite H.
   auto.
 Qed.
+
+Definition simplify' (p: pred_op) :=
+  match p with
+  | A ∧ T => A
+  | T ∧ A => A
+  | _ ∧ ⟂ => ⟂
+  | ⟂ ∧ _ => ⟂
+  | _ ∨ T => T
+  | T ∨ _ => T
+  | A ∨ ⟂ => A
+  | ⟂ ∨ A => A
+  | A => A
+  end.
+
+Lemma pred_op_dec :
+  forall p1 p2: pred_op,
+  { p1 = p2 } + { p1 <> p2 }.
+Proof. pose proof Pos.eq_dec. repeat decide equality. Qed.
+
+Fixpoint simplify (p: pred_op) :=
+  match p with
+  | A ∧ B =>
+    let A' := simplify A in
+    let B' := simplify B in
+    simplify' (A' ∧ B')
+  | A ∨ B =>
+    let A' := simplify A in
+    let B' := simplify B in
+    simplify' (A' ∨ B')
+  | T => T
+  | ⟂ => ⟂
+  | Plit a => Plit a
+  end.
+
+Lemma simplify'_correct :
+  forall h a,
+    sat_predicate (simplify' h) a = sat_predicate h a.
+Proof.
+  destruct h; crush; repeat destruct_match; crush;
+  solve [rewrite andb_true_r; auto | rewrite orb_false_r; auto].
+Qed.
+
+Lemma simplify_correct :
+  forall h a,
+    sat_predicate (simplify h) a = sat_predicate h a.
+Proof.
+  Local Opaque simplify'.
+  induction h; crush.
+  - replace (sat_predicate h1 a && sat_predicate h2 a)
+      with (sat_predicate (simplify h1) a && sat_predicate (simplify h2) a)
+      by crush.
+    rewrite simplify'_correct. crush.
+  - replace (sat_predicate h1 a || sat_predicate h2 a)
+      with (sat_predicate (simplify h1) a || sat_predicate (simplify h2) a)
+      by crush.
+    rewrite simplify'_correct. crush.
+    Local Transparent simplify'.
+Qed.
