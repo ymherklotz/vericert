@@ -828,6 +828,6 @@ let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
   { fn_sig = f.fn_sig;
     fn_params = f.fn_params;
     fn_stacksize = f.fn_stacksize;
-    fn_code = List.fold_left (add_to_tree scheduled) PTree.empty reachable;
+    fn_code = scheduled (*List.fold_left (add_to_tree scheduled) PTree.empty reachable*);
     fn_entrypoint = f.fn_entrypoint
   }
