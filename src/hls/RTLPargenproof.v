@@ -37,11 +37,6 @@ Require Import vericert.hls.Abstr.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
 
-(*|
-Abstract computations
-=====================
-|*)
-
 (*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
@@ -616,7 +611,7 @@ Proof.
     match goal with
     H: forall _, _ |- context[Mem.storev] => erewrite <- H; eauto
     end.
-Qed.
+  - admit. Admitted.
 
 Lemma step_instr_list_matches :
   forall a ge sp st st',
@@ -687,7 +682,7 @@ Proof.
   apply check_list_l_false in H. tauto.
 Qed.
 
-Lemma sem_separate :
+(*Lemma sem_separate :
   forall A ctx b a st',
     sem ctx (abstract_sequence empty (a ++ b)) st' ->
     exists st'',
@@ -703,7 +698,7 @@ Proof.
     rewrite abstract_seq.
     eapply sem_update2; eauto.
   }
-Qed.
+Qed.*)
 
 Lemma sem_update_RBnop :
   forall A ctx f st',
@@ -711,14 +706,22 @@ Lemma sem_update_RBnop :
 Proof. auto. Qed.
 
 Lemma sem_update_Op :
-  forall A ge sp ist f st' r l o0 o m rs v,
+  forall A ge sp ist f st' r l o0 o m rs v ps,
   @sem A (mk_ctx ist sp ge) f st' ->
-  Op.eval_operation ge sp o0 rs ## l m = Some v ->
-  match_states st' (mk_instr_state rs m ps) ->
+  eval_predf ps o = true ->
+  Op.eval_operation ge sp o0 (rs ## l) m = Some v ->
+  match_states st' (mk_instr_state rs ps m) ->
   exists tst,
-  sem (mk_ctx ist sp ge) (update f (RBop o o0 l r)) tst /\ match_states (mk_instr_state (Regmap.set r v rs) m ps) tst.
+  sem (mk_ctx ist sp ge) (update f (RBop (Some o) o0 l r)) tst
+  /\ match_states (mk_instr_state (Regmap.set r v rs) ps m) tst.
 Proof.
-  intros. inv H1. simplify.
+  intros. inv H1. inv H. inv H1. inv H3. simplify.
+  econstructor. simplify.
+  { constructor; try constructor; intros; try solve [rewrite genmap1; now eauto].
+    destruct (Pos.eq_dec x r); subst.
+    { rewrite map2. specialize (H1 r). inv H1.
+(*}
+  }
   destruct st.
   econstructor. simplify.
   { constructor.
@@ -731,7 +734,7 @@ Proof.
   { constructor; eauto. intros.
     destruct (Pos.eq_dec r x);
     subst; [repeat rewrite Regmap.gss | repeat rewrite Regmap.gso]; auto. }
-Qed.
+Qed.*) Admitted.
 
 Lemma sem_update :
   forall A ge sp st x st' st'' st''' f,
