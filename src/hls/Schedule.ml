@@ -715,13 +715,15 @@ let parse_soln tree s =
   else tree
 
 let solve_constraints constr =
-  let oc = open_out "lpsolve.txt" in
+  let (fn, oc) = Filename.open_temp_file "vericert_" "_lp_solve" in
   fprintf oc "%s\n" (print_lp constr);
   close_out oc;
 
-  Str.split (Str.regexp_string "\n") (read_process "lp_solve lpsolve.txt")
-  |> drop 3
-  |> List.fold_left parse_soln IMap.empty
+  let res = Str.split (Str.regexp_string "\n") (read_process ("lp_solve " ^ fn))
+            |> drop 3
+            |> List.fold_left parse_soln IMap.empty
+  in
+  Sys.remove fn; res
 
 let subgraph dfg l =
   let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
