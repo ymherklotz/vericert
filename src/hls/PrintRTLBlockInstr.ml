@@ -23,9 +23,9 @@ let ros pp = function
   | Coq_inr s -> fprintf pp "\"%s\"" (extern_atom s)
 
 let rec print_pred_op pp = function
-  | Plit p -> if fst p then pred pp (snd p) else fprintf pp "~ %a" pred (snd p)
-  | Pand (p1, p2) -> fprintf pp "(%a & %a)" print_pred_op p1 print_pred_op p2
-  | Por (p1, p2) -> fprintf pp "(%a | %a)" print_pred_op p1 print_pred_op p2
+  | Plit p -> if fst p then pred pp (snd p) else fprintf pp "~%a" pred (snd p)
+  | Pand (p1, p2) -> fprintf pp "(%a ∧ %a)" print_pred_op p1 print_pred_op p2
+  | Por (p1, p2) -> fprintf pp "(%a ∨ %a)" print_pred_op p1 print_pred_op p2
   | Ptrue -> fprintf pp "T"
   | Pfalse -> fprintf pp "⟂"
 
