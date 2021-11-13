@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     tb->reset = 0;
     tb->eval(); tb->clk = 1; tb->eval(); tb->clk = 0; tb->eval();
 
-    int cycles = 1;
+    size_t cycles = 1;
 
     // Tick the clock until we are done
     while(!tb->finish) {
@@ -30,6 +30,6 @@ int main(int argc, char **argv) {
         cycles++;
     }
 
-    printf("cycles: %d\nfinished: %d\n", cycles, (unsigned)tb->return_val);
+    printf("cycles: %lu\nfinished: %u\n", cycles, (unsigned)tb->return_val);
     exit(EXIT_SUCCESS);
 }

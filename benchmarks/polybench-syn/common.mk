@@ -34,6 +34,7 @@ clean:
 	rm -f *.clog
 	rm -f *.tmp
 	rm -f $(TARGETS)
+	rm -rf *.verilator
 
 .PRECIOUS: %.v %.gcc %.iver
 .PHONY: all clean
