@@ -132,9 +132,19 @@ Fixpoint NEapp {A} (l m: NE.non_empty A) :=
   | a ::| b => a ::| NEapp b m
   end.
 
-Definition app_predicated {A: Type} (a b: predicated A) :=
+Definition app_predicated' {A: Type} (a b: predicated A) :=
   let negation := ¬ (NEfold_left (fun a b => a ∨ (fst b)) b ⟂) in
-  NEapp (NE.map (fun x => (negation ∧ (fst x), snd x)) a) b.
+  NEapp (NE.map (fun x => (negation ∧ fst x, snd x)) a) b.
+
+Definition app_predicated {A: Type} (p: option pred_op) (a b: predicated A) :=
+  match p with
+  | Some p' => NEapp (NE.map (fun x => (¬ p' ∧ fst x, snd x)) a)
+                     (NE.map (fun x => (p' ∧ fst x, snd x)) b)
+  | None => b
+  end.
+
+Definition pred_ret {A: Type} (a: A) : predicated A :=
+  NE.singleton (T, a).
 
 (*|
 Update Function
@@ -156,29 +166,29 @@ Definition update (f : forest) (i : instr) : forest :=
   | RBnop => f
   | RBop p op rl r =>
     f # (Reg r) <-
-    (app_predicated
+    (app_predicated p
        (f # (Reg r))
-       (map_predicated (predicated_from_opt p (Eop op)) (merge (list_translation rl f))))
+       (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f))))
   | RBload p chunk addr rl r =>
     f # (Reg r) <-
-      (app_predicated
+      (app_predicated p
          (f # (Reg r))
          (map_predicated
-            (map_predicated (predicated_from_opt p (Eload chunk addr)) (merge (list_translation rl f)))
+            (map_predicated (pred_ret (Eload chunk addr)) (merge (list_translation rl f)))
             (f # Mem)))
   | RBstore p chunk addr rl r =>
     f # Mem <-
-      (app_predicated
-         (f # (Reg r))
+      (app_predicated p
+         (f # Mem)
          (map_predicated
             (map_predicated
-               (predicated_apply2 (map_predicated (predicated_from_opt p Estore) (f # (Reg r))) chunk addr)
+               (predicated_apply2 (map_predicated (pred_ret Estore) (f # (Reg r))) chunk addr)
                (merge (list_translation rl f))) (f # Mem)))
   | RBsetpred p' c args p =>
     f # (Pred p) <-
-    (app_predicated
+    (app_predicated p'
        (f # (Pred p))
-       (map_predicated (predicated_from_opt p' (Esetpred c)) (merge (list_translation args f))))
+       (map_predicated (pred_ret (Esetpred c)) (merge (list_translation args f))))
   end.
 
 (*|
