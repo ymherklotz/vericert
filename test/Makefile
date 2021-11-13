@@ -1,6 +1,6 @@
 CC ?= gcc
 VERICERT ?= vericert
-VERICERT_OPTS ?= -fschedule
+VERICERT_OPTS ?= -fschedule -fif-conv
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
