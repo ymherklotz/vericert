@@ -742,7 +742,11 @@ Lemma sem_update :
   match_states st' st''' ->
   @step_instr A ge sp st''' x st'' ->
   exists tst, sem (mk_ctx st sp ge) (update f x) tst /\ match_states st'' tst.
-Proof. Admitted.
+Proof.
+  intros. destruct x.
+  - inv H1. econstructor. simplify. eauto. symmetry; auto.
+  - inv H1. inv H0. econstructor.
+    Admitted.
 
 Lemma rtlblock_trans_correct :
   forall bb ge sp st st',
