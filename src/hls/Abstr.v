@@ -630,15 +630,6 @@ Definition encode_expression max pe h :=
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
   end.*)
 
-Fixpoint max_predicate (p: pred_op) : positive :=
-  match p with
-  | Plit (b, p) => p
-  | Ptrue => 1
-  | Pfalse => 1
-  | Pand a b => Pos.max (max_predicate a) (max_predicate b)
-  | Por a b => Pos.max (max_predicate a) (max_predicate b)
-  end.
-
 Fixpoint max_pred_expr (pe: pred_expr) : positive :=
   match pe with
   | NE.singleton (p, e) => max_predicate p
