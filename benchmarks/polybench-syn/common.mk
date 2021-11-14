@@ -1,11 +1,11 @@
 VERICERT ?= vericert
-VERICERT_OPTS ?= -DSYNTHESIS -fschedule
+VERICERT_OPTS ?= -DSYNTHESIS -O0 -finline
 
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
 VERILATOR ?= verilator
-VERILATOR_OPTS ?= -Wno-fatal --top main --exe /home/ymherklotz/projects/vericert/driver/verilator_main.cpp
+VERILATOR_OPTS ?= -Wno-fatal --top main --exe /home/ymherklotz/projects/vericert/scripts/verilator_main.cpp
 
 TARGETS ?=
 
