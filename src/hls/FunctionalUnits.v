@@ -77,6 +77,80 @@ Record resources := mk_resources {
   res_arch: arch;
 }.
 
+Definition index_div {b:bool} r (d: divider b) :=
+  match r with
+  | 1 => div_numer d
+  | 2 => div_denom d
+  | 3 => div_quot d
+  | _ => div_rem d
+  end.
+
+Definition index_ram r (d: ram) :=
+  match r with
+  | 1 => ram_mem d
+  | 2 => ram_en d
+  | 3 => ram_u_en d
+  | 4 => ram_addr d
+  | 5 => ram_wr_en d
+  | 6 => ram_d_in d
+  | _ => ram_d_out d
+  end.
+
+Definition index_res u r res :=
+  match PTree.get u res with
+  | Some (SignedDiv d) => Some (index_div r d)
+  | Some (UnsignedDiv d) => Some (index_div r d)
+  | Some (Ram d) => Some (index_ram r d)
+  | None => None
+  end.
+
+Definition get_ram n res: option (positive * ram) :=
+  match nth_error (arch_ram (res_arch res)) n with
+  | Some ri =>
+      match PTree.get ri (res_funct_units res) with
+      | Some (Ram r) => Some (ri, r)
+      | _ => None
+      end
+  | None => None
+  end.
+
+Definition get_div n res :=
+  match nth_error (arch_div (res_arch res)) n with
+  | Some ri =>
+      match PTree.get ri (res_funct_units res) with
+      | Some (UnsignedDiv d) => Some (ri, d)
+      | _ => None
+      end
+  | None => None
+  end.
+
+Definition get_sdiv n res :=
+  match nth_error (arch_sdiv (res_arch res)) n with
+  | Some ri =>
+      match PTree.get ri (res_funct_units res) with
+      | Some (SignedDiv d) => Some (ri, d)
+      | _ => None
+      end
+  | None => None
+  end.
+
+Definition set_res fu res :=
+  let max := fold_left Pos.max ((arch_sdiv (res_arch res))
+                                  ++ (arch_div (res_arch res))
+                                  ++ (arch_ram (res_arch res))) 1 in
+  let nt := PTree.set (max + 1)%positive fu (res_funct_units res) in
+  match fu with
+  | UnsignedDiv _ => mk_resources nt (mk_arch (max :: arch_div (res_arch res))
+                                              (arch_sdiv (res_arch res))
+                                              (arch_ram (res_arch res)))
+  | SignedDiv _ => mk_resources nt (mk_arch (arch_div (res_arch res))
+                                            (max :: arch_sdiv (res_arch res))
+                                            (arch_ram (res_arch res)))
+  | Ram _ => mk_resources nt (mk_arch (arch_div (res_arch res))
+                                      (arch_sdiv (res_arch res))
+                                      (max :: arch_ram (res_arch res)))
+  end.
+
 Definition initial_funct_units: funct_units := PTree.empty _.
 
 Definition initial_arch := mk_arch nil nil nil.
