@@ -37,8 +37,8 @@ Definition node := positive.
 Inductive instr : Type :=
 | FUnop : instr
 | FUop : option pred_op -> operation -> list reg -> reg -> instr
-| FUload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
-| FUstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| FUread : positive -> positive -> reg -> instr
+| FUwrite : positive -> positive -> reg -> instr
 | FUsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
 
 Inductive cf_instr : Type :=
@@ -69,10 +69,8 @@ Definition max_reg_instr (m: positive) (i: instr) :=
   | FUnop => m
   | FUop p op args res =>
       fold_left Pos.max args (Pos.max res m)
-  | FUload p chunk addr args dst =>
-      fold_left Pos.max args (Pos.max dst m)
-  | FUstore p chunk addr args src =>
-      fold_left Pos.max args (Pos.max src m)
+  | FUread p1 p2 r => Pos.max m r
+  | FUwrite p1 p2 r => Pos.max m r
   | FUsetpred p' c args p =>
       fold_left Pos.max args m
   end.
@@ -157,7 +155,7 @@ Record function: Type :=
       fn_params: list reg;
       fn_stacksize: Z;
       fn_code: code;
-      fn_funct_units: funct_unit;
+      fn_funct_units: resources;
       fn_entrypoint: node;
     }.
 
@@ -246,18 +244,6 @@ Section RELSEM.
       eval_operation ge sp op rs##args m = Some v ->
       eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#res <- v) pr m) ist ->
       step_instr sp (mk_instr_state rs pr m) (FUop p op args res) ist
-  | exec_FUload:
-    forall addr rs args a chunk m v dst sp p pr ist,
-      eval_addressing ge sp addr rs##args = Some a ->
-      Mem.loadv chunk m a = Some v ->
-      eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#dst <- v) pr m) ist ->
-      step_instr sp (mk_instr_state rs pr m) (FUload p chunk addr args dst) ist
-  | exec_FUstore:
-    forall addr rs args a chunk m src m' sp p pr ist,
-      eval_addressing ge sp addr rs##args = Some a ->
-      Mem.storev chunk m a rs#src = Some m' ->
-      eval_pred p (mk_instr_state rs pr m) (mk_instr_state rs pr m') ist ->
-      step_instr sp (mk_instr_state rs pr m) (FUstore p chunk addr args src) ist
   | exec_FUsetpred:
     forall sp rs pr m p c b args p' ist,
       Op.eval_condition c rs##args m = Some b ->
