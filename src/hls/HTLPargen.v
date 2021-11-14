@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.RTLParFU.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 
@@ -681,20 +681,22 @@ Definition translate_predicate (a : assignment)
 Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
   : mon stmnt :=
   match i with
-  | RBnop =>
+  | FUnop =>
     ret Vskip
-  | RBop p op args dst =>
+  | FUop p op args dst =>
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
     translate_predicate a preg p (Vvar dst) instr
-  | RBload p chunk addr args dst =>
+  | FUload p chunk addr args dst =>
     do src <- translate_arr_access chunk addr args stack;
     do _ <- declare_reg None dst 32;
     translate_predicate a preg p (Vvar dst) src
-  | RBstore p chunk addr args src =>
+  | FUstore p chunk addr args src =>
     do dst <- translate_arr_access chunk addr args stack;
     translate_predicate a preg p dst (Vvar src)
-  | RBsetpred _ c args p =>
+  | FUread p1 p2 r => ret Vskip
+  | FUwrite p1 p2 r => ret Vskip
+  | FUsetpred _ c args p =>
     do cond <- translate_condition c args;
     ret (a (pred_expr preg (Plit (true, p))) cond)
   end.
@@ -738,14 +740,14 @@ Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * li
 Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
   match cfi with
-  | RBgoto n' =>
+  | FUgoto n' =>
     do st <- get;
     ret (Vskip, state_goto st.(st_st) n')
-  | RBcond c args n1 n2 =>
+  | FUcond c args n1 n2 =>
     do st <- get;
     do e <- translate_condition c args;
     ret (Vskip, state_cond st.(st_st) e n1 n2)
-  | RBreturn r =>
+  | FUreturn r =>
     match r with
     | Some r' =>
       ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r'))),
@@ -754,18 +756,18 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
       ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z)))),
            Vskip)
     end
-  | RBpred_cf p c1 c2 =>
+  | FUpred_cf p c1 c2 =>
     do (tc1s, tc1c) <- translate_cfi' fin rtrn stack preg c1;
     do (tc2s, tc2c) <- translate_cfi' fin rtrn stack preg c2;
     ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
-  | RBjumptable r tbl =>
+  | FUjumptable r tbl =>
     do s <- get;
     ret (Vskip, Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr s.(st_st) tbl)) (Some Vskip))
-  | RBcall sig ri rl r n =>
+  | FUcall sig ri rl r n =>
     error (Errors.msg "HTLPargen: RPcall not supported.")
-  | RBtailcall sig ri lr =>
+  | FUtailcall sig ri lr =>
     error (Errors.msg "HTLPargen: RPtailcall not supported.")
-  | RBbuiltin e lb b n =>
+  | FUbuiltin e lb b n =>
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
@@ -863,7 +865,7 @@ Definition transl_module (f : function) : Errors.res HTL.module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition main_is_internal (p : RTLPar.program) : bool :=
+Definition main_is_internal (p : RTLParFU.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
   match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
   | Some b =>
@@ -874,7 +876,7 @@ Definition main_is_internal (p : RTLPar.program) : bool :=
   | _ => false
   end.
 
-Definition transl_program (p : RTLBlockInstr.program) : Errors.res HTL.program :=
+Definition transl_program (p : RTLParFU.program) : Errors.res HTL.program :=
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").
