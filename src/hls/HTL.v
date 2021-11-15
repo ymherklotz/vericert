@@ -31,6 +31,7 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Array.
+Require Import vericert.hls.FunctionalUnits.
 Require vericert.hls.Verilog.
 
 Local Open Scope positive.
@@ -53,22 +54,6 @@ Definition map_well_formed {A : Type} (m : PTree.t A) : Prop :=
   forall p0 : positive,
     In p0 (map fst (Maps.PTree.elements m)) ->
     (Z.pos p0 <= Integers.Int.max_unsigned)%Z.
-
-Record ram := mk_ram {
-  ram_size: nat;
-  ram_mem: reg;
-  ram_en: reg;
-  ram_u_en: reg;
-  ram_addr: reg;
-  ram_wr_en: reg;
-  ram_d_in: reg;
-  ram_d_out: reg;
-  ram_ordering: (ram_addr < ram_en
-                 /\ ram_en < ram_d_in
-                 /\ ram_d_in < ram_d_out
-                 /\ ram_d_out < ram_wr_en
-                 /\ ram_wr_en < ram_u_en)
-}.
 
 Definition module_ordering a b c d e f g := a < b < c /\ c < d < e /\ e < f < g.
 
