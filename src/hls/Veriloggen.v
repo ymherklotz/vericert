@@ -25,6 +25,7 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
+Require Import vericert.hls.FunctionalUnits.
 
 Definition transl_list_fun (a : node * Verilog.stmnt) :=
   let (n, stmnt) := a in
