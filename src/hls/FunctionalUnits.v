@@ -135,10 +135,10 @@ Definition get_sdiv n res :=
   end.
 
 Definition set_res fu res :=
-  let max := fold_left Pos.max ((arch_sdiv (res_arch res))
+  let max := ((fold_left Pos.max ((arch_sdiv (res_arch res))
                                   ++ (arch_div (res_arch res))
-                                  ++ (arch_ram (res_arch res))) 1 in
-  let nt := PTree.set (max + 1)%positive fu (res_funct_units res) in
+                                  ++ (arch_ram (res_arch res))) 1) + 1)%positive in
+  let nt := PTree.set max fu (res_funct_units res) in
   match fu with
   | UnsignedDiv _ => mk_resources nt (mk_arch (max :: arch_div (res_arch res))
                                               (arch_sdiv (res_arch res))
@@ -164,3 +164,22 @@ Definition funct_unit_stages (f: funct_unit) : positive :=
   | UnsignedDiv d => div_stages d
   | _ => 1
   end.
+
+Definition max_reg_ram r :=
+  fold_right Pos.max 1 (ram_mem r::ram_en r::ram_u_en r::ram_addr r
+                                ::ram_wr_en r::ram_d_in r::ram_d_out r::nil).
+
+Definition max_reg_divider {b: bool} (d: divider b) :=
+  fold_right Pos.max 1 (div_numer d::div_denom d::div_quot d::div_rem d::nil).
+
+Definition max_reg_fu fu :=
+  match fu with
+  | SignedDiv d | UnsignedDiv d => max_reg_divider d
+  | Ram r => max_reg_ram r
+  end.
+
+Definition max_reg_funct_units r :=
+  PTree.fold (fun m _ a => Pos.max m (max_reg_fu a)) r 1.
+
+Definition max_reg_resources r :=
+  max_reg_funct_units r.(res_funct_units).
