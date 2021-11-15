@@ -379,7 +379,8 @@ Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
 Definition max_reg_function (f: function) :=
   Pos.max
     (PTree.fold max_reg_bblock f.(fn_code) 1%positive)
-    (fold_left Pos.max f.(fn_params) 1%positive).
+    (Pos.max (fold_left Pos.max f.(fn_params) 1%positive)
+             (max_reg_resources f.(fn_funct_units))).
 
 Definition max_pc_function (f: function) : positive :=
   PTree.fold (fun m pc i => (Pos.max m
