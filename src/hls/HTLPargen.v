@@ -31,6 +31,7 @@ Require Import vericert.hls.HTL.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLParFU.
+Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 
@@ -687,13 +688,6 @@ Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
     translate_predicate a preg p (Vvar dst) instr
-  | FUload p chunk addr args dst =>
-    do src <- translate_arr_access chunk addr args stack;
-    do _ <- declare_reg None dst 32;
-    translate_predicate a preg p (Vvar dst) src
-  | FUstore p chunk addr args src =>
-    do dst <- translate_arr_access chunk addr args stack;
-    translate_predicate a preg p dst (Vvar src)
   | FUread p1 p2 r => ret Vskip
   | FUwrite p1 p2 r => ret Vskip
   | FUsetpred _ c args p =>
@@ -801,6 +795,11 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
                    end; unfold module_ordering; auto.
 Defined.
 
+Lemma clk_greater :
+  forall ram clk r',
+    Some ram = Some r' -> (clk < ram_addr r')%positive.
+Proof. Admitted.
+
 Definition transf_module (f: function) : mon HTL.module.
   refine (
   if stack_correct f.(fn_stacksize) then
@@ -822,9 +821,31 @@ Definition transf_module (f: function) : mon HTL.module.
           zle (Z.pos (max_pc_map current_state.(st_controllogic)))
               Integers.Int.max_unsigned,
           decide_order (st_st current_state) fin rtrn stack start rst clk,
-          max_list_dec (fn_params f) (st_st current_state)
+          max_list_dec (fn_params f) (st_st current_state),
+          get_ram 0 (fn_funct_units f)
     with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, Some (i, ram) =>
+        ret (HTL.mkmodule
+           f.(fn_params)
+           current_state.(st_datapath)
+           current_state.(st_controllogic)
+           f.(fn_entrypoint)
+           current_state.(st_st)
+           stack
+           stack_len
+           fin
+           rtrn
+           start
+           rst
+           clk
+           current_state.(st_scldecls)
+           current_state.(st_arrdecls)
+           (Some ram)
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
+           MORD
+           _
+           WFPARAMS)
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, _ =>
         ret (HTL.mkmodule
            f.(fn_params)
            current_state.(st_datapath)
@@ -845,9 +866,11 @@ Definition transf_module (f: function) : mon HTL.module.
            MORD
            _
            WFPARAMS)
-    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
+    | _, _, _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
-  else error (Errors.msg "Stack size misalignment.")); discriminate.
+  else error (Errors.msg "Stack size misalignment.")).
+  apply clk_greater.
+  discriminate.
 Defined.
 
 Definition max_state (f: function) : state :=
