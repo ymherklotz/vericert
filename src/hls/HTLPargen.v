@@ -27,6 +27,7 @@ Require Import compcert.lib.Maps.
 Require Import vericert.common.Statemonad.
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.RTLBlockInstr.
@@ -329,6 +330,30 @@ Definition check_address_parameter_signed (p : Z) : bool :=
 Definition check_address_parameter_unsigned (p : Z) : bool :=
   Z.leb p Integers.Ptrofs.max_unsigned.
 
+Lemma create_reg_state_incr:
+  forall s sz i,
+    st_incr s (mkstate
+         s.(st_st)
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+         s.(st_arrdecls)
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_reg (i : option io) (sz : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+                   (st_arrdecls s)
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_reg_state_incr s sz i).
+
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg)
   : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
@@ -367,10 +392,10 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
   | Op.Omulhs, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhs")
   | Op.Omulhu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhu")
-  | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
-  | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
-  | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
-  | Op.Omodu, r1::r2::nil => ret (bop Vmodu r1 r2)
+  | Op.Odiv, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: div")
+  | Op.Odivu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: divu")
+  | Op.Omod, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mod")
+  | Op.Omodu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: modu")
   | Op.Oand, r1::r2::nil => ret (bop Vand r1 r2)
   | Op.Oandimm n, r::nil => ret (boplit Vand r n)
   | Op.Oor, r1::r2::nil => ret (bop Vor r1 r2)
@@ -469,30 +494,6 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
-
-Lemma create_reg_state_incr:
-  forall s sz i,
-    st_incr s (mkstate
-         s.(st_st)
-         (Pos.succ (st_freshreg s))
-         (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
-         s.(st_arrdecls)
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_reg (i : option io) (sz : nat) : mon reg :=
-  fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
-                   s.(st_st)
-                   (Pos.succ r)
-                   (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
-                   (st_arrdecls s)
-                   (st_datapath s)
-                   (st_controllogic s))
-              (create_reg_state_incr s sz i).
 
 Lemma create_arr_state_incr:
   forall s sz ln i,

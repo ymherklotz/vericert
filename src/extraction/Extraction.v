@@ -145,6 +145,7 @@ Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTLBlock => "PrintRTLBlock.print_if".
+Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
 Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".

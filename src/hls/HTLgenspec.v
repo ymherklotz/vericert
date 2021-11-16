@@ -31,6 +31,7 @@ Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.HTLgen.
 Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.FunctionalUnits.
 
 #[local] Hint Resolve Maps.PTree.elements_keys_norepet : htlspec.
 #[local] Hint Resolve Maps.PTree.elements_correct : htlspec.

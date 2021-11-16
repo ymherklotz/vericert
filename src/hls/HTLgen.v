@@ -32,6 +32,7 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
+Require Import vericert.hls.FunctionalUnits.
 
 #[local] Hint Resolve AssocMap.gempty : htlh.
 #[local] Hint Resolve AssocMap.gso : htlh.

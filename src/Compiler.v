@@ -69,6 +69,7 @@ Require vericert.hls.RTLParFUgen.
 Require vericert.hls.HTLPargen.
 Require vericert.hls.Pipeline.
 Require vericert.hls.IfConversion.
+(*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
 

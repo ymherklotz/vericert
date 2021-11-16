@@ -28,6 +28,7 @@ open Clflags
 open Printf
 
 open VericertClflags
+open FunctionalUnits
 
 module PMap = Map.Make (struct
   type t = P.t
@@ -152,9 +153,9 @@ let declarearr (t, _) =
 
 let print_io = function
   | Some Vinput -> "input", false
-  | Some Voutput -> "output reg", true
+  | Some Voutput -> "output logic", true
   | Some Vinout -> "inout", false
-  | None -> "reg", true
+  | None -> "logic", true
 
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
@@ -179,6 +180,20 @@ let rec intersperse c = function
   | x :: xs -> x :: c :: intersperse c xs
 
 let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
+
+(**let print_funct_units clk = function
+  | SignedDiv (stages, numer, denom, quot, rem) ->
+    sprintf ("div_signed #(.stages(%d)) divs(.clk(%s), " ^^
+             ".clken(1'b1), .numer(%s), .denom(%s), " ^^
+             ".quotient(%s), .remain(%s))\n")
+      (P.to_int stages)
+      (register clk) (register numer) (register denom) (register quot) (register rem)
+  | UnsignedDiv (stages, numer, denom, quot, rem) ->
+    sprintf ("div_unsigned #(.stages(%d)) divs(.clk(%s), " ^^
+             ".clken(1'b1), .numer(%s), .denom(%s), " ^^
+             ".quotient(%s), .remain(%s))\n")
+      (P.to_int stages)
+      (register clk) (register numer) (register denom) (register quot) (register rem)*)
 
 let compose f g x = g x |> f
 

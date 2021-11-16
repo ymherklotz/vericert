@@ -421,10 +421,10 @@ let cmdline_actions =
   warning_options @
 (* Vericert.Interpreter mode *)
  [ Exact "-interp", Set option_interp;
-  Exact "-quiet", Unit (fun () -> Vericert.Interp.trace := 0);
-  Exact "-trace", Unit (fun () -> Vericert.Interp.trace := 2);
-  Exact "-random", Unit (fun () -> Vericert.Interp.mode := Vericert.Interp.Random);
-  Exact "-all", Unit (fun () -> Vericert.Interp.mode := Vericert.Interp.All)
+   Exact "-quiet", Unit (fun () -> Vericert.Interp.trace := 0);
+   Exact "-trace", Unit (fun () -> Vericert.Interp.trace := 2);
+   Exact "-random", Unit (fun () -> Vericert.Interp.mode := Vericert.Interp.Random);
+   Exact "-all", Unit (fun () -> Vericert.Interp.mode := Vericert.Interp.All)
  ]
 (* Optimization options *)
 (* -f options: come in -f and -fno- variants *)

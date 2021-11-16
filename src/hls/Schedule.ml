@@ -571,6 +571,18 @@ let gather_bb_constraints debug bb =
 let encode_var bbn n i = { sv_type = VarType (bbn, n); sv_num = i }
 let encode_bb bbn i = { sv_type = BBType bbn; sv_num = i }
 
+let add_initial_sv n dfg constr =
+  let add_initial_sv' (i, instr) g =
+    let pipes = pipeline_stages instr in
+    if pipes > 0 then
+      List.init pipes (fun i' -> i')
+      |> List.fold_left (fun g i' ->
+          G.add_edge_e g (encode_var n i i', -1, encode_var n i (i'+1))
+        ) g
+    else g
+  in
+  DFG.fold_vertex add_initial_sv' dfg constr
+
 let add_super_nodes n dfg =
   DFG.fold_vertex (function v1 -> fun g ->
       (if DFG.in_degree dfg v1 = 0
@@ -578,12 +590,14 @@ let add_super_nodes n dfg =
        else g) |>
       (fun g' ->
          if DFG.out_degree dfg v1 = 0
-         then G.add_edge_e g' (encode_var n (fst v1) 0, 0, encode_bb n 1)
+         then G.add_edge_e g' (encode_var n (fst v1) (pipeline_stages (snd v1)),
+                               0, encode_bb n 1)
          else g')) dfg
 
 let add_data_deps n =
-  DFG.fold_edges_e (function ((i1, _), l, (i2, _)) -> fun g ->
-      G.add_edge_e g (encode_var n i1 0, 0, encode_var n i2 0)
+  DFG.fold_edges_e (function ((i1, instr1), _, (i2, _)) -> fun g ->
+      let end_sv = pipeline_stages instr1 in
+      G.add_edge_e g (encode_var n i1 end_sv, 0, encode_var n i2 0)
     )
 
 let add_ctrl_deps n succs constr =
@@ -611,7 +625,7 @@ let add_cycle_constr max n dfg constr =
   let negated_dfg = negate_graph dfg in
   let longest_path v = BFDFG.all_shortest_paths negated_dfg v
                        |> BFDFG.H.to_seq |> List.of_seq in
-  let constrained_paths = List.filter (function (v, m) -> - m > max) in
+  let constrained_paths = List.filter (function (_, m) -> - m > max) in
   List.fold_left (fun g -> function (v, v', w) ->
       G.add_edge_e g (encode_var n (fst v) 0,
                       - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int max))) - 1),
@@ -671,6 +685,7 @@ let gather_cfg_constraints c constr curr =
   | None -> assert false
   | Some { bb_exit = ctrl; _ } ->
     add_super_nodes n dfg constr
+    |> add_initial_sv n dfg
     |> add_data_deps n dfg
     |> add_ctrl_deps n (successors_instr ctrl
                         |> List.map P.to_int
@@ -703,16 +718,21 @@ let print_lp constr =
 
 let update_schedule v = function Some l -> Some (v :: l) | None -> Some [ v ]
 
-let parse_soln tree s =
+let parse_soln (tree, bbtree) s =
   let r = Str.regexp "var\\([0-9]+\\)n\\([0-9]+\\)_0[ ]+\\([0-9]+\\)" in
-  if Str.string_match r s 0 then
-    IMap.update
-      (Str.matched_group 1 s |> int_of_string)
-      (update_schedule
-         ( Str.matched_group 2 s |> int_of_string,
-           Str.matched_group 3 s |> int_of_string ))
-      tree
-  else tree
+  let bb = Str.regexp "bb\\([0-9]+\\)_\\([0-9]+\\)[ ]+\\([0-9]+\\)" in
+  let upd s = IMap.update
+            (Str.matched_group 1 s |> int_of_string)
+            (update_schedule
+               ( Str.matched_group 2 s |> int_of_string,
+                 Str.matched_group 3 s |> int_of_string ))
+  in
+  if Str.string_match r s 0
+  then (upd s tree, bbtree)
+  else
+    (if Str.string_match bb s 0
+     then (tree, upd s bbtree)
+     else (tree, bbtree))
 
 let solve_constraints constr =
   let (fn, oc) = Filename.open_temp_file "vericert_" "_lp_solve" in
@@ -721,7 +741,7 @@ let solve_constraints constr =
 
   let res = Str.split (Str.regexp_string "\n") (read_process ("lp_solve " ^ fn))
             |> drop 3
-            |> List.fold_left parse_soln IMap.empty
+            |> List.fold_left parse_soln (IMap.empty, IMap.empty)
   in
   Sys.remove fn; res
 
@@ -765,20 +785,35 @@ let all_dfs dfg =
       if check_in el a then a else
         (DFGDfs.fold_component (fun v l -> v :: l) [] dfg' el) :: a) [] roots
 
+let range s e =
+  List.init (e - s) (fun i -> i)
+  |> List.map (fun x -> x + s)
+
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
-let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
+let transf_rtlpar c c' schedule =
   let f i bb : RTLPar.bblock =
     match bb with
     | { bb_body = []; bb_exit = c } -> { bb_body = []; bb_exit = c }
     | { bb_body = bb_body'; bb_exit = ctrl_flow } ->
       let dfg = match PTree.get i c' with None -> assert false | Some x -> x in
-      let i_sched = IMap.find (P.to_int i) schedule in
+      let bb_st_e =
+        let m = IMap.find (P.to_int i) (snd schedule) in
+        (List.assq 0 m, List.assq 1 m) in
+      let i_sched = IMap.find (P.to_int i) (fst schedule) in
       let i_sched_tree =
         List.fold_left combine_bb_schedule IMap.empty i_sched
       in
       let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
       in
+      (*let body2 = List.fold_left (fun x b ->
+          match IMap.find_opt b i_sched_tree with
+          | Some i -> i :: x
+          | None -> [] :: x
+        ) [] (range (fst bb_st_e) (snd bb_st_e + 1))
+        |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
+        |> List.rev
+      in*)
       (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x ->
@@ -787,6 +822,8 @@ let transf_rtlpar c c' (schedule : (int * int) list IMap.t) =
                                                |> List.map (fun y ->
                                                    TopoDFG.fold (fun i l -> snd i :: l) y []
                                                    |> List.rev))) body
+                                           (*|> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
+                                           |> List.rev) body2*)
       in
       { bb_body = final_body2;
         bb_exit = ctrl_flow
