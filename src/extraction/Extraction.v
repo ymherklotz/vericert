@@ -148,6 +148,7 @@ Extract Constant Compiler.print_RTLBlock => "PrintRTLBlock.print_if".
 Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
 Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
+Extract Constant Compiler.print_RTLParFU => "PrintRTLParFU.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".

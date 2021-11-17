@@ -392,10 +392,10 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Omulimm n, r::nil => ret (boplit Vmul r n)
   | Op.Omulhs, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhs")
   | Op.Omulhu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mulhu")
-  | Op.Odiv, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: div")
-  | Op.Odivu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: divu")
-  | Op.Omod, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: mod")
-  | Op.Omodu, r1::r2::nil => error (Errors.msg "Htlgen: Instruction not implemented: modu")
+  | Op.Odiv, r1::r2::nil => ret (bop Vdiv r1 r2)
+  | Op.Odivu, r1::r2::nil => ret (bop Vdivu r1 r2)
+  | Op.Omod, r1::r2::nil => ret (bop Vmod r1 r2)
+  | Op.Omodu, r1::r2::nil => ret (bop Vmodu r1 r2)
   | Op.Oand, r1::r2::nil => ret (bop Vand r1 r2)
   | Op.Oandimm n, r::nil => ret (boplit Vand r n)
   | Op.Oor, r1::r2::nil => ret (bop Vor r1 r2)
@@ -457,28 +457,6 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
          (add_branch_instr_state_incr s e n n1 n2 NTRANS)
     | _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
-
-Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
-           (args : list reg) (stack : reg) : mon expr :=
-  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Mint32, Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
-  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vvari stack
-                    (Vbinop Vdivu
-                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-                            (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
-  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vvari stack (Vlit (ZToValue (a / 4))))
-    else error (Errors.msg "HTLgen: eff_addressing out of bounds stack offset")
-  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
-  end.
 
 Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
   match ns with
@@ -680,7 +658,7 @@ Definition translate_predicate (a : assignment)
     ret (a dst (Vternary (pred_expr preg pos) e dst))
   end.
 
-Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
+Definition translate_inst a (fin rtrn preg : reg) (n : node) (i : instr)
   : mon stmnt :=
   match i with
   | FUnop =>
@@ -721,18 +699,18 @@ Definition create_new_state (p: node): mon node :=
                 s.(st_controllogic))
               (create_new_state_state_incr s p).
 
-Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * list (list instr)) :=
+Definition translate_inst_list (fin rtrn preg: reg) (ni : node * node * list (list instr)) :=
   match ni with
   | (n, p, li) =>
     do _ <- collectlist
           (fun l =>
-             do stmnt <- translate_inst Vblock fin rtrn stack preg n l;
+             do stmnt <- translate_inst Vblock fin rtrn preg n l;
              add_data_instr n stmnt) (concat li);
     do st <- get;
     add_control_instr n (state_goto st.(st_st) p)
   end.
 
-Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
+Fixpoint translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
   match cfi with
   | FUgoto n' =>
@@ -752,8 +730,8 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
            Vskip)
     end
   | FUpred_cf p c1 c2 =>
-    do (tc1s, tc1c) <- translate_cfi' fin rtrn stack preg c1;
-    do (tc2s, tc2c) <- translate_cfi' fin rtrn stack preg c2;
+    do (tc1s, tc1c) <- translate_cfi' fin rtrn preg c1;
+    do (tc2s, tc2c) <- translate_cfi' fin rtrn preg c2;
     ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
   | FUjumptable r tbl =>
     do s <- get;
@@ -766,23 +744,23 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
-Definition translate_cfi (fin rtrn stack preg: reg) (ni: node * cf_instr)
+Definition translate_cfi (fin rtrn preg: reg) (ni: node * cf_instr)
   : mon unit :=
   let (n, cfi) := ni in
-  do (s, c) <- translate_cfi' fin rtrn stack preg cfi;
+  do (s, c) <- translate_cfi' fin rtrn preg cfi;
   do _ <- add_control_instr n c;
   add_data_instr n s.
 
-Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
+Definition transf_bblock (fin rtrn preg: reg) (ni : node * bblock)
   : mon unit :=
   let (n, bb) := ni in
   do nstate <- create_new_state ((poslength bb.(bb_body)))%positive;
-  do _ <- collectlist (translate_inst_list fin rtrn stack preg)
+  do _ <- collectlist (translate_inst_list fin rtrn preg)
                       (prange n (nstate + poslength bb.(bb_body) - 1)%positive
                                   bb.(bb_body));
   match bb.(bb_body) with
-  | nil => translate_cfi fin rtrn stack preg (n, bb.(bb_exit))
-  | _ => translate_cfi fin rtrn stack preg (nstate, bb.(bb_exit))
+  | nil => translate_cfi fin rtrn preg (n, bb.(bb_exit))
+  | _ => translate_cfi fin rtrn preg (nstate, bb.(bb_exit))
   end.
 
 Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
@@ -806,10 +784,8 @@ Definition transf_module (f: function) : mon HTL.module.
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
-    do (stack, stack_len) <- create_arr None 32
-                                        (Z.to_nat (f.(fn_stacksize) / 4));
     do preg <- create_reg None 32;
-    do _ <- collectlist (transf_bblock fin rtrn stack preg)
+    do _ <- collectlist (transf_bblock fin rtrn preg)
                         (Maps.PTree.elements f.(fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
                         f.(fn_params);

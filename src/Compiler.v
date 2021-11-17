@@ -86,6 +86,7 @@ Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: Z -> HTL.program -> unit.
 Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
 Parameter print_RTLPar: Z -> RTLPar.program -> unit.
+Parameter print_RTLParFU: Z -> RTLParFU.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -249,6 +250,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ RTLPargen.transl_program
    @@ print (print_RTLPar 0)
   @@@ RTLParFUgen.transl_program
+   @@ print (print_RTLParFU 0)
   @@@ HTLPargen.transl_program
    @@ print (print_HTL 0)
    @@ Veriloggen.transl_program.

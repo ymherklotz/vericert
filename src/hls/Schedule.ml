@@ -289,6 +289,7 @@ let comb_delay = function
   | _ -> 1
 
 let pipeline_stages = function
+  | RBload _ -> 2
   | RBop (_, op, _, _) ->
     (match op with
      | Odiv -> 32
@@ -743,7 +744,7 @@ let solve_constraints constr =
             |> drop 3
             |> List.fold_left parse_soln (IMap.empty, IMap.empty)
   in
-  Sys.remove fn; res
+  (*Sys.remove fn;*) res
 
 let subgraph dfg l =
   let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
@@ -806,14 +807,14 @@ let transf_rtlpar c c' schedule =
       let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
                  |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
       in
-      (*let body2 = List.fold_left (fun x b ->
+      let body2 = List.fold_left (fun x b ->
           match IMap.find_opt b i_sched_tree with
           | Some i -> i :: x
           | None -> [] :: x
         ) [] (range (fst bb_st_e) (snd bb_st_e + 1))
         |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
         |> List.rev
-      in*)
+      in
       (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x ->
@@ -821,7 +822,7 @@ let transf_rtlpar c c' schedule =
                                                |> List.map (subgraph x)
                                                |> List.map (fun y ->
                                                    TopoDFG.fold (fun i l -> snd i :: l) y []
-                                                   |> List.rev))) body
+                                                   |> List.rev))) body2
                                            (*|> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
                                            |> List.rev) body2*)
       in

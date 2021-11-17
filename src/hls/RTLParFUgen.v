@@ -57,7 +57,7 @@ Definition transl_instr (res: resources) (cycle: positive) (i: RTLBlockInstr.ins
                           :: FUop po (Op.Ointconst (Int.repr 0)) nil (ram_wr_en r)
                           :: FUop po (Op.Olea addr) args (ram_addr r)
                           :: FUop po (Op.Oshruimm (Int.repr 2)) ((ram_addr r)::nil) (ram_addr r)
-                          :: instr_list, update (cycle+1)
+                          :: instr_list, update (Pos.pred cycle)
                                                 (add_instr (FUop po Op.Omove (ram_d_out r::nil) d))
                                                 d_tree)
       | _ => Errors.Error (Errors.msg "Could not find RAM")

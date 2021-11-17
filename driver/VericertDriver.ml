@@ -67,6 +67,7 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
   set_dest Vericert.PrintRTLBlock.destination option_drtlblock ".rtlblock";
   set_dest Vericert.PrintRTLPar.destination option_drtlpar ".rtlpar";
+  set_dest Vericert.PrintRTLParFU.destination option_drtlparfu ".rtlparfu";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
@@ -393,6 +394,7 @@ let cmdline_actions =
   Exact "-drtl", Set option_drtl;
   Exact "-drtlblock", Set option_drtlblock;
   Exact "-drtlpar", Set option_drtlpar;
+  Exact "-drtlparfu", Set option_drtlparfu;
   Exact "-dhtl", Set option_dhtl;
   Exact "-dltl", Set option_dltl;
   Exact "-dalloctrace", Set option_dalloctrace;
@@ -407,6 +409,7 @@ let cmdline_actions =
     option_drtl := true;
     option_drtlblock := true;
     option_drtlpar := true;
+    option_drtlparfu := true;
     option_dhtl := true;
     option_dltl := true;
     option_dalloctrace := true;
