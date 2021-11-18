@@ -161,7 +161,6 @@ Definition transl_function (f: RTLPar.function): Errors.res RTLParFU.function :=
                             (max+6)%positive
                             (max+4)%positive
                             (max+5)%positive
-                            ltac:(lia)
                     )) initial_resources in
   do c' <- transl_code fu (RTLBlockInstr.fn_code f);
   Errors.OK (mkfunction (RTLBlockInstr.fn_sig f)
