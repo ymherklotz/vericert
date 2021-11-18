@@ -182,7 +182,7 @@ Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
-Extract Constant Pipeline.pipeline => "SoftwarePipelining.pipeline".
+Extract Constant Pipeline.pipeline => "pipelining.pipeline".
 Extract Constant RTLBlockgen.partition => "Partition.partition".
 Extract Constant RTLPargen.schedule => "Schedule.schedule_fn".
 

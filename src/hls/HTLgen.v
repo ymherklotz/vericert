@@ -584,7 +584,7 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+(*Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
                           && (d <? e) && (e <? f) && (f <? g))%positive true with
           | left t => left _
@@ -593,7 +593,7 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
   simplify; repeat match goal with
                    | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
                    end; unfold module_ordering; auto.
-Defined.
+Defined.*)
 
 Definition transf_module (f: function) : mon HTL.module.
   refine (
@@ -606,21 +606,24 @@ Definition transf_module (f: function) : mon HTL.module.
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
+    do r_en <- create_reg None 1;
+    do r_u_en <- create_reg None 1;
+    do r_addr <- create_reg None 32;
+    do r_wr_en <- create_reg None 1;
+    do r_d_in <- create_reg None 32;
+    do r_d_out <- create_reg None 32;
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned,
-          decide_order (st_st current_state) fin rtrn stack start rst clk,
           max_list_dec (RTL.fn_params f) (st_st current_state)
     with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
+    | left LEDATA, left LECTRL, left WFPARAMS =>
         ret (HTL.mkmodule
            f.(RTL.fn_params)
            current_state.(st_datapath)
            current_state.(st_controllogic)
            f.(fn_entrypoint)
            current_state.(st_st)
-           stack
-           stack_len
            fin
            rtrn
            start
@@ -628,12 +631,8 @@ Definition transf_module (f: function) : mon HTL.module.
            clk
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
-           None
-           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
-           MORD
-           _
-           WFPARAMS)
-    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
+           (mk_ram stack_len stack r_en r_u_en r_addr r_wr_en r_d_in r_d_out))
+    | _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
   else error (Errors.msg "Stack size misalignment.")); discriminate.
 Defined.

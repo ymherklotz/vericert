@@ -145,6 +145,30 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_controllogic))
               (declare_reg_state_incr i s r sz).
 
+Lemma declare_arr_state_incr :
+  forall i s r sz ln,
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       s.(st_freshstate)
+       s.(st_scldecls)
+       (AssocMap.set r (i, VArray sz ln) s.(st_arrdecls))
+       s.(st_datapath)
+       s.(st_controllogic)).
+Proof. Admitted.
+
+Definition declare_arr (i : option io) (r : reg) (sz : nat) (ln : nat) : mon unit :=
+  fun s => OK tt (mkstate
+                s.(st_st)
+                s.(st_freshreg)
+                s.(st_freshstate)
+                s.(st_scldecls)
+                (AssocMap.set r (i, VArray sz ln) s.(st_arrdecls))
+                s.(st_datapath)
+                s.(st_controllogic))
+              (declare_arr_state_incr i s r sz ln).
+
 Lemma add_instr_state_incr :
   forall s n n' st,
     (st_controllogic s)!n = None ->
@@ -763,7 +787,7 @@ Definition transf_bblock (fin rtrn preg: reg) (ni : node * bblock)
   | _ => translate_cfi fin rtrn preg (nstate, bb.(bb_exit))
   end.
 
-Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+(*Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
                           && (d <? e) && (e <? f) && (f <? g))%positive true with
           | left t => left _
@@ -772,15 +796,24 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
   simplify; repeat match goal with
                    | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
                    end; unfold module_ordering; auto.
-Defined.
+Defined.*)
 
 Lemma clk_greater :
   forall ram clk r',
     Some ram = Some r' -> (clk < ram_addr r')%positive.
 Proof. Admitted.
 
-Definition transf_module (f: function) : mon HTL.module.
-  refine (
+Definition declare_ram (r: ram) : mon unit :=
+  do _ <- declare_reg None r.(ram_en) 1;
+  do _ <- declare_reg None r.(ram_u_en) 1;
+  do _ <- declare_reg None r.(ram_wr_en) 1;
+  do _ <- declare_reg None r.(ram_addr) 32;
+  do _ <- declare_reg None r.(ram_d_in) 32;
+  do _ <- declare_reg None r.(ram_d_out) 32;
+  do _ <- declare_arr None r.(ram_mem) 32 r.(ram_size);
+  ret tt.
+
+Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
@@ -792,63 +825,36 @@ Definition transf_module (f: function) : mon HTL.module.
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
-    do current_state <- get;
-    match zle (Z.pos (max_pc_map current_state.(st_datapath)))
-              Integers.Int.max_unsigned,
+    match get_ram 0 (fn_funct_units f) with
+    | Some (_, r) =>
+        do _ <- declare_ram r;
+        do current_state <- get;
+        match zle (Z.pos (max_pc_map current_state.(st_datapath)))
+                  Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic)))
               Integers.Int.max_unsigned,
-          decide_order (st_st current_state) fin rtrn stack start rst clk,
-          max_list_dec (fn_params f) (st_st current_state),
-          get_ram 0 (fn_funct_units f)
-    with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, Some (i, ram) =>
-        ret (HTL.mkmodule
-           f.(fn_params)
-           current_state.(st_datapath)
-           current_state.(st_controllogic)
-           f.(fn_entrypoint)
-           current_state.(st_st)
-           stack
-           stack_len
-           fin
-           rtrn
-           start
-           rst
-           clk
-           current_state.(st_scldecls)
-           current_state.(st_arrdecls)
-           (Some ram)
-           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
-           MORD
-           _
-           WFPARAMS)
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS, _ =>
-        ret (HTL.mkmodule
-           f.(fn_params)
-           current_state.(st_datapath)
-           current_state.(st_controllogic)
-           f.(fn_entrypoint)
-           current_state.(st_st)
-           stack
-           stack_len
-           fin
-           rtrn
-           start
-           rst
-           clk
-           current_state.(st_scldecls)
-           current_state.(st_arrdecls)
-           None
-           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
-           MORD
-           _
-           WFPARAMS)
-    | _, _, _, _, _ => error (Errors.msg "More than 2^32 states.")
+          max_list_dec (fn_params f) (st_st current_state)
+        with
+        | left LEDATA, left LECTRL, left WFPARAMS =>
+          ret (HTL.mkmodule
+             f.(fn_params)
+             current_state.(st_datapath)
+             current_state.(st_controllogic)
+             f.(fn_entrypoint)
+             current_state.(st_st)
+             fin
+             rtrn
+             start
+             rst
+             clk
+             current_state.(st_scldecls)
+             current_state.(st_arrdecls)
+             r)
+        | _, _, _=> error (Errors.msg "More than 2^32 states.")
+        end
+    | _ => error (Errors.msg "Stack RAM not found.")
     end
-  else error (Errors.msg "Stack size misalignment.")).
-  apply clk_greater.
-  discriminate.
-Defined.
+  else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in

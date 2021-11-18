@@ -52,12 +52,10 @@ Record ram := mk_ram {
   ram_wr_en: reg;
   ram_d_in: reg;
   ram_d_out: reg;
-  ram_ordering: (ram_addr < ram_en
-                 /\ ram_en < ram_d_in
-                 /\ ram_d_in < ram_d_out
-                 /\ ram_d_out < ram_wr_en
-                 /\ ram_wr_en < ram_u_en)
 }.
+
+Definition all_ram_regs r :=
+  ram_mem r::ram_en r::ram_u_en r::ram_addr r::ram_wr_en r::ram_d_in r::ram_d_out r::nil.
 
 Inductive funct_unit: Type :=
 | SignedDiv: divider true -> funct_unit

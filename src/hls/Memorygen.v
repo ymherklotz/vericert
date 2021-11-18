@@ -44,7 +44,7 @@ Local Open Scope assocmap.
 #[local] Hint Resolve max_reg_stmnt_lt_stmnt_tree : mgen.
 #[local] Hint Resolve max_stmnt_lt_module : mgen.
 
-Lemma int_eq_not_false : forall x, Int.eq x (Int.not x) = false.
+(*Lemma int_eq_not_false : forall x, Int.eq x (Int.not x) = false.
 Proof.
   intros. unfold Int.eq.
   rewrite Int.unsigned_not.
@@ -3202,3 +3202,4 @@ Section CORRECTNESS.
   Qed.
 
 End CORRECTNESS.
+*)
