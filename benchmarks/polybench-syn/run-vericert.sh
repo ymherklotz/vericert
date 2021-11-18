@@ -10,27 +10,31 @@ while read benchmark ; do
    cresult=$(cat $benchmark.clog | cut -d' ' -f2)
    #echo "C output: "$cresult
    #./$benchmark.iver > $benchmark.tmp
+   if [[ ! -f ./$benchmark.verilator/Vmain ]]; then
+      echo -e "\e[0;91mFAIL\e[0m: Verilog failed compilation"
+      continue
+   fi
    ./$benchmark.verilator/Vmain > $benchmark.tmp
    veriresult=$(tail -1 $benchmark.tmp | cut -d' ' -f2)
    cycles=$(tail -2 $benchmark.tmp | head -1 | tr -s ' ' | cut -d' ' -f2)
    #echo "Verilog output: "$veriresult
 
    #Undefined checks
-   if test -z $veriresult 
+   if [[ -z "$veriresult" ]]
    then
       echo "\e[0;91mFAIL\e[0m: Verilog returned nothing"
       #exit 0
    fi
    
    # Don't care checks
-   if [ $veriresult == "x" ] 
+   if [[ $veriresult == "x" ]]
    then
       echo "\e[0;91mFAIL\e[0m: Verilog returned don't cares"
       #exit 0
    fi
 
    # unequal result check
-   if [ $cresult -ne $veriresult ] 
+   if [[ $cresult -ne $veriresult ]]
    then 
       echo -e "\e[0;91mFAIL\e[0m: Verilog and C output do not match!"
       #exit 0

@@ -1,5 +1,5 @@
 VERICERT ?= vericert
-VERICERT_OPTS ?= -DSYNTHESIS -O0 -finline
+VERICERT_OPTS ?= -DSYNTHESIS -O0 -finline -fschedule -fif-conv
 
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
