@@ -305,7 +305,7 @@ let add_dep map i tree dfg curr =
   | None -> dfg
   | Some ip ->
     let ipv = (List.nth map ip) in
-    DFG.add_edge_e dfg (ipv, comb_delay (snd ipv), List.nth map i)
+    DFG.add_edge_e dfg (ipv, comb_delay (snd (List.nth map i)), List.nth map i)
 
 (** This function calculates the dependencies of each instruction.  The nodes correspond to previous
    registers that were allocated and show which instruction caused it.
@@ -408,7 +408,7 @@ let accumulate_WAW_mem_deps instrs dfg curri =
   | RBstore (_, _, _, _, _) -> (
       match next_store 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i))
   | _ -> dfg
 
 (** Predicate dependencies. *)
@@ -622,18 +622,22 @@ let negate_graph constr =
       DFG.add_edge_e g (v1, -e, v2)
     ) constr DFG.empty
 
-let add_cycle_constr max n dfg constr =
+let add_cycle_constr maxf n dfg constr =
   let negated_dfg = negate_graph dfg in
+  let max_initial_del = DFG.fold_vertex (fun v1 g ->
+      if DFG.in_degree dfg v1 = 0
+      then max g (comb_delay (snd v1))
+      else g) dfg 0 in
   let longest_path v = BFDFG.all_shortest_paths negated_dfg v
-                       |> BFDFG.H.to_seq |> List.of_seq in
-  let constrained_paths = List.filter (function (_, m) -> - m > max) in
+                       |> BFDFG.H.to_seq |> List.of_seq
+                       |> List.map (function (x, y) -> (x, y - max_initial_del)) in
+  let constrained_paths = List.filter (function (_, m) -> - m > maxf) in
   List.fold_left (fun g -> function (v, v', w) ->
       G.add_edge_e g (encode_var n (fst v) 0,
-                      - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int max))) - 1),
+                      - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int maxf))) - 1),
                       encode_var n (fst v') 0)
     ) constr (DFG.fold_vertex (fun v l ->
-      List.append l (longest_path v |> constrained_paths
-                     |> List.map (function (v', w) -> (v, v', - w)))
+      List.append l (longest_path v |> constrained_paths |> List.map (function (v', w) -> (v, v', - w)))
     ) dfg [])
 
 type resource =
