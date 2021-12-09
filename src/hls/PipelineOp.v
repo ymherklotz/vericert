@@ -79,7 +79,7 @@ Definition map_at_err {A: Type} (n: nat) (f: A -> A) (l: list A): option (list A
   then None
   else Some (map_at n f l).
 
-Definition replace_div' sdiv udiv (d: instr) :=
+(*Definition replace_div' sdiv udiv (d: instr) :=
   match d with
   | RBop op Odiv args dst => RBpiped op sdiv args
   | RBop op Odivu args dst => RBpiped op udiv args
@@ -190,3 +190,4 @@ Definition transf_fundef (fd: fundef) : fundef :=
 
 Definition transf_program (p: program) : program :=
   transform_program transf_fundef p.
+*)

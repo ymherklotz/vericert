@@ -67,7 +67,7 @@ Require vericert.hls.RTLBlockgen.
 Require vericert.hls.RTLPargen.
 Require vericert.hls.RTLParFUgen.
 Require vericert.hls.HTLPargen.
-Require vericert.hls.Pipeline.
+(*Require vericert.hls.Pipeline.*)
 Require vericert.hls.IfConversion.
 (*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.

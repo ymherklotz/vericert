@@ -21,7 +21,7 @@ COQMAKE := $(COQBIN)coq_makefile
 
 COQDOCFLAGS := --no-lib-name -l
 
-VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls, src/$(d)/*.v)
+VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, src/$(d)/*.v)
 
 PREFIX ?= .
 

@@ -637,7 +637,10 @@ let add_cycle_constr maxf n dfg constr =
                       - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int maxf))) - 1),
                       encode_var n (fst v') 0)
     ) constr (DFG.fold_vertex (fun v l ->
-      List.append l (longest_path v |> constrained_paths |> List.map (function (v', w) -> (v, v', - w)))
+      List.append l (longest_path v (*|> (function l -> List.iter (function (a, x) ->
+          printf "c: %d %d\n" (fst a) x) l; l)*) |> constrained_paths (* |> (function l -> List.iter (function (a, x) ->
+          printf "%d %d\n" (fst a) x) l; l)*)
+                     |> List.map (function (v', w) -> (v, v', - w)))
     ) dfg [])
 
 type resource =

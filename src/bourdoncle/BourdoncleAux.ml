@@ -4,7 +4,8 @@ open Camlcoq
 open BinNums
 open BinPos
 open Maps
-open RTL
+open RTLBlock
+open RTLBlockInstr
 open BourdoncleIterator
 module B = Bourdoncle
 
@@ -38,25 +39,23 @@ let bourdoncleListToString (l : B.bourdoncle list) : string =
 (* Dummy type to avoid redefining existing functions *)
 type instr = | Inop
 
+let rec get_exits = function
+  | RBgoto j -> [(int_of_positive j, Inop)]
+  | RBcall (_,_,_,dst,j) -> [(int_of_positive j, Inop)]
+  | RBtailcall _ -> []
+  | RBbuiltin (_,_,dst,j) -> [(int_of_positive j, Inop)]
+  | RBcond (c,args,j,k) -> [(int_of_positive j, Inop);(int_of_positive k, Inop)]
+  | RBjumptable (_,tbl) -> List.map (fun j -> (int_of_positive j, Inop)) tbl
+  | RBpred_cf (p, cf1, cf2) -> List.append (get_exits cf1) (get_exits cf2)
+  | RBreturn _ -> []
+
 let build_cfg f =
   let entry = int_of_positive f.fn_entrypoint in
   let max = PTree.fold (fun m n _ -> max m (int_of_positive n)) f.fn_code 0 in
   (* nodes are between 1 and max+1 *)
   let succ = Array.make (max+1) [] in
   let _ = PTree.fold (fun () n ins ->
-			succ.(int_of_positive n) <-
-        let inop : instr = Inop in
-			  match ins with
-			    | RTL.Inop j -> [(int_of_positive j, inop)]
-			    | RTL.Iop (op,args,dst,j) -> [(int_of_positive j, Inop)]
-			    | RTL.Iload (_,_,_,dst,j) -> [(int_of_positive j, Inop)]
-			    | RTL.Istore (_,_,_,_,j) -> [(int_of_positive j, Inop)]
-			    | RTL.Icall (_,_,_,dst,j) -> [(int_of_positive j, Inop)]
-			    | RTL.Itailcall _ -> []
-			    | RTL.Ibuiltin (_,_,dst,j) -> [(int_of_positive j, Inop)]
-			    | RTL.Icond (c,args,j,k) -> [(int_of_positive j, Inop);(int_of_positive k, Inop)]
-			    | RTL.Ijumptable (_,tbl) -> List.map (fun j -> (int_of_positive j, inop)) tbl
-			    | RTL.Ireturn _ -> []) f.fn_code () in
+			succ.(int_of_positive n) <- get_exits ins.bb_exit) f.fn_code () in
     { entry = entry; succ = succ }
 
 let rec build_bourdoncle' (bl : bourdoncle list) : B.bourdoncle list =
@@ -66,7 +65,7 @@ let rec build_bourdoncle' (bl : bourdoncle list) : B.bourdoncle list =
     | (L ((I h) :: l, _)) :: r -> B.L (positive_of_int h, build_bourdoncle' l) :: (build_bourdoncle' r)
     | _ -> failwith "Assertion error: invalid bourdoncle ist"
 
-let build_bourdoncle'' (f : coq_function) : B.bourdoncle =
+let build_bourdoncle'' (f : bb coq_function) : B.bourdoncle =
   let cfg = build_cfg f in
   match build_bourdoncle' (get_bourdoncle cfg) with
     | [] -> failwith "assertion error: empty bourdoncle"
@@ -103,7 +102,7 @@ let build_order (b : B.bourdoncle) : coq_N PMap.t =
   let bo = build_order' (linearize b) (succ_pos N0) in
   (succ_pos N0, bo)
 
-let build_bourdoncle (f : coq_function) : (B.bourdoncle * coq_N PMap.t) =
+let build_bourdoncle (f : bb coq_function) : (B.bourdoncle * coq_N PMap.t) =
   let b = build_bourdoncle'' f in
   let bo = build_order b in
   (b, bo)

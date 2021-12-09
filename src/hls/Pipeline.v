@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Require Import compcert.lib.Maps.
+(*Require Import compcert.lib.Maps.
 Require Import compcert.common.AST.
 Require Import compcert.backend.RTL.
 
@@ -26,3 +26,4 @@ Definition transf_fundef := transf_fundef pipeline.
 
 Definition transf_program : program -> program :=
   transform_program transf_fundef.
+*)
