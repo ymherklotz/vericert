@@ -4,8 +4,8 @@
     - [Setting up Nix](#setting-up-nix)
     - [Makefile build](#makefile-build)
   - [Running](#running)
-  - [Citation](#org741ad34)
-  - [License](#orgb089937)
+  - [Citation](#orge392203)
+  - [License](#org8a5a598)
 
 <a href="https://vericert.ymhg.org"><img src="https://vericert.ymhg.org/vericert-main.svg" width="100%" height="144" /></a>
 
@@ -109,7 +109,7 @@ To test out `vericert` you can try the following examples which are in the test 
 ```
 
 
-<a id="org741ad34"></a>
+<a id="orge392203"></a>
 
 # Citation
 
@@ -132,7 +132,7 @@ If you use Vericert in any way, please cite it using our [OOPSLA&rsquo;21 paper]
 ```
 
 
-<a id="orgb089937"></a>
+<a id="org8a5a598"></a>
 
 # License
 
