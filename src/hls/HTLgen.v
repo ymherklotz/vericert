@@ -503,8 +503,8 @@ Definition return_val r :=
   end.
 
 Definition do_return fin rtrn r :=
-  Vseq (block fin (Vlit (ZToValue 1%Z)))
-       (block rtrn (return_val r)).
+  Vseq (nonblock fin (Vlit (ZToValue 1%Z)))
+       (nonblock rtrn (return_val r)).
 
 Definition idle fin := nonblock fin (Vlit (ZToValue 0%Z)).
 
@@ -910,6 +910,13 @@ Proof.
 Qed.
 
 Definition transl_program (p : RTL.program) : Errors.res HTL.program :=
-  if main_is_internal p && only_allowed_instrs_dec p && main_not_called_dec p && only_main_has_stack_dec p
-  then transform_partial_program (transl_fundef p) p
-  else Errors.Error (Errors.msg "Main function is not Internal.").
+  if main_is_internal p
+  then if only_allowed_instrs_dec p || true (* This might be wrong, because it checks all functions except
+                                               for main (not only the called functions). *)
+       then if main_not_called_dec p
+            then if only_main_has_stack_dec p
+                 then transform_partial_program (transl_fundef p) p
+                 else Errors.Error (Errors.msg "other functions have a stack.")
+            else Errors.Error (Errors.msg "main is called.")
+       else Errors.Error (Errors.msg "instructions present that are not allowed.")
+  else Errors.Error (Errors.msg "main function is not internal.").

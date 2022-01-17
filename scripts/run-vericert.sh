@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 
-output=$1
-
-mkdir -p $output
-rm -f $output/exec.csv
+rm exec.csv
 
 top=$(pwd)
  #set up
@@ -40,5 +37,5 @@ while read benchmark ; do
    echo "PASS"
    fi
    name=$(echo $benchmark | awk -v FS="/" '{print $NF}')
-   echo $name","$cycles >> $output/exec.csv
+   echo $name","$cycles >> exec.csv
 done < benchmark-list-master

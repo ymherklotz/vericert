@@ -1,4 +1,4 @@
-VERICERT ?= vericert
+VERICERT ?= /home/ymherklotz/projects/mpardalos-vericert/bin/vericert
 VERICERT_OPTS ?= -DSYNTHESIS
 
 IVERILOG ?= iverilog

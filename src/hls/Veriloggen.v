@@ -84,24 +84,24 @@ Section TRANSLATE.
     let body : list Verilog.module_item :=
         match (HTL.mod_ram m) with
         | Some ram =>
-          Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
-                                        (Vseq
-                                       (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
-                                       (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
-                                        (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
-                  :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                  :: inst_ram clk ram
-                  :: arr_decls
-                  ++ scl_decls
+            Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                          (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                          (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
+                    :: Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                                     (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0)))
+                                                     (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip)))
+                    :: inst_ram clk ram
+                    :: arr_decls
+                    ++ scl_decls
         | Nothing =>
-          Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
-                                        (Vseq
-                                       (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
-                                       (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0))))
-                                        (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
-                  :: Valways (Vposedge clk) (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip))
-                  :: arr_decls
-                  ++ scl_decls
+            Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                          (Vnonblock (Vvar (HTL.mod_st m)) (Vlit (posToValue (HTL.mod_entrypoint m))))
+                                          (Vcase (Vvar (HTL.mod_st m)) case_el_ctrl (Some Vskip)))
+                    :: Valways (Vposedge clk) (Vcond (Vbinop Veq (Vvar (HTL.mod_reset m)) (Vlit (ZToValue 1)))
+                                                     (Vnonblock (Vvar (HTL.mod_finish m)) (Vlit (ZToValue 0)))
+                                                     (Vcase (Vvar (HTL.mod_st m)) case_el_data (Some Vskip)))
+                    :: arr_decls
+                    ++ scl_decls
         end
     in
 

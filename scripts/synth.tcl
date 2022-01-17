@@ -76,7 +76,7 @@ proc dump_statistics {  } {
 }; #END PROC
 set outputDir .
 create_project -in_memory -part xc7z020clg484-1 -force
-read_verilog main.v
+read_verilog -sv main.v
 synth_design -mode out_of_context -no_iobuf -top main -part xc7z020clg484-1
 write_checkpoint -force $outputDir/post_synth.dcp
 report_timing_summary -file $outputDir/post_synth_timing_summary.rpt
