@@ -1,8 +1,13 @@
 #lang racket
 
+(require racket/match)
+(require racket/list)
+(require racket/file)
+
+(require threading)
+
 (require xml)
 (require xml/path)
-(require racket/match)
 
 (require csv-reading)
 (require csv-writing)
@@ -11,25 +16,18 @@
 (require data-frame)
 (require sawzall)
 
-(require threading)
-
 (permissive-xexprs #t)
 
-(define (to-name f) (regexp-replace #rx".*/([^/]+)/encode_report.xml" f "\\1"))
+(define (to-name f) (regexp-replace #rx".*/([^/]+)" f "\\1"))
 
-(define files
-  '("./data/data-mining/covariance/encode_report.xml"
-    "./data/stencils/heat-3d/encode_report.xml"
-    "./data/stencils/jacobi-1d/encode_report.xml"
-    "./data/stencils/seidel-2d/encode_report.xml"
-    "./data/stencils/jacobi-2d/encode_report.xml"
-    "./data/linear-algebra/kernels/doitgen/encode_report.xml"
-    "./data/linear-algebra/kernels/2mm/encode_report.xml"
-    "./data/linear-algebra/kernels/3mm/encode_report.xml"
-    "./data/linear-algebra/blas/gemver/encode_report.xml"
-    "./data/linear-algebra/blas/syrk/encode_report.xml"
-    "./data/linear-algebra/blas/gemm/encode_report.xml"
-    "./data/linear-algebra/solvers/trisolv/encode_report.xml"))
+(define (write-file file data)
+  (with-output-to-file file
+    (lambda ()
+      (display data))
+    #:exists 'replace))
+
+(define files (file->lines "../benchmarks/polybench-syn/benchmark-list-master"))
+(define base "/home/ymherklotz/projects/mpardalos-vericert/results-vericert-fun-full-inlining")
 
 (define (list->hash l)
   (foldr (lambda (v l)
@@ -42,7 +40,7 @@
          (hash) l))
 
 (define name-f-map
-  (list->hash (map (lambda (f) (list (to-name f) f)) files)))
+  (list->hash (map (lambda (f) (list (to-name f) (string-append base "/" f "_report.xml"))) files)))
 
 (define (parse-vivado-report f)
   (let* ([encode-xml-port (open-input-file f)]
@@ -58,6 +56,8 @@
 (define (vivado-report-f f) (process-vivado-report (parse-vivado-report f)))
 
 ;;(vivado-report-f "./data/data-mining/covariance/encode_report.xml")
+;;
+;;(vivado-report-f "/home/ymherklotz/projects/mpardalos-vericert/results-vericert-fun-full-inlining/medley/nussinov_report.xml")
 
 (define synth-f (map flatten (hash-map name-f-map
                                        (lambda (n f) (let ([x (vivado-report-f f)])
@@ -78,13 +78,12 @@
     (close-input-port exec-csv)
     report))
 
-(define sim-report (list->hashn (parse-sim-report "exec.csv")))
+(define sim-report (list->hashn (parse-sim-report (string-append base "/exec.csv"))))
 
-(define csv (open-output-file "out2.csv"))
-(display (table->string
-          (append '((benchmark lut_flip_flop slice regs luts ramfifo iopin dsps power delay cycles))
-                  (map (lambda (x) (append x (list (hash-ref sim-report (car x))))) synth-f))) csv)
-(close-output-port csv)
+(write-file "out.csv"
+ (table->string
+  (append '((benchmark lut_flip_flop slice regs luts ramfifo iopin dsps power delay cycles))
+          (map (lambda (x) (append x (list (hash-ref sim-report (car x))))) synth-f))))
 
 ;;(define vivado-report (process-vivado-report (parse-vivado-report "encode_report.xml")))
 ;;(define cycles (hash-ref sim-report "covariance"))
