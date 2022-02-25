@@ -34,24 +34,17 @@ Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Import NE.NonEmptyNotation.
 
-(*|
-=================
-RTLPar Generation
-=================
-|*)
+(** * RTLPar Generation *)
 
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
 
-(*|
-Abstract Computations
-=====================
+(** ** Abstract Computations
 
 Define the abstract computation using the ``update`` function, which will set each register to its
 symbolic value.  First we need to define a few helper functions to correctly translate the
-predicates.
-|*)
+predicates.  *)
 
 Fixpoint list_translation (l : list reg) (f : forest) {struct l} : list pred_expr :=
   match l with
@@ -146,9 +139,7 @@ Definition app_predicated {A: Type} (p: option pred_op) (a b: predicated A) :=
 Definition pred_ret {A: Type} (a: A) : predicated A :=
   NE.singleton (T, a).
 
-(*|
-Update Function
----------------
+(** *** Update Function
 
 The ``update`` function will generate a new forest given an existing forest and a new instruction,
 so that it can evaluate a symbolic expression by folding over a list of instructions.  The main
@@ -158,8 +149,7 @@ problem is that predicates need to be merged as well, so that:
 2. The expression assigned to the register should still be correct.
 
 This is done by multiplying the predicates together, and assigning the negation of the expression to
-the other predicates.
-|*)
+the other predicates.  *)
 
 Definition update (f : forest) (i : instr) : forest :=
   match i with
