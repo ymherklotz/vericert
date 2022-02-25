@@ -50,6 +50,10 @@ proof: Makefile.coq
 
 doc: Makefile.coq
 	$(MAKE) COQDOCFLAGS="$(COQDOCFLAGS)" -f Makefile.coq html
+	cp ./docs/res/coqdoc.css html/.
+
+doc-pdf: Makefile.coq
+	$(MAKE) COQDOCFLAGS="$(COQDOCFLAGS)" -f Makefile.coq all.tex
 
 extraction: src/extraction/STAMP
 

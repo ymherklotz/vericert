@@ -12,7 +12,59 @@ vericert - A formally verified high-level synthesis tool.
 
 * DESCRIPTION
 
-- -drtl :: Print intermediate RTL.
+** HLS Options
+
+- --no-hls :: Do not use HLS and generate standard flow
+- --simulate :: Simulate the result with the Verilog semantics
+- --debug-hls :: Add debug logic to the Verilog
+- --initialise-stack :: initialise the stack to all 0s
+
+** HLS Optimisations
+
+- -fschedule :: Schedule the resulting hardware [off]
+- -fif-conversion :: If-conversion optimisation [off]
+
+** General options
+
+- -stdlib <dir> :: Set the path of the Compcert run-time library
+- -v :: Print external commands before invoking them
+- -timings :: Show the time spent in various compiler passes
+- -version :: Print the version string and exit
+- -target <value> :: Generate code for the given target
+- -conf <file> :: Read configuration from file
+- @<file> :: Read command line options from <file>
+
+** Tracing Options
+
+- -dprepro :: Save C file after preprocessing in <file>.i
+- -dparse :: Save C file after parsing and elaboration in <file>.parsed.c
+- -dc :: Save generated C in <file>.compcert.c
+- -dclight :: Save generated Clight in <file>.light.c
+- -dcminor :: Save generated Cminor in <file>.cm
+- -drtl :: Save RTL at various optimization points in <file>.rtl.<n>
+- -drtlblock :: Save RTLBlock <file>.rtlblock
+- -dhtl :: Save HTL before Verilog generation <file>.htl
+- -dltl :: Save LTL after register allocation in <file>.ltl
+- -dmach :: Save generated Mach code in <file>.mach
+- -dasm :: Save generated assembly in <file>.s
+- -dall :: Save all generated intermediate files in <file>.<ext>
+- -sdump :: Save info for post-linking validation in <file>.json
+- -o <file> :: Generate output in <file>
+
+** Diagnostic options
+
+- -Wall :: Enable all warnings
+- -W<warning> :: Enable the specific <warning>
+- -Wno-<warning> :: Disable the specific <warning>
+- -Werror :: Make all warnings into errors
+- -Werror=<warning> :: Turn <warning> into an error
+- -Wno-error=<warning> :: Turn <warning> into a warning even if -Werror is specified
+- -Wfatal-errors :: Turn all errors into fatal errors aborting the compilation
+- -fdiagnostics-color :: Turn on colored diagnostics
+- -fno-diagnostics-color :: Turn of colored diagnostics
+- -fmax-errors=<n> :: Maximum number of errors to report
+- -fdiagnostics-show-option :: Print the option name with mappable diagnostics
+- -fno-diagnostics-show-option :: Turn of printing of options with mappable diagnostics
 
 * AUTHOR
 
