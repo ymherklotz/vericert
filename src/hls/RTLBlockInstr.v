@@ -33,15 +33,15 @@ Require Import Vericertlib.
 
 (** * RTLBlock Instructions
 
-These instructions are used for ``RTLBlock`` and ``RTLPar``, so that they have consistent
+These instructions are used for [RTLBlock] and [RTLPar], so that they have consistent
 instructions, which greatly simplifies the proofs, as they will by default have the same instruction
 syntax and semantics.  The only changes are therefore at the top-level of the instructions.
 
 ** Instruction Definition
 
 First, we define the instructions that can be placed into a basic block, meaning they won't branch.
-The main changes to how instructions are defined in ``RTL``, is that these instructions don't have a
-next node, as they will be in a basic block, and they also have an optional predicate (``pred_op``).
+The main changes to how instructions are defined in [RTL], is that these instructions don't have a
+next node, as they will be in a basic block, and they also have an optional predicate ([pred_op]).
 *)
 
 Definition node := positive.

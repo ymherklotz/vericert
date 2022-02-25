@@ -1008,12 +1008,12 @@ Section CORRECTNESS.
       is a simulation argument based on diagrams of the following form:
 <<
                       match_states
-    code st rs ---------------- State m st assoc
-         ||                             |
-         ||                             |
-         ||                             |
-         \/                             v
-    code st rs' --------------- State m st assoc'
+    code st rs ------------------------- State m st assoc
+         ||                                      |
+         ||                                      |
+         ||                                      |
+         \/                                      v
+    code st rs' ------------------------ State m st assoc'
                       match_states
 >>
       where [tr_code c data control fin rtrn st] is assumed to hold.

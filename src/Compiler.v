@@ -68,7 +68,7 @@ Require Import vericert.hls.HTLgenproof.
 (** ** Declarations
 
 We then need to declare the external OCaml functions used to print out intermediate steps in the
-compilation, such as ``print_RTL``, ``print_HTL`` and ``print_RTLBlock``.  *)
+compilation, such as [print_RTL], [print_HTL] and [print_RTLBlock].  *)
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: Z -> HTL.program -> unit.
@@ -158,7 +158,7 @@ Qed.
 
 (** *** Top-level Translation
 
-An optimised transformation function from ``RTL`` to ``Verilog`` can then be defined, which applies
+An optimised transformation function from [RTL] to [Verilog] can then be defined, which applies
 the front end compiler optimisations of CompCert to the RTL that is generated and then performs the
 two Vericert passes from RTL to HTL and then from HTL to Verilog.  *)
 
@@ -236,7 +236,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
 
 (** ** Correctness Proof
 
-Finally, the top-level definition for all the passes is defined, which combines the ``match_prog``
+Finally, the top-level definition for all the passes is defined, which combines the [match_prog]
 predicates of each translation pass from C until Verilog.  *)
 
 Local Open Scope linking_scope.
@@ -260,14 +260,14 @@ Definition CompCert's_passes :=
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
-(** These passes are then composed into a larger, top-level ``match_prog`` predicate which matches a
+(** These passes are then composed into a larger, top-level [match_prog] predicate which matches a
 C program directly with a Verilog program.  *)
 
 Definition match_prog: Csyntax.program -> Verilog.program -> Prop :=
   pass_match (compose_passes CompCert's_passes).
 
 (** We then need to prove that this predicate holds, assuming that the translation is performed
-using the ``transf_hls`` function declared above.  *)
+using the [transf_hls] function declared above.  *)
 
 Theorem transf_hls_match:
   forall p tp,
@@ -373,8 +373,8 @@ Qed.
 
 The following theorem is a *backward simulation* between the C and Verilog, which proves the
 semantics preservation of the translation.  We can assume that the C and Verilog programs match, as
-we have proven previously in ``transf_hls_match`` that our translation implies that the
-``match_prog`` predicate will hold.  *)
+we have proven previously in [transf_hls_match] that our translation implies that the
+[match_prog] predicate will hold.  *)
 
 Theorem c_semantic_preservation:
   forall p tp,
@@ -391,8 +391,8 @@ Proof.
   exact (proj2 (cstrategy_semantic_preservation _ _ H)).
 Qed.
 
-(** We can then use ``transf_hls_match`` to prove the backward simulation where the assumption is
-that the translation is performed using the ``transf_hls`` function and that it succeeds.  *)
+(** We can then use [transf_hls_match] to prove the backward simulation where the assumption is
+that the translation is performed using the [transf_hls] function and that it succeeds.  *)
 
 Theorem transf_c_program_correct:
   forall p tp,
