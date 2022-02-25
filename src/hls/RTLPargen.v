@@ -42,7 +42,7 @@ Import NE.NonEmptyNotation.
 
 (** ** Abstract Computations
 
-Define the abstract computation using the ``update`` function, which will set each register to its
+Define the abstract computation using the [update] function, which will set each register to its
 symbolic value.  First we need to define a few helper functions to correctly translate the
 predicates.  *)
 
@@ -141,7 +141,7 @@ Definition pred_ret {A: Type} (a: A) : predicated A :=
 
 (** *** Update Function
 
-The ``update`` function will generate a new forest given an existing forest and a new instruction,
+The [update] function will generate a new forest given an existing forest and a new instruction,
 so that it can evaluate a symbolic expression by folding over a list of instructions.  The main
 problem is that predicates need to be merged as well, so that:
 
@@ -181,12 +181,10 @@ Definition update (f : forest) (i : instr) : forest :=
        (map_predicated (pred_ret (Esetpred c)) (merge (list_translation args f))))
   end.
 
-(*|
-Implementing which are necessary to show the correctness of the translation validation by showing
-that there aren't any more effects in the resultant RTLPar code than in the RTLBlock code.
+(** Implementing which are necessary to show the correctness of the translation validation by
+showing that there aren't any more effects in the resultant RTLPar code than in the RTLBlock code.
 
-Get a sequence from the basic block.
-|*)
+Get a sequence from the basic block.  *)
 
 Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   match b with
@@ -194,18 +192,15 @@ Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   | i :: l => abstract_sequence (update f i) l
   end.
 
-(*|
-Check equivalence of control flow instructions.  As none of the basic blocks should have been moved,
-none of the labels should be different, meaning the control-flow instructions should match exactly.
-|*)
+(** Check equivalence of control flow instructions.  As none of the basic blocks should have been
+moved, none of the labels should be different, meaning the control-flow instructions should match
+exactly.  *)
 
 Definition check_control_flow_instr (c1 c2: cf_instr) : bool :=
   if cf_instr_eq c1 c2 then true else false.
 
-(*|
-We define the top-level oracle that will check if two basic blocks are equivalent after a scheduling
-transformation.
-|*)
+(** We define the top-level oracle that will check if two basic blocks are equivalent after a
+scheduling transformation.  *)
 
 Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
   match bb with
@@ -246,10 +241,7 @@ Lemma check_scheduled_trees_correct2:
     PTree.get x f2 = None.
 Proof. solve_scheduled_trees_correct. Qed.
 
-(*|
-Top-level Functions
-===================
-|*)
+(** ** Top-level Functions  *)
 
 Parameter schedule : RTLBlock.function -> RTLPar.function.
 

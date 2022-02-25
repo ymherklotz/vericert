@@ -160,7 +160,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
       translate_arr_access mem addr args stk s = OK c s' i ->
       tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
                (state_goto st n).
-(*| tr_instr_Ijumptable :
+(* tr_instr_Ijumptable :
     forall cexpr tbl r,
     cexpr = tbl_to_case_expr st tbl ->
     tr_instr fin rtrn st stk (RTL.Ijumptable r tbl) (Vskip) (Vcase (Vvar r) cexpr (Some Vskip)).*)

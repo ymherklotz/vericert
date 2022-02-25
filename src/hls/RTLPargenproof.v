@@ -46,12 +46,9 @@ Inductive state_lessdef : instr_state -> instr_state -> Prop :=
     (forall x, rs1 !! x = rs2 !! x) ->
     state_lessdef (mk_instr_state rs1 m1) (mk_instr_state rs2 m1).
 
-(*|
-RTLBlock to abstract translation
---------------------------------
+(** *** RTLBlock to abstract translation
 
-Correctness of translation from RTLBlock to the abstract interpretation language.
-|*)
+Correctness of translation from RTLBlock to the abstract interpretation language. *)
 
 Ltac inv_simp :=
   repeat match goal with

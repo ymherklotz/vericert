@@ -31,22 +31,18 @@ Require Import compcert.verilog.Op.
 Require Import Predicate.
 Require Import Vericertlib.
 
-(*|
-=====================
-RTLBlock Instructions
-=====================
+(** * RTLBlock Instructions
 
 These instructions are used for ``RTLBlock`` and ``RTLPar``, so that they have consistent
 instructions, which greatly simplifies the proofs, as they will by default have the same instruction
 syntax and semantics.  The only changes are therefore at the top-level of the instructions.
 
-Instruction Definition
-======================
+** Instruction Definition
 
 First, we define the instructions that can be placed into a basic block, meaning they won't branch.
 The main changes to how instructions are defined in ``RTL``, is that these instructions don't have a
 next node, as they will be in a basic block, and they also have an optional predicate (``pred_op``).
-|*)
+*)
 
 Definition node := positive.
 
@@ -57,13 +53,10 @@ Inductive instr : Type :=
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
 
-(*|
-Control-Flow Instruction Definition
-===================================
+(** ** Control-Flow Instruction Definition
 
 These are the instructions that count as control-flow, and will be placed at the end of the basic
-blocks.
-|*)
+blocks.  *)
 
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
@@ -76,10 +69,7 @@ Inductive cf_instr : Type :=
 | RBgoto : node -> cf_instr
 | RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
 
-(*|
-Helper functions
-================
-|*)
+(** ** Helper functions  *)
 
 Fixpoint successors_instr (i : cf_instr) : list node :=
   match i with
@@ -170,17 +160,14 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | _, _ => Regmap.init Vundef
   end.
 
-(*|
-Instruction State
------------------
+(** *** Instruction State
 
 Definition of the instruction state, which contains the following:
 
-:is_rs: This is the current state of the registers.
-:is_ps: This is the current state of the predicate registers, which is in a separate namespace and
-        area compared to the standard registers in ``is_rs``.
-:is_mem: The current state of the memory.
-|*)
+- [is_rs] This is the current state of the registers.
+- [is_ps] This is the current state of the predicate registers, which is in a separate namespace and
+        area compared to the standard registers in [is_rs].
+- [is_mem] The current state of the memory.  *)
 
 Record instr_state := mk_instr_state {
   is_rs: regset;
@@ -188,10 +175,7 @@ Record instr_state := mk_instr_state {
   is_mem: mem;
 }.
 
-(*|
-Top-Level Type Definitions
-==========================
-|*)
+(** ** Top-Level Type Definitions *)
 
 Section DEFINITION.
 
@@ -256,10 +240,7 @@ Section DEFINITION.
 
 End DEFINITION.
 
-(*|
-Semantics
-=========
-|*)
+(** ** Semantics *)
 
 Section RELSEM.
 
