@@ -8,3 +8,4 @@
 (package-install 'org)
 (package-install 'org-contrib)
 (package-install 'org-transclusion)
+(package-install 'htmlize)

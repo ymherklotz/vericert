@@ -48,10 +48,10 @@ Free Documentation License''.
 :CUSTOM_ID: building
 :END:
 
-#+transclude: [[file:~/projects/vericert/README.org::#building][file:~/projects/vericert/README.org::#building]] :only-contents :exclude-elements "headline property-drawer"
-#+transclude: [[file:~/projects/vericert/README.org::#downloading-compcert][file:~/projects/vericert/README.org::#downloading-compcert]] :level 2
-#+transclude: [[file:~/projects/vericert/README.org::#setting-up-nix][file:~/projects/vericert/README.org::#setting-up-nix]] :level 2
-#+transclude: [[file:~/projects/vericert/README.org::#makefile-build][file:~/projects/vericert/README.org::#makefile-build]] :level 2
+#+transclude: [[file:~/projects/vericert/README.org::#building][file:../README.org::#building]] :only-contents :exclude-elements "headline property-drawer"
+#+transclude: [[file:~/projects/vericert/README.org::#downloading-compcert][file:../README.org::#downloading-compcert]] :level 2
+#+transclude: [[file:~/projects/vericert/README.org::#setting-up-nix][file:../README.org::#setting-up-nix]] :level 2
+#+transclude: [[file:~/projects/vericert/README.org::#makefile-build][file:../README.org::#makefile-build]] :level 2
 
 ** Testing
 
@@ -131,6 +131,10 @@ $ ./main_c
 $ echo $?
 50
 #+end_src
+
+** Man pages
+
+#+transclude: [[file:man.org][file:man.org]] :exclude-elements "keyword" :level 3
 
 * Unreleased Features
 :PROPERTIES:

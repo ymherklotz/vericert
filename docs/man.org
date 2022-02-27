@@ -1,6 +1,5 @@
 #+title: vericert
 #+man_class_options: :section-id "1"
-#+export_file_name: vericert.1
 #+options: toc:nil num:nil
 #+html_head_extra: <style>body{font-family:monospace;max-width:60em}h1{text-align:center}dt{font-weight:700}dd{margin-bottom:1em}</style>
 
@@ -14,19 +13,19 @@ vericert - A formally verified high-level synthesis tool.
 
 * DESCRIPTION
 
-** HLS Options
+** HLS Options:
 
 - --no-hls :: Do not use HLS and generate standard flow
 - --simulate :: Simulate the result with the Verilog semantics
 - --debug-hls :: Add debug logic to the Verilog
 - --initialise-stack :: initialise the stack to all 0s
 
-** HLS Optimisations
+** HLS Optimisations:
 
 - -fschedule :: Schedule the resulting hardware [off]
 - -fif-conversion :: If-conversion optimisation [off]
 
-** General options
+** General options:
 
 - -stdlib <dir> :: Set the path of the Compcert run-time library
 - -v :: Print external commands before invoking them
@@ -36,7 +35,7 @@ vericert - A formally verified high-level synthesis tool.
 - -conf <file> :: Read configuration from file
 - @<file> :: Read command line options from <file>
 
-** Tracing Options
+** Tracing Options:
 
 - -dprepro :: Save C file after preprocessing in <file>.i
 - -dparse :: Save C file after parsing and elaboration in <file>.parsed.c
@@ -53,7 +52,7 @@ vericert - A formally verified high-level synthesis tool.
 - -sdump :: Save info for post-linking validation in <file>.json
 - -o <file> :: Generate output in <file>
 
-** Diagnostic options
+** Diagnostic options:
 
 - -Wall :: Enable all warnings
 - -W<warning> :: Enable the specific <warning>
