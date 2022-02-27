@@ -1,6 +1,8 @@
 #+title: vericert
 #+man_class_options: :section-id "1"
 #+export_file_name: vericert.1
+#+options: toc:nil num:nil
+#+html_head_extra: <style>body{font-family:monospace;max-width:60em}h1{text-align:center}dt{font-weight:700}dd{margin-bottom:1em}</style>
 
 * NAME
 

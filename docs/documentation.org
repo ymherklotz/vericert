@@ -4,7 +4,7 @@
 #+email:    git@ymhg.org
 #+language: en
 
-* Docs
+* Introduction
 :PROPERTIES:
 :EXPORT_FILE_NAME: _index
 :EXPORT_HUGO_SECTION: docs
@@ -15,10 +15,10 @@ Vericert translates C code into a hardware description language called Verilog, 
 synthesised into hardware, to be placed onto a field-programmable gate array (FPGA) or
 application-specific integrated circuit (ASIC).
 
-#+attr_html: :width 600
+#+attr_html: :width "600px"
 #+caption: Current design of Vericert, where HTL is an intermediate language representing a finite state machine with data-path (FSMD) and Verilog is the target language.
 #+name: fig:design
-[[./images/toolflow.svg]]
+[[./images/toolflow.png]]
 
 The design shown in Figure [[fig:design]] shows how Vericert leverages an existing verified C compiler
 called [[https://compcert.org/compcert-C.html][CompCert]] to perform this translation.
@@ -49,9 +49,9 @@ Free Documentation License''.
 :END:
 
 #+transclude: [[file:~/projects/vericert/README.org::#building][file:~/projects/vericert/README.org::#building]] :only-contents :exclude-elements "headline property-drawer"
-#+transclude: [[file:~/projects/vericert/README.org::#downloading-compcert][file:~/projects/vericert/README.org::#downloading-compcert]]
-#+transclude: [[file:~/projects/vericert/README.org::#setting-up-nix][file:~/projects/vericert/README.org::#setting-up-nix]]
-#+transclude: [[file:~/projects/vericert/README.org::#makefile-build][file:~/projects/vericert/README.org::#makefile-build]]
+#+transclude: [[file:~/projects/vericert/README.org::#downloading-compcert][file:~/projects/vericert/README.org::#downloading-compcert]] :level 2
+#+transclude: [[file:~/projects/vericert/README.org::#setting-up-nix][file:~/projects/vericert/README.org::#setting-up-nix]] :level 2
+#+transclude: [[file:~/projects/vericert/README.org::#makefile-build][file:~/projects/vericert/README.org::#makefile-build]] :level 2
 
 ** Testing
 
@@ -155,6 +155,7 @@ to the proper documentation.
 :PROPERTIES:
 :CUSTOM_ID: scheduling
 :END:
+#+cindex: scheduling
 
 Scheduling is an optimisation which is used to run various instructions in parallel that are
 independent to each other.
