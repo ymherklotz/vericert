@@ -3,13 +3,4 @@
 -R src/hls vericert.hls
 -R src vericert
 
--R lib/CompCert/backend compcert.backend
--R lib/CompCert/cfrontend compcert.cfrontend
--R lib/CompCert/common compcert.common
--R lib/CompCert/cparser compcert.cparser
--R lib/CompCert/driver compcert.driver
--R lib/CompCert/exportclight compcert.exportclight
--R lib/CompCert/lib compcert.lib
--R lib/CompCert/verilog compcert.verilog
--R lib/CompCert/flocq Flocq
--R lib/CompCert/MenhirLib MenhirLib
+-R /nix/store/66l13gkqf431c0lm3x1lcn7zvfqxz6sq-coq8.14-compcert-dev-lib/lib/coq/8.14/user-contrib/compcert/flocq Flocq

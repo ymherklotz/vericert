@@ -1,3 +1,0 @@
-[submodule "lib/CompCert"]
-	path = lib/CompCert
-	url = https://github.com/ymherklotz/CompCert.git

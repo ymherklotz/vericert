@@ -6,15 +6,10 @@ ifeq ($(UNAME_S),Darwin)
 	ARCH := verilog-macosx
 endif
 
-COMPCERTRECDIRS := lib common verilog backend cfrontend driver cparser
-
 COQINCLUDES := -R src/common vericert.common \
                -R src/extraction vericert.extraction \
                -R src/hls vericert.hls \
-               -R src vericert \
-               $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d)) \
-               -R lib/CompCert/flocq Flocq \
-               -R lib/CompCert/MenhirLib MenhirLib
+               -R src vericert
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
@@ -27,16 +22,9 @@ PREFIX ?= .
 
 .PHONY: all install proof clean extraction test
 
-all: lib/COMPCERTSTAMP
+all:
 	$(MAKE) proof
 	$(MAKE) compile
-
-lib/CompCert/Makefile.config: lib/CompCert/configure
-	(cd lib/CompCert && ./configure --ignore-coq-version $(ARCH))
-
-lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
-	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
-	touch $@
 
 install:
 	install -d $(PREFIX)/bin
