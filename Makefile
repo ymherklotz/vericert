@@ -6,7 +6,7 @@ ifeq ($(UNAME_S),Darwin)
 	ARCH := verilog-macosx
 endif
 
-COMPCERTRECDIRS := lib common verilog backend cfrontend driver exportclight cparser
+COMPCERTRECDIRS := lib common verilog backend cfrontend driver cparser
 
 COQINCLUDES := -R src/common vericert.common \
                -R src/extraction vericert.extraction \

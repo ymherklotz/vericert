@@ -45,12 +45,6 @@ Proof.
   - apply Z.mod_divide; assumption.
 Qed.
 
-Lemma mod_0_r: forall (m: Z),
-    m mod 0 = 0.
-Proof.
-  intros. destruct m; reflexivity.
-Qed.
-
 Lemma sub_mod_0: forall (a b m: Z),
     a mod m = 0 ->
     b mod m = 0 ->
@@ -87,18 +81,6 @@ Proof.
   rewrite Z.mod_same by lia.
   rewrite Z.add_0_r.
   reflexivity.
-Qed.
-
-Lemma mod_pow2_same_cases: forall a n,
-    a mod 2 ^ n = a ->
-    2 ^ n = 0 /\ a = 0 \/ 0 <= a < 2 ^ n.
-Proof.
-  intros.
-  assert (n < 0 \/ 0 <= n) as C by lia. destruct C as [C | C].
-  - left. rewrite (Z.pow_neg_r 2 n C) in *. rewrite mod_0_r in H. auto.
-  - right.
-    rewrite <- H. apply Z.mod_pos_bound.
-    apply Z.pow_pos_nonneg; lia.
 Qed.
 
 Lemma mod_pow2_same_bounds: forall a n,

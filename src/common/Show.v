@@ -1,4 +1,4 @@
-(* 
+(*
  * Vericert: Verified high-level synthesis.
  * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
  *
@@ -24,15 +24,11 @@ From Coq Require Import
 
 Local Open Scope string.
 
-Class Show A : Type :=
-  {
-  show : A -> string
-  }.
+Class Show A : Type := { show : A -> string }.
 
+#[export]
 Instance showBool : Show bool :=
-  {
-  show := fun b:bool => if b then "true" else "false"
-  }.
+  { show := fun b:bool => if b then "true" else "false" }.
 
 Fixpoint string_of_nat_aux (time n : nat) (acc : string) : string :=
   let d := match n mod 10 with
@@ -52,17 +48,11 @@ Fixpoint string_of_nat_aux (time n : nat) (acc : string) : string :=
 Definition string_of_nat (n : nat) : string :=
   string_of_nat_aux n n "".
 
-Instance showNat : Show nat :=
-  {
-  show := string_of_nat
-  }.
+#[export]
+Instance showNat : Show nat := { show := string_of_nat }.
 
-Instance showZ : Show Z :=
-  {
-  show a := show (Z.to_nat a)
-  }.
+#[export]
+Instance showZ : Show Z := { show a := show (Z.to_nat a) }.
 
-Instance showPositive : Show positive :=
-  {
-  show a := show (Zpos a)
-  }.
+#[export]
+Instance showPositive : Show positive := { show a := show (Zpos a) }.

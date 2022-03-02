@@ -42,63 +42,75 @@ Module AssocMapExt.
       | Some v => v
       end.
 
-    Fixpoint merge (m1 m2 : t A) : t A :=
-      match m1, m2 with
-      | Node l1 (Some a) r1, Node l2 _ r2 => Node (merge l1 l2) (Some a) (merge r1 r2)
-      | Node l1 None r1, Node l2 o r2 => Node (merge l1 l2) o (merge r1 r2)
-      | Leaf, _ => m2
-      | _, _ => m1
+    Definition merge_atom (new : option A) (old : option A) : option A :=
+      match new, old with
+      | Some _, _ => new
+      | _, _ => old
       end.
 
+    Definition merge (m1 m2 : t A) : t A :=
+      PTree.combine merge_atom m1 m2.
+
     Lemma merge_base_1 :
-      forall am,
-      merge (empty A) am = am.
-    Proof. auto. Qed.
+      forall am x,
+      (merge (empty A) am) ! x = am ! x.
+    Proof using.
+      unfold merge; intros.
+      rewrite PTree.gcombine; eauto.
+    Qed.
 
     Lemma merge_base_2 :
-      forall am,
-      merge am (empty A) = am.
-    Proof.
-      unfold merge.
-      destruct am; trivial.
-      destruct o; trivial.
+      forall am x,
+      (merge am (empty A)) ! x = am ! x.
+    Proof using.
+      unfold merge; intros.
+      rewrite PTree.gcombine; eauto.
+      cbv [merge_atom]. destruct_match; crush.
     Qed.
 
     Lemma merge_add_assoc :
-      forall r am am' v,
-      merge (set r v am) am' = set r v (merge am am').
-    Proof.
-      induction r; intros; destruct am; destruct am'; try (destruct o); simpl;
-        try rewrite IHr; try reflexivity.
+      forall r am am' v x,
+      (merge (set r v am) am') ! x = (set r v (merge am am')) ! x.
+    Proof using.
+      unfold merge. intros; rewrite PTree.gcombine by auto.
+      unfold merge_atom. destruct_match.
+      destruct (peq r x); subst.
+      rewrite PTree.gss in Heqo. inv Heqo. rewrite PTree.gss. auto.
+      rewrite PTree.gso in Heqo by auto. rewrite PTree.gso by auto.
+      rewrite PTree.gcombine by auto. rewrite Heqo. auto.
+      destruct (peq r x); subst.
+      rewrite PTree.gss in Heqo. inv Heqo.
+      rewrite PTree.gso in Heqo by auto. rewrite PTree.gso by auto.
+      rewrite PTree.gcombine by auto. rewrite Heqo. auto.
     Qed.
 
     Lemma merge_correct_1 :
       forall am bm k v,
-      get k am = Some v ->
-      get k (merge am bm) = Some v.
-    Proof.
-      induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
-        try rewrite gempty in H; try discriminate; try assumption; auto.
+      am ! k = Some v ->
+      (merge am bm) ! k = Some v.
+    Proof using.
+      unfold merge; intros. rewrite PTree.gcombine by auto.
+      rewrite H; auto.
     Qed.
 
     Lemma merge_correct_2 :
       forall am bm k v,
-      get k am = None ->
-      get k bm = Some v ->
-      get k (merge am bm) = Some v.
-    Proof.
-      induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
-        try rewrite gempty in H; try discriminate; try assumption; auto.
+      am ! k = None ->
+      bm ! k = Some v ->
+      (merge am bm) ! k = Some v.
+    Proof using.
+      unfold merge; intros. rewrite PTree.gcombine by auto.
+      rewrite H. rewrite H0. auto.
     Qed.
 
     Lemma merge_correct_3 :
       forall am bm k,
-      get k am = None ->
-      get k bm = None ->
-      get k (merge am bm) = None.
-    Proof.
-      induction am; intros; destruct k; destruct bm; try (destruct o); simpl;
-        try rewrite gempty in H; try discriminate; try assumption; auto.
+      am ! k = None ->
+      bm ! k = None ->
+      (merge am bm) ! k = None.
+    Proof using.
+      unfold merge; intros. rewrite PTree.gcombine by auto.
+      rewrite H. rewrite H0. auto.
     Qed.
 
     Definition merge_fold (am bm : t A) : t A :=

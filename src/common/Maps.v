@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Set Implicit Arguments.
+(*Set Implicit Arguments.
 
 Require Export compcert.lib.Maps.
 
@@ -62,3 +62,4 @@ Definition traverse (A B : Type) (f : positive -> A -> res B) m := xtraverse f m
 Definition traverse1 (A B : Type) (f : A -> res B) := traverse (fun _ => f).
 
 End PTree.
+*)
