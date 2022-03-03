@@ -2,5 +2,3 @@
 -R src/extraction vericert.extraction
 -R src/hls vericert.hls
 -R src vericert
-
--R /nix/store/66l13gkqf431c0lm3x1lcn7zvfqxz6sq-coq8.14-compcert-dev-lib/lib/coq/8.14/user-contrib/compcert/flocq Flocq

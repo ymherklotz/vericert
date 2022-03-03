@@ -14,11 +14,11 @@ let
         src = fetchFromGitHub {
           owner = "ymherklotz";
           repo = "CompCert";
-          rev = "4f467596f8674f5f4fbf84a793cb8fcfc35a44a2";
-          sha256 = "0m435pscfdb4irjxhzazzpl8jv63piwl4rb3nnpdirs9dg7msl2j";
+          rev = "4fa0349a2f5477a78b249ac0e762a5d32e0722d7";
+          sha256 = "Rqw9xvqyT43IfhNpuCN3guUb+62bhPOA/O8Frg3Poxc=";
         };
 
-        buildInputs = with ocamlPackages; [ ocaml findlib menhir menhirLib gcc ] ++ [ coq ];
+        buildInputs = with ocamlPackages; [ ocaml findlib gcc menhir menhirLib ] ++ [ coq ];
         propagatedBuildInputs = [ flocq ];
 
         enableParallelBuilding = true;
@@ -55,9 +55,8 @@ ncoqPackages.mkCoqDerivation {
   defaultVersion = "3.10";
 
   buildInputs = with ncoq.ocamlPackages; [ ncoq dune_2 gcc
-                                           ncoq.ocaml findlib menhir
+                                           ncoq.ocaml findlib
                                            ocamlgraph merlin
-                                           menhirLib
                                            ncompcert
                                          ];
 
