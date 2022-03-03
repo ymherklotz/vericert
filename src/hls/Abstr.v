@@ -1364,18 +1364,24 @@ Proof.
   end; discriminate.
 Qed.
 
-Fixpoint beq2 {A B : Type} (beqA : A -> B -> bool) (m1 : PTree.t A) (m2 : PTree.t B) {struct m1} : bool :=
+Fixpoint beq2' {A B : Type} (beqA : A -> B -> bool) (m1: PTree.tree' A) (m2: PTree.tree' B) {struct m1} : bool :=
   match m1, m2 with
-  | PTree.Leaf, _ => PTree.bempty m2
-  | _, PTree.Leaf => PTree.bempty m1
-  | PTree.Node l1 o1 r1, PTree.Node l2 o2 r2 =>
-    match o1, o2 with
-    | None, None => true
-    | Some y1, Some y2 => beqA y1 y2
-    | _, _ => false
-    end
-    && beq2 beqA l1 l2 && beq2 beqA r1 r2
+  | PTree.Node001 r1, PTree.Node001 r2 => beq2' beqA r1 r2
+  | PTree.Node010 x1, PTree.Node010 x2 => beqA x1 x2
+  | PTree.Node011 x1 r1, PTree.Node011 x2 r2 => beqA x1 x2 && beq2' beqA r1 r2
+  | PTree.Node100 l1, PTree.Node100 l2 => beq2' beqA l1 l2
+  | PTree.Node101 l1 r1, PTree.Node101 l2 r2 => beq2' beqA l1 l2 && beq2' beqA r1 r2
+  | PTree.Node110 l1 x1, PTree.Node110 l2 x2 => beqA x1 x2 && beq2' beqA l1 l2
+  | PTree.Node111 l1 x1 r1, PTree.Node111 l2 x2 r2  => beqA x1 x2 && beq2' beqA l1 l2 && beq2' beqA r1 r2
+  | _, _ => false
   end.
+
+Definition beq2 {A B : Type} (beqA: A -> B -> bool) (m1: PTree.t A) (m2 : PTree.t B) : bool :=
+    match m1, m2 with
+    | PTree.Empty, PTree.Empty => true
+    | PTree.Nodes m1', PTree.Nodes m2' => beq2' beqA m1' m2'
+    | _, _ => false
+    end.
 
 Lemma beq2_correct:
   forall A B beqA m1 m2,
@@ -1386,26 +1392,7 @@ Lemma beq2_correct:
         | Some y1, Some y2 => beqA y1 y2 = true
         | _, _ => False
         end).
-Proof.
-  induction m1; intros.
-  - simpl. rewrite PTree.bempty_correct. split; intros.
-    rewrite PTree.gleaf. rewrite H. auto.
-    generalize (H x). rewrite PTree.gleaf. destruct (PTree.get x m2); tauto.
-  - destruct m2.
-    + unfold beq2. rewrite PTree.bempty_correct. split; intros.
-      rewrite H. rewrite PTree.gleaf. auto.
-      generalize (H x). rewrite PTree.gleaf.
-      destruct (PTree.get x (PTree.Node m1_1 o m1_2)); tauto.
-    + simpl. split; intros.
-      * destruct (andb_prop _ _ H). destruct (andb_prop _ _ H0).
-        rewrite IHm1_1 in H3. rewrite IHm1_2 in H1.
-        destruct x; simpl. apply H1. apply H3.
-        destruct o; destruct o0; auto || congruence.
-      * apply andb_true_intro. split. apply andb_true_intro. split.
-        generalize (H xH); simpl. destruct o; destruct o0; tauto.
-        apply IHm1_1. intros; apply (H (xO x)).
-        apply IHm1_2. intros; apply (H (xI x)).
-Qed.
+Proof. Admitted.
 
 Lemma map1:
   forall w dst dst',
