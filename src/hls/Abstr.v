@@ -1364,35 +1364,88 @@ Proof.
   end; discriminate.
 Qed.
 
-Fixpoint beq2' {A B : Type} (beqA : A -> B -> bool) (m1: PTree.tree' A) (m2: PTree.tree' B) {struct m1} : bool :=
-  match m1, m2 with
-  | PTree.Node001 r1, PTree.Node001 r2 => beq2' beqA r1 r2
-  | PTree.Node010 x1, PTree.Node010 x2 => beqA x1 x2
-  | PTree.Node011 x1 r1, PTree.Node011 x2 r2 => beqA x1 x2 && beq2' beqA r1 r2
-  | PTree.Node100 l1, PTree.Node100 l2 => beq2' beqA l1 l2
-  | PTree.Node101 l1 r1, PTree.Node101 l2 r2 => beq2' beqA l1 l2 && beq2' beqA r1 r2
-  | PTree.Node110 l1 x1, PTree.Node110 l2 x2 => beqA x1 x2 && beq2' beqA l1 l2
-  | PTree.Node111 l1 x1 r1, PTree.Node111 l2 x2 r2  => beqA x1 x2 && beq2' beqA l1 l2 && beq2' beqA r1 r2
-  | _, _ => false
-  end.
+Section BOOLEAN_EQUALITY.
 
-Definition beq2 {A B : Type} (beqA: A -> B -> bool) (m1: PTree.t A) (m2 : PTree.t B) : bool :=
+  Context {A B: Type}.
+  Context (beqA: A -> B -> bool).
+
+  Fixpoint beq2' (m1: PTree.tree' A) (m2: PTree.tree' B) {struct m1} : bool :=
     match m1, m2 with
-    | PTree.Empty, PTree.Empty => true
-    | PTree.Nodes m1', PTree.Nodes m2' => beq2' beqA m1' m2'
+    | PTree.Node001 r1, PTree.Node001 r2 => beq2' r1 r2
+    | PTree.Node010 x1, PTree.Node010 x2 => beqA x1 x2
+    | PTree.Node011 x1 r1, PTree.Node011 x2 r2 => beqA x1 x2 && beq2' r1 r2
+    | PTree.Node100 l1, PTree.Node100 l2 => beq2' l1 l2
+    | PTree.Node101 l1 r1, PTree.Node101 l2 r2 => beq2' l1 l2 && beq2' r1 r2
+    | PTree.Node110 l1 x1, PTree.Node110 l2 x2 => beqA x1 x2 && beq2' l1 l2
+    | PTree.Node111 l1 x1 r1, PTree.Node111 l2 x2 r2  => beqA x1 x2 && beq2' l1 l2 && beq2' r1 r2
     | _, _ => false
     end.
 
-Lemma beq2_correct:
-  forall A B beqA m1 m2,
-    @beq2 A B beqA m1 m2 = true <->
-    (forall (x: PTree.elt),
-        match PTree.get x m1, PTree.get x m2 with
-        | None, None => True
-        | Some y1, Some y2 => beqA y1 y2 = true
-        | _, _ => False
-        end).
-Proof. Admitted.
+  Definition beq2 (m1: PTree.t A) (m2 : PTree.t B) : bool :=
+    match m1, m2 with
+    | PTree.Empty, PTree.Empty => true
+    | PTree.Nodes m1', PTree.Nodes m2' => beq2' m1' m2'
+    | _, _ => false
+    end.
+
+  Let beq2_optA (o1: option A) (o2: option B) : bool :=
+    match o1, o2 with
+    | None, None => true
+    | Some a1, Some a2 => beqA a1 a2
+    | _, _ => false
+    end.
+
+  Lemma beq_correct_bool:
+    forall m1 m2,
+      beq2 m1 m2 = true <-> (forall x, beq2_optA (m1 ! x) (m2 ! x) = true).
+  Proof.
+    Local Transparent PTree.Node.
+    assert (beq_NN: forall l1 o1 r1 l2 o2 r2,
+               PTree.not_trivially_empty l1 o1 r1 ->
+               PTree.not_trivially_empty l2 o2 r2 ->
+               beq2 (PTree.Node l1 o1 r1) (PTree.Node l2 o2 r2) =
+                 beq2 l1 l2 && beq2_optA o1 o2 && beq2 r1 r2).
+    { intros.
+      destruct l1, o1, r1; try contradiction; destruct l2, o2, r2; try contradiction;
+        simpl; rewrite ? andb_true_r, ? andb_false_r; auto.
+      rewrite andb_comm; auto.
+      f_equal; rewrite andb_comm; auto. }
+    induction m1 using PTree.tree_ind; [|induction m2 using PTree.tree_ind].
+    - intros. simpl; split; intros.
+      + destruct m2; try discriminate. simpl; auto.
+      + replace m2 with (@PTree.Empty B); auto. apply PTree.extensionality; intros x.
+        specialize (H x). destruct (m2 ! x); simpl; easy.
+    - split; intros.
+      + destruct (PTree.Node l o r); try discriminate. simpl; auto.
+      + replace (PTree.Node l o r) with (@PTree.Empty A); auto. apply PTree.extensionality; intros x.
+        specialize (H0 x). destruct ((PTree.Node l o r) ! x); simpl in *; easy.
+    - rewrite beq_NN by auto. split; intros.
+      + InvBooleans. rewrite ! PTree.gNode. destruct x.
+        * apply IHm0; auto.
+        * apply IHm1; auto.
+        * auto.
+      + apply andb_true_intro; split; [apply andb_true_intro; split|].
+        * apply IHm1. intros. specialize (H1 (xO x)); rewrite ! PTree.gNode in H1; auto.
+        * specialize (H1 xH); rewrite ! PTree.gNode in H1; auto.
+        * apply IHm0. intros. specialize (H1 (xI x)); rewrite ! PTree.gNode in H1; auto.
+  Qed.
+
+  Theorem beq2_correct:
+    forall m1 m2,
+      beq2 m1 m2 = true <->
+        (forall (x: PTree.elt),
+            match m1 ! x, m2 ! x with
+            | None, None => True
+            | Some y1, Some y2 => beqA y1 y2 = true
+            | _, _ => False
+            end).
+  Proof.
+    intros. rewrite beq_correct_bool. unfold beq2_optA. split; intros.
+    - specialize (H x). destruct (m1 ! x), (m2 ! x); intuition congruence.
+    - specialize (H x). destruct (m1 ! x), (m2 ! x); intuition auto.
+  Qed.
+
+End BOOLEAN_EQUALITY.
 
 Lemma map1:
   forall w dst dst',
