@@ -4,8 +4,8 @@
     - [Setting up Nix](#setting-up-nix)
     - [Makefile build](#makefile-build)
   - [Running](#running)
-  - [Citation](#orge392203)
-  - [License](#org8a5a598)
+  - [Citation](#org28fad40)
+  - [License](#org5eb199f)
 
 <a href="https://vericert.ymhg.org"><img src="https://vericert.ymhg.org/vericert-main.svg" width="100%" height="144" /></a>
 
@@ -109,7 +109,7 @@ To test out `vericert` you can try the following examples which are in the test 
 ```
 
 
-<a id="orge392203"></a>
+<a id="org28fad40"></a>
 
 # Citation
 
@@ -132,15 +132,15 @@ If you use Vericert in any way, please cite it using our [OOPSLA&rsquo;21 paper]
 ```
 
 
-<a id="org8a5a598"></a>
+<a id="org5eb199f"></a>
 
 # License
 
-This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). The license can be seen in [/LICENSE](file:///LICENSE).
+This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). The license can be seen in [LICENSE](LICENSE).
 
 The following external code and its license is present in this repository:
 
--   **[/src/pipelining](file:///src/pipelining):** MIT
+-   **[src/pipelining](src/pipelining):** MIT
 
 ```text
 Copyright (c) 2008,2009,2010 Jean-Baptiste Tristan and INRIA

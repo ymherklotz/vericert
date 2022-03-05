@@ -133,11 +133,11 @@ If you use Vericert in any way, please cite it using our [[https://yannherklotz.
 
 ** License
 
-This project is licensed under [[https://www.gnu.org/licenses/gpl-3.0.en.html][GPLv3]].  The license can be seen in [[/LICENSE][/LICENSE]].
+This project is licensed under [[https://www.gnu.org/licenses/gpl-3.0.en.html][GPLv3]].  The license can be seen in [[file:LICENSE][LICENSE]].
 
 The following external code and its license is present in this repository:
 
-- [[/src/pipelining][/src/pipelining]] :: MIT
+- [[file:src/pipelining][src/pipelining]] :: MIT
 
 #+begin_src text
 Copyright (c) 2008,2009,2010 Jean-Baptiste Tristan and INRIA
