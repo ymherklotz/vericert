@@ -328,6 +328,7 @@ let accumulate_RAW_deps map dfg curr =
   match curr with
   | RBop (op, _, rs, dst) -> acc_dep_instruction rs dst
   | RBload (op, _mem, _addr, rs, dst) -> acc_dep_instruction rs dst
+  | RBsetpred (_op, _mem, rs, _p) -> acc_dep_instruction_nodst rs
   | RBstore (op, _mem, _addr, rs, src) -> acc_dep_instruction_nodst (src :: rs)
   | _ -> (i + 1, dst_map, graph)
 
@@ -425,6 +426,7 @@ let get_predicate = function
   | RBop (p, _, _, _) -> p
   | RBload (p, _, _, _, _) -> p
   | RBstore (p, _, _, _, _) -> p
+  | RBsetpred (p, _, _, _) -> p
   | _ -> None
 
 let rec next_setpred p i = function
@@ -448,6 +450,7 @@ let rec next_preduse p i instr=
   | RBload (Some p', _, _, _, _) :: rst -> next p' rst
   | RBstore (Some p', _, _, _, _) :: rst -> next p' rst
   | RBop (Some p', _, _, _) :: rst -> next p' rst
+  | RBsetpred (Some p', _, _, _) :: rst -> next p' rst
   | _ :: rst -> next_load (i + 1) rst
 
 let accumulate_RAW_pred_deps instrs dfg curri =
