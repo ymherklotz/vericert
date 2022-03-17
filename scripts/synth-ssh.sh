@@ -5,9 +5,10 @@
 
 scriptsdir=$(dirname "$(readlink -f "$BASH_SOURCE")")
 
-bench=$1
-output=$2
-machine=ee-beholder1.ee.ic.ac.uk
+num=$1
+bench=$2
+output=$3
+machine=ee-beholder${num}.ee.ic.ac.uk
 user=ymh15
 files="$scriptsdir/synth.tcl $output/$bench.v"
 log="$output/${bench}_synth.log"

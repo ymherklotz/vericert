@@ -29,4 +29,4 @@ rsync -am --include '*/' --include '*.v' --exclude '*' $source/ $output/
 echo "executing $parallel runs in parallel"
 cat $scriptsdir/../benchmarks/polybench-syn/benchmark-list-master | \
     xargs --max-procs=$parallel --replace=% \
-    $scriptsdir/synth-ssh0.sh % $output
+    $scriptsdir/synth-ssh.sh 0 % $output
