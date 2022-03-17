@@ -41,10 +41,10 @@ lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 install: docs/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
 	install -d $(PREFIX)/bin
-	install -C _build/default/driver/compcert.ini $(PREFIX)/bin
+	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin
 	install -C _build/default/driver/VericertDriver.exe $(PREFIX)/bin/vericert
 	install -d $(PREFIX)/share/man/man1
-	install -C $< $(PREFIX)/share/man/man1
+	install -C -m 644 $< $(PREFIX)/share/man/man1
 
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq

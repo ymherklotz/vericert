@@ -82,3 +82,11 @@ creduce_bug_*/
 /docs/man/
 /docs/manual/
 /docs/src/
+
+*~
+*.man
+*.link
+
+/bin
+/share
+/results*
