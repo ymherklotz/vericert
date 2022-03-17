@@ -6,6 +6,8 @@
 (require 'ox)
 (require 'ox-html)
 (require 'htmlize)
+(require 'ox-texinfo)
+(require 'ox-man)
 
 (setq org-transclusion-exclude-elements nil
       org-html-head-include-default-style nil
@@ -19,4 +21,3 @@
       org-html-htmlize-output-type 'css)
 
 (org-transclusion-add-all)
-(org-html-export-to-html)

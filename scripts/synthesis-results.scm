@@ -32,7 +32,7 @@
 
 (: description string)
 (define description
-  "synthesise: sends a verilog file to be synthesised and returns results as a CSV file.")
+  "synthesis-results: sends a verilog file to be synthesised and returns results as a CSV file.")
 
 (define (usage)
 	(with-output-to-port (current-error-port)

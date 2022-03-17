@@ -38,11 +38,13 @@ lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
 
-install:
-	install -d $(PREFIX)/bin
+install: docs/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
-	install -C _build/default/driver/compcert.ini $(PREFIX)/bin/.
+	install -d $(PREFIX)/bin
+	install -C _build/default/driver/compcert.ini $(PREFIX)/bin
 	install -C _build/default/driver/VericertDriver.exe $(PREFIX)/bin/vericert
+	install -d $(PREFIX)/share/man/man1
+	install -C $< $(PREFIX)/share/man/man1
 
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
@@ -74,6 +76,9 @@ src/extraction/STAMP:
 Makefile.coq:
 	@echo "COQMAKE Makefile.coq"
 	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
+
+docs/vericert.1:
+	$(MAKE) -C docs vericert.1
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean

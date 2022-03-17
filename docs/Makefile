@@ -3,18 +3,26 @@ all: manual src man-html
 install-deps:
 	emacs --batch --load ./res/install-deps.el
 
+%.man: %.org
+	emacs --batch --file $< --load ./res/publish.el --funcall org-man-export-to-man
+
+%.html: %.org
+	emacs --batch --file $< --load ./res/publish.el --funcall org-html-export-to-html
+
 manual:
 	mkdir -p manual
-	emacs --batch --file documentation.org --load ./res/publish-manual.el
+	emacs --batch --file documentation.org --load ./res/publish.el --funcall org-texinfo-export-to-texinfo
 	makeinfo --html --number-sections --no-split \
         --css-ref "https://www.gnu.org/software/emacs/manual.css" \
         vericert.texi -o ./manual/index.html
 	cp -r images ./manual/.
 
-man-html:
+man-html: man.html
 	mkdir -p man
-	emacs --batch --file man.org --load ./res/publish-html.el
 	cp man.html ./man/vericert.1.html
+
+vericert.1: man.man
+	cp $< $@
 
 src:
 	$(MAKE) -C .. doc
