@@ -1,0 +1,98 @@
+#! /usr/bin/chicken-csi -ss
+;; -*- mode: scheme -*-
+
+(import (chicken port)
+        (chicken process-context)
+        args
+        csv-abnf
+        matchable
+        regex
+        srfi-193
+        ssax)
+
+(define options)
+(define operands)
+
+(define (check-opt b) (cdr (or (assoc b options) `(,b . #f))))
+
+(define opts
+	(list (args:make-option (v verbose) (optional: "LEVEL") "Debug level [default: 0]"
+	                        (set! arg (or arg "0")))
+        (args:make-option (k keys) (required: "KEY,KEY,...") "Keys to display [default: slice,ramfifo,delay]")
+        (args:make-option (o output) (required: "FILE") "Output file")
+        (args:make-option (s suppress) (required: "TYPE,TYPE,...") "Values to suppress from output [default: none]")
+        (args:make-option (x xml) #:none "Output raw XML from the synthesis tool")
+        (args:make-option (c csv) #:none "Output processed CSV")
+	      (args:make-option (V version) #:none "Display version"
+	                        (print "synthesise v0.1.0")
+	                        (exit))
+	      (args:make-option (h help) #:none "Display this text"
+	                        (usage))))
+
+(define description
+  "synthesise: sends a verilog file to be synthesised and returns results as a CSV file.")
+
+(define (usage)
+	(with-output-to-port (current-error-port)
+	  (lambda ()
+      (print description)
+      (newline)
+	    (print "Usage: " (program-name) " [options...] [files...]")
+	    (newline)
+	    (print (args:usage opts))
+	    (print "Report bugs to git at yannherklotz dot com.")))
+  (exit 1))
+
+(define-values (fmt-cell fmt-record fmt-csv) (make-format ","))
+
+(define (map-names n)
+  (match n
+    ["XILINX_LUT_FLIP_FLOP_PAIRS_USED" "lut_flip_flop"]
+    ["XILINX_SLICE" "slice"]
+    ["XILINX_SLICE_REGISTERS" "regs"]
+    ["XILINX_SLICE_LUTS" "luts"]
+    ["XILINX_BLOCK_RAMFIFO" "ramfifo"]
+    ["XILINX_IOPIN" "iopin"]
+    ["XILINX_DSPS" "dsps"]
+    ["XILINX_POWER" "power"]
+    ["XILINX_DESIGN_DELAY" "delay"]
+    [_ n]))
+
+(define (xml-matcher xml)
+  (match xml
+    [('*TOP* _ ('document ('application ('section _ . r))))
+     (map (match-lambda
+            [('item ('@ ('value v) ('stringID s))) (list (map-names s) (string->number v))]) r)]))
+
+(define (parse-xml name file)
+  (with-input-from-file file
+    (lambda ()
+      (list name (xml-matcher (ssax:xml->sxml (current-input-port) '()))))))
+
+;;(define xml-parser
+;;  (with-input-from-file "nussinov_report.xml"
+;;    (lambda () (parse-xml "nussinov" (current-input-port)))))
+
+(define (to-csv-record b head results)
+  (let ((res (map (lambda (key)
+                    (cadr (assoc key (cadr results)))) head)))
+    (list->csv-record (if b res (cons (car results) res)))))
+
+(define (path-to-name path)
+  (string-substitute "^.*?([^/]+)_report\\.xml$" "\\1" path))
+
+(define (write-file file-name text)
+  (with-output-to-file file-name (lambda () (display text))))
+
+(define (convert-files files)
+  (map (lambda (f) (parse-xml (path-to-name f) f)) files))
+
+(define (main args)
+  (set!-values (options operands)
+	             (args:parse args opts))
+  (let ((head (string-split-fields "," (or (check-opt 'keys) "slice,ramfifo,delay") #:infix))
+        (suppress (string-split-fields "," (or (check-opt 'suppress) "none") #:infix)))
+    (let ((body (map (lambda (f) (to-csv-record (member "name" suppress) head f))
+                     (convert-files operands)))
+          (header (list->csv-record (if (member "name" suppress) head (cons "name" head)))))
+    (display (fmt-csv (if (member "header" suppress) body (cons header body)))))))
