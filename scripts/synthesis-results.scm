@@ -1,4 +1,4 @@
-#! /usr/bin/chicken-csi -ss
+#! /usr/bin/chicken-csi -s
 ;; -*- mode: scheme -*-
 
 (import (chicken port)
@@ -118,3 +118,5 @@
         (lambda ()
           (display (csv:fmt-table-string
                     (if (member "header" suppress) body (cons header body)))))))))
+
+(main (command-line-arguments))
