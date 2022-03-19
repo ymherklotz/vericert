@@ -91,7 +91,7 @@
     (lambda ()
       (list name (xml-matcher (ssax:xml->sxml (current-input-port) '()))))))
 
-(define (to-csv-record b head results)
+(define ((to-csv-record b head) results)
   (let ((res (map (lambda (key)
                     (cadr (assoc key (cadr results)))) head)))
     (csv:fmt-row (if b res (cons (car results) res)))))
@@ -126,8 +126,7 @@
   (let ((head (split-at-comma (or (check-opt 'keys) "slice,ramfifo,delay")))
         (suppress (split-at-comma (or (check-opt 'suppress) "none")))
         (files (get-files-from-op operands)))
-    (let ((body (map (lambda (f) (to-csv-record (member "name" suppress) head f))
-                     (convert-files files)))
+    (let ((body (map (to-csv-record (member "name" suppress) head) (convert-files files)))
           (header (csv:fmt-row (if (member "name" suppress) head (cons "name" head)))))
     (with-output
         (lambda ()
