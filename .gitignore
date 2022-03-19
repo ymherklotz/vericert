@@ -1,3 +1,7 @@
+/benchmarks/**/*
+!/benchmarks/**/*.*
+!/benchmarks/**/*/
+
 .*.aux
 *.a
 *.cma
