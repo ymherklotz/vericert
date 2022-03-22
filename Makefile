@@ -87,7 +87,10 @@ clean:: Makefile.coq
 	rm -f Makefile.coq
 
 detangle-all:
-	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)$(foreach vs,$(VS),(org-babel-detangle \"$(vs)\")))"
+	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)\
+        (setq org-src-preserve-indentation t)\
+        $(foreach vs,$(VS),(org-babel-detangle \"$(vs)\"))\
+        (org-save-all-org-buffers))"
 
 clean::
 	rm -f */*.v.d */*.glob */*.vo */*~ *~

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-main][rtlblockinstr-main]] *)
+(* [[file:../../lit/scheduling.org::rtlblockinstr-imports][rtlblockinstr-imports]] *)
 Require Import Coq.micromega.Lia.
 
 Require Import compcert.backend.Registers.
@@ -31,20 +31,9 @@ Require Import compcert.verilog.Op.
 
 Require Import Predicate.
 Require Import Vericertlib.
+(* rtlblockinstr-imports ends here *)
 
-(** * RTLBlock Instructions
-
-These instructions are used for [RTLBlock] and [RTLPar], so that they have consistent
-instructions, which greatly simplifies the proofs, as they will by default have the same instruction
-syntax and semantics.  The only changes are therefore at the top-level of the instructions.
-
- ** Instruction Definition
-
-First, we define the instructions that can be placed into a basic block, meaning they won't branch.
-The main changes to how instructions are defined in [RTL], is that these instructions don't have a
-next node, as they will be in a basic block, and they also have an optional predicate ([pred_op]).
-*)
-
+(* [[file:../../lit/scheduling.org::rtlblockinstr-instr-def][rtlblockinstr-instr-def]] *)
 Definition node := positive.
 
 Inductive instr : Type :=
@@ -53,12 +42,9 @@ Inductive instr : Type :=
 | RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
+(* rtlblockinstr-instr-def ends here *)
 
-(** ** Control-Flow Instruction Definition
-
-These are the instructions that count as control-flow, and will be placed at the end of the basic
-blocks.  *)
-
+(* [[file:../../lit/scheduling.org::rtlblockinstr-cf-instr-def][rtlblockinstr-cf-instr-def]] *)
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
 | RBtailcall : signature -> reg + ident -> list reg -> cf_instr
@@ -69,9 +55,9 @@ Inductive cf_instr : Type :=
 | RBreturn : option reg -> cf_instr
 | RBgoto : node -> cf_instr
 | RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
+(* rtlblockinstr-cf-instr-def ends here *)
 
-(** ** Helper functions  *)
-
+(* [[file:../../lit/scheduling.org::rtlblockinstr-helpers][rtlblockinstr-helpers]] *)
 Fixpoint successors_instr (i : cf_instr) : list node :=
   match i with
   | RBcall sig ros args res s => s :: nil
@@ -160,24 +146,17 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
   | _, _ => Regmap.init Vundef
   end.
+(* rtlblockinstr-helpers ends here *)
 
-(** *** Instruction State
-
-Definition of the instruction state, which contains the following:
-
-- [is_rs] This is the current state of the registers.
-- [is_ps] This is the current state of the predicate registers, which is in a separate namespace and
-        area compared to the standard registers in [is_rs].
-- [is_mem] The current state of the memory.  *)
-
+(* [[file:../../lit/scheduling.org::rtlblockinstr-instr-state][rtlblockinstr-instr-state]] *)
 Record instr_state := mk_instr_state {
   is_rs: regset;
   is_ps: predset;
   is_mem: mem;
 }.
+(* rtlblockinstr-instr-state ends here *)
 
-(** ** Top-Level Type Definitions *)
-
+(* [[file:../../lit/scheduling.org::rtlblockinstr-type-def][rtlblockinstr-type-def]] *)
 Section DEFINITION.
 
   Context {bblock_body: Type}.
@@ -240,9 +219,9 @@ Section DEFINITION.
       state.
 
 End DEFINITION.
+(* rtlblockinstr-type-def ends here *)
 
-(** ** Semantics *)
-
+(* [[file:../../lit/scheduling.org::rtlblockinstr-semantics][rtlblockinstr-semantics]] *)
 Section RELSEM.
 
   Context {bblock_body : Type}.
@@ -347,4 +326,4 @@ Section RELSEM.
       step_cf_instr (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
 
 End RELSEM.
-(* rtlblockinstr-main ends here *)
+(* rtlblockinstr-semantics ends here *)

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlblockgen-main][rtlblockgen-main]] *)
+(* [[file:../../lit/scheduling.org::rtlblockgen-imports][rtlblockgen-imports]] *)
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
 Require Import compcert.lib.Maps.
@@ -28,16 +28,10 @@ Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLBlock.
 
 #[local] Open Scope positive.
+(* rtlblockgen-imports ends here *)
 
-Parameter partition : RTL.function -> Errors.res function.
-
-(** [find_block max nodes index]: Does not need to be sorted, because we use filter and the max fold
-    function to find the desired element. *)
-Definition find_block (max: positive) (nodes: list positive) (index: positive) : positive :=
-  List.fold_right Pos.min max (List.filter (fun x => (index <=? x)) nodes).
-
-(*Compute find_block (2::94::28::40::19::nil) 40.*)
-
+(* [[file:../../lit/scheduling.org::rtlblockgen-equalities-insert][rtlblockgen-equalities-insert]] *)
+(* [[[[file:~/projects/vericert/lit/scheduling.org::rtlblockgen-equalities][rtlblockgen-equalities]]][rtlblockgen-equalities]] *)
 Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
 Proof.
   decide equality.
@@ -155,6 +149,18 @@ Defined.
 
 Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
   if eqd a b then true else false.
+(* rtlblockgen-equalities ends here *)
+(* rtlblockgen-equalities-insert ends here *)
+
+(* [[file:../../lit/scheduling.org::rtlblockgen-main][rtlblockgen-main]] *)
+Parameter partition : RTL.function -> Errors.res function.
+
+(** [find_block max nodes index]: Does not need to be sorted, because we use filter and the max fold
+    function to find the desired element. *)
+Definition find_block (max: positive) (nodes: list positive) (index: positive) : positive :=
+  List.fold_right Pos.min max (List.filter (fun x => (index <=? x)) nodes).
+
+(*Compute find_block (2::94::28::40::19::nil) 40.*)
 
 Definition check_instr (n: positive) (istr: RTL.instruction) (istr': instr) :=
   match istr, istr' with

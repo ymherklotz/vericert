@@ -13,7 +13,7 @@
 <<license>>
 #+end_src
 
-#+name: rtlblockinstr-main
+#+name: rtlblockinstr-imports
 #+begin_src coq
 Require Import Coq.micromega.Lia.
 
@@ -29,20 +29,20 @@ Require Import compcert.verilog.Op.
 
 Require Import Predicate.
 Require Import Vericertlib.
+#+end_src
 
-(** * RTLBlock Instructions
+These instructions are used for ~RTLBlock~ and ~RTLPar~, so that they have consistent instructions,
+which greatly simplifies the proofs, as they will by default have the same instruction syntax and
+semantics.  The only changes are therefore at the top-level of the instructions.
 
-These instructions are used for [RTLBlock] and [RTLPar], so that they have consistent
-instructions, which greatly simplifies the proofs, as they will by default have the same instruction
-syntax and semantics.  The only changes are therefore at the top-level of the instructions.
-
- ** Instruction Definition
+*** Instruction Definition
 
 First, we define the instructions that can be placed into a basic block, meaning they won't branch.
 The main changes to how instructions are defined in [RTL], is that these instructions don't have a
 next node, as they will be in a basic block, and they also have an optional predicate ([pred_op]).
-*)
 
+#+name: rtlblockinstr-instr-def
+#+begin_src coq
 Definition node := positive.
 
 Inductive instr : Type :=
@@ -51,12 +51,15 @@ Inductive instr : Type :=
 | RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
 | RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
+#+end_src
 
-(** ** Control-Flow Instruction Definition
+*** Control-Flow Instruction Definition
 
 These are the instructions that count as control-flow, and will be placed at the end of the basic
-blocks.  *)
+blocks.
 
+#+name: rtlblockinstr-cf-instr-def
+#+begin_src coq
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
 | RBtailcall : signature -> reg + ident -> list reg -> cf_instr
@@ -67,9 +70,12 @@ Inductive cf_instr : Type :=
 | RBreturn : option reg -> cf_instr
 | RBgoto : node -> cf_instr
 | RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
+#+end_src
 
-(** ** Helper functions  *)
+*** Helper functions
 
+#+name: rtlblockinstr-helpers
+#+begin_src coq
 Fixpoint successors_instr (i : cf_instr) : list node :=
   match i with
   | RBcall sig ros args res s => s :: nil
@@ -158,24 +164,30 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
   | _, _ => Regmap.init Vundef
   end.
+#+end_src
 
-(** *** Instruction State
+**** Instruction State
 
 Definition of the instruction state, which contains the following:
 
-- [is_rs] This is the current state of the registers.
-- [is_ps] This is the current state of the predicate registers, which is in a separate namespace and
-        area compared to the standard registers in [is_rs].
-- [is_mem] The current state of the memory.  *)
+- ~is_rs~ :: This is the current state of the registers.
+- ~is_ps~ :: This is the current state of the predicate registers, which is in a separate namespace
+  and area compared to the standard registers in [is_rs].
+- ~is_mem~ :: The current state of the memory.
 
+#+name: rtlblockinstr-instr-state
+#+begin_src coq
 Record instr_state := mk_instr_state {
   is_rs: regset;
   is_ps: predset;
   is_mem: mem;
 }.
+#+end_src
 
-(** ** Top-Level Type Definitions *)
+*** Top-Level Type Definitions
 
+#+name: rtlblockinstr-type-def
+#+begin_src coq
 Section DEFINITION.
 
   Context {bblock_body: Type}.
@@ -238,9 +250,12 @@ Section DEFINITION.
       state.
 
 End DEFINITION.
+#+end_src
 
-(** ** Semantics *)
+*** Semantics
 
+#+name: rtlblockinstr-semantics
+#+begin_src coq
 Section RELSEM.
 
   Context {bblock_body : Type}.
@@ -1540,7 +1555,7 @@ Refers to [[rtlblockgen-equalities][rtlblockgen-equalities]].
 <<license>>
 #+end_src
 
-#+name: rtlblockgen-main
+#+name: rtlblockgen-imports
 #+begin_src coq
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
@@ -1553,7 +1568,15 @@ Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLBlock.
 
 #[local] Open Scope positive.
+#+end_src
 
+#+name: rtlblockgen-equalities-insert
+#+begin_src coq
+<<rtlblockgen-equalities>>
+#+end_src
+
+#+name: rtlblockgen-main
+#+begin_src coq
 Parameter partition : RTL.function -> Errors.res function.
 
 (** [find_block max nodes index]: Does not need to be sorted, because we use filter and the max fold
@@ -1562,124 +1585,6 @@ Definition find_block (max: positive) (nodes: list positive) (index: positive) :
   List.fold_right Pos.min max (List.filter (fun x => (index <=? x)) nodes).
 
 (*Compute find_block (2::94::28::40::19::nil) 40.*)
-
-Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Defined.
-
-Lemma condition_eq: forall (x y : Op.condition), {x = y} + {x <> y}.
-Proof.
-  generalize comparison_eq; intro.
-  generalize Int.eq_dec; intro.
-  generalize Int64.eq_dec; intro.
-  decide equality.
-Defined.
-
-Lemma addressing_eq : forall (x y : Op.addressing), {x = y} + {x <> y}.
-Proof.
-  generalize Int.eq_dec; intro.
-  generalize AST.ident_eq; intro.
-  generalize Z.eq_dec; intro.
-  generalize Ptrofs.eq_dec; intro.
-  decide equality.
-Defined.
-
-Lemma typ_eq : forall (x y : AST.typ), {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Defined.
-
-Lemma operation_eq: forall (x y : Op.operation), {x = y} + {x <> y}.
-Proof.
-  generalize Int.eq_dec; intro.
-  generalize Int64.eq_dec; intro.
-  generalize Float.eq_dec; intro.
-  generalize Float32.eq_dec; intro.
-  generalize AST.ident_eq; intro.
-  generalize condition_eq; intro.
-  generalize addressing_eq; intro.
-  generalize typ_eq; intro.
-  decide equality.
-Defined.
-
-Lemma memory_chunk_eq : forall (x y : AST.memory_chunk), {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Defined.
-
-Lemma list_typ_eq: forall (x y : list AST.typ), {x = y} + {x <> y}.
-Proof.
-  generalize typ_eq; intro.
-  decide equality.
-Defined.
-
-Lemma option_typ_eq : forall (x y : option AST.typ), {x = y} + {x <> y}.
-Proof.
-  generalize typ_eq; intro.
-  decide equality.
-Defined.
-
-Lemma signature_eq: forall (x y : AST.signature), {x = y} + {x <> y}.
-Proof.
-  repeat decide equality.
-Defined.
-
-Lemma list_operation_eq : forall (x y : list Op.operation), {x = y} + {x <> y}.
-Proof.
-  generalize operation_eq; intro.
-  decide equality.
-Defined.
-
-Lemma list_pos_eq : forall (x y : list positive), {x = y} + {x <> y}.
-Proof.
-  generalize Pos.eq_dec; intros.
-  decide equality.
-Defined.
-
-Lemma sig_eq : forall (x y : AST.signature), {x = y} + {x <> y}.
-Proof.
-  repeat decide equality.
-Defined.
-
-Lemma instr_eq: forall (x y : instr), {x = y} + {x <> y}.
-Proof.
-  generalize Pos.eq_dec; intro.
-  generalize typ_eq; intro.
-  generalize Int.eq_dec; intro.
-  generalize memory_chunk_eq; intro.
-  generalize addressing_eq; intro.
-  generalize operation_eq; intro.
-  generalize condition_eq; intro.
-  generalize signature_eq; intro.
-  generalize list_operation_eq; intro.
-  generalize list_pos_eq; intro.
-  generalize AST.ident_eq; intro.
-  repeat decide equality.
-Defined.
-
-Lemma cf_instr_eq: forall (x y : cf_instr), {x = y} + {x <> y}.
-Proof.
-  generalize Pos.eq_dec; intro.
-  generalize typ_eq; intro.
-  generalize Int.eq_dec; intro.
-  generalize Int64.eq_dec; intro.
-  generalize Float.eq_dec; intro.
-  generalize Float32.eq_dec; intro.
-  generalize Ptrofs.eq_dec; intro.
-  generalize memory_chunk_eq; intro.
-  generalize addressing_eq; intro.
-  generalize operation_eq; intro.
-  generalize condition_eq; intro.
-  generalize signature_eq; intro.
-  generalize list_operation_eq; intro.
-  generalize list_pos_eq; intro.
-  generalize AST.ident_eq; intro.
-  repeat decide equality.
-Defined.
-
-Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
-  if eqd a b then true else false.
 
 Definition check_instr (n: positive) (istr: RTL.instruction) (istr': instr) :=
   match istr, istr' with
@@ -1810,6 +1715,129 @@ Definition transl_fundef := transf_partial_fundef transl_function.
 
 Definition transl_program : RTL.program -> Errors.res program :=
   transform_partial_program transl_fundef.
+#+end_src
+
+** Equalities (rtlblockgen-equalities)
+
+#+name: rtlblockgen-equalities
+#+begin_src coq :tangle no
+Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
+Proof.
+  decide equality.
+Defined.
+
+Lemma condition_eq: forall (x y : Op.condition), {x = y} + {x <> y}.
+Proof.
+  generalize comparison_eq; intro.
+  generalize Int.eq_dec; intro.
+  generalize Int64.eq_dec; intro.
+  decide equality.
+Defined.
+
+Lemma addressing_eq : forall (x y : Op.addressing), {x = y} + {x <> y}.
+Proof.
+  generalize Int.eq_dec; intro.
+  generalize AST.ident_eq; intro.
+  generalize Z.eq_dec; intro.
+  generalize Ptrofs.eq_dec; intro.
+  decide equality.
+Defined.
+
+Lemma typ_eq : forall (x y : AST.typ), {x = y} + {x <> y}.
+Proof.
+  decide equality.
+Defined.
+
+Lemma operation_eq: forall (x y : Op.operation), {x = y} + {x <> y}.
+Proof.
+  generalize Int.eq_dec; intro.
+  generalize Int64.eq_dec; intro.
+  generalize Float.eq_dec; intro.
+  generalize Float32.eq_dec; intro.
+  generalize AST.ident_eq; intro.
+  generalize condition_eq; intro.
+  generalize addressing_eq; intro.
+  generalize typ_eq; intro.
+  decide equality.
+Defined.
+
+Lemma memory_chunk_eq : forall (x y : AST.memory_chunk), {x = y} + {x <> y}.
+Proof.
+  decide equality.
+Defined.
+
+Lemma list_typ_eq: forall (x y : list AST.typ), {x = y} + {x <> y}.
+Proof.
+  generalize typ_eq; intro.
+  decide equality.
+Defined.
+
+Lemma option_typ_eq : forall (x y : option AST.typ), {x = y} + {x <> y}.
+Proof.
+  generalize typ_eq; intro.
+  decide equality.
+Defined.
+
+Lemma signature_eq: forall (x y : AST.signature), {x = y} + {x <> y}.
+Proof.
+  repeat decide equality.
+Defined.
+
+Lemma list_operation_eq : forall (x y : list Op.operation), {x = y} + {x <> y}.
+Proof.
+  generalize operation_eq; intro.
+  decide equality.
+Defined.
+
+Lemma list_pos_eq : forall (x y : list positive), {x = y} + {x <> y}.
+Proof.
+  generalize Pos.eq_dec; intros.
+  decide equality.
+Defined.
+
+Lemma sig_eq : forall (x y : AST.signature), {x = y} + {x <> y}.
+Proof.
+  repeat decide equality.
+Defined.
+
+Lemma instr_eq: forall (x y : instr), {x = y} + {x <> y}.
+Proof.
+  generalize Pos.eq_dec; intro.
+  generalize typ_eq; intro.
+  generalize Int.eq_dec; intro.
+  generalize memory_chunk_eq; intro.
+  generalize addressing_eq; intro.
+  generalize operation_eq; intro.
+  generalize condition_eq; intro.
+  generalize signature_eq; intro.
+  generalize list_operation_eq; intro.
+  generalize list_pos_eq; intro.
+  generalize AST.ident_eq; intro.
+  repeat decide equality.
+Defined.
+
+Lemma cf_instr_eq: forall (x y : cf_instr), {x = y} + {x <> y}.
+Proof.
+  generalize Pos.eq_dec; intro.
+  generalize typ_eq; intro.
+  generalize Int.eq_dec; intro.
+  generalize Int64.eq_dec; intro.
+  generalize Float.eq_dec; intro.
+  generalize Float32.eq_dec; intro.
+  generalize Ptrofs.eq_dec; intro.
+  generalize memory_chunk_eq; intro.
+  generalize addressing_eq; intro.
+  generalize operation_eq; intro.
+  generalize condition_eq; intro.
+  generalize signature_eq; intro.
+  generalize list_operation_eq; intro.
+  generalize list_pos_eq; intro.
+  generalize AST.ident_eq; intro.
+  repeat decide equality.
+Defined.
+
+Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
+  if eqd a b then true else false.
 #+end_src
 
 * RTLBlockgenproof
