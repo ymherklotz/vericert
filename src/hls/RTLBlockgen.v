@@ -38,7 +38,6 @@ Definition find_block (max: positive) (nodes: list positive) (index: positive) :
 
 (*Compute find_block (2::94::28::40::19::nil) 40.*)
 
-(* [[[[file:~/projects/vericert/lit/scheduling.org::rtlblockgen-equalities][rtlblockgen-equalities]]][rtlblockgen-equalities]] *)
 Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
 Proof.
   decide equality.
@@ -156,7 +155,6 @@ Defined.
 
 Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
   if eqd a b then true else false.
-(* rtlblockgen-equalities ends here *)
 
 Definition check_instr (n: positive) (istr: RTL.instruction) (istr': instr) :=
   match istr, istr' with

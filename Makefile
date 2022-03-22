@@ -21,7 +21,7 @@ COQMAKE := $(COQBIN)coq_makefile
 
 COQDOCFLAGS := --no-lib-name -l
 
-VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, src/$(d)/*.v)
+VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, $(wildcard src/$(d)/*.v))
 LIT := $(wildcard lit/*.org)
 
 PREFIX ?= .
@@ -87,7 +87,7 @@ clean:: Makefile.coq
 	rm -f Makefile.coq
 
 detangle-all:
-	$(foreach vs,$(VS),emacs --batch --find-file $(vs) --eval "(progn(require 'org)(require 'ob-tangle)(org-babel-detangle))")
+	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)$(foreach vs,$(VS),(org-babel-detangle \"$(vs)\")))"
 
 clean::
 	rm -f */*.v.d */*.glob */*.vo */*~ *~

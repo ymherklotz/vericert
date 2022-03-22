@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlpargenproof-main][rtlpargenproof-main]] *)
+(* [[file:../../lit/scheduling.org::rtlpargenproof-imports][rtlpargenproof-imports]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
@@ -37,7 +37,9 @@ Require Import vericert.hls.Abstr.
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
+(* rtlpargenproof-imports ends here *)
 
+(* [[file:../../lit/scheduling.org::rtlpargenproof-main][rtlpargenproof-main]] *)
 (*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
@@ -46,10 +48,6 @@ Inductive state_lessdef : instr_state -> instr_state -> Prop :=
     forall rs1 rs2 m1,
     (forall x, rs1 !! x = rs2 !! x) ->
     state_lessdef (mk_instr_state rs1 m1) (mk_instr_state rs2 m1).
-
-(** *** RTLBlock to abstract translation
-
-Correctness of translation from RTLBlock to the abstract interpretation language. *)
 
 Ltac inv_simp :=
   repeat match goal with
