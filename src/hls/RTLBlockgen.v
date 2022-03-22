@@ -31,7 +31,6 @@ Require Import vericert.hls.RTLBlock.
 (* rtlblockgen-imports ends here *)
 
 (* [[file:../../lit/scheduling.org::rtlblockgen-equalities-insert][rtlblockgen-equalities-insert]] *)
-(* [[[[file:~/projects/vericert/lit/scheduling.org::rtlblockgen-equalities][rtlblockgen-equalities]]][rtlblockgen-equalities]] *)
 Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
 Proof.
   decide equality.
@@ -149,7 +148,6 @@ Defined.
 
 Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
   if eqd a b then true else false.
-(* rtlblockgen-equalities ends here *)
 (* rtlblockgen-equalities-insert ends here *)
 
 (* [[file:../../lit/scheduling.org::rtlblockgen-main][rtlblockgen-main]] *)
