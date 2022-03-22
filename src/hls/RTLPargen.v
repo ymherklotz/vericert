@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+(* [[file:../../lit/scheduling.org::rtlpargen-main][rtlpargen-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
@@ -260,3 +261,4 @@ Definition transl_fundef := transf_partial_fundef transl_function.
 
 Definition transl_program (p : RTLBlock.program) : Errors.res RTLPar.program :=
   transform_partial_program transl_fundef p.
+(* rtlpargen-main ends here *)

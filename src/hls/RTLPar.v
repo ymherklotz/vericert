@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+(* [[file:../../lit/scheduling.org::rtlpar-main][rtlpar-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.
@@ -138,3 +139,4 @@ Definition max_pc_function (f: function) : positive :=
                                      (pc + match Zlength i.(bb_body)
                                            with Z.pos p => p | _ => 1 end))%positive)
              f.(fn_code) 1%positive.
+(* rtlpar-main ends here *)

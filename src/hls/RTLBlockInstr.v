@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+(* [[file:../../lit/scheduling.org::rtlblockinstr-main][rtlblockinstr-main]] *)
 Require Import Coq.micromega.Lia.
 
 Require Import compcert.backend.Registers.
@@ -37,7 +38,7 @@ These instructions are used for [RTLBlock] and [RTLPar], so that they have consi
 instructions, which greatly simplifies the proofs, as they will by default have the same instruction
 syntax and semantics.  The only changes are therefore at the top-level of the instructions.
 
-** Instruction Definition
+ ** Instruction Definition
 
 First, we define the instructions that can be placed into a basic block, meaning they won't branch.
 The main changes to how instructions are defined in [RTL], is that these instructions don't have a
@@ -346,3 +347,4 @@ Section RELSEM.
       step_cf_instr (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
 
 End RELSEM.
+(* rtlblockinstr-main ends here *)

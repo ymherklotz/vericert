@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+(* [[file:../../lit/scheduling.org::scheduler-main][scheduler-main]] *)
 open Printf
 open Clflags
 open Camlcoq
@@ -881,3 +882,4 @@ let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
     fn_code = scheduled (*List.fold_left (add_to_tree scheduled) PTree.empty reachable*);
     fn_entrypoint = f.fn_entrypoint
   }
+(* scheduler-main ends here *)
