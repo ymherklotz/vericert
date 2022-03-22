@@ -692,48 +692,6 @@ Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
     equiv_check p1 p2
   end.
 
-Definition forall_ptree {A:Type} (f:positive->A->bool) (m:Maps.PTree.t A) : bool :=
-  Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true.
-
-Ltac boolInv :=
-  match goal with
-  | [ H: _ && _ = true |- _ ] =>
-      destruct (andb_prop _ _ H); clear H; boolInv
-  | [ H: proj_sumbool _ = true |- _ ] =>
-      generalize (proj_sumbool_true _ H); clear H;
-      let EQ := fresh in (intro EQ; try subst; boolInv)
-  | _ =>
-      idtac
-  end.
-
-Remark ptree_forall:
-  forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
-  Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true = true ->
-  forall i x, Maps.PTree.get i m = Some x -> f i x = true.
-Proof.
-  intros.
-  set (f' := fun (res: bool) (i: positive) (x: A) => res && f i x).
-  set (P := fun (m: Maps.PTree.t A) (res: bool) =>
-              res = true -> Maps.PTree.get i m = Some x -> f i x = true).
-  assert (P m true).
-  rewrite <- H. fold f'. apply Maps.PTree_Properties.fold_rec.
-  unfold P; intros. rewrite <- H1 in H4. auto.
-  red; intros. now rewrite Maps.PTree.gempty in H2.
-  unfold P; intros. unfold f' in H4. boolInv.
-  rewrite Maps.PTree.gsspec in H5. destruct (peq i k).
-  subst. inv H5. auto.
-  apply H3; auto.
-  red in H1. auto.
-Qed.
-
-Lemma forall_ptree_true:
-  forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
-    forall_ptree f m = true ->
-    forall i x, Maps.PTree.get i m = Some x -> f i x = true.
-Proof.
-  apply ptree_forall.
-Qed.
-
 Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
   match np2 ! n with
   | Some p' => equiv_check p p'
