@@ -1,15 +1,16 @@
 VERICERT ?= vericert
-VERICERT_OPTS ?= -DSYNTHESIS -fschedule -fif-conv
+VERICERT_OPTS ?= -DSYNTHESIS -fschedule
 
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
 VERILATOR ?= verilator
-VERILATOR_OPTS ?= -Wno-fatal --top main --exe /home/ymherklotz/projects/vericert/scripts/verilator_main.cpp
+VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe /home/ymherklotz/projects/vericert/scripts/verilator_main.cpp
 
 TARGETS ?=
 
 %.v: %.c
+	@echo -e "\033[0;35mMAKE\033[0m" $<
 	$(VERICERT) $(VERICERT_OPTS) $< -o $@
 
 %.iver: %.v
@@ -20,7 +21,8 @@ TARGETS ?=
 
 %.verilator: %.v
 	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $@ --cc $<
-	$(MAKE) -C $@ -f Vmain.mk
+	@echo -e $(MAKE) -C $@ -f Vmain.mk
+	@$(MAKE) -C $@ -f Vmain.mk &>/dev/null
 
 %: %.iver %.gcc %.verilator
 	cp $< $@

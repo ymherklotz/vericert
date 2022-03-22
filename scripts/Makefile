@@ -1,9 +1,12 @@
 PREFIX ?= ..
 
-all: synthesis
+all: synthesis-results
 
 %: %.scm
-	chicken-csc -static -o $@ $<
+	$(eval TMP := $(shell mktemp))
+	echo "(main (command-line-arguments))" >$(TMP)
+	chicken-csc -static -epilogue $(TMP) -output-file $@ $<
+	rm $(TMP)
 
 %.1: %.org
 	emacs --batch --file $< --load ../docs/res/publish.el --funcall org-man-export-to-man
