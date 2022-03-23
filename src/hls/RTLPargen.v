@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlpargen-main][rtlpargen-main]] *)
+(* [[file:../../lit/scheduler.org::rtlpargen-main][rtlpargen-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.

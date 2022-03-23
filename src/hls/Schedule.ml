@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::scheduler-main][scheduler-main]] *)
+(* [[file:../../lit/scheduler.org::scheduler-main][scheduler-main]] *)
 open Printf
 open Clflags
 open Camlcoq

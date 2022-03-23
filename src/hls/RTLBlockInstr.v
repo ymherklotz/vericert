@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-imports][rtlblockinstr-imports]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-imports][rtlblockinstr-imports]] *)
 Require Import Coq.micromega.Lia.
 
 Require Import compcert.backend.Registers.
@@ -33,7 +33,7 @@ Require Import Predicate.
 Require Import Vericertlib.
 (* rtlblockinstr-imports ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-instr-def][rtlblockinstr-instr-def]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-instr-def][rtlblockinstr-instr-def]] *)
 Definition node := positive.
 
 Inductive instr : Type :=
@@ -44,7 +44,7 @@ Inductive instr : Type :=
 | RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
 (* rtlblockinstr-instr-def ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-cf-instr-def][rtlblockinstr-cf-instr-def]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-cf-instr-def][rtlblockinstr-cf-instr-def]] *)
 Inductive cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
 | RBtailcall : signature -> reg + ident -> list reg -> cf_instr
@@ -57,7 +57,7 @@ Inductive cf_instr : Type :=
 | RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
 (* rtlblockinstr-cf-instr-def ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-helpers][rtlblockinstr-helpers]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-helpers][rtlblockinstr-helpers]] *)
 Fixpoint successors_instr (i : cf_instr) : list node :=
   match i with
   | RBcall sig ros args res s => s :: nil
@@ -148,7 +148,7 @@ Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   end.
 (* rtlblockinstr-helpers ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-instr-state][rtlblockinstr-instr-state]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-instr-state][rtlblockinstr-instr-state]] *)
 Record instr_state := mk_instr_state {
   is_rs: regset;
   is_ps: predset;
@@ -156,7 +156,7 @@ Record instr_state := mk_instr_state {
 }.
 (* rtlblockinstr-instr-state ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-type-def][rtlblockinstr-type-def]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-type-def][rtlblockinstr-type-def]] *)
 Section DEFINITION.
 
   Context {bblock_body: Type}.
@@ -221,7 +221,7 @@ Section DEFINITION.
 End DEFINITION.
 (* rtlblockinstr-type-def ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockinstr-semantics][rtlblockinstr-semantics]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblockinstr-semantics][rtlblockinstr-semantics]] *)
 Section RELSEM.
 
   Context {bblock_body : Type}.

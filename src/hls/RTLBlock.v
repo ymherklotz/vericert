@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlblock-main][rtlblock-main]] *)
+(* [[file:../../lit/scheduler-languages.org::rtlblock-main][rtlblock-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.

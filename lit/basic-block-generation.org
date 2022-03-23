@@ -29,7 +29,7 @@ Require Import vericert.hls.RTLBlock.
 #+end_src
 
 #+name: rtlblockgen-equalities-insert
-#+begin_src coq
+#+begin_src coq :comments no
 <<rtlblockgen-equalities>>
 #+end_src
 

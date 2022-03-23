@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlpargenproof-imports][rtlpargenproof-imports]] *)
+(* [[file:../../lit/scheduler.org::rtlpargenproof-imports][rtlpargenproof-imports]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
@@ -39,7 +39,7 @@ Require Import vericert.hls.Abstr.
 #[local] Open Scope pred_op.
 (* rtlpargenproof-imports ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlpargenproof-main][rtlpargenproof-main]] *)
+(* [[file:../../lit/scheduler.org::rtlpargenproof-main][rtlpargenproof-main]] *)
 (*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
@@ -1092,7 +1092,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eauto. eauto. simplify. eauto. eauto. }
     { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
       inv H2. unfold transl_function in Heqr. destruct_match; crush.
-      inv Heqr. 
+      inv Heqr.
       repeat econstructor; eauto.
       unfold bind in *. destruct_match; crush. }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }

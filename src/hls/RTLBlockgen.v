@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduling.org::rtlblockgen-imports][rtlblockgen-imports]] *)
+(* [[file:../../lit/basic-block-generation.org::rtlblockgen-imports][rtlblockgen-imports]] *)
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
 Require Import compcert.lib.Maps.
@@ -30,7 +30,6 @@ Require Import vericert.hls.RTLBlock.
 #[local] Open Scope positive.
 (* rtlblockgen-imports ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockgen-equalities-insert][rtlblockgen-equalities-insert]] *)
 Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
 Proof.
   decide equality.
@@ -148,9 +147,8 @@ Defined.
 
 Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
   if eqd a b then true else false.
-(* rtlblockgen-equalities-insert ends here *)
 
-(* [[file:../../lit/scheduling.org::rtlblockgen-main][rtlblockgen-main]] *)
+(* [[file:../../lit/basic-block-generation.org::rtlblockgen-main][rtlblockgen-main]] *)
 Parameter partition : RTL.function -> Errors.res function.
 
 (** [find_block max nodes index]: Does not need to be sorted, because we use filter and the max fold
