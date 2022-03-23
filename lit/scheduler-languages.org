@@ -1,0 +1,689 @@
+#+title: Scheduler Languages
+#+author: Yann Herklotz
+#+email: yann [at] yannherklotz [dot] com
+
+* RTLBlockInstr
+:PROPERTIES:
+:header-args:coq: :comments noweb :noweb no-export :padline yes :tangle ../src/hls/RTLBlockInstr.v
+:END:
+
+#+begin_src coq :comments no :padline no :exports none
+<<license>>
+#+end_src
+
+#+name: rtlblockinstr-imports
+#+begin_src coq
+Require Import Coq.micromega.Lia.
+
+Require Import compcert.backend.Registers.
+Require Import compcert.common.AST.
+Require Import compcert.common.Events.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Values.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require Import compcert.verilog.Op.
+
+Require Import Predicate.
+Require Import Vericertlib.
+#+end_src
+
+These instructions are used for ~RTLBlock~ and ~RTLPar~, so that they have consistent instructions,
+which greatly simplifies the proofs, as they will by default have the same instruction syntax and
+semantics.  The only changes are therefore at the top-level of the instructions.
+
+** Instruction Definition
+
+First, we define the instructions that can be placed into a basic block, meaning they won't branch.
+The main changes to how instructions are defined in [RTL], is that these instructions don't have a
+next node, as they will be in a basic block, and they also have an optional predicate ([pred_op]).
+
+#+name: rtlblockinstr-instr-def
+#+begin_src coq
+Definition node := positive.
+
+Inductive instr : Type :=
+| RBnop : instr
+| RBop : option pred_op -> operation -> list reg -> reg -> instr
+| RBload : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBstore : option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBsetpred : option pred_op -> condition -> list reg -> predicate -> instr.
+#+end_src
+
+** Control-Flow Instruction Definition
+
+These are the instructions that count as control-flow, and will be placed at the end of the basic
+blocks.
+
+#+name: rtlblockinstr-cf-instr-def
+#+begin_src coq
+Inductive cf_instr : Type :=
+| RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
+| RBtailcall : signature -> reg + ident -> list reg -> cf_instr
+| RBbuiltin : external_function -> list (builtin_arg reg) ->
+              builtin_res reg -> node -> cf_instr
+| RBcond : condition -> list reg -> node -> node -> cf_instr
+| RBjumptable : reg -> list node -> cf_instr
+| RBreturn : option reg -> cf_instr
+| RBgoto : node -> cf_instr
+| RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
+#+end_src
+
+** Helper functions
+
+#+name: rtlblockinstr-helpers
+#+begin_src coq
+Fixpoint successors_instr (i : cf_instr) : list node :=
+  match i with
+  | RBcall sig ros args res s => s :: nil
+  | RBtailcall sig ros args => nil
+  | RBbuiltin ef args res s => s :: nil
+  | RBcond cond args ifso ifnot => ifso :: ifnot :: nil
+  | RBjumptable arg tbl => tbl
+  | RBreturn optarg => nil
+  | RBgoto n => n :: nil
+  | RBpred_cf p c1 c2 => concat (successors_instr c1 :: successors_instr c2 :: nil)
+  end.
+
+Definition max_reg_instr (m: positive) (i: instr) :=
+  match i with
+  | RBnop => m
+  | RBop p op args res =>
+    fold_left Pos.max args (Pos.max res m)
+  | RBload p chunk addr args dst =>
+    fold_left Pos.max args (Pos.max dst m)
+  | RBstore p chunk addr args src =>
+    fold_left Pos.max args (Pos.max src m)
+  | RBsetpred p' c args p =>
+    fold_left Pos.max args m
+  end.
+
+Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
+  match i with
+  | RBcall sig (inl r) args res s =>
+    fold_left Pos.max args (Pos.max r (Pos.max res m))
+  | RBcall sig (inr id) args res s =>
+    fold_left Pos.max args (Pos.max res m)
+  | RBtailcall sig (inl r) args =>
+    fold_left Pos.max args (Pos.max r m)
+  | RBtailcall sig (inr id) args =>
+    fold_left Pos.max args m
+  | RBbuiltin ef args res s =>
+      fold_left Pos.max (params_of_builtin_args args)
+        (fold_left Pos.max (params_of_builtin_res res) m)
+  | RBcond cond args ifso ifnot => fold_left Pos.max args m
+  | RBjumptable arg tbl => Pos.max arg m
+  | RBreturn None => m
+  | RBreturn (Some arg) => Pos.max arg m
+  | RBgoto n => m
+  | RBpred_cf p c1 c2 => Pos.max (max_reg_cfi m c1) (max_reg_cfi m c2)
+  end.
+
+Definition regset := Regmap.t val.
+Definition predset := PMap.t bool.
+
+Definition eval_predf (pr: predset) (p: pred_op) :=
+  sat_predicate p (fun x => pr !! (Pos.of_nat x)).
+
+#[global]
+Instance eval_predf_Proper : Proper (eq ==> equiv ==> eq) eval_predf.
+Proof.
+  unfold Proper. simplify. unfold "==>".
+  intros.
+  unfold sat_equiv in *. intros. unfold eval_predf. subst. apply H0.
+Qed.
+
+#[local] Open Scope pred_op.
+
+Lemma eval_predf_Pand :
+  forall ps p p',
+    eval_predf ps (p ∧ p') = eval_predf ps p && eval_predf ps p'.
+Proof. unfold eval_predf; split; simplify; auto with bool. Qed.
+
+Lemma eval_predf_Por :
+  forall ps p p',
+    eval_predf ps (p ∨ p') = eval_predf ps p || eval_predf ps p'.
+Proof. unfold eval_predf; split; simplify; auto with bool. Qed.
+
+Lemma eval_predf_pr_equiv :
+  forall p ps ps',
+    (forall x, ps !! x = ps' !! x) ->
+    eval_predf ps p = eval_predf ps' p.
+Proof.
+  induction p; simplify; auto;
+    try (unfold eval_predf; simplify; repeat (destruct_match; []); inv Heqp0; rewrite <- H; auto);
+  [repeat rewrite eval_predf_Pand|repeat rewrite eval_predf_Por];
+  erewrite IHp1; try eassumption; erewrite IHp2; eauto.
+Qed.
+
+Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
+  match rl, vl with
+  | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
+  | _, _ => Regmap.init Vundef
+  end.
+#+end_src
+
+*** Instruction State
+
+Definition of the instruction state, which contains the following:
+
+- ~is_rs~ :: This is the current state of the registers.
+- ~is_ps~ :: This is the current state of the predicate registers, which is in a separate namespace
+  and area compared to the standard registers in [is_rs].
+- ~is_mem~ :: The current state of the memory.
+
+#+name: rtlblockinstr-instr-state
+#+begin_src coq
+Record instr_state := mk_instr_state {
+  is_rs: regset;
+  is_ps: predset;
+  is_mem: mem;
+}.
+#+end_src
+
+** Top-Level Type Definitions
+
+#+name: rtlblockinstr-type-def
+#+begin_src coq
+Section DEFINITION.
+
+  Context {bblock_body: Type}.
+
+  Record bblock : Type := mk_bblock {
+    bb_body: bblock_body;
+    bb_exit: cf_instr
+  }.
+
+  Definition code: Type := PTree.t bblock.
+
+  Record function: Type := mkfunction {
+    fn_sig: signature;
+    fn_params: list reg;
+    fn_stacksize: Z;
+    fn_code: code;
+    fn_entrypoint: node
+  }.
+
+  Definition fundef := AST.fundef function.
+
+  Definition program := AST.program fundef unit.
+
+  Definition funsig (fd: fundef) :=
+    match fd with
+    | Internal f => fn_sig f
+    | External ef => ef_sig ef
+    end.
+
+  Inductive stackframe : Type :=
+  | Stackframe:
+      forall (res: reg)            (**r where to store the result *)
+             (f: function)         (**r calling function *)
+             (sp: val)             (**r stack pointer in calling function *)
+             (pc: node)            (**r program point in calling function *)
+             (rs: regset)          (**r register state in calling function *)
+             (pr: predset),        (**r predicate state of the calling function *)
+      stackframe.
+
+  Inductive state : Type :=
+  | State:
+      forall (stack: list stackframe) (**r call stack *)
+             (f: function)            (**r current function *)
+             (sp: val)                (**r stack pointer *)
+             (pc: node)               (**r current program point in [c] *)
+             (rs: regset)             (**r register state *)
+             (pr: predset)            (**r predicate register state *)
+             (m: mem),                (**r memory state *)
+      state
+  | Callstate:
+      forall (stack: list stackframe) (**r call stack *)
+             (f: fundef)              (**r function to call *)
+             (args: list val)         (**r arguments to the call *)
+             (m: mem),                (**r memory state *)
+      state
+  | Returnstate:
+      forall (stack: list stackframe) (**r call stack *)
+             (v: val)                 (**r return value for the call *)
+             (m: mem),                (**r memory state *)
+      state.
+
+End DEFINITION.
+#+end_src
+
+** Semantics
+
+#+name: rtlblockinstr-semantics
+#+begin_src coq
+Section RELSEM.
+
+  Context {bblock_body : Type}.
+
+  Definition genv := Genv.t (@fundef bblock_body) unit.
+
+  Context (ge: genv).
+
+  Definition find_function
+             (ros: reg + ident) (rs: regset) : option fundef :=
+    match ros with
+    | inl r => Genv.find_funct ge rs#r
+    | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+    end.
+
+  Inductive eval_pred: option pred_op -> instr_state -> instr_state -> instr_state -> Prop :=
+  | eval_pred_true:
+      forall i i' p,
+      eval_predf (is_ps i) p = true ->
+      eval_pred (Some p) i i' i'
+  | eval_pred_false:
+      forall i i' p,
+      eval_predf (is_ps i) p = false ->
+      eval_pred (Some p) i i' i
+  | eval_pred_none:
+      forall i i', eval_pred None i i' i.
+
+  Inductive step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
+  | exec_RBnop:
+      forall sp ist,
+        step_instr sp ist RBnop ist
+  | exec_RBop:
+      forall op v res args rs m sp p ist pr,
+        eval_operation ge sp op rs##args m = Some v ->
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#res <- v) pr m) ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBop p op args res) ist
+  | exec_RBload:
+      forall addr rs args a chunk m v dst sp p pr ist,
+        eval_addressing ge sp addr rs##args = Some a ->
+        Mem.loadv chunk m a = Some v ->
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state (rs#dst <- v) pr m) ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBload p chunk addr args dst) ist
+  | exec_RBstore:
+      forall addr rs args a chunk m src m' sp p pr ist,
+        eval_addressing ge sp addr rs##args = Some a ->
+        Mem.storev chunk m a rs#src = Some m' ->
+        eval_pred p (mk_instr_state rs pr m) (mk_instr_state rs pr m') ist ->
+        step_instr sp (mk_instr_state rs pr m) (RBstore p chunk addr args src) ist
+  | exec_RBsetpred:
+      forall sp rs pr m p c b args p' ist,
+      Op.eval_condition c rs##args m = Some b ->
+      eval_pred p' (mk_instr_state rs pr m) (mk_instr_state rs (pr#p <- b) m) ist ->
+      step_instr sp (mk_instr_state rs pr m) (RBsetpred p' c args p) ist.
+
+  Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
+  | exec_RBcall:
+    forall s f sp rs m res fd ros sig args pc pc' pr,
+      find_function ros rs = Some fd ->
+      funsig fd = sig ->
+      step_cf_instr (State s f sp pc rs pr m) (RBcall sig ros args res pc')
+           E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
+  | exec_RBtailcall:
+      forall s f stk rs m sig ros args fd m' pc pr,
+      find_function ros rs = Some fd ->
+      funsig fd = sig ->
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs pr m) (RBtailcall sig ros args)
+        E0 (Callstate s fd rs##args m')
+  | exec_RBbuiltin:
+      forall s f sp rs m ef args res pc' vargs t vres m' pc pr,
+      eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      step_cf_instr (State s f sp pc rs pr m) (RBbuiltin ef args res pc')
+         t (State s f sp pc' (regmap_setres res vres rs) pr m')
+  | exec_RBcond:
+      forall s f sp rs m cond args ifso ifnot b pc pc' pr,
+      eval_condition cond rs##args m = Some b ->
+      pc' = (if b then ifso else ifnot) ->
+      step_cf_instr (State s f sp pc rs pr m) (RBcond cond args ifso ifnot)
+        E0 (State s f sp pc' rs pr m)
+  | exec_RBjumptable:
+      forall s f sp rs m arg tbl n pc pc' pr,
+      rs#arg = Vint n ->
+      list_nth_z tbl (Int.unsigned n) = Some pc' ->
+      step_cf_instr (State s f sp pc rs pr m) (RBjumptable arg tbl)
+        E0 (State s f sp pc' rs pr m)
+  | exec_RBreturn:
+      forall s f stk rs m or pc m' pr,
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc rs pr m) (RBreturn or)
+        E0 (Returnstate s (regmap_optget or Vundef rs) m')
+  | exec_RBgoto:
+      forall s f sp pc rs pr m pc',
+      step_cf_instr (State s f sp pc rs pr m) (RBgoto pc') E0 (State s f sp pc' rs pr m)
+  | exec_RBpred_cf:
+      forall s f sp pc rs pr m cf1 cf2 st' p t,
+      step_cf_instr (State s f sp pc rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
+      step_cf_instr (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
+
+End RELSEM.
+#+end_src
+
+* RTLBlock
+:PROPERTIES:
+:header-args:coq: :comments noweb :noweb no-export :padline yes :tangle ../src/hls/RTLBlock.v
+:END:
+
+#+begin_src coq :comments no :padline no :exports none
+<<license>>
+#+end_src
+
+#+name: rtlblock-main
+#+begin_src coq
+Require Import compcert.backend.Registers.
+Require Import compcert.common.AST.
+Require Import compcert.common.Events.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Values.
+Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require Import compcert.verilog.Op.
+
+Require Import vericert.hls.RTLBlockInstr.
+
+Definition bb := list instr.
+
+Definition bblock := @bblock bb.
+Definition code := @code bb.
+Definition function := @function bb.
+Definition fundef := @fundef bb.
+Definition program := @program bb.
+Definition funsig := @funsig bb.
+Definition stackframe := @stackframe bb.
+
+Definition genv := @genv bb.
+
+Inductive state : Type :=
+| State:
+  forall (stack: list stackframe) (**r call stack *)
+         (f: function)            (**r current function *)
+         (b: bb)                  (**r current block being executed *)
+         (sp: val)                (**r stack pointer *)
+         (pc: node)               (**r current program point in [c] *)
+         (rs: regset)             (**r register state *)
+         (pr: predset)            (**r predicate register state *)
+         (m: mem),                (**r memory state *)
+    state
+| Callstate:
+  forall (stack: list stackframe) (**r call stack *)
+         (f: fundef)              (**r function to call *)
+         (args: list val)         (**r arguments to the call *)
+         (m: mem),                (**r memory state *)
+    state
+| Returnstate:
+  forall (stack: list stackframe) (**r call stack *)
+         (v: val)                 (**r return value for the call *)
+         (m: mem),                (**r memory state *)
+    state.
+
+Section RELSEM.
+
+  Context (ge: genv).
+
+  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
+    | exec_RBcons:
+        forall state i state' state'' instrs sp,
+        step_instr ge sp state i state' ->
+        step_instr_list sp state' instrs state'' ->
+        step_instr_list sp state (i :: instrs) state''
+    | exec_RBnil:
+        forall state sp,
+        step_instr_list sp state nil state.
+
+    Definition find_function
+             (ros: reg + ident) (rs: regset) : option fundef :=
+    match ros with
+    | inl r => Genv.find_funct ge rs#r
+    | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+    end.
+
+  Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
+  | exec_RBcall:
+    forall s f b sp rs m res fd ros sig args pc pc' pr,
+      find_function ros rs = Some fd ->
+      funsig fd = sig ->
+      step_cf_instr (State s f b sp pc rs pr m) (RBcall sig ros args res pc')
+                    E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
+  | exec_RBtailcall:
+    forall s f b stk rs m sig ros args fd m' pc pr,
+      find_function ros rs = Some fd ->
+      funsig fd = sig ->
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      step_cf_instr (State s f b (Vptr stk Ptrofs.zero) pc rs pr m) (RBtailcall sig ros args)
+                    E0 (Callstate s fd rs##args m')
+  | exec_RBbuiltin:
+      forall s f b sp rs m ef args res pc' vargs t vres m' pc pr,
+      eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      step_cf_instr (State s f b sp pc rs pr m) (RBbuiltin ef args res pc')
+         t (State s f b sp pc' (regmap_setres res vres rs) pr m')
+  | exec_RBcond:
+      forall s f block sp rs m cond args ifso ifnot b pc pc' pr,
+      eval_condition cond rs##args m = Some b ->
+      pc' = (if b then ifso else ifnot) ->
+      step_cf_instr (State s f block sp pc rs pr m) (RBcond cond args ifso ifnot)
+        E0 (State s f block sp pc' rs pr m)
+  | exec_RBjumptable:
+      forall s f b sp rs m arg tbl n pc pc' pr,
+      rs#arg = Vint n ->
+      list_nth_z tbl (Int.unsigned n) = Some pc' ->
+      step_cf_instr (State s f b sp pc rs pr m) (RBjumptable arg tbl)
+        E0 (State s f b sp pc' rs pr m)
+  | exec_RBreturn:
+      forall s f b stk rs m or pc m' pr,
+      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+      step_cf_instr (State s f b (Vptr stk Ptrofs.zero) pc rs pr m) (RBreturn or)
+        E0 (Returnstate s (regmap_optget or Vundef rs) m')
+  | exec_RBgoto:
+      forall s f b sp pc rs pr m pc',
+      step_cf_instr (State s f b sp pc rs pr m) (RBgoto pc') E0 (State s f b sp pc' rs pr m)
+  | exec_RBpred_cf:
+      forall s f b sp pc rs pr m cf1 cf2 st' p t,
+      step_cf_instr (State s f b sp pc rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
+      step_cf_instr (State s f b sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
+
+  Inductive step: state -> trace -> state -> Prop :=
+  | exec_function_internal:
+    forall s f args m m' stk,
+      Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+      step (Callstate s (Internal f) args m)
+        E0 (State s f
+                  (Vptr stk Ptrofs.zero)
+                  f.(fn_entrypoint)
+                  (init_regs args f.(fn_params))
+                  (PMap.init false)
+                  m')
+  | exec_function_external:
+    forall s ef args res t m m',
+      external_call ef ge args m t res m' ->
+      step (Callstate s (External ef) args m)
+         t (Returnstate s res m')
+  | exec_return:
+    forall res f sp pc rs s vres m pr,
+      step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
+        E0 (State s f sp pc (rs#res <- vres) pr m).
+
+End RELSEM.
+
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      funsig f = signature_main ->
+      initial_state p (Callstate nil f nil m0).
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall r m,
+      final_state (Returnstate nil (Vint r) m) r.
+
+Definition semantics (p: program) :=
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
+#+end_src
+
+* RTLPar
+:PROPERTIES:
+:header-args:coq: :comments noweb :noweb no-export :padline yes :tangle ../src/hls/RTLPar.v
+:END:
+
+#+begin_src coq :comments no :padline no :exports none
+<<license>>
+#+end_src
+
+#+name: rtlpar-main
+#+begin_src coq
+Require Import compcert.backend.Registers.
+Require Import compcert.common.AST.
+Require Import compcert.common.Events.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Values.
+Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Integers.
+Require Import compcert.lib.Maps.
+Require Import compcert.verilog.Op.
+
+Require Import vericert.hls.RTLBlockInstr.
+
+Definition bb := list (list (list instr)).
+
+Definition bblock := @bblock bb.
+Definition code := @code bb.
+Definition function := @function bb.
+Definition fundef := @fundef bb.
+Definition program := @program bb.
+Definition funsig := @funsig bb.
+Definition stackframe := @stackframe bb.
+Definition state := @state bb.
+Definition genv := @genv bb.
+
+Section RELSEM.
+
+  Context (ge: genv).
+
+  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
+    | exec_RBcons:
+        forall state i state' state'' instrs sp,
+        step_instr ge sp state i state' ->
+        step_instr_list sp state' instrs state'' ->
+        step_instr_list sp state (i :: instrs) state''
+    | exec_RBnil:
+        forall state sp,
+        step_instr_list sp state nil state.
+
+  Inductive step_instr_seq (sp : val)
+    : instr_state -> list (list instr) -> instr_state -> Prop :=
+  | exec_instr_seq_cons:
+    forall state i state' state'' instrs,
+      step_instr_list sp state i state' ->
+      step_instr_seq sp state' instrs state'' ->
+      step_instr_seq sp state (i :: instrs) state''
+  | exec_instr_seq_nil:
+    forall state,
+      step_instr_seq sp state nil state.
+
+  Inductive step_instr_block (sp : val)
+    : instr_state -> bb -> instr_state -> Prop :=
+  | exec_instr_block_cons:
+    forall state i state' state'' instrs,
+      step_instr_seq sp state i state' ->
+      step_instr_block sp state' instrs state'' ->
+      step_instr_block sp state (i :: instrs) state''
+  | exec_instr_block_nil:
+    forall state,
+      step_instr_block sp state nil state.
+
+  Inductive step: state -> trace -> state -> Prop :=
+  | exec_bblock:
+    forall s f sp pc rs rs' m m' t s' bb pr pr',
+      f.(fn_code)!pc = Some bb ->
+      step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
+      step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
+      step (State s f sp pc rs pr m) t s'
+  | exec_function_internal:
+    forall s f args m m' stk,
+      Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+      step (Callstate s (Internal f) args m)
+        E0 (State s
+                  f
+                  (Vptr stk Ptrofs.zero)
+                  f.(fn_entrypoint)
+                  (init_regs args f.(fn_params))
+                  (PMap.init false)
+                  m')
+  | exec_function_external:
+    forall s ef args res t m m',
+      external_call ef ge args m t res m' ->
+      step (Callstate s (External ef) args m)
+         t (Returnstate s res m')
+  | exec_return:
+    forall res f sp pc rs s vres m pr,
+      step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
+        E0 (State s f sp pc (rs#res <- vres) pr m).
+
+End RELSEM.
+
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      funsig f = signature_main ->
+      initial_state p (Callstate nil f nil m0).
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall r m,
+      final_state (Returnstate nil (Vint r) m) r.
+
+Definition semantics (p: program) :=
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
+
+Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
+  let max_body := fold_left (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x) bb.(bb_body) m in
+  max_reg_cfi max_body bb.(bb_exit).
+
+Definition max_reg_function (f: function) :=
+  Pos.max
+    (PTree.fold max_reg_bblock f.(fn_code) 1%positive)
+    (fold_left Pos.max f.(fn_params) 1%positive).
+
+Definition max_pc_function (f: function) : positive :=
+  PTree.fold (fun m pc i => (Pos.max m
+                                     (pc + match Zlength i.(bb_body)
+                                           with Z.pos p => p | _ => 1 end))%positive)
+             f.(fn_code) 1%positive.
+#+end_src
+
+* License
+
+#+name: license
+#+begin_src coq :tangle no
+(*
+ * Vericert: Verified high-level synthesis.
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *)
+#+end_src
