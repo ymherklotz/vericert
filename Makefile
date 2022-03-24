@@ -22,11 +22,11 @@ COQMAKE := $(COQBIN)coq_makefile
 COQDOCFLAGS := --no-lib-name -l
 
 VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, $(wildcard src/$(d)/*.v))
-LIT := $(wildcard lit/*.org)
+LIT := docs/basic-block-generation.org docs/scheduler.org docs/scheduler-languages.org
 
 PREFIX ?= .
 
-.PHONY: all install proof clean extraction test
+.PHONY: all install proof clean extraction test force
 
 all: lib/COMPCERTSTAMP
 	$(MAKE) proof
@@ -74,23 +74,26 @@ src/extraction/STAMP:
 	@$(COQEXEC) ./src/extraction/Extraction.v
 	@touch $@
 
-Makefile.coq:
+Makefile.coq: force
 	@echo "COQMAKE Makefile.coq"
 	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
+	echo "$(COQINCLUDES)" >_CoqProject
+
+force:
 
 docs/vericert.1:
 	$(MAKE) -C docs vericert.1
-
-clean:: Makefile.coq
-	$(MAKE) -f Makefile.coq clean
-	$(MAKE) -C test clean
-	rm -f Makefile.coq
 
 detangle-all:
 	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)\
         (setq org-src-preserve-indentation t)\
         $(foreach vs,$(VS),(org-babel-detangle \"$(vs)\"))\
         (org-save-all-org-buffers))"
+
+clean:: Makefile.coq
+	$(MAKE) -f Makefile.coq clean
+	$(MAKE) -C test clean
+	rm -f Makefile.coq
 
 clean::
 	rm -f */*.v.d */*.glob */*.vo */*~ *~
