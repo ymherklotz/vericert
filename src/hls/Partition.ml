@@ -1,6 +1,6 @@
- (*
+(*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+(* [[file:../../docs/basic-block-generation.org::partition-main][partition-main]] *)
 open Printf
 open Clflags
 open Camlcoq
@@ -122,3 +123,4 @@ let function_from_RTL f =
               }
 
 let partition = function_from_RTL
+(* partition-main ends here *)

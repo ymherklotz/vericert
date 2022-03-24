@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/basic-block-generation.org::rtlblockgen-imports][rtlblockgen-imports]] *)
+(* [[file:../../docs/basic-block-generation.org::rtlblockgen-imports][rtlblockgen-imports]] *)
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
 Require Import compcert.lib.Maps.
@@ -148,7 +148,7 @@ Defined.
 Definition ceq {A: Type} (eqd: forall a b: A, {a = b} + {a <> b}) (a b: A): bool :=
   if eqd a b then true else false.
 
-(* [[file:../../lit/basic-block-generation.org::rtlblockgen-main][rtlblockgen-main]] *)
+(* [[file:../../docs/basic-block-generation.org::rtlblockgen-main][rtlblockgen-main]] *)
 Parameter partition : RTL.function -> Errors.res function.
 
 (** [find_block max nodes index]: Does not need to be sorted, because we use filter and the max fold

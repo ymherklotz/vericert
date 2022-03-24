@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/basic-block-generation.org::rtlblockgenproof-imports][rtlblockgenproof-imports]] *)
+(* [[file:../../docs/basic-block-generation.org::rtlblockgenproof-imports][rtlblockgenproof-imports]] *)
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
 Require Import compcert.lib.Maps.
@@ -25,7 +25,7 @@ Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLBlockgen.
 (* rtlblockgenproof-imports ends here *)
 
-(* [[file:../../lit/basic-block-generation.org::rtlblockgenproof-match-states][rtlblockgenproof-match-states]] *)
+(* [[file:../../docs/basic-block-generation.org::rtlblockgenproof-match-states][rtlblockgenproof-match-states]] *)
 Inductive match_states : RTL.state -> RTLBlock.state -> Prop :=
 | match_state :
   forall stk f tf sp pc rs m
@@ -34,7 +34,7 @@ Inductive match_states : RTL.state -> RTLBlock.state -> Prop :=
                (RTLBlock.State stk tf sp (find_block max n i) rs m).
 (* rtlblockgenproof-match-states ends here *)
 
-(* [[file:../../lit/basic-block-generation.org::rtlblockgenproof-correctness][rtlblockgenproof-correctness]] *)
+(* [[file:../../docs/basic-block-generation.org::rtlblockgenproof-correctness][rtlblockgenproof-correctness]] *)
 Section CORRECTNESS.
 
   Context (prog : RTL.program).
