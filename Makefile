@@ -8,10 +8,7 @@ endif
 
 COMPCERTRECDIRS := lib common verilog backend cfrontend driver cparser
 
-COQINCLUDES := -R src/common vericert.common \
-               -R src/extraction vericert.extraction \
-               -R src/hls vericert.hls \
-               -R src vericert \
+COQINCLUDES := -R src vericert \
                $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d)) \
                -R lib/CompCert/flocq Flocq \
                -R lib/CompCert/MenhirLib MenhirLib
@@ -74,7 +71,7 @@ src/extraction/STAMP:
 	@$(COQEXEC) ./src/extraction/Extraction.v
 	@touch $@
 
-Makefile.coq: force
+Makefile.coq _CoqProject: force
 	@echo "COQMAKE Makefile.coq"
 	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
 	echo "$(COQINCLUDES)" >_CoqProject
