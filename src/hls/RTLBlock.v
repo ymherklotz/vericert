@@ -40,138 +40,74 @@ Definition fundef := @fundef bb.
 Definition program := @program bb.
 Definition funsig := @funsig bb.
 Definition stackframe := @stackframe bb.
+Definition state := @state bb.
 
 Definition genv := @genv bb.
+(* rtlblock-main ends here *)
 
-Inductive state : Type :=
-| State:
-  forall (stack: list stackframe) (**r call stack *)
-         (f: function)            (**r current function *)
-         (b: bb)                  (**r current block being executed *)
-         (sp: val)                (**r stack pointer *)
-         (pc: node)               (**r current program point in [c] *)
-         (rs: regset)             (**r register state *)
-         (pr: predset)            (**r predicate register state *)
-         (m: mem),                (**r memory state *)
-    state
-| Callstate:
-  forall (stack: list stackframe) (**r call stack *)
-         (f: fundef)              (**r function to call *)
-         (args: list val)         (**r arguments to the call *)
-         (m: mem),                (**r memory state *)
-    state
-| Returnstate:
-  forall (stack: list stackframe) (**r call stack *)
-         (v: val)                 (**r return value for the call *)
-         (m: mem),                (**r memory state *)
-    state.
-
+(* [[file:../../docs/scheduler-languages.org::rtlblock-semantics][rtlblock-semantics]] *)
 Section RELSEM.
 
   Context (ge: genv).
+(* rtlblock-semantics ends here *)
 
+(* [[file:../../docs/scheduler-languages.org::#step_instr_list][rtlblock-step_instr_list]] *)
   Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
-    | exec_RBcons:
-        forall state i state' state'' instrs sp,
-        step_instr ge sp state i state' ->
-        step_instr_list sp state' instrs state'' ->
-        step_instr_list sp state (i :: instrs) state''
-    | exec_RBnil:
-        forall state sp,
-        step_instr_list sp state nil state.
+  | exec_RBcons:
+    forall state i state' state'' instrs sp,
+      step_instr ge sp state i state' ->
+      step_instr_list sp state' instrs state'' ->
+      step_instr_list sp state (i :: instrs) state''
+  | exec_RBnil:
+    forall state sp,
+      step_instr_list sp state nil state.
+(* rtlblock-step_instr_list ends here *)
 
-    Definition find_function
-             (ros: reg + ident) (rs: regset) : option fundef :=
-    match ros with
-    | inl r => Genv.find_funct ge rs#r
-    | inr symb =>
-      match Genv.find_symbol ge symb with
-      | None => None
-      | Some b => Genv.find_funct_ptr ge b
-      end
-    end.
-
-  Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
-  | exec_RBcall:
-    forall s f b sp rs m res fd ros sig args pc pc' pr,
-      find_function ros rs = Some fd ->
-      funsig fd = sig ->
-      step_cf_instr (State s f b sp pc rs pr m) (RBcall sig ros args res pc')
-                    E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
-  | exec_RBtailcall:
-    forall s f b stk rs m sig ros args fd m' pc pr,
-      find_function ros rs = Some fd ->
-      funsig fd = sig ->
-      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr (State s f b (Vptr stk Ptrofs.zero) pc rs pr m) (RBtailcall sig ros args)
-                    E0 (Callstate s fd rs##args m')
-  | exec_RBbuiltin:
-      forall s f b sp rs m ef args res pc' vargs t vres m' pc pr,
-      eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
-      step_cf_instr (State s f b sp pc rs pr m) (RBbuiltin ef args res pc')
-         t (State s f b sp pc' (regmap_setres res vres rs) pr m')
-  | exec_RBcond:
-      forall s f block sp rs m cond args ifso ifnot b pc pc' pr,
-      eval_condition cond rs##args m = Some b ->
-      pc' = (if b then ifso else ifnot) ->
-      step_cf_instr (State s f block sp pc rs pr m) (RBcond cond args ifso ifnot)
-        E0 (State s f block sp pc' rs pr m)
-  | exec_RBjumptable:
-      forall s f b sp rs m arg tbl n pc pc' pr,
-      rs#arg = Vint n ->
-      list_nth_z tbl (Int.unsigned n) = Some pc' ->
-      step_cf_instr (State s f b sp pc rs pr m) (RBjumptable arg tbl)
-        E0 (State s f b sp pc' rs pr m)
-  | exec_RBreturn:
-      forall s f b stk rs m or pc m' pr,
-      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr (State s f b (Vptr stk Ptrofs.zero) pc rs pr m) (RBreturn or)
-        E0 (Returnstate s (regmap_optget or Vundef rs) m')
-  | exec_RBgoto:
-      forall s f b sp pc rs pr m pc',
-      step_cf_instr (State s f b sp pc rs pr m) (RBgoto pc') E0 (State s f b sp pc' rs pr m)
-  | exec_RBpred_cf:
-      forall s f b sp pc rs pr m cf1 cf2 st' p t,
-      step_cf_instr (State s f b sp pc rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
-      step_cf_instr (State s f b sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
-
-  Inductive step: state -> trace -> state -> Prop :=
+(* [[file:../../docs/scheduler-languages.org::#rtlblock-step][rtlblock-step]] *)
+  Variant step: state -> trace -> state -> Prop :=
+  | exec_bblock:
+    forall s f sp pc rs rs' m m' t s' bb pr pr',
+      f.(fn_code)!pc = Some bb ->
+      step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
+      step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
+      step (State s f sp pc rs pr m) t s'
   | exec_function_internal:
     forall s f args m m' stk,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
       step (Callstate s (Internal f) args m)
-        E0 (State s f
-                  (Vptr stk Ptrofs.zero)
-                  f.(fn_entrypoint)
-                  (init_regs args f.(fn_params))
-                  (PMap.init false)
-                  m')
+           E0 (State s f
+                     (Vptr stk Ptrofs.zero)
+                     f.(fn_entrypoint)
+                         (init_regs args f.(fn_params))
+                         (PMap.init false)
+                         m')
   | exec_function_external:
     forall s ef args res t m m',
       external_call ef ge args m t res m' ->
       step (Callstate s (External ef) args m)
-         t (Returnstate s res m')
+           t (Returnstate s res m')
   | exec_return:
     forall res f sp pc rs s vres m pr,
       step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
-        E0 (State s f sp pc (rs#res <- vres) pr m).
+           E0 (State s f sp pc (rs#res <- vres) pr m).
+(* rtlblock-step ends here *)
 
+(* [[file:../../docs/scheduler-languages.org::#rtlblock-step][rtlblock-rest]] *)
 End RELSEM.
 
 Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate nil f nil m0).
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    funsig f = signature_main ->
+    initial_state p (Callstate nil f nil m0).
 
 Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall r m,
-      final_state (Returnstate nil (Vint r) m) r.
+| final_state_intro: forall r m,
+    final_state (Returnstate nil (Vint r) m) r.
 
 Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
-(* rtlblock-main ends here *)
+(* rtlblock-rest ends here *)

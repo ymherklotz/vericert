@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduler.org::rtlpargen-main][rtlpargen-main]] *)
+(* [[file:../../docs/scheduler.org::rtlpargen-main][rtlpargen-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
@@ -35,18 +35,12 @@ Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Import NE.NonEmptyNotation.
 
-(** * RTLPar Generation *)
-
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
+(* rtlpargen-main ends here *)
 
-(** ** Abstract Computations
-
-Define the abstract computation using the [update] function, which will set each register to its
-symbolic value.  First we need to define a few helper functions to correctly translate the
-predicates.  *)
-
+(* [[file:../../docs/scheduler.org::rtlpargen-generation][rtlpargen-generation]] *)
 Fixpoint list_translation (l : list reg) (f : forest) {struct l} : list pred_expr :=
   match l with
   | nil => nil
@@ -139,19 +133,9 @@ Definition app_predicated {A: Type} (p: option pred_op) (a b: predicated A) :=
 
 Definition pred_ret {A: Type} (a: A) : predicated A :=
   NE.singleton (T, a).
+(* rtlpargen-generation ends here *)
 
-(** *** Update Function
-
-The [update] function will generate a new forest given an existing forest and a new instruction,
-so that it can evaluate a symbolic expression by folding over a list of instructions.  The main
-problem is that predicates need to be merged as well, so that:
-
-1. The predicates are *independent*.
-2. The expression assigned to the register should still be correct.
-
-This is done by multiplying the predicates together, and assigning the negation of the expression to
-the other predicates.  *)
-
+(* [[file:../../docs/scheduler.org::#update-function][rtlpargen-update-function]] *)
 Definition update (f : forest) (i : instr) : forest :=
   match i with
   | RBnop => f
@@ -181,28 +165,22 @@ Definition update (f : forest) (i : instr) : forest :=
        (f # (Pred p))
        (map_predicated (pred_ret (Esetpred c)) (merge (list_translation args f))))
   end.
+(* rtlpargen-update-function ends here *)
 
-(** Implementing which are necessary to show the correctness of the translation validation by
-showing that there aren't any more effects in the resultant RTLPar code than in the RTLBlock code.
-
-Get a sequence from the basic block.  *)
-
+(* [[file:../../docs/scheduler.org::#update-function][rtlpargen-abstract-seq]] *)
 Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   match b with
   | nil => f
   | i :: l => abstract_sequence (update f i) l
   end.
+(* rtlpargen-abstract-seq ends here *)
 
-(** Check equivalence of control flow instructions.  As none of the basic blocks should have been
-moved, none of the labels should be different, meaning the control-flow instructions should match
-exactly.  *)
-
+(* [[file:../../docs/scheduler.org::#update-function][rtlpargen-check-functions]] *)
 Definition check_control_flow_instr (c1 c2: cf_instr) : bool :=
   if cf_instr_eq c1 c2 then true else false.
+(* rtlpargen-check-functions ends here *)
 
-(** We define the top-level oracle that will check if two basic blocks are equivalent after a
-scheduling transformation.  *)
-
+(* [[file:../../docs/scheduler.org::#update-function][rtlpargen-top-check-functions]] *)
 Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
   match bb with
   | nil =>
@@ -241,9 +219,9 @@ Lemma check_scheduled_trees_correct2:
     PTree.get x f1 = None ->
     PTree.get x f2 = None.
 Proof. solve_scheduled_trees_correct. Qed.
+(* rtlpargen-top-check-functions ends here *)
 
-(** ** Top-level Functions  *)
-
+(* [[file:../../docs/scheduler.org::rtlpargen-top-level-functions][rtlpargen-top-level-functions]] *)
 Parameter schedule : RTLBlock.function -> RTLPar.function.
 
 Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :=
@@ -261,4 +239,4 @@ Definition transl_fundef := transf_partial_fundef transl_function.
 
 Definition transl_program (p : RTLBlock.program) : Errors.res RTLPar.program :=
   transform_partial_program transl_fundef p.
-(* rtlpargen-main ends here *)
+(* rtlpargen-top-level-functions ends here *)

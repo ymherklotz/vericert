@@ -195,8 +195,10 @@ Section DEFINITION.
              (rs: regset)          (**r register state in calling function *)
              (pr: predset),        (**r predicate state of the calling function *)
       stackframe.
+(* rtlblockinstr-type-def ends here *)
 
-  Inductive state : Type :=
+(* [[file:../../docs/scheduler-languages.org::#state][rtlblockinstr-state]] *)
+  Variant state : Type :=
   | State:
       forall (stack: list stackframe) (**r call stack *)
              (f: function)            (**r current function *)
@@ -217,9 +219,11 @@ Section DEFINITION.
              (v: val)                 (**r return value for the call *)
              (m: mem),                (**r memory state *)
       state.
+(* rtlblockinstr-state ends here *)
 
+(* [[file:../../docs/scheduler-languages.org::#state][rtlblockinstr-state]] *)
 End DEFINITION.
-(* rtlblockinstr-type-def ends here *)
+(* rtlblockinstr-state ends here *)
 
 (* [[file:../../docs/scheduler-languages.org::rtlblockinstr-semantics][rtlblockinstr-semantics]] *)
 Section RELSEM.
@@ -252,7 +256,9 @@ Section RELSEM.
       eval_pred (Some p) i i' i
   | eval_pred_none:
       forall i i', eval_pred None i i' i.
+(* rtlblockinstr-semantics ends here *)
 
+(* [[file:../../docs/scheduler-languages.org::#step_instr][rtlblockinstr-step_instr]] *)
   Inductive step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
   | exec_RBnop:
       forall sp ist,
@@ -279,7 +285,9 @@ Section RELSEM.
       Op.eval_condition c rs##args m = Some b ->
       eval_pred p' (mk_instr_state rs pr m) (mk_instr_state rs (pr#p <- b) m) ist ->
       step_instr sp (mk_instr_state rs pr m) (RBsetpred p' c args p) ist.
+(* rtlblockinstr-step_instr ends here *)
 
+(* [[file:../../docs/scheduler-languages.org::#step_cf_instr][rtlblockinstr-step_cf_instr]] *)
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:
     forall s f sp rs m res fd ros sig args pc pc' pr,
@@ -324,6 +332,8 @@ Section RELSEM.
       forall s f sp pc rs pr m cf1 cf2 st' p t,
       step_cf_instr (State s f sp pc rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
       step_cf_instr (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2) t st'.
+(* rtlblockinstr-step_cf_instr ends here *)
 
+(* [[file:../../docs/scheduler-languages.org::#step_cf_instr][rtlblockinstr-end_RELSEM]] *)
 End RELSEM.
-(* rtlblockinstr-semantics ends here *)
+(* rtlblockinstr-end_RELSEM ends here *)

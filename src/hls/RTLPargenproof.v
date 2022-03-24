@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../lit/scheduler.org::rtlpargenproof-imports][rtlpargenproof-imports]] *)
+(* [[file:../../docs/scheduler.org::rtlpargenproof-imports][rtlpargenproof-imports]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
@@ -39,7 +39,7 @@ Require Import vericert.hls.Abstr.
 #[local] Open Scope pred_op.
 (* rtlpargenproof-imports ends here *)
 
-(* [[file:../../lit/scheduler.org::rtlpargenproof-main][rtlpargenproof-main]] *)
+(* [[file:../../docs/scheduler.org::rtlpargenproof-main][rtlpargenproof-main]] *)
 (*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
