@@ -1,20 +1,32 @@
-(*
- * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *)
+(*|
+..
+   Vericert: Verified high-level synthesis.
+   Copyright (C) 2019-2022 Yann Herklotz <yann@yannherklotz.com>
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+=============
+RTLBlockInstr
+=============
+
+These instructions are used for ``RTLBlock`` and ``RTLPar``, so that they have
+consistent instructions, which greatly simplifies the proofs, as they will by
+default have the same instruction syntax and semantics.  The only changes are
+therefore at the top-level of the instructions.
+
+.. coq:: none
+|*)
 
 Require Import Coq.micromega.Lia.
 
@@ -34,15 +46,6 @@ Require Import Vericertlib.
 Definition node := positive.
 
 (*|
-=============
-RTLBlockInstr
-=============
-
-These instructions are used for ``RTLBlock`` and ``RTLPar``, so that they have
-consistent instructions, which greatly simplifies the proofs, as they will by
-default have the same instruction syntax and semantics.  The only changes are
-therefore at the top-level of the instructions.
-
 Instruction Definition
 ======================
 

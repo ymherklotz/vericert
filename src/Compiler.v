@@ -1,22 +1,21 @@
-(*
- * Vericert: Verified high-level synthesis.
- * Copyright (C) 2019-2020 Yann Herklotz <yann@yannherklotz.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- *)
-
 (*|
+..
+   Vericert: Verified high-level synthesis.
+   Copyright (C) 2019-2022 Yann Herklotz <yann@yannherklotz.com>
+
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 ==============
 Compiler Proof
 ==============
@@ -27,9 +26,12 @@ backwards simulation correct.
 Imports
 =======
 
+
 We first need to import all of the modules that are used in the correctness
 proof, which includes all of the passes that are performed in Vericert and the
 CompCert front end.
+
+.. coq:: none
 |*)
 
 Require compcert.backend.Selection.
@@ -133,24 +135,28 @@ Definition partial_if {A: Type}
 
 Definition time {A B: Type} (name: string) (f: A -> B) : A -> B := f.
 
-Definition match_if {A: Type} (flag: unit -> bool) (R: A -> A -> Prop): A -> A -> Prop :=
+Definition match_if {A: Type} (flag: unit -> bool) (R: A -> A -> Prop)
+  : A -> A -> Prop :=
   if flag tt then R else eq.
 
 Lemma total_if_match:
-  forall (A: Type) (flag: unit -> bool) (f: A -> A) (rel: A -> A -> Prop) (prog: A),
-  (forall p, rel p (f p)) ->
+  forall (A: Type) (flag: unit -> bool) (f: A -> A)
+         (rel: A -> A -> Prop) (prog: A),
+    (forall p, rel p (f p)) ->
   match_if flag rel prog (total_if flag f prog).
 Proof.
   intros. unfold match_if, total_if. destruct (flag tt); auto.
 Qed.
 
 Lemma partial_if_match:
-  forall (A: Type) (flag: unit -> bool) (f: A -> res A) (rel: A -> A -> Prop) (prog tprog: A),
+  forall (A: Type) (flag: unit -> bool) (f: A -> res A)
+         (rel: A -> A -> Prop) (prog tprog: A),
   (forall p tp, f p = OK tp -> rel p tp) ->
   partial_if flag f prog = OK tprog ->
   match_if flag rel prog tprog.
 Proof.
-  intros. unfold match_if, partial_if in *. destruct (flag tt). auto. congruence.
+  intros. unfold match_if, partial_if in *. destruct (flag tt).
+  auto. congruence.
 Qed.
 
 Remark forward_simulation_identity:
@@ -164,12 +170,14 @@ Proof.
 Qed.
 
 Lemma match_if_simulation:
-  forall (A: Type) (sem: A -> semantics) (flag: unit -> bool) (transf: A -> A -> Prop) (prog tprog: A),
+  forall (A: Type) (sem: A -> semantics) (flag: unit -> bool)
+         (transf: A -> A -> Prop) (prog tprog: A),
   match_if flag transf prog tprog ->
   (forall p tp, transf p tp -> forward_simulation (sem p) (sem tp)) ->
   forward_simulation (sem prog) (sem tprog).
 Proof.
-  intros. unfold match_if in *. destruct (flag tt). eauto. subst. apply forward_simulation_identity.
+  intros. unfold match_if in *. destruct (flag tt). eauto. subst.
+  apply forward_simulation_identity.
 Qed.
 
 (*|
@@ -188,13 +196,16 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_RTL 1)
    @@ Renumber.transf_program
    @@ print (print_RTL 2)
-   @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
+   @@ total_if Compopts.optim_constprop
+      (time "Constant propagation" Constprop.transf_program)
    @@ print (print_RTL 3)
-   @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
+   @@ total_if Compopts.optim_constprop
+      (time "Renumbering" Renumber.transf_program)
    @@ print (print_RTL 4)
   @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
    @@ print (print_RTL 5)
-  @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
+  @@@ partial_if Compopts.optim_redundancy
+      (time "Redundancy elimination" Deadcode.transf_program)
    @@ print (print_RTL 6)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
@@ -220,8 +231,10 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 0)
   @@@ transf_backend.
 
-(* This is an unverified version of transf_hls with some experimental additions such as scheduling
-that aren't completed yet. *)
+(*|
+This is an unverified version of transf_hls with some experimental additions
+such as scheduling that aren't completed yet.
+|*)
 Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   OK p
   @@@ SimplExpr.transl_program
@@ -234,13 +247,16 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 1)
    @@ Renumber.transf_program
    @@ print (print_RTL 2)
-   @@ total_if Compopts.optim_constprop (time "Constant propagation" Constprop.transf_program)
+   @@ total_if Compopts.optim_constprop
+      (time "Constant propagation" Constprop.transf_program)
    @@ print (print_RTL 3)
-   @@ total_if Compopts.optim_constprop (time "Renumbering" Renumber.transf_program)
+   @@ total_if Compopts.optim_constprop
+      (time "Renumbering" Renumber.transf_program)
    @@ print (print_RTL 4)
   @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
    @@ print (print_RTL 5)
-  @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
+  @@@ partial_if Compopts.optim_redundancy
+      (time "Redundancy elimination" Deadcode.transf_program)
    @@ print (print_RTL 6)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
@@ -280,7 +296,8 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
-  ::: (@mkpass _ _ HTLgenproof.match_prog (HTLgenproof.TransfHTLLink HTLgen.transl_program))
+  ::: (@mkpass _ _ HTLgenproof.match_prog
+               (HTLgenproof.TransfHTLLink HTLgen.transl_program))
   (*::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)*)
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
@@ -305,22 +322,36 @@ Theorem transf_hls_match:
 Proof.
   intros p tp T.
   unfold transf_hls, time in T. simpl in T.
-  destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1; simpl in T; try discriminate.
-  destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2; simpl in T; try discriminate.
-  destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3; simpl in T; try discriminate.
-  destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4; simpl in T; try discriminate.
-  destruct (Selection.sel_program p4) as [p5|e] eqn:P5; simpl in T; try discriminate.
+  destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1;
+    simpl in T; try discriminate.
+  destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2;
+    simpl in T; try discriminate.
+  destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3;
+    simpl in T; try discriminate.
+  destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4;
+    simpl in T; try discriminate.
+  destruct (Selection.sel_program p4) as [p5|e] eqn:P5;
+    simpl in T; try discriminate.
   rewrite ! compose_print_identity in T.
-  destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6; simpl in T; try discriminate.
-  unfold transf_backend, time in T. simpl in T. rewrite ! compose_print_identity in T.
-  destruct (Inlining.transf_program p6) as [p7|e] eqn:P7; simpl in T; try discriminate.
+  destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6;
+    simpl in T; try discriminate.
+  unfold transf_backend, time in T. simpl in T.
+  rewrite ! compose_print_identity in T.
+  destruct (Inlining.transf_program p6) as [p7|e] eqn:P7;
+    simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
-  set (p9 := total_if Compopts.optim_constprop Constprop.transf_program p8) in *.
-  set (p10 := total_if Compopts.optim_constprop Renumber.transf_program p9) in *.
-  destruct (partial_if Compopts.optim_CSE CSE.transf_program p10) as [p11|e] eqn:P11; simpl in T; try discriminate.
-  destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11) as [p12|e] eqn:P12; simpl in T; try discriminate.
-  destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13; simpl in T; try discriminate.
-  destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14; simpl in T; try discriminate.
+  set (p9 := total_if Compopts.optim_constprop
+                      Constprop.transf_program p8) in *.
+  set (p10 := total_if Compopts.optim_constprop
+                       Renumber.transf_program p9) in *.
+  destruct (partial_if Compopts.optim_CSE CSE.transf_program p10)
+    as [p11|e] eqn:P11; simpl in T; try discriminate.
+  destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11)
+    as [p12|e] eqn:P12; simpl in T; try discriminate.
+  destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13;
+    simpl in T; try discriminate.
+  destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14;
+    simpl in T; try discriminate.
   (*set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.*)
   set (p15 := Veriloggen.transl_program p14) in *.
   unfold match_prog; simpl.
@@ -332,13 +363,18 @@ Proof.
   exists p6; split. apply RTLgenproof.transf_program_match; auto.
   exists p7; split. apply Inliningproof.transf_program_match; auto.
   exists p8; split. apply Renumberproof.transf_program_match; auto.
-  exists p9; split. apply total_if_match. apply Constpropproof.transf_program_match.
-  exists p10; split. apply total_if_match. apply Renumberproof.transf_program_match.
-  exists p11; split. eapply partial_if_match; eauto. apply CSEproof.transf_program_match.
-  exists p12; split. eapply partial_if_match; eauto. apply Deadcodeproof.transf_program_match.
+  exists p9; split. apply total_if_match.
+  apply Constpropproof.transf_program_match.
+  exists p10; split. apply total_if_match.
+  apply Renumberproof.transf_program_match.
+  exists p11; split. eapply partial_if_match; eauto.
+  apply CSEproof.transf_program_match.
+  exists p12; split. eapply partial_if_match; eauto.
+  apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  (*exists p15; split. apply total_if_match. apply Memorygen.transf_program_match; auto.*)
+  (*exists p15; split. apply total_if_match.
+    apply Memorygen.transf_program_match; auto.*)
   exists p15; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
@@ -347,7 +383,8 @@ Theorem cstrategy_semantic_preservation:
   forall p tp,
   match_prog p tp ->
   forward_simulation (Cstrategy.semantics p) (Verilog.semantics tp)
-  /\ backward_simulation (atomic (Cstrategy.semantics p)) (Verilog.semantics tp).
+  /\ backward_simulation (atomic (Cstrategy.semantics p))
+                         (Verilog.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -357,7 +394,8 @@ Ltac DestructM :=
       destruct H as (p & M & MM); clear H
   end.
   repeat DestructM. subst tp.
-  assert (F: forward_simulation (Cstrategy.semantics p) (Verilog.semantics p15)).
+  assert (F: forward_simulation (Cstrategy.semantics p)
+                                (Verilog.semantics p15)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -376,24 +414,30 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply Renumberproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
-  eapply match_if_simulation. eassumption. exact Constpropproof.transf_program_correct.
+  eapply match_if_simulation. eassumption.
+  exact Constpropproof.transf_program_correct.
   eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact Renumberproof.transf_program_correct.
+    eapply match_if_simulation. eassumption.
+  exact Renumberproof.transf_program_correct.
   eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact CSEproof.transf_program_correct.
+    eapply match_if_simulation. eassumption.
+  exact CSEproof.transf_program_correct.
   eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact Deadcodeproof.transf_program_correct; eassumption.
+    eapply match_if_simulation. eassumption.
+  exact Deadcodeproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct. eassumption.
   (*eapply compose_forward_simulations.
-    eapply match_if_simulation. eassumption. exact Memorygen.transf_program_correct; eassumption.*)
+    eapply match_if_simulation. eassumption.
+    exact Memorygen.transf_program_correct; eassumption.*)
   eapply Veriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.
   apply forward_to_backward_simulation.
-  apply factor_forward_simulation. auto. eapply sd_traces. eapply Verilog.semantics_determinate.
+  apply factor_forward_simulation. auto. eapply sd_traces.
+  eapply Verilog.semantics_determinate.
   apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
   apply Verilog.semantics_determinate.
 Qed.
@@ -451,11 +495,13 @@ Theorem separate_transf_c_program_correct:
   link_list c_units = Some c_program ->
   exists verilog_program,
       link_list verilog_units = Some verilog_program
-   /\ backward_simulation (Csem.semantics c_program) (Verilog.semantics verilog_program).
+   /\ backward_simulation (Csem.semantics c_program)
+                          (Verilog.semantics verilog_program).
 Proof.
   intros.
   assert (nlist_forall2 match_prog c_units verilog_units).
-  { eapply nlist_forall2_imply. eauto. simpl; intros. apply transf_hls_match; auto. }
+  { eapply nlist_forall2_imply. eauto. simpl; intros.
+    apply transf_hls_match; auto. }
   assert (exists verilog_program, link_list verilog_units = Some verilog_program
                                   /\ match_prog c_program verilog_program).
   { eapply link_list_compose_passes; eauto. }

@@ -17,7 +17,8 @@ COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
 
 COQDOCFLAGS := --no-lib-name -l
-ALECTRYON_OPTS := --html-minification --long-line-threshold 80 --coq-driver sertop_noexec $(COQINCLUDES)
+ALECTRYON_OPTS := --no-header --html-minification --long-line-threshold 80 \
+                  --coq-driver sertop_noexec $(COQINCLUDES)
 
 VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, $(wildcard src/$(d)/*.v))
 LIT := docs/basic-block-generation.org docs/scheduler.org docs/scheduler-languages.org
