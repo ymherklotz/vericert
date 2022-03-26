@@ -30,10 +30,14 @@ Require Import vericert.bourdoncle.Bourdoncle.
 
 Parameter build_bourdoncle : function -> (bourdoncle * PMap.t N).
 
-(** * If-Conversion
+(*|
+=============
+If-Conversion
+=============
 
-This conversion is a verified conversion from RTLBlock back to itself, which performs if-conversion
-on basic blocks to make basic blocks larger.  *)
+This conversion is a verified conversion from RTLBlock back to itself, which
+performs if-conversion on basic blocks to make basic blocks larger.
+|*)
 
 Definition combine_pred (p: pred_op) (optp: option pred_op) :=
   match optp with

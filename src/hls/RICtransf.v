@@ -27,12 +27,16 @@ Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLPar.
 Require Import vericert.hls.Predicate.
 
-(** * Reverse If-Conversion
+(*|
+=====================
+Reverse If-Conversion
+=====================
 
-This transformation takes a scheduling RTLPar block and removes any predicates from it.  It can then
-be trivially transformed into linear code again.  It works by iteratively selecting a predicate,
-then creating a branch based on it and placing subsequent instructions in one branch or the other.
-*)
+This transformation takes a scheduling RTLPar block and removes any predicates
+from it.  It can then be trivially transformed into linear code again.  It works
+by iteratively selecting a predicate, then creating a branch based on it and
+placing subsequent instructions in one branch or the other.
+|*)
 
 Fixpoint existsb_val {A B} (f: A -> option B) (l : list A) : option B :=
   match l with

@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../docs/scheduler.org::scheduler-main][scheduler-main]] *)
 open Printf
 open Clflags
 open Camlcoq
@@ -882,4 +881,3 @@ let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
     fn_code = scheduled (*List.fold_left (add_to_tree scheduled) PTree.empty reachable*);
     fn_entrypoint = f.fn_entrypoint
   }
-(* scheduler-main ends here *)

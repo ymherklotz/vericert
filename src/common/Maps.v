@@ -29,8 +29,9 @@ Import PTree.
 
 Local Open Scope error_monad_scope.
 
-(** Instance of traverse for [PTree] and [Errors]. This should maybe be generalised
-    in the future. *)
+(*|
+Instance of traverse for ``PTree`` and ``Errors``. This should maybe be generalised in the future.
+|*)
 
 Module PTree.
 

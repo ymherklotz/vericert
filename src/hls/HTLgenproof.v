@@ -1004,22 +1004,25 @@ Section CORRECTNESS.
         constructor.
   Qed.
 
-  (** The proof of semantic preservation for the translation of instructions
-      is a simulation argument based on diagrams of the following form:
-<<
-                      match_states
-    code st rs ------------------------- State m st assoc
-         ||                                      |
-         ||                                      |
-         ||                                      |
-         \/                                      v
-    code st rs' ------------------------ State m st assoc'
-                      match_states
->>
-      where [tr_code c data control fin rtrn st] is assumed to hold.
+(*|
+The proof of semantic preservation for the translation of instructions is a
+simulation argument based on diagrams of the following form:
 
-      The precondition and postcondition is that that should hold is [match_assocmaps rs assoc].
-   *)
+::
+>                      match_states
+>    code st rs ------------------------- State m st assoc
+>         ||                                      |
+>         ||                                      |
+>         ||                                      |
+>         \/                                      v
+>    code st rs' ------------------------ State m st assoc'
+>                      match_states
+
+where ``tr_code c data control fin rtrn st`` is assumed to hold.
+
+The precondition and postcondition is that that should hold is ``match_assocmaps
+rs assoc``.
+|*)
 
   Definition transl_instr_prop (instr : RTL.instruction) : Prop :=
     forall m asr asa fin rtrn st stmt trans res,
@@ -1091,7 +1094,7 @@ Section CORRECTNESS.
     apply Smallstep.plus_one.
     eapply HTL.step_module; eauto.
     inv CONST; assumption.
-    inv CONST; assumption. 
+    inv CONST; assumption.
     (* processing of state *)
     econstructor.
     crush.
@@ -2569,7 +2572,7 @@ Section CORRECTNESS.
           Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m) R2.
   Proof.
     intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE.
-  
+
   #[local] Hint Resolve transl_ijumptable_correct : htlproof.*)
 
   Lemma transl_ireturn_correct:

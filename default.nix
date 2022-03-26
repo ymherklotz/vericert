@@ -11,6 +11,10 @@ stdenv.mkDerivation {
                   ncoq.ocaml ncoq.ocamlPackages.findlib ncoq.ocamlPackages.menhir
                   ncoq.ocamlPackages.ocamlgraph ncoq.ocamlPackages.merlin
                   ncoq.ocamlPackages.menhirLib
+
+                  ncoqPackages.serapi
+                  python3
+                  python3Packages.alectryon
                 ];
 
   enableParallelBuilding = true;

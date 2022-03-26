@@ -1,4 +1,6 @@
-(** Type of a Bourdoncle component. *)
+(*|
+Type of a Bourdoncle component.
+|*)
 
 Require Import List.
 Require Import BinPos.

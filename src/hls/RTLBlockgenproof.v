@@ -16,25 +16,47 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../docs/basic-block-generation.org::rtlblockgenproof-imports][rtlblockgenproof-imports]] *)
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
 Require Import compcert.lib.Maps.
+Require Import compcert.common.Errors.
 
+Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLBlockgen.
-(* rtlblockgenproof-imports ends here *)
 
-(* [[file:../../docs/basic-block-generation.org::rtlblockgenproof-match-states][rtlblockgenproof-match-states]] *)
+(*|
+Defining a find block specification
+-----------------------------------
+
+Basically, it should be able to find the location of the block without using the
+``find_block`` function, so that this is more useful for the proofs.  There are
+various different types of options that could come up though:
+
+1. The instruction is a standard instruction present inside of a basic block.
+2. The instruction is a standard instruction which ends with a ``goto``.
+3. The instruction is a control-flow instruction.
+
+For case number 1, there should exist a value in the list of instructions, such
+that the instructions match exactly, and the indices match as well.  In the
+original code, this instruction must have been going from the current node to
+the node - 1.  For case number 2, there should be an instruction at the right
+index again, however, this time there will also be a ``goto`` instruction in the
+control-flow part of the basic block.
+|*)
+
+(*Definition find_block_spec (c1: RTL.code) (c2: code) :=
+  forall x i,
+    c1 ! x = Some i ->
+    exists y li, c2 ! y = Some li /\ nth_error li.(bb_body) ((Pos.to_nat y) - (Pos.to_nat x))%nat = Some i.
+
 Inductive match_states : RTL.state -> RTLBlock.state -> Prop :=
 | match_state :
   forall stk f tf sp pc rs m
          (TF: transl_function f = OK tf),
-  match_states (RTL.State stk f sp pc rs m)
-               (RTLBlock.State stk tf sp (find_block max n i) rs m).
-(* rtlblockgenproof-match-states ends here *)
+    match_states (RTL.State stk f sp pc rs m)
+                 (State stk tf sp (find_block max n i) rs m).
 
-(* [[file:../../docs/basic-block-generation.org::rtlblockgenproof-correctness][rtlblockgenproof-correctness]] *)
 Section CORRECTNESS.
 
   Context (prog : RTL.program).
@@ -49,4 +71,4 @@ Section CORRECTNESS.
     apply senv_preserved.
 
 End CORRECTNESS.
-(* rtlblockgenproof-correctness ends here *)
+*)

@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../docs/scheduler.org::rtlpargenproof-imports][rtlpargenproof-imports]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
@@ -37,9 +36,18 @@ Require Import vericert.hls.Abstr.
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
-(* rtlpargenproof-imports ends here *)
 
-(* [[file:../../docs/scheduler.org::rtlpargenproof-main][rtlpargenproof-main]] *)
+(*|
+==============
+RTLPargenproof
+==============
+
+RTLBlock to abstract translation
+================================
+
+Correctness of translation from RTLBlock to the abstract interpretation language.
+|*)
+
 (*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
@@ -1134,4 +1142,3 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
 End CORRECTNESS.
-(* rtlpargenproof-main ends here *)

@@ -16,15 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(** * Compiler Proof
+(*|
+==============
+Compiler Proof
+==============
 
-This is the top-level module of the correctness proof and proves the final backwards simulation
-correct.
+This is the top-level module of the correctness proof and proves the final
+backwards simulation correct.
 
-** Imports
+Imports
+=======
 
-We first need to import all of the modules that are used in the correctness proof, which includes
-all of the passes that are performed in Vericert and the CompCert front end.  *)
+We first need to import all of the modules that are used in the correctness
+proof, which includes all of the passes that are performed in Vericert and the
+CompCert front end.
+|*)
 
 Require compcert.backend.Selection.
 Require compcert.backend.RTL.
@@ -65,10 +71,14 @@ Require vericert.hls.Memorygen.
 
 Require Import vericert.hls.HTLgenproof.
 
-(** ** Declarations
+(*|
+Declarations
+============
 
-We then need to declare the external OCaml functions used to print out intermediate steps in the
-compilation, such as [print_RTL], [print_HTL] and [print_RTLBlock].  *)
+We then need to declare the external OCaml functions used to print out
+intermediate steps in the compilation, such as ``print_RTL``, ``print_HTL`` and
+``print_RTLBlock``.
+|*)
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: Z -> HTL.program -> unit.
@@ -86,16 +96,20 @@ Proof.
   intros; unfold print. destruct (printer prog); auto.
 Qed.
 
-(** We also declare some new notation, which is also used in CompCert to combine the monadic results
-of each pass.  *)
+(*|
+We also declare some new notation, which is also used in CompCert to combine the
+monadic results of each pass.
+|*)
 
 Notation "a @@@ b" :=
    (Compiler.apply_partial _ _ a b) (at level 50, left associativity).
 Notation "a @@ b" :=
   (Compiler.apply_total _ _ a b) (at level 50, left associativity).
 
-(** As printing is used in the translation but does not change the output, we need to prove that it
-has no effect so that it can be removed during the proof.  *)
+(*|
+As printing is used in the translation but does not change the output, we need
+to prove that it has no effect so that it can be removed during the proof.
+|*)
 
 Lemma compose_print_identity:
   forall (A: Type) (x: res A) (f: A -> unit),
@@ -104,8 +118,10 @@ Proof.
   intros. destruct x; simpl. rewrite print_identity. auto. auto.
 Qed.
 
-(** Finally, some optimisation passes are only activated by a flag, which is handled by the following
-functions for partial and total passes.  *)
+(*|
+Finally, some optimisation passes are only activated by a flag, which is handled
+by the following functions for partial and total passes.
+|*)
 
 Definition total_if {A: Type}
           (flag: unit -> bool) (f: A -> A) (prog: A) : A :=
@@ -156,11 +172,15 @@ Proof.
   intros. unfold match_if in *. destruct (flag tt). eauto. subst. apply forward_simulation_identity.
 Qed.
 
-(** *** Top-level Translation
+(*|
+Top-level Translation
+---------------------
 
-An optimised transformation function from [RTL] to [Verilog] can then be defined, which applies
-the front end compiler optimisations of CompCert to the RTL that is generated and then performs the
-two Vericert passes from RTL to HTL and then from HTL to Verilog.  *)
+An optimised transformation function from ``RTL`` to ``Verilog`` can then be
+defined, which applies the front end compiler optimisations of CompCert to the
+RTL that is generated and then performs the two Vericert passes from RTL to HTL
+and then from HTL to Verilog.
+|*)
 
 Definition transf_backend (r : RTL.program) : res Verilog.program :=
   OK r
@@ -184,8 +204,10 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_HTL 1)*)
    @@ Veriloggen.transl_program.
 
-(** The transformation functions from RTL to Verilog are then added to the backend of the CompCert
-transformations from Clight to RTL.  *)
+(*|
+The transformation functions from RTL to Verilog are then added to the backend
+of the CompCert transformations from Clight to RTL.
+|*)
 
 Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
   OK p
@@ -234,10 +256,13 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_HTL 0)
    @@ Veriloggen.transl_program.
 
-(** ** Correctness Proof
+(*|
+Correctness Proof
+=================
 
-Finally, the top-level definition for all the passes is defined, which combines the [match_prog]
-predicates of each translation pass from C until Verilog.  *)
+Finally, the top-level definition for all the passes is defined, which combines
+the ``match_prog`` predicates of each translation pass from C until Verilog.
+|*)
 
 Local Open Scope linking_scope.
 
@@ -260,14 +285,18 @@ Definition CompCert's_passes :=
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
-(** These passes are then composed into a larger, top-level [match_prog] predicate which matches a
-C program directly with a Verilog program.  *)
+(*|
+These passes are then composed into a larger, top-level ``match_prog`` predicate
+which matches a C program directly with a Verilog program.
+|*)
 
 Definition match_prog: Csyntax.program -> Verilog.program -> Prop :=
   pass_match (compose_passes CompCert's_passes).
 
-(** We then need to prove that this predicate holds, assuming that the translation is performed
-using the [transf_hls] function declared above.  *)
+(*|
+We then need to prove that this predicate holds, assuming that the translation
+is performed using the ``transf_hls`` function declared above.
+|*)
 
 Theorem transf_hls_match:
   forall p tp,
@@ -369,12 +398,16 @@ Ltac DestructM :=
   apply Verilog.semantics_determinate.
 Qed.
 
-(** *** Backward Simulation
+(*|
+Backward Simulation
+-------------------
 
-The following theorem is a *backward simulation* between the C and Verilog, which proves the
-semantics preservation of the translation.  We can assume that the C and Verilog programs match, as
-we have proven previously in [transf_hls_match] that our translation implies that the
-[match_prog] predicate will hold.  *)
+The following theorem is a *backward simulation* between the C and Verilog,
+which proves the semantics preservation of the translation.  We can assume that
+the C and Verilog programs match, as we have proven previously in
+``transf_hls_match`` that our translation implies that the ``match_prog``
+predicate will hold.
+|*)
 
 Theorem c_semantic_preservation:
   forall p tp,
@@ -391,8 +424,11 @@ Proof.
   exact (proj2 (cstrategy_semantic_preservation _ _ H)).
 Qed.
 
-(** We can then use [transf_hls_match] to prove the backward simulation where the assumption is
-that the translation is performed using the [transf_hls] function and that it succeeds.  *)
+(*|
+We can then use ``transf_hls_match`` to prove the backward simulation where the
+assumption is that the translation is performed using the ``transf_hls``
+function and that it succeeds.
+|*)
 
 Theorem transf_c_program_correct:
   forall p tp,
@@ -402,9 +438,12 @@ Proof.
   intros. apply c_semantic_preservation. apply transf_hls_match; auto.
 Qed.
 
-(** The final theorem of the semantic preservation of the translation of separate translation units
-can also be proven correct, however, this is only because the translation fails if more than one
-translation unit is passed to Vericert at the moment.  *)
+(*|
+The final theorem of the semantic preservation of the translation of separate
+translation units can also be proven correct, however, this is only because the
+translation fails if more than one translation unit is passed to Vericert at the
+moment.
+|*)
 
 Theorem separate_transf_c_program_correct:
   forall c_units verilog_units c_program,

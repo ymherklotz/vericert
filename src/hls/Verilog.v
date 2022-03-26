@@ -142,23 +142,28 @@ Definition nonblock_reg (r : reg) (asr : reg_associations) (v : value) :=
 Inductive scl_decl : Type := VScalar (sz : nat).
 Inductive arr_decl : Type := VArray (sz : nat) (ln : nat).
 
-(** ** Verilog AST
+(*|
+Verilog AST
+===========
 
 The Verilog AST is defined here, which is the target language of the
 compilation.
 
-*** Value
+Value
+-----
 
-The Verilog [value] is a bitvector containg a size and the actual bitvector. In
-this case, the [Word.word] type is used as many theorems about that bitvector
-have already been proven.
+The Verilog ``value`` is a bitvector containg a size and the actual
+bitvector. In this case, the ``Word.word`` type is used as many theorems about
+that bitvector have already been proven.
 
-*** Binary Operators
+Binary Operators
+----------------
 
 These are the binary operations that can be represented in Verilog. Ideally,
 multiplication and division would be done by custom modules which could al so be
 scheduled properly. However, for now every Verilog operator is assumed to take
-one clock cycle.  *)
+one clock cycle.
+|*)
 
 Inductive binop : Type :=
 | Vadd : binop  (** addition (binary [+]) *)
@@ -186,13 +191,19 @@ Inductive binop : Type :=
 | Vshru : binop. (** shift right unsigned ([>>]) *)
 (* Vror : binop (** shift right unsigned ([>>]) *)*)
 
-(** *** Unary Operators *)
+(*|
+Unary Operators
+---------------
+|*)
 
 Inductive unop : Type :=
 | Vneg  (** negation ([-]) *)
 | Vnot. (** not operation [!] *)
 
-(** *** Expressions *)
+(*|
+Expressions
+-----------
+|*)
 
 Inductive expr : Type :=
 | Vlit : value -> expr
@@ -207,7 +218,10 @@ Inductive expr : Type :=
 Definition posToExpr (p : positive) : expr :=
   Vlit (posToValue p).
 
-(** *** Statements *)
+(*|
+Statements
+----------
+|*)
 
 Inductive stmnt : Type :=
 | Vskip : stmnt
@@ -220,13 +234,17 @@ with stmnt_expr_list : Type :=
 | Stmntnil : stmnt_expr_list
 | Stmntcons : expr -> stmnt -> stmnt_expr_list -> stmnt_expr_list.
 
-(** *** Edges
+(*|
+Edges
+-----
 
-These define when an always block should be triggered, for example if the always block should be
-triggered synchronously at the clock edge, or asynchronously for combinational logic.
+These define when an always block should be triggered, for example if the always
+block should be triggered synchronously at the clock edge, or asynchronously for
+combinational logic.
 
-[edge] is not part of [stmnt] in this formalisation because is closer to the semantics that are
-used.  *)
+``edge`` is not part of ``stmnt`` in this formalisation because is closer to the
+semantics that are used.
+|*)
 
 Inductive edge : Type :=
 | Vposedge : reg -> edge
@@ -234,11 +252,15 @@ Inductive edge : Type :=
 | Valledge : edge
 | Voredge : edge -> edge -> edge.
 
-(** *** Module Items
+(*|
+Module Items
+------------
 
-Module items can either be declarations ([Vdecl]) or always blocks ([Valways]).  The declarations
-are always register declarations as combinational logic can be done using combinational always block
-instead of continuous assignments.  *)
+Module items can either be declarations (``Vdecl``) or always blocks
+(``Valways``).  The declarations are always register declarations as
+combinational logic can be done using combinational always block instead of
+continuous assignments.
+|*)
 
 Inductive io : Type :=
 | Vinput : io
@@ -255,15 +277,17 @@ Inductive module_item : Type :=
 | Valways_ff : edge -> stmnt -> module_item
 | Valways_comb : edge -> stmnt -> module_item.
 
-(** The main module type containing all the important control signals
+(*|
+The main module type containing all the important control signals
 
-- [mod_start] If set, starts the computations in the module.
-- [mod_reset] If set, reset the state in the module.
-- [mod_clk] The clock that controls the computation in the module.
-- [mod_args] The arguments to the module.
-- [mod_finish] Bit that is set if the result is ready.
-- [mod_return] The return value that was computed.
-- [mod_body] The body of the module, including the state machine.  *)
+:mod_start: If set, starts the computations in the module.
+:mod_reset: If set, reset the state in the module.
+:mod_clk: The clock that controls the computation in the module.
+:mod_args: The arguments to the module.
+:mod_finish: Bit that is set if the result is ready.
+:mod_return: The return value that was computed.
+:mod_body: The body of the module, including the state machine.
+|*)
 
 Record module : Type := mkmodule {
   mod_start : reg;
@@ -271,7 +295,8 @@ Record module : Type := mkmodule {
   mod_clk : reg;
   mod_finish : reg;
   mod_return : reg;
-  mod_st : reg; (**r Variable that defines the current state, it should be internal. *)
+  mod_st : reg; (**r Variable that defines the current state,
+                     it should be internal. *)
   mod_stk : reg;
   mod_stk_len : nat;
   mod_args : list reg;
@@ -283,33 +308,39 @@ Definition fundef := AST.fundef module.
 
 Definition program := AST.program fundef unit.
 
-(** Convert a [positive] to an expression directly, setting it to the right size.  *)
+(*|
+Convert a ``positive`` to an expression directly, setting it to the right size.
+|*)
+
 Definition posToLit (p : positive) : expr :=
   Vlit (posToValue p).
 
 Definition fext := unit.
 Definition fextclk := nat -> fext.
 
-(** *** State
+(*|
+State
+-----
 
-The [state] contains the following items:
+The ``state`` contains the following items:
 
-- Current [module] that is being worked on, so that the state variable can be
-retrieved and set appropriately.
-- Current [module_item] which is being worked on.
-- A contiunation ([cont]) which defines what to do next.  The option is to
-  either evaluate another module item or go to the next clock cycle.  Finally
-  it could also end if the finish flag of the module goes high.
+- Current ``module`` that is being worked on, so that the state variable can be
+  retrieved and set appropriately.
+- Current ``module_item`` which is being worked on.
+- A contiunation (``cont``) which defines what to do next.  The option is to
+  either evaluate another module item or go to the next clock cycle.  Finally it
+  could also end if the finish flag of the module goes high.
 - Association list containing the blocking assignments made, or assignments made
   in previous clock cycles.
 - Nonblocking association list containing all the nonblocking assignments made
   in the current module.
 - The environment containing values for the input.
-- The program counter which determines the value for the state in this version of
-  Verilog, as the Verilog was generated by the RTL, which means that we have to
-  make an assumption about how it looks.  In this case, that it contains state
-  which determines which part of the Verilog is executed.  This is then the part
-  of the Verilog that should match with the RTL.  *)
+- The program counter which determines the value for the state in this version
+  of Verilog, as the Verilog was generated by the RTL, which means that we have
+  to make an assumption about how it looks.  In this case, that it contains
+  state which determines which part of the Verilog is executed.  This is then
+  the part of the Verilog that should match with the RTL.
+|*)
 
 Inductive stackframe : Type :=
   Stackframe :
@@ -429,7 +460,9 @@ Definition handle_def {A : Type} (a : A) (val : option A)
 
 Local Open Scope error_monad_scope.
 
-(** Return the location of the lhs of an assignment.  *)
+(*|
+Return the location of the lhs of an assignment.
+|*)
 
 Inductive location : Type :=
 | LocReg (_ : reg)

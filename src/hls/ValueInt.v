@@ -22,22 +22,31 @@ From compcert Require Import lib.Integers common.Values.
 From vericert Require Import Vericertlib.
 (* end hide *)
 
-(** * Value
+(*|
+=====
+Value
+=====
 
-A [value] is a bitvector with a specific size. We are using the implementation
+A ``value`` is a bitvector with a specific size. We are using the implementation
 of the bitvector by mit-plv/bbv, because it has many theorems that we can reuse.
-However, we need to wrap it with an [Inductive] so that we can specify and match
-on the size of the [value]. This is necessary so that we can easily store
-[value]s of different sizes in a list or in a map.
+However, we need to wrap it with an ``Inductive`` so that we can specify and
+match on the size of the ``value``. This is necessary so that we can easily
+store ``value`` of different sizes in a list or in a map.
 
-Using the default [word], this would not be possible, as the size is part of the type. *)
+Using the default ``word``, this would not be possible, as the size is part of
+the type.
+|*)
 
 Definition value : Type := int.
 
-(** ** Value conversions
+(*|
+Value conversions
+=================
 
-Various conversions to different number types such as [N], [Z], [positive] and
-[int], where the last one is a theory of integers of powers of 2 in CompCert. *)
+Various conversions to different number types such as ``N``, ``Z``, ``positive``
+and ``int``, where the last one is a theory of integers of powers of 2 in
+CompCert.
+|*)
 
 Definition valueToNat (v : value) : nat :=
   Z.to_nat (Int.unsigned v).
@@ -83,10 +92,12 @@ Definition valToValue (v : Values.val) : option value :=
   | _ => None
   end.
 
-(** Convert a [value] to a [bool], so that choices can be made based on the
-result. This is also because comparison operators will give back [value] instead
-of [bool], so if they are in a condition, they will have to be converted before
-they can be used. *)
+(*|
+Convert a ``value`` to a ``bool``, so that choices can be made based on the
+result. This is also because comparison operators will give back ``value``
+instead of ``bool``, so if they are in a condition, they will have to be
+converted before they can be used.
+|*)
 
 Definition valueToBool (v : value) : bool :=
   if Z.eqb (uvalueToZ v) 0 then false else true.
@@ -94,7 +105,10 @@ Definition valueToBool (v : value) : bool :=
 Definition boolToValue (b : bool) : value :=
   natToValue (if b then 1 else 0).
 
-(** ** Arithmetic operations *)
+(*|
+Arithmetic operations
+---------------------
+|*)
 
 Inductive val_value_lessdef: val -> value -> Prop :=
 | val_value_lessdef_int:

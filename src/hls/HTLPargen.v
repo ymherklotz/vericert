@@ -405,7 +405,10 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg)
   | _, _ => error (Errors.msg "HTLPargen: translate_eff_addressing unsuported addressing")
   end.
 
-(** Translate an instruction to a statement. FIX mulhs mulhu *)
+(*|
+Translate an instruction to a statement. FIX mulhs mulhu
+|*)
+
 Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   match op, args with
   | Op.Omove, r::nil => ret (Vvar r)

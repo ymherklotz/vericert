@@ -17,6 +17,7 @@ COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
 
 COQDOCFLAGS := --no-lib-name -l
+ALECTRYON_OPTS := --html-minification --long-line-threshold 80 --coq-driver sertop_noexec $(COQINCLUDES)
 
 VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, $(wildcard src/$(d)/*.v))
 LIT := docs/basic-block-generation.org docs/scheduler.org docs/scheduler-languages.org
@@ -48,7 +49,13 @@ proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
 	@rm -f src/extraction/STAMP
 
-doc: Makefile.coq
+doc-html: $(patsubst src/%.v,html/%.html,$(VS))
+
+html/%.html: src/%.v
+	@mkdir -p $(dir $@)
+	@echo "ALECTRYON" $@; alectryon $(ALECTRYON_OPTS) $< -o $@
+
+coqdoc: Makefile.coq
 	$(MAKE) COQDOCFLAGS="$(COQDOCFLAGS)" -f Makefile.coq html
 	cp ./docs/res/coqdoc.css html/.
 

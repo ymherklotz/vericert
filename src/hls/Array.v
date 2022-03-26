@@ -190,7 +190,10 @@ Proof.
   auto using nth_error_nth.
 Qed.
 
-(** Tail recursive version of standard library function. *)
+(*|
+Tail recursive version of standard library function.
+|*)
+
 Fixpoint list_repeat' {A : Type} (acc : list A) (a : A) (n : nat) : list A :=
   match n with
   | O => acc

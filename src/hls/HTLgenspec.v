@@ -120,11 +120,15 @@ Ltac monadInv H :=
     ((progress simpl in H) || unfold F in H); monadInv1 H
   end.
 
-(** * Relational specification of the translation *)
+(*|
+===========================================
+Relational specification of the translation
+===========================================
 
-(** We now define inductive predicates that characterise the fact that the
+We now define inductive predicates that characterise the fact that the
 statemachine that is created by the translation contains the correct
-translations for each of the elements *)
+translations for each of the elements.
+|*)
 
 Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -> Prop :=
 | tr_instr_Inop :

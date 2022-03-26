@@ -38,11 +38,14 @@ Require Import vericert.hls.Predicate.
 #[local] Open Scope positive.
 #[local] Open Scope pred_op.
 
-(** ** Schedule Oracle
+(*|
+Schedule Oracle
+===============
 
-This oracle determines if a schedule was valid by performing symbolic execution on the input and
-output and showing that these behave the same.  This acts on each basic block separately, as the
-rest of the functions should be equivalent.  *)
+This oracle determines if a schedule was valid by performing symbolic execution
+on the input and output and showing that these behave the same.  This acts on
+each basic block separately, as the rest of the functions should be equivalent.
+|*)
 
 Definition reg := positive.
 
@@ -51,8 +54,11 @@ Inductive resource : Set :=
 | Pred : reg -> resource
 | Mem : resource.
 
-(** The following defines quite a few equality comparisons automatically, however, these can be
-optimised heavily if written manually, as their proofs are not needed.  *)
+(*|
+The following defines quite a few equality comparisons automatically, however,
+these can be optimised heavily if written manually, as their proofs are not
+needed.
+|*)
 
 Lemma resource_eq : forall (r1 r2 : resource), {r1 = r2} + {r1 <> r2}.
 Proof.
@@ -174,9 +180,12 @@ Proof.
   repeat decide equality.
 Defined.
 
-(** We then create equality lemmas for a resource and a module to index resources uniquely.  The
-indexing is done by setting Mem to 1, whereas all other infinitely many registers will all be
-shifted right by 1.  This means that they will never overlap.  *)
+(*|
+We then create equality lemmas for a resource and a module to index resources
+uniquely.  The indexing is done by setting Mem to 1, whereas all other
+infinitely many registers will all be shifted right by 1.  This means that they
+will never overlap.
+|*)
 
 Module R_indexed.
   Definition t := resource.
@@ -193,17 +202,21 @@ Module R_indexed.
   Definition eq := resource_eq.
 End R_indexed.
 
-(** We can then create expressions that mimic the expressions defined in RTLBlock and RTLPar, which use
-expressions instead of registers as their inputs and outputs.  This means that we can accumulate all
-the results of the operations as general expressions that will be present in those registers.
+(*|
+We can then create expressions that mimic the expressions defined in RTLBlock
+and RTLPar, which use expressions instead of registers as their inputs and
+outputs.  This means that we can accumulate all the results of the operations as
+general expressions that will be present in those registers.
 
 - Ebase: the starting value of the register.
 - Eop: Some arithmetic operation on a number of registers.
 - Eload: A load from a memory location into a register.
 - Estore: A store from a register to a memory location.
 
-Then, to make recursion over expressions easier, expression_list is also defined in the datatype, as
-that enables mutual recursive definitions over the datatypes.  *)
+Then, to make recursion over expressions easier, expression_list is also defined
+in the datatype, as that enables mutual recursive definitions over the
+datatypes.
+|*)
 
 Inductive expression : Type :=
 | Ebase : resource -> expression
@@ -312,8 +325,10 @@ Definition predicated A := NE.non_empty (pred_op * A).
 
 Definition pred_expr := predicated expression.
 
-(** Using IMap we can create a map from resources to any other type, as resources can be uniquely
-identified as positive numbers.  *)
+(*|
+Using ``IMap`` we can create a map from resources to any other type, as
+resources can be uniquely identified as positive numbers.
+|*)
 
 Module Rtree := ITree(R_indexed).
 
@@ -345,8 +360,11 @@ Definition get_m i := match i with mk_instr_state a b c => c end.
 Definition eval_predf_opt pr p :=
   match p with Some p' => eval_predf pr p' | None => true end.
 
-(** Finally we want to define the semantics of execution for the expressions with symbolic values,
-so the result of executing the expressions will be an expressions.  *)
+(*|
+Finally we want to define the semantics of execution for the expressions with
+symbolic values, so the result of executing the expressions will be an
+expressions.
+|*)
 
 Section SEMANTICS.
 

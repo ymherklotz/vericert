@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../docs/scheduler-languages.org::rtlblock-main][rtlblock-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.
@@ -31,6 +30,12 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.hls.RTLBlockInstr.
 
+(*|
+========
+RTLBlock
+========
+|*)
+
 Definition bb := list instr.
 
 Definition bblock := @bblock bb.
@@ -43,16 +48,30 @@ Definition stackframe := @stackframe bb.
 Definition state := @state bb.
 
 Definition genv := @genv bb.
-(* rtlblock-main ends here *)
 
-(* [[file:../../docs/scheduler-languages.org::rtlblock-semantics][rtlblock-semantics]] *)
+(*|
+Semantics
+=========
+
+We first describe the semantics by assuming a global program environment with
+type ~genv~ which was declared earlier.
+|*)
+
 Section RELSEM.
 
   Context (ge: genv).
-(* rtlblock-semantics ends here *)
 
-(* [[file:../../docs/scheduler-languages.org::#step_instr_list][rtlblock-step_instr_list]] *)
-  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
+(*|
+Instruction list step
+---------------------
+
+The ``step_instr_list`` definition describes the execution of a list of
+instructions in one big step, inductively traversing the list of instructions
+and applying the ``step_instr``.
+|*)
+
+  Inductive step_instr_list:
+    val -> instr_state -> list instr -> instr_state -> Prop :=
   | exec_RBcons:
     forall state i state' state'' instrs sp,
       step_instr ge sp state i state' ->
@@ -61,14 +80,21 @@ Section RELSEM.
   | exec_RBnil:
     forall state sp,
       step_instr_list sp state nil state.
-(* rtlblock-step_instr_list ends here *)
 
-(* [[file:../../docs/scheduler-languages.org::#rtlblock-step][rtlblock-step]] *)
+(*|
+Top-level step
+--------------
+
+The step function itself then uses this big step of the list of instructions to
+then show a transition from basic block to basic block.
+|*)
+
   Variant step: state -> trace -> state -> Prop :=
   | exec_bblock:
     forall s f sp pc rs rs' m m' t s' bb pr pr',
       f.(fn_code)!pc = Some bb ->
-      step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
+      step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body)
+                         (mk_instr_state rs' pr' m') ->
       step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
       step (State s f sp pc rs pr m) t s'
   | exec_function_internal:
@@ -90,9 +116,7 @@ Section RELSEM.
     forall res f sp pc rs s vres m pr,
       step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
            E0 (State s f sp pc (rs#res <- vres) pr m).
-(* rtlblock-step ends here *)
 
-(* [[file:../../docs/scheduler-languages.org::#rtlblock-step][rtlblock-rest]] *)
 End RELSEM.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -110,4 +134,3 @@ Inductive final_state: state -> int -> Prop :=
 
 Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
-(* rtlblock-rest ends here *)

@@ -36,10 +36,13 @@ Require Import ValueInt.
 
 Local Open Scope positive.
 
-(** The purpose of the hardware transfer language (HTL) is to create a more hardware-like layout
-that is still similar to the register transfer language (RTL) that it came from. The main change is
-that function calls become module instantiations and that we now describe a state machine instead of
-a control-flow graph.  *)
+(*|
+The purpose of the hardware transfer language (HTL) is to create a more
+hardware-like layout that is still similar to the register transfer language
+(RTL) that it came from. The main change is that function calls become module
+instantiations and that we now describe a state machine instead of a
+control-flow graph.
+|*)
 
 Local Open Scope assocmap.
 
@@ -84,7 +87,10 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
 Definition empty_stack (m : module) : Verilog.assocmap_arr :=
   (AssocMap.set m.(mod_ram).(ram_mem) (Array.arr_repeat None m.(mod_ram).(ram_size)) (AssocMap.empty Verilog.arr)).
 
-(** * Operational Semantics *)
+(*|
+Operational Semantics
+=====================
+|*)
 
 Definition genv := Globalenvs.Genv.t fundef unit.
 

@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../docs/scheduler-languages.org::rtlpar-main][rtlpar-main]] *)
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.
@@ -47,15 +46,16 @@ Section RELSEM.
 
   Context (ge: genv).
 
-  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
-    | exec_RBcons:
-        forall state i state' state'' instrs sp,
-        step_instr ge sp state i state' ->
-        step_instr_list sp state' instrs state'' ->
-        step_instr_list sp state (i :: instrs) state''
-    | exec_RBnil:
-        forall state sp,
-        step_instr_list sp state nil state.
+  Inductive step_instr_list:
+    val -> instr_state -> list instr -> instr_state -> Prop :=
+  | exec_RBcons:
+    forall state i state' state'' instrs sp,
+      step_instr ge sp state i state' ->
+      step_instr_list sp state' instrs state'' ->
+      step_instr_list sp state (i :: instrs) state''
+  | exec_RBnil:
+    forall state sp,
+      step_instr_list sp state nil state.
 
   Inductive step_instr_seq (sp : val)
     : instr_state -> list (list instr) -> instr_state -> Prop :=
@@ -83,7 +83,8 @@ Section RELSEM.
   | exec_bblock:
     forall s f sp pc rs rs' m m' t s' bb pr pr',
       f.(fn_code)!pc = Some bb ->
-      step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
+      step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body)
+                          (mk_instr_state rs' pr' m') ->
       step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
       step (State s f sp pc rs pr m) t s'
   | exec_function_internal:
@@ -126,7 +127,11 @@ Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
 
 Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
-  let max_body := fold_left (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x) bb.(bb_body) m in
+  let max_body :=
+    fold_left
+      (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x)
+      bb.(bb_body) m
+  in
   max_reg_cfi max_body bb.(bb_exit).
 
 Definition max_reg_function (f: function) :=
@@ -135,8 +140,9 @@ Definition max_reg_function (f: function) :=
     (fold_left Pos.max f.(fn_params) 1%positive).
 
 Definition max_pc_function (f: function) : positive :=
-  PTree.fold (fun m pc i => (Pos.max m
-                                     (pc + match Zlength i.(bb_body)
-                                           with Z.pos p => p | _ => 1 end))%positive)
-             f.(fn_code) 1%positive.
-(* rtlpar-main ends here *)
+  PTree.fold
+    (fun m pc i =>
+       (Pos.max m
+                (pc + match Zlength i.(bb_body)
+                      with Z.pos p => p | _ => 1 end))%positive)
+    f.(fn_code) 1%positive.
