@@ -50,6 +50,25 @@ pygments_style = "emacs"
 #
 html_theme = 'alabaster'
 
+html_theme_options = {
+    'logo': 'images/vericert-main.svg',
+    'github_user': 'ymherklotz',
+    'github_repo': 'vericert',
+    'description': 'A formally verified high-level synthesis tool written in Coq.',
+    'github_button': False,
+    'show_powered_by': False,
+}
+
+html_sidebars = {
+    '**': [
+        'about.html',
+        'searchbox.html',
+        'navigation.html',
+        'relations.html',
+        'donate.html',
+    ]
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
