@@ -19,6 +19,8 @@
 ================
 RTLBlockgenproof
 ================
+
+.. coq:: none
 |*)
 
 Require compcert.backend.RTL.
@@ -58,13 +60,26 @@ For case number 3, there should be a ``nop`` instruction in the basic block, and
 then the equivalent control-flow instruction ending the basic block.
 |*)
 
-Parameter find_block_spec : code -> node -> RTL.instruction -> node -> Prop.
+Parameter find_block_spec : code -> node -> node -> Prop.
 
-Definition find_instr_spec (c: code) (n: node) (i: RTL.instruction) (n': node) (i': instr) :=
-    find_block_spec c n i n'
+Definition find_instr_spec (c: code) (n: node) (i: RTL.instruction)
+           (n': node) (i': instr) :=
+    find_block_spec c n n'
     /\ exists il,
       c ! n' = Some il
       /\ nth_error il.(bb_body) (Pos.to_nat n - Pos.to_nat n')%nat = Some i'.
+
+(*|
+.. index::
+   pair: semantics; transl_code_spec
+
+Translation Specification
+-------------------------
+
+This specification should describe the translation that the unverified
+transformation performs.  This should be proven from the validation of the
+transformation.
+|*)
 
 Inductive transl_code_spec (c: RTL.code) (tc: code) :=
 | transl_code_standard_bb :
@@ -73,16 +88,38 @@ Inductive transl_code_spec (c: RTL.code) (tc: code) :=
     find_instr_spec tc x i x' i' ->
     check_instr x i i' = true ->
     transl_code_spec c tc
-| transl_code_standard_goto :
-  forall
+| transl_code_standard_cf :
+  forall x x' i i' il,
+    c ! x = Some i ->
+    tc ! x' = Some il ->
+    find_instr_spec tc x i x' i' ->
+    check_cf_instr_body i i' = true ->
+    check_cf_instr i il.(bb_exit) = true ->
+    transl_code_spec c tc
 .
 
-Inductive match_states : RTL.state -> RTLBlock.state -> Prop :=
+Lemma transl_function_correct :
+  forall f tf,
+    transl_function f = OK tf ->
+    transl_code_spec f.(RTL.fn_code) tf.(fn_code).
+Proof. Admitted.
+
+Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
+| match_stackframe_init :
+  forall a b,
+    match_stackframe a b.
+
+Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
 | match_state :
-  forall stk f tf sp pc rs m
-         (TF: transl_function f = OK tf),
+  forall stk stk' f tf sp pc rs m pc' ps
+         (TF: transl_function f = OK tf)
+         (PC: find_block_spec tf.(fn_code) pc pc')
+         (STK: Forall2 match_stackframe stk stk'),
     match_states (RTL.State stk f sp pc rs m)
-                 (State stk tf sp (find_block max n i) rs m).
+                 (State stk' tf sp pc' rs ps m).
+
+Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
+  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
 
 Section CORRECTNESS.
 
@@ -92,10 +129,8 @@ Section CORRECTNESS.
   Context (TRANSL : match_prog prog tprog).
 
   Theorem transf_program_correct:
-    Smallstep.forward_simulation (RTL.semantics prog) (RTLBlock.semantics tprog).
-  Proof.
-    eapply Smallstep.forward_simulation_plus; eauto with htlproof.
-    apply senv_preserved.
+    Smallstep.forward_simulation (RTL.semantics prog)
+                                 (RTLBlock.semantics tprog).
+  Proof. Admitted.
 
 End CORRECTNESS.
-*)

@@ -19,6 +19,8 @@
 ===========
 RTLBlockgen
 ===========
+
+.. coq:: none
 |*)
 
 Require compcert.backend.RTL.
@@ -33,8 +35,6 @@ Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLBlock.
 
 #[local] Open Scope positive.
-
-Parameter partition : RTL.function -> Errors.res function.
 
 (*|
 ``find_block max nodes index``: Does not need to be sorted, because we use
@@ -170,6 +170,8 @@ Definition check_present_blocks (c: code) (n: list positive) (max: positive) (i:
       end
   | None => false
   end.
+
+Parameter partition : RTL.function -> Errors.res function.
 
 Definition transl_function (f: RTL.function) :=
   match partition f with
