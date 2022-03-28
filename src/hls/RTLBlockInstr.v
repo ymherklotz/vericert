@@ -46,6 +46,9 @@ Require Import Vericertlib.
 Definition node := positive.
 
 (*|
+.. index::
+   triple: definition; RTLBlockInstr; instruction
+
 Instruction Definition
 ======================
 
@@ -67,6 +70,9 @@ Inductive instr : Type :=
   option pred_op -> condition -> list reg -> predicate -> instr.
 
 (*|
+.. index::
+   triple: definition; RTLBlockInstr; control-flow instruction
+
 Control-Flow Instruction Definition
 ===================================
 
@@ -312,6 +318,14 @@ Section RELSEM.
   | eval_pred_none:
       forall i i', eval_pred None i i' i.
 
+(*|
+.. index::
+   triple: semantics; RTLBlockInstr; instruction
+
+Step Instruction
+=============================
+|*)
+
   Inductive step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
   | exec_RBnop:
       forall sp ist,
@@ -345,6 +359,14 @@ Section RELSEM.
                    (mk_instr_state rs (pr#p <- b) m) ist ->
       step_instr sp (mk_instr_state rs pr m)
                     (RBsetpred p' c args p) ist.
+
+(*|
+.. index::
+   triple: semantics; RTLBlockInstr; control-flow instruction
+
+Step Control-Flow Instruction
+=============================
+|*)
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:
