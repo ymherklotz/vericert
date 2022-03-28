@@ -48,25 +48,12 @@ pygments_style = "emacs"
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
+
+html_logo = "_static/images/vericert-main.svg"
 
 html_theme_options = {
-    'logo': 'images/vericert-main.svg',
-    'github_user': 'ymherklotz',
-    'github_repo': 'vericert',
-    'description': 'A formally verified high-level synthesis tool written in Coq.',
-    'github_button': False,
-    'show_powered_by': False,
-}
-
-html_sidebars = {
-    '**': [
-        'about.html',
-        'searchbox.html',
-        'navigation.html',
-        'relations.html',
-        'donate.html',
-    ]
+    'style_nav_header_background': '#fff5db'
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

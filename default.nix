@@ -15,6 +15,7 @@ stdenv.mkDerivation {
                   ncoqPackages.serapi
                   python3
                   python3Packages.alectryon
+                  python3Packages.sphinx_rtd_theme
                 ];
 
   enableParallelBuilding = true;

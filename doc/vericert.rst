@@ -12,15 +12,13 @@ application-specific integrated circuit (ASIC).
 
 .. _fig:design:
 
-.. figure:: /_static/images/toolflow.png
+.. figure:: /_static/images/toolflow.svg
 
     Current design of Vericert, where HTL is an intermediate language representing a finite state
     machine with data-path (FSMD) and Verilog is the target language.
 
 The design shown in Figure `fig:design`_ shows how Vericert leverages an existing verified C
 compiler called `CompCert <https://compcert.org/compcert-C.html>`_ to perform this translation.
-
-.. index:: vericert
 
 .. _building:
 
@@ -47,8 +45,6 @@ Or by running the test suite using the following command:
     make test
 
 .. _using-vericert:
-
-.. index:: vericert
 
 Using Vericert
 --------------
@@ -454,7 +450,7 @@ Example
 
 A small standalone Coq file that exhibits many of the style points.
 
-.. code:: coq
+.. coq:: no-out
 
     (*
      * Vericert: Verified high-level synthesis.
