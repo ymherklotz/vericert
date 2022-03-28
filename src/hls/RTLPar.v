@@ -30,7 +30,7 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.hls.RTLBlockInstr.
 
-Definition bb := list (list (list instr)).
+Definition bb := list (list instr).
 
 Definition bblock := @bblock bb.
 Definition code := @code bb.

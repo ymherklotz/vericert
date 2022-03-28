@@ -36,7 +36,7 @@ RTLBlock
 ========
 |*)
 
-Definition bb := list instr.
+Definition bb := instr.
 
 Definition bblock := @bblock bb.
 Definition code := @code bb.
@@ -95,8 +95,8 @@ then show a transition from basic block to basic block.
       f.(fn_code)!pc = Some bb ->
       step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body)
                          (mk_instr_state rs' pr' m') ->
-      step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
-      step (State s f sp pc rs pr m) t s'
+      step_cf_instr ge (State s f sp pc nil rs' pr' m') bb.(bb_exit) t s' ->
+      step (State s f sp pc nil rs pr m) t s'
   | exec_function_internal:
     forall s f args m m' stk,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
@@ -104,6 +104,7 @@ then show a transition from basic block to basic block.
            E0 (State s f
                      (Vptr stk Ptrofs.zero)
                      f.(fn_entrypoint)
+                         nil
                          (init_regs args f.(fn_params))
                          (PMap.init false)
                          m')
@@ -115,7 +116,7 @@ then show a transition from basic block to basic block.
   | exec_return:
     forall res f sp pc rs s vres m pr,
       step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
-           E0 (State s f sp pc (rs#res <- vres) pr m).
+           E0 (State s f sp pc nil (rs#res <- vres) pr m).
 
 End RELSEM.
 

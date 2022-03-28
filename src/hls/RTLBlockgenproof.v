@@ -25,8 +25,9 @@ RTLBlockgenproof
 
 Require compcert.backend.RTL.
 Require Import compcert.common.AST.
-Require Import compcert.lib.Maps.
 Require Import compcert.common.Errors.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
@@ -81,7 +82,7 @@ transformation performs.  This should be proven from the validation of the
 transformation.
 |*)
 
-Inductive transl_code_spec (c: RTL.code) (tc: code) :=
+Variant transl_code_spec (c: RTL.code) (tc: code) :=
 | transl_code_standard_bb :
   forall x x' i i',
     c ! x = Some i ->
@@ -128,9 +129,41 @@ Section CORRECTNESS.
 
   Context (TRANSL : match_prog prog tprog).
 
+  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
+  Let tge : genv := Globalenvs.Genv.globalenv tprog.
+
+  Lemma symbols_preserved:
+    forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+  Proof using TRANSL. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
+
+  Lemma senv_preserved:
+    Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
+  Proof using TRANSL. intros; eapply (Genv.senv_transf_partial TRANSL). Qed.
+  #[local] Hint Resolve senv_preserved : rtlgp.
+
+  Lemma transl_initial_states :
+    forall s1 : Smallstep.state (RTL.semantics prog),
+      Smallstep.initial_state (RTL.semantics prog) s1 ->
+      exists s2 : Smallstep.state (semantics tprog),
+        Smallstep.initial_state (semantics tprog) s2 /\ match_states s1 s2.
+  Proof. Admitted.
+
+  Lemma transl_final_states :
+    forall (s1 : Smallstep.state (RTL.semantics prog))
+           (s2 : Smallstep.state (semantics tprog))
+           (r : Integers.Int.int),
+      match_states s1 s2 ->
+      Smallstep.final_state (RTL.semantics prog) s1 r ->
+      Smallstep.final_state (semantics tprog) s2 r.
+  Proof. Admitted.
+
   Theorem transf_program_correct:
     Smallstep.forward_simulation (RTL.semantics prog)
                                  (RTLBlock.semantics tprog).
-  Proof. Admitted.
+  Proof.
+    eapply Smallstep.forward_simulation_plus.
+    apply senv_preserved.
+    admit.
+    eauto using transl_final_states.
 
 End CORRECTNESS.
