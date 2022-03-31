@@ -69,7 +69,7 @@ Section RELSEM.
       step_instr_seq sp state nil state.
 
   Inductive step_instr_block (sp : val)
-    : instr_state -> bb -> instr_state -> Prop :=
+    : instr_state -> list bb -> instr_state -> Prop :=
   | exec_instr_block_cons:
     forall state i state' state'' instrs,
       step_instr_seq sp state i state' ->
@@ -81,12 +81,12 @@ Section RELSEM.
 
   Inductive step: state -> trace -> state -> Prop :=
   | exec_bblock:
-    forall s f sp pc rs rs' m m' t s' bb pr pr',
+    forall s (f: function) sp pc rs rs' m m' t s' bb pr pr',
       f.(fn_code)!pc = Some bb ->
       step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body)
                           (mk_instr_state rs' pr' m') ->
-      step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
-      step (State s f sp pc rs pr m) t s'
+      step_cf_instr ge (State s f sp pc nil rs' pr' m') bb.(bb_exit) t s' ->
+      step (State s f sp pc nil rs pr m) t s'
   | exec_function_internal:
     forall s f args m m' stk,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
@@ -95,6 +95,7 @@ Section RELSEM.
                   f
                   (Vptr stk Ptrofs.zero)
                   f.(fn_entrypoint)
+                  nil
                   (init_regs args f.(fn_params))
                   (PMap.init false)
                   m')
@@ -106,7 +107,7 @@ Section RELSEM.
   | exec_return:
     forall res f sp pc rs s vres m pr,
       step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
-        E0 (State s f sp pc (rs#res <- vres) pr m).
+        E0 (State s f sp pc nil (rs#res <- vres) pr m).
 
 End RELSEM.
 

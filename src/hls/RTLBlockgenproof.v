@@ -117,7 +117,7 @@ Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
          (PC: find_block_spec tf.(fn_code) pc pc')
          (STK: Forall2 match_stackframe stk stk'),
     match_states (RTL.State stk f sp pc rs m)
-                 (State stk' tf sp pc' rs ps m).
+                 (State stk' tf sp pc' nil rs ps m).
 
 Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
@@ -165,5 +165,6 @@ Section CORRECTNESS.
     apply senv_preserved.
     admit.
     eauto using transl_final_states.
+    Admitted.
 
 End CORRECTNESS.

@@ -58,7 +58,7 @@ Definition add_bb (should_split: bool) (i: list (list instr))
   | (a, b) => if should_split then (a, i::b) else (i::a, b)
   end.
 
-Fixpoint first_split (saw_pred: bool) (bb: bb) :=
+Fixpoint first_split (saw_pred: bool) (bb: list bb) :=
   match bb with
   | a :: b =>
       match includes_setpred a with
@@ -72,7 +72,7 @@ Fixpoint first_split (saw_pred: bool) (bb: bb) :=
   | nil => (None, (nil, nil))
   end.
 
-Definition split_bb (fresh: node) (b: bb) : bb * bb * bb :=
+Definition split_bb (fresh: node) (b: list bb) : list bb * list bb * list bb :=
   match first_split false b with
   | (Some p, (bb1, bb2)) => (bb1 ++ bb2, nil, nil)
   | (None, (bb1, bb2)) => (bb1 ++ bb2, nil, nil)

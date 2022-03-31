@@ -134,7 +134,7 @@ Definition insert_extra (pt: PTree.t (list instr)) (curr: list (list instr))
   | None => ((cycle + 1)%positive, curr :: bb)
   end.
 
-Definition transl_bb (res: resources) (bb: RTLPar.bb): Errors.res RTLParFU.bblock_body :=
+Definition transl_bb (res: resources) (bb: list RTLPar.bb): Errors.res RTLParFU.bblock_body :=
   do (litr, n) <- fold_right (transl_seq_block res) (OK (nil, PTree.empty _, 1%positive)) bb;
   let (li, tr) := litr in
   OK (snd (fold_right (insert_extra tr) (1%positive, nil) li)).

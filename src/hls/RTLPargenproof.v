@@ -812,8 +812,8 @@ Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
       (STACKS: list_forall2 match_stackframes sf sf')
       (REG: forall x, rs !! x = rs' !! x)
       (REG: forall x, ps !! x = ps' !! x),
-      match_states (State sf f sp pc rs ps m)
-                   (State sf' tf sp pc rs' ps' m)
+      match_states (State sf f sp pc nil rs ps m)
+                   (State sf' tf sp pc nil rs' ps' m)
 | match_returnstate:
     forall stack stack' v m
       (STACKS: list_forall2 match_stackframes stack stack'),
