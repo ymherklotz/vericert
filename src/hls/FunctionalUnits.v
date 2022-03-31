@@ -52,12 +52,10 @@ Record ram := mk_ram {
   ram_wr_en: reg;
   ram_d_in: reg;
   ram_d_out: reg;
-  ram_ordering: (ram_addr < ram_en
-                 /\ ram_en < ram_d_in
-                 /\ ram_d_in < ram_d_out
-                 /\ ram_d_out < ram_wr_en
-                 /\ ram_wr_en < ram_u_en)
 }.
+
+Definition all_ram_regs r :=
+  ram_mem r::ram_en r::ram_u_en r::ram_addr r::ram_wr_en r::ram_d_in r::ram_d_out r::nil.
 
 Inductive funct_unit: Type :=
 | SignedDiv: divider true -> funct_unit
@@ -77,6 +75,80 @@ Record resources := mk_resources {
   res_arch: arch;
 }.
 
+Definition index_div {b:bool} r (d: divider b) :=
+  match r with
+  | 1 => div_numer d
+  | 2 => div_denom d
+  | 3 => div_quot d
+  | _ => div_rem d
+  end.
+
+Definition index_ram r (d: ram) :=
+  match r with
+  | 1 => ram_mem d
+  | 2 => ram_en d
+  | 3 => ram_u_en d
+  | 4 => ram_addr d
+  | 5 => ram_wr_en d
+  | 6 => ram_d_in d
+  | _ => ram_d_out d
+  end.
+
+Definition index_res u r res :=
+  match PTree.get u res with
+  | Some (SignedDiv d) => Some (index_div r d)
+  | Some (UnsignedDiv d) => Some (index_div r d)
+  | Some (Ram d) => Some (index_ram r d)
+  | None => None
+  end.
+
+Definition get_ram n res: option (positive * ram) :=
+  match nth_error (arch_ram (res_arch res)) n with
+  | Some ri =>
+      match PTree.get ri (res_funct_units res) with
+      | Some (Ram r) => Some (ri, r)
+      | _ => None
+      end
+  | None => None
+  end.
+
+Definition get_div n res :=
+  match nth_error (arch_div (res_arch res)) n with
+  | Some ri =>
+      match PTree.get ri (res_funct_units res) with
+      | Some (UnsignedDiv d) => Some (ri, d)
+      | _ => None
+      end
+  | None => None
+  end.
+
+Definition get_sdiv n res :=
+  match nth_error (arch_sdiv (res_arch res)) n with
+  | Some ri =>
+      match PTree.get ri (res_funct_units res) with
+      | Some (SignedDiv d) => Some (ri, d)
+      | _ => None
+      end
+  | None => None
+  end.
+
+Definition set_res fu res :=
+  let max := ((fold_left Pos.max ((arch_sdiv (res_arch res))
+                                  ++ (arch_div (res_arch res))
+                                  ++ (arch_ram (res_arch res))) 1) + 1)%positive in
+  let nt := PTree.set max fu (res_funct_units res) in
+  match fu with
+  | UnsignedDiv _ => mk_resources nt (mk_arch (max :: arch_div (res_arch res))
+                                              (arch_sdiv (res_arch res))
+                                              (arch_ram (res_arch res)))
+  | SignedDiv _ => mk_resources nt (mk_arch (arch_div (res_arch res))
+                                            (max :: arch_sdiv (res_arch res))
+                                            (arch_ram (res_arch res)))
+  | Ram _ => mk_resources nt (mk_arch (arch_div (res_arch res))
+                                      (arch_sdiv (res_arch res))
+                                      (max :: arch_ram (res_arch res)))
+  end.
+
 Definition initial_funct_units: funct_units := PTree.empty _.
 
 Definition initial_arch := mk_arch nil nil nil.
@@ -90,3 +162,22 @@ Definition funct_unit_stages (f: funct_unit) : positive :=
   | UnsignedDiv d => div_stages d
   | _ => 1
   end.
+
+Definition max_reg_ram r :=
+  fold_right Pos.max 1 (ram_mem r::ram_en r::ram_u_en r::ram_addr r
+                                ::ram_wr_en r::ram_d_in r::ram_d_out r::nil).
+
+Definition max_reg_divider {b: bool} (d: divider b) :=
+  fold_right Pos.max 1 (div_numer d::div_denom d::div_quot d::div_rem d::nil).
+
+Definition max_reg_fu fu :=
+  match fu with
+  | SignedDiv d | UnsignedDiv d => max_reg_divider d
+  | Ram r => max_reg_ram r
+  end.
+
+Definition max_reg_funct_units r :=
+  PTree.fold (fun m _ a => Pos.max m (max_reg_fu a)) r 1.
+
+Definition max_reg_resources r :=
+  max_reg_funct_units r.(res_funct_units).

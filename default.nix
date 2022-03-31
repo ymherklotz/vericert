@@ -1,7 +1,7 @@
-with import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/1a56d76d718afb6c47dd96602c915b6d23f7c45d.tar.gz") {};
+with import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/00197eff36bb8f7dd7f53a59f730e1fd8e11b1f4.tar.gz") {};
 let
-  ncoq = coq_8_13;
-  ncoqPackages = coqPackages_8_13;
+  ncoq = coq_8_14;
+  ncoqPackages = coqPackages_8_14;
 in
 stdenv.mkDerivation {
   name = "vericert";
@@ -13,10 +13,9 @@ stdenv.mkDerivation {
                   ncoq.ocamlPackages.menhirLib
 
                   ncoqPackages.serapi
-                  python3 python3Packages.docutils python3Packages.pygments
-                  python3Packages.dominate
-                  python3Packages.pelican
+                  python3
                   python3Packages.alectryon
+                  python3Packages.sphinx_rtd_theme
                 ];
 
   enableParallelBuilding = true;

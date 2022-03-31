@@ -1,0 +1,44 @@
+#+title: synthesis-results
+#+man_class_options: :section-id "1"
+#+options: toc:nil num:nil
+#+html_head_extra: <style>body{font-family:monospace;max-width:60em}h1{text-align:center}dt{font-weight:700}dd{margin-bottom:1em}</style>
+
+* NAME
+
+synthesis-results: sends a verilog file to be synthesised and returns results as a CSV file.
+
+* SYNOPSYS
+
+Usage: *synthesis-results* [options...] [files...]
+
+* DESCRIPTION
+
+- -v, --verbose[=LEVEL] :: Debug level [default: 0]
+- -k, --keys=KEY,KEY,... :: Keys to display [default: slice,ramfifo,delay]
+- -o, --output=FILE :: Output file
+- -s, --suppress=TYPE,TYPE,... :: Values to suppress from output [default: none]
+- -x, --xml :: Output raw XML from the synthesis tool
+- -c, --csv :: Output processed CSV
+- -V, --version :: Display version
+- -h, --help :: Display this text
+
+* AUTHOR
+
+Written by Yann Herklotz.
+
+* COPYRIGHT
+
+Copyright (C) 2022 Yann Herklotz <yann@yannherklotz.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.

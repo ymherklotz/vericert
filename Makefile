@@ -6,12 +6,9 @@ ifeq ($(UNAME_S),Darwin)
 	ARCH := verilog-macosx
 endif
 
-COMPCERTRECDIRS := lib common verilog backend cfrontend driver exportclight cparser
+COMPCERTRECDIRS := lib common verilog backend cfrontend driver cparser
 
-COQINCLUDES := -R src/common vericert.common \
-               -R src/extraction vericert.extraction \
-               -R src/hls vericert.hls \
-               -R src vericert \
+COQINCLUDES := -R src vericert \
                $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d)) \
                -R lib/CompCert/flocq Flocq \
                -R lib/CompCert/MenhirLib MenhirLib
@@ -20,12 +17,15 @@ COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
 
 COQDOCFLAGS := --no-lib-name -l
+ALECTRYON_OPTS := --no-header --html-minification --long-line-threshold 80 \
+                  --coq-driver sertop_noexec $(COQINCLUDES)
 
-VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls, src/$(d)/*.v)
+VS := src/Compiler.v src/Simulator.v src/HLSOpts.v $(foreach d, common hls bourdoncle, $(wildcard src/$(d)/*.v))
+LIT := docs/basic-block-generation.org docs/scheduler.org docs/scheduler-languages.org
 
 PREFIX ?= .
 
-.PHONY: all install proof clean extraction test
+.PHONY: all install proof clean extraction test force
 
 all: lib/COMPCERTSTAMP
 	$(MAKE) proof
@@ -38,18 +38,30 @@ lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
 
-install:
-	install -d $(PREFIX)/bin
+install: docs/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
-	install -C _build/default/driver/compcert.ini $(PREFIX)/bin/.
+	install -d $(PREFIX)/bin
+	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin
 	install -C _build/default/driver/VericertDriver.exe $(PREFIX)/bin/vericert
+	install -d $(PREFIX)/share/man/man1
+	install -C -m 644 $< $(PREFIX)/share/man/man1
 
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
 	@rm -f src/extraction/STAMP
 
-doc: Makefile.coq
+doc-html: $(patsubst src/%.v,html/%.html,$(VS))
+
+html/%.html: src/%.v
+	@mkdir -p $(dir $@)
+	@echo "ALECTRYON" $@; alectryon $(ALECTRYON_OPTS) $< -o $@
+
+coqdoc: Makefile.coq
 	$(MAKE) COQDOCFLAGS="$(COQDOCFLAGS)" -f Makefile.coq html
+	cp ./docs/res/coqdoc.css html/.
+
+doc-pdf: Makefile.coq
+	$(MAKE) COQDOCFLAGS="$(COQDOCFLAGS)" -f Makefile.coq all.tex
 
 extraction: src/extraction/STAMP
 
@@ -67,9 +79,21 @@ src/extraction/STAMP:
 	@$(COQEXEC) ./src/extraction/Extraction.v
 	@touch $@
 
-Makefile.coq:
+Makefile.coq _CoqProject: force
 	@echo "COQMAKE Makefile.coq"
 	$(COQBIN)coq_makefile $(COQINCLUDES) $(VS) -o Makefile.coq
+	echo "$(COQINCLUDES)" >_CoqProject
+
+force:
+
+docs/vericert.1:
+	$(MAKE) -C docs vericert.1
+
+detangle-all:
+	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)\
+        (setq org-src-preserve-indentation t)\
+        $(foreach vs,$(VS),(org-babel-detangle \"$(vs)\"))\
+        (org-save-all-org-buffers))"
 
 clean:: Makefile.coq
 	$(MAKE) -f Makefile.coq clean

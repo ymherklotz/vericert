@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.hls.RTLBlockInstr.
 
-Definition bb := list (list (list instr)).
+Definition bb := list (list instr).
 
 Definition bblock := @bblock bb.
 Definition code := @code bb.
@@ -46,15 +46,16 @@ Section RELSEM.
 
   Context (ge: genv).
 
-  Inductive step_instr_list: val -> instr_state -> list instr -> instr_state -> Prop :=
-    | exec_RBcons:
-        forall state i state' state'' instrs sp,
-        step_instr ge sp state i state' ->
-        step_instr_list sp state' instrs state'' ->
-        step_instr_list sp state (i :: instrs) state''
-    | exec_RBnil:
-        forall state sp,
-        step_instr_list sp state nil state.
+  Inductive step_instr_list:
+    val -> instr_state -> list instr -> instr_state -> Prop :=
+  | exec_RBcons:
+    forall state i state' state'' instrs sp,
+      step_instr ge sp state i state' ->
+      step_instr_list sp state' instrs state'' ->
+      step_instr_list sp state (i :: instrs) state''
+  | exec_RBnil:
+    forall state sp,
+      step_instr_list sp state nil state.
 
   Inductive step_instr_seq (sp : val)
     : instr_state -> list (list instr) -> instr_state -> Prop :=
@@ -68,7 +69,7 @@ Section RELSEM.
       step_instr_seq sp state nil state.
 
   Inductive step_instr_block (sp : val)
-    : instr_state -> bb -> instr_state -> Prop :=
+    : instr_state -> list bb -> instr_state -> Prop :=
   | exec_instr_block_cons:
     forall state i state' state'' instrs,
       step_instr_seq sp state i state' ->
@@ -80,11 +81,12 @@ Section RELSEM.
 
   Inductive step: state -> trace -> state -> Prop :=
   | exec_bblock:
-    forall s f sp pc rs rs' m m' t s' bb pr pr',
+    forall s (f: function) sp pc rs rs' m m' t s' bb pr pr',
       f.(fn_code)!pc = Some bb ->
-      step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
-      step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t s' ->
-      step (State s f sp pc rs pr m) t s'
+      step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body)
+                          (mk_instr_state rs' pr' m') ->
+      step_cf_instr ge (State s f sp pc nil rs' pr' m') bb.(bb_exit) t s' ->
+      step (State s f sp pc nil rs pr m) t s'
   | exec_function_internal:
     forall s f args m m' stk,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
@@ -93,6 +95,7 @@ Section RELSEM.
                   f
                   (Vptr stk Ptrofs.zero)
                   f.(fn_entrypoint)
+                  nil
                   (init_regs args f.(fn_params))
                   (PMap.init false)
                   m')
@@ -104,7 +107,7 @@ Section RELSEM.
   | exec_return:
     forall res f sp pc rs s vres m pr,
       step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
-        E0 (State s f sp pc (rs#res <- vres) pr m).
+        E0 (State s f sp pc nil (rs#res <- vres) pr m).
 
 End RELSEM.
 
@@ -125,7 +128,11 @@ Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
 
 Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
-  let max_body := fold_left (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x) bb.(bb_body) m in
+  let max_body :=
+    fold_left
+      (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x)
+      bb.(bb_body) m
+  in
   max_reg_cfi max_body bb.(bb_exit).
 
 Definition max_reg_function (f: function) :=
@@ -134,7 +141,9 @@ Definition max_reg_function (f: function) :=
     (fold_left Pos.max f.(fn_params) 1%positive).
 
 Definition max_pc_function (f: function) : positive :=
-  PTree.fold (fun m pc i => (Pos.max m
-                                     (pc + match Zlength i.(bb_body)
-                                           with Z.pos p => p | _ => 1 end))%positive)
-             f.(fn_code) 1%positive.
+  PTree.fold
+    (fun m pc i =>
+       (Pos.max m
+                (pc + match Zlength i.(bb_body)
+                      with Z.pos p => p | _ => 1 end))%positive)
+    f.(fn_code) 1%positive.

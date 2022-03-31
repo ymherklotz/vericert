@@ -42,9 +42,9 @@ Require Import vericert.hls.Predicate.
 Schedule Oracle
 ===============
 
-This oracle determines if a schedule was valid by performing symbolic execution on the input and
-output and showing that these behave the same.  This acts on each basic block separately, as the
-rest of the functions should be equivalent.
+This oracle determines if a schedule was valid by performing symbolic execution
+on the input and output and showing that these behave the same.  This acts on
+each basic block separately, as the rest of the functions should be equivalent.
 |*)
 
 Definition reg := positive.
@@ -55,8 +55,9 @@ Inductive resource : Set :=
 | Mem : resource.
 
 (*|
-The following defines quite a few equality comparisons automatically, however, these can be
-optimised heavily if written manually, as their proofs are not needed.
+The following defines quite a few equality comparisons automatically, however,
+these can be optimised heavily if written manually, as their proofs are not
+needed.
 |*)
 
 Lemma resource_eq : forall (r1 r2 : resource), {r1 = r2} + {r1 <> r2}.
@@ -180,9 +181,10 @@ Proof.
 Defined.
 
 (*|
-We then create equality lemmas for a resource and a module to index resources uniquely.  The
-indexing is done by setting Mem to 1, whereas all other infinitely many registers will all be
-shifted right by 1.  This means that they will never overlap.
+We then create equality lemmas for a resource and a module to index resources
+uniquely.  The indexing is done by setting Mem to 1, whereas all other
+infinitely many registers will all be shifted right by 1.  This means that they
+will never overlap.
 |*)
 
 Module R_indexed.
@@ -201,17 +203,19 @@ Module R_indexed.
 End R_indexed.
 
 (*|
-We can then create expressions that mimic the expressions defined in RTLBlock and RTLPar, which use
-expressions instead of registers as their inputs and outputs.  This means that we can accumulate all
-the results of the operations as general expressions that will be present in those registers.
+We can then create expressions that mimic the expressions defined in RTLBlock
+and RTLPar, which use expressions instead of registers as their inputs and
+outputs.  This means that we can accumulate all the results of the operations as
+general expressions that will be present in those registers.
 
 - Ebase: the starting value of the register.
 - Eop: Some arithmetic operation on a number of registers.
 - Eload: A load from a memory location into a register.
 - Estore: A store from a register to a memory location.
 
-Then, to make recursion over expressions easier, expression_list is also defined in the datatype, as
-that enables mutual recursive definitions over the datatypes.
+Then, to make recursion over expressions easier, expression_list is also defined
+in the datatype, as that enables mutual recursive definitions over the
+datatypes.
 |*)
 
 Inductive expression : Type :=
@@ -322,8 +326,8 @@ Definition predicated A := NE.non_empty (pred_op * A).
 Definition pred_expr := predicated expression.
 
 (*|
-Using IMap we can create a map from resources to any other type, as resources can be uniquely
-identified as positive numbers.
+Using ``IMap`` we can create a map from resources to any other type, as
+resources can be uniquely identified as positive numbers.
 |*)
 
 Module Rtree := ITree(R_indexed).
@@ -357,8 +361,9 @@ Definition eval_predf_opt pr p :=
   match p with Some p' => eval_predf pr p' | None => true end.
 
 (*|
-Finally we want to define the semantics of execution for the expressions with symbolic values, so
-the result of executing the expressions will be an expressions.
+Finally we want to define the semantics of execution for the expressions with
+symbolic values, so the result of executing the expressions will be an
+expressions.
 |*)
 
 Section SEMANTICS.
@@ -630,15 +635,6 @@ Definition encode_expression max pe h :=
     (Pand (Por (Pnot p) (Pvar p')) p'', h'')
   end.*)
 
-Fixpoint max_predicate (p: pred_op) : positive :=
-  match p with
-  | Plit (b, p) => p
-  | Ptrue => 1
-  | Pfalse => 1
-  | Pand a b => Pos.max (max_predicate a) (max_predicate b)
-  | Por a b => Pos.max (max_predicate a) (max_predicate b)
-  end.
-
 Fixpoint max_pred_expr (pe: pred_expr) : positive :=
   match pe with
   | NE.singleton (p, e) => max_predicate p
@@ -691,7 +687,7 @@ Inductive similar {A B} : @ctx A -> @ctx B -> Prop :=
 
 Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
   match pe1, pe2 with
-  (*| PEsingleton None e1, PEsingleton None e2 => beq_expression e1 e2
+  (* PEsingleton None e1, PEsingleton None e2 => beq_expression e1 e2
   | PEsingleton (Some p1) e1, PEsingleton (Some p2) e2 =>
     if beq_expression e1 e2
     then match sat_pred_simple bound (Por (Pand p1 (Pnot p2)) (Pand p2 (Pnot p1))) with
@@ -713,48 +709,6 @@ Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
     let (p2, h') := encode_expression max pe2 h in
     equiv_check p1 p2
   end.
-
-Definition forall_ptree {A:Type} (f:positive->A->bool) (m:Maps.PTree.t A) : bool :=
-  Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true.
-
-Ltac boolInv :=
-  match goal with
-  | [ H: _ && _ = true |- _ ] =>
-      destruct (andb_prop _ _ H); clear H; boolInv
-  | [ H: proj_sumbool _ = true |- _ ] =>
-      generalize (proj_sumbool_true _ H); clear H;
-      let EQ := fresh in (intro EQ; try subst; boolInv)
-  | _ =>
-      idtac
-  end.
-
-Remark ptree_forall:
-  forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
-  Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true = true ->
-  forall i x, Maps.PTree.get i m = Some x -> f i x = true.
-Proof.
-  intros.
-  set (f' := fun (res: bool) (i: positive) (x: A) => res && f i x).
-  set (P := fun (m: Maps.PTree.t A) (res: bool) =>
-              res = true -> Maps.PTree.get i m = Some x -> f i x = true).
-  assert (P m true).
-  rewrite <- H. fold f'. apply Maps.PTree_Properties.fold_rec.
-  unfold P; intros. rewrite <- H1 in H4. auto.
-  red; intros. now rewrite Maps.PTree.gempty in H2.
-  unfold P; intros. unfold f' in H4. boolInv.
-  rewrite Maps.PTree.gsspec in H5. destruct (peq i k).
-  subst. inv H5. auto.
-  apply H3; auto.
-  red in H1. auto.
-Qed.
-
-Lemma forall_ptree_true:
-  forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
-    forall_ptree f m = true ->
-    forall i x, Maps.PTree.get i m = Some x -> f i x = true.
-Proof.
-  apply ptree_forall.
-Qed.
 
 Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
   match np2 ! n with
@@ -1386,48 +1340,88 @@ Proof.
   end; discriminate.
 Qed.
 
-Fixpoint beq2 {A B : Type} (beqA : A -> B -> bool) (m1 : PTree.t A) (m2 : PTree.t B) {struct m1} : bool :=
-  match m1, m2 with
-  | PTree.Leaf, _ => PTree.bempty m2
-  | _, PTree.Leaf => PTree.bempty m1
-  | PTree.Node l1 o1 r1, PTree.Node l2 o2 r2 =>
+Section BOOLEAN_EQUALITY.
+
+  Context {A B: Type}.
+  Context (beqA: A -> B -> bool).
+
+  Fixpoint beq2' (m1: PTree.tree' A) (m2: PTree.tree' B) {struct m1} : bool :=
+    match m1, m2 with
+    | PTree.Node001 r1, PTree.Node001 r2 => beq2' r1 r2
+    | PTree.Node010 x1, PTree.Node010 x2 => beqA x1 x2
+    | PTree.Node011 x1 r1, PTree.Node011 x2 r2 => beqA x1 x2 && beq2' r1 r2
+    | PTree.Node100 l1, PTree.Node100 l2 => beq2' l1 l2
+    | PTree.Node101 l1 r1, PTree.Node101 l2 r2 => beq2' l1 l2 && beq2' r1 r2
+    | PTree.Node110 l1 x1, PTree.Node110 l2 x2 => beqA x1 x2 && beq2' l1 l2
+    | PTree.Node111 l1 x1 r1, PTree.Node111 l2 x2 r2  => beqA x1 x2 && beq2' l1 l2 && beq2' r1 r2
+    | _, _ => false
+    end.
+
+  Definition beq2 (m1: PTree.t A) (m2 : PTree.t B) : bool :=
+    match m1, m2 with
+    | PTree.Empty, PTree.Empty => true
+    | PTree.Nodes m1', PTree.Nodes m2' => beq2' m1' m2'
+    | _, _ => false
+    end.
+
+  Let beq2_optA (o1: option A) (o2: option B) : bool :=
     match o1, o2 with
     | None, None => true
-    | Some y1, Some y2 => beqA y1 y2
+    | Some a1, Some a2 => beqA a1 a2
     | _, _ => false
-    end
-    && beq2 beqA l1 l2 && beq2 beqA r1 r2
-  end.
+    end.
 
-Lemma beq2_correct:
-  forall A B beqA m1 m2,
-    @beq2 A B beqA m1 m2 = true <->
-    (forall (x: PTree.elt),
-        match PTree.get x m1, PTree.get x m2 with
-        | None, None => True
-        | Some y1, Some y2 => beqA y1 y2 = true
-        | _, _ => False
-        end).
-Proof.
-  induction m1; intros.
-  - simpl. rewrite PTree.bempty_correct. split; intros.
-    rewrite PTree.gleaf. rewrite H. auto.
-    generalize (H x). rewrite PTree.gleaf. destruct (PTree.get x m2); tauto.
-  - destruct m2.
-    + unfold beq2. rewrite PTree.bempty_correct. split; intros.
-      rewrite H. rewrite PTree.gleaf. auto.
-      generalize (H x). rewrite PTree.gleaf.
-      destruct (PTree.get x (PTree.Node m1_1 o m1_2)); tauto.
-    + simpl. split; intros.
-      * destruct (andb_prop _ _ H). destruct (andb_prop _ _ H0).
-        rewrite IHm1_1 in H3. rewrite IHm1_2 in H1.
-        destruct x; simpl. apply H1. apply H3.
-        destruct o; destruct o0; auto || congruence.
-      * apply andb_true_intro. split. apply andb_true_intro. split.
-        generalize (H xH); simpl. destruct o; destruct o0; tauto.
-        apply IHm1_1. intros; apply (H (xO x)).
-        apply IHm1_2. intros; apply (H (xI x)).
-Qed.
+  Lemma beq_correct_bool:
+    forall m1 m2,
+      beq2 m1 m2 = true <-> (forall x, beq2_optA (m1 ! x) (m2 ! x) = true).
+  Proof.
+    Local Transparent PTree.Node.
+    assert (beq_NN: forall l1 o1 r1 l2 o2 r2,
+               PTree.not_trivially_empty l1 o1 r1 ->
+               PTree.not_trivially_empty l2 o2 r2 ->
+               beq2 (PTree.Node l1 o1 r1) (PTree.Node l2 o2 r2) =
+                 beq2 l1 l2 && beq2_optA o1 o2 && beq2 r1 r2).
+    { intros.
+      destruct l1, o1, r1; try contradiction; destruct l2, o2, r2; try contradiction;
+        simpl; rewrite ? andb_true_r, ? andb_false_r; auto.
+      rewrite andb_comm; auto.
+      f_equal; rewrite andb_comm; auto. }
+    induction m1 using PTree.tree_ind; [|induction m2 using PTree.tree_ind].
+    - intros. simpl; split; intros.
+      + destruct m2; try discriminate. simpl; auto.
+      + replace m2 with (@PTree.Empty B); auto. apply PTree.extensionality; intros x.
+        specialize (H x). destruct (m2 ! x); simpl; easy.
+    - split; intros.
+      + destruct (PTree.Node l o r); try discriminate. simpl; auto.
+      + replace (PTree.Node l o r) with (@PTree.Empty A); auto. apply PTree.extensionality; intros x.
+        specialize (H0 x). destruct ((PTree.Node l o r) ! x); simpl in *; easy.
+    - rewrite beq_NN by auto. split; intros.
+      + InvBooleans. rewrite ! PTree.gNode. destruct x.
+        * apply IHm0; auto.
+        * apply IHm1; auto.
+        * auto.
+      + apply andb_true_intro; split; [apply andb_true_intro; split|].
+        * apply IHm1. intros. specialize (H1 (xO x)); rewrite ! PTree.gNode in H1; auto.
+        * specialize (H1 xH); rewrite ! PTree.gNode in H1; auto.
+        * apply IHm0. intros. specialize (H1 (xI x)); rewrite ! PTree.gNode in H1; auto.
+  Qed.
+
+  Theorem beq2_correct:
+    forall m1 m2,
+      beq2 m1 m2 = true <->
+        (forall (x: PTree.elt),
+            match m1 ! x, m2 ! x with
+            | None, None => True
+            | Some y1, Some y2 => beqA y1 y2 = true
+            | _, _ => False
+            end).
+  Proof.
+    intros. rewrite beq_correct_bool. unfold beq2_optA. split; intros.
+    - specialize (H x). destruct (m1 ! x), (m2 ! x); intuition congruence.
+    - specialize (H x). destruct (m1 ! x), (m2 ! x); intuition auto.
+  Qed.
+
+End BOOLEAN_EQUALITY.
 
 Lemma map1:
   forall w dst dst',

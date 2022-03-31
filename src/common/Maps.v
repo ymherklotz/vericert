@@ -17,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-Set Implicit Arguments.
+(*Set Implicit Arguments.
 
 Require Export compcert.lib.Maps.
 
@@ -29,8 +29,9 @@ Import PTree.
 
 Local Open Scope error_monad_scope.
 
-(** Instance of traverse for [PTree] and [Errors]. This should maybe be generalised
-    in the future. *)
+(*|
+Instance of traverse for ``PTree`` and ``Errors``. This should maybe be generalised in the future.
+|*)
 
 Module PTree.
 
@@ -62,3 +63,4 @@ Definition traverse (A B : Type) (f : positive -> A -> res B) m := xtraverse f m
 Definition traverse1 (A B : Type) (f : A -> res B) := traverse (fun _ => f).
 
 End PTree.
+*)

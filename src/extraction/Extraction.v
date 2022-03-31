@@ -24,9 +24,10 @@ From vericert Require
      RTLPar
      RTLBlockInstr
      HTLgen
-     Pipeline
+     (*Pipeline*)
      HLSOpts
      Predicate
+     Bourdoncle
 .
 
 From Coq Require DecidableClass.
@@ -145,8 +146,10 @@ Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTLBlock => "PrintRTLBlock.print_if".
+Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
 Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
+Extract Constant Compiler.print_RTLParFU => "PrintRTLParFU.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
@@ -180,9 +183,12 @@ Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
-Extract Constant Pipeline.pipeline => "SoftwarePipelining.pipeline".
+(*Extract Constant Pipeline.pipeline => "pipelining.pipeline".*)
 Extract Constant RTLBlockgen.partition => "Partition.partition".
 Extract Constant RTLPargen.schedule => "Schedule.schedule_fn".
+
+(* Loop normalization *)
+Extract Constant IfConversion.build_bourdoncle => "BourdoncleAux.build_bourdoncle".
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
@@ -193,9 +199,9 @@ Separate Extraction
          vericert.Compiler.transf_hls_temp
          RTLBlockgen.transl_program RTLBlockInstr.successors_instr
          HTLgen.tbl_to_case_expr
-         Pipeline.pipeline
          Predicate.sat_pred_simple
          Verilog.stmnt_to_list
+         Bourdoncle.bourdoncle
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

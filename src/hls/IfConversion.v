@@ -26,14 +26,17 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.Predicate.
+Require Import vericert.bourdoncle.Bourdoncle.
+
+Parameter build_bourdoncle : function -> (bourdoncle * PMap.t N).
 
 (*|
 =============
-If conversion
+If-Conversion
 =============
 
-This conversion is a verified conversion from RTLBlock back to itself, which performs if-conversion
-on basic blocks to make basic blocks larger.
+This conversion is a verified conversion from RTLBlock back to itself, which
+performs if-conversion on basic blocks to make basic blocks larger.
 |*)
 
 Definition combine_pred (p: pred_op) (optp: option pred_op) :=
@@ -96,11 +99,34 @@ Definition find_all_backedges (c: code) : list node :=
 Definition has_backedge (entry: node) (be: list node) :=
   any (fun x => Pos.eqb entry x) be.
 
-Definition find_blocks_with_cond (c: code) : list (node * bblock) :=
+Fixpoint get_loops (b: bourdoncle): list node :=
+  match b with
+  | L h b' => h::(fold_right (fun a b => get_loops a ++ b) nil b')
+  | I h => nil
+  end.
+
+Definition is_loop (b: list node) (n: node) :=
+  any (fun x => Pos.eqb x n) b.
+
+Definition is_flat_cfi (n: cf_instr) :=
+  match n with
+  | RBcond _ _ _ _ => false
+  | RBjumptable _ _ => false
+  | RBpred_cf _ _ _ => false
+  | _ => true
+  end.
+
+Definition is_flat (c: code) (succ: node) :=
+  match c ! succ with
+  | Some bblock => is_flat_cfi bblock.(bb_exit)
+  | None => false
+  end.
+
+Definition find_blocks_with_cond ep (b: list node) (c: code) : list (node * bblock) :=
   let backedges := find_all_backedges c in
   List.filter (fun x => is_cond_cfi (snd x).(bb_exit) &&
-                        negb (has_backedge (fst x) backedges) &&
-                        all (fun x' => negb (has_backedge x' backedges))
+                        (negb (is_loop b (fst x)) || Pos.eqb (fst x) ep) &&
+                        all (fun x' => is_flat c x')
                             (successors_instr (snd x).(bb_exit))
               ) (PTree.elements c).
 
@@ -109,8 +135,10 @@ Definition if_convert_code (p: nat * code) (nb: node * bblock) :=
   (S (fst p), PTree.set (fst nb) nbb (snd p)).
 
 Definition transf_function (f: function) : function :=
+  let (b, _) := build_bourdoncle f in
+  let b' := get_loops b in
   let (_, c) := List.fold_left if_convert_code
-                               (find_blocks_with_cond f.(fn_code))
+                               (find_blocks_with_cond f.(fn_entrypoint) b' f.(fn_code))
                                (1%nat, f.(fn_code)) in
   mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize) c f.(fn_entrypoint).
 

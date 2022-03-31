@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,26 +34,25 @@ Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Import NE.NonEmptyNotation.
 
-(*|
-=================
-RTLPar Generation
-=================
-|*)
-
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
 
 (*|
+=========
+RTLPargen
+=========
+
 Abstract Computations
 =====================
 
-Define the abstract computation using the ``update`` function, which will set each register to its
-symbolic value.  First we need to define a few helper functions to correctly translate the
-predicates.
+Define the abstract computation using the [update] function, which will set each
+register to its symbolic value.  First we need to define a few helper functions
+to correctly translate the predicates.
 |*)
 
-Fixpoint list_translation (l : list reg) (f : forest) {struct l} : list pred_expr :=
+Fixpoint list_translation (l : list reg) (f : forest) {struct l}
+  : list pred_expr :=
   match l with
   | nil => nil
   | i :: l => (f # (Reg i)) :: (list_translation l f)
@@ -77,7 +76,8 @@ Definition merge'' x :=
   | ((a, e), (b, el)) => (merge''' a b, Econs e el)
   end.
 
-Definition map_pred_op {A B} (pf: option pred_op * (A -> B)) (pa: option pred_op * A): option pred_op * B :=
+Definition map_pred_op {A B} (pf: option pred_op * (A -> B))
+           (pa: option pred_op * A): option pred_op * B :=
   match pa, pf with
   | (p, a), (p', f) => (merge''' p p', f a)
   end.
@@ -86,8 +86,8 @@ Definition predicated_prod {A B: Type} (p1: predicated A) (p2: predicated B) :=
   NE.map (fun x => match x with ((a, b), (c, d)) => (Pand a c, (b, d)) end)
          (NE.non_empty_prod p1 p2).
 
-Definition predicated_map {A B: Type} (f: A -> B) (p: predicated A): predicated B :=
-  NE.map (fun x => (fst x, f (snd x))) p.
+Definition predicated_map {A B: Type} (f: A -> B) (p: predicated A)
+  : predicated B := NE.map (fun x => (fst x, f (snd x))) p.
 
 (*map (fun x => (fst x, Econs (snd x) Enil)) pel*)
 Definition merge' (pel: pred_expr) (tpel: predicated expression_list) :=
@@ -99,16 +99,20 @@ Fixpoint merge (pel: list pred_expr): predicated expression_list :=
   | a :: b => merge' a (merge b)
   end.
 
-Definition map_predicated {A B} (pf: predicated (A -> B)) (pa: predicated A): predicated B :=
+Definition map_predicated {A B} (pf: predicated (A -> B)) (pa: predicated A)
+  : predicated B :=
   predicated_map (fun x => (fst x) (snd x)) (predicated_prod pf pa).
 
-Definition predicated_apply1 {A B} (pf: predicated (A -> B)) (pa: A): predicated B :=
+Definition predicated_apply1 {A B} (pf: predicated (A -> B)) (pa: A)
+  : predicated B :=
   NE.map (fun x => (fst x, (snd x) pa)) pf.
 
-Definition predicated_apply2 {A B C} (pf: predicated (A -> B -> C)) (pa: A) (pb: B): predicated C :=
+Definition predicated_apply2 {A B C} (pf: predicated (A -> B -> C)) (pa: A)
+           (pb: B): predicated C :=
   NE.map (fun x => (fst x, (snd x) pa pb)) pf.
 
-Definition predicated_apply3 {A B C D} (pf: predicated (A -> B -> C -> D)) (pa: A) (pb: B) (pc: C): predicated D :=
+Definition predicated_apply3 {A B C D} (pf: predicated (A -> B -> C -> D))
+           (pa: A) (pb: B) (pc: C): predicated D :=
   NE.map (fun x => (fst x, (snd x) pa pb pc)) pf.
 
 Definition predicated_from_opt {A: Type} (p: option pred_op) (a: A) :=
@@ -132,23 +136,34 @@ Fixpoint NEapp {A} (l m: NE.non_empty A) :=
   | a ::| b => a ::| NEapp b m
   end.
 
-Definition app_predicated {A: Type} (a b: predicated A) :=
+Definition app_predicated' {A: Type} (a b: predicated A) :=
   let negation := ¬ (NEfold_left (fun a b => a ∨ (fst b)) b ⟂) in
-  NEapp (NE.map (fun x => (negation ∧ (fst x), snd x)) a) b.
+  NEapp (NE.map (fun x => (negation ∧ fst x, snd x)) a) b.
+
+Definition app_predicated {A: Type} (p: option pred_op) (a b: predicated A) :=
+  match p with
+  | Some p' => NEapp (NE.map (fun x => (¬ p' ∧ fst x, snd x)) a)
+                     (NE.map (fun x => (p' ∧ fst x, snd x)) b)
+  | None => b
+  end.
+
+Definition pred_ret {A: Type} (a: A) : predicated A :=
+  NE.singleton (T, a).
 
 (*|
 Update Function
 ---------------
 
-The ``update`` function will generate a new forest given an existing forest and a new instruction,
-so that it can evaluate a symbolic expression by folding over a list of instructions.  The main
-problem is that predicates need to be merged as well, so that:
+The ``update`` function will generate a new forest given an existing forest and
+a new instruction, so that it can evaluate a symbolic expression by folding over
+a list of instructions.  The main problem is that predicates need to be merged
+as well, so that:
 
 1. The predicates are *independent*.
 2. The expression assigned to the register should still be correct.
 
-This is done by multiplying the predicates together, and assigning the negation of the expression to
-the other predicates.
+This is done by multiplying the predicates together, and assigning the negation
+of the expression to the other predicates.
 |*)
 
 Definition update (f : forest) (i : instr) : forest :=
@@ -156,34 +171,38 @@ Definition update (f : forest) (i : instr) : forest :=
   | RBnop => f
   | RBop p op rl r =>
     f # (Reg r) <-
-    (app_predicated
+    (app_predicated p
        (f # (Reg r))
-       (map_predicated (predicated_from_opt p (Eop op)) (merge (list_translation rl f))))
+       (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f))))
   | RBload p chunk addr rl r =>
     f # (Reg r) <-
-      (app_predicated
+      (app_predicated p
          (f # (Reg r))
          (map_predicated
-            (map_predicated (predicated_from_opt p (Eload chunk addr)) (merge (list_translation rl f)))
+            (map_predicated (pred_ret (Eload chunk addr))
+                            (merge (list_translation rl f)))
             (f # Mem)))
   | RBstore p chunk addr rl r =>
     f # Mem <-
-      (app_predicated
-         (f # (Reg r))
+      (app_predicated p
+         (f # Mem)
          (map_predicated
             (map_predicated
-               (predicated_apply2 (map_predicated (predicated_from_opt p Estore) (f # (Reg r))) chunk addr)
+               (predicated_apply2 (map_predicated (pred_ret Estore)
+                                                  (f # (Reg r))) chunk addr)
                (merge (list_translation rl f))) (f # Mem)))
   | RBsetpred p' c args p =>
     f # (Pred p) <-
-    (app_predicated
+    (app_predicated p'
        (f # (Pred p))
-       (map_predicated (predicated_from_opt p' (Esetpred c)) (merge (list_translation args f))))
+       (map_predicated (pred_ret (Esetpred c))
+                       (merge (list_translation args f))))
   end.
 
 (*|
-Implementing which are necessary to show the correctness of the translation validation by showing
-that there aren't any more effects in the resultant RTLPar code than in the RTLBlock code.
+Implementing which are necessary to show the correctness of the translation
+validation by showing that there aren't any more effects in the resultant RTLPar
+code than in the RTLBlock code.
 
 Get a sequence from the basic block.
 |*)
@@ -195,19 +214,20 @@ Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
   end.
 
 (*|
-Check equivalence of control flow instructions.  As none of the basic blocks should have been moved,
-none of the labels should be different, meaning the control-flow instructions should match exactly.
+Check equivalence of control flow instructions.  As none of the basic blocks
+should have been moved, none of the labels should be different, meaning the
+control-flow instructions should match exactly.
 |*)
 
 Definition check_control_flow_instr (c1 c2: cf_instr) : bool :=
   if cf_instr_eq c1 c2 then true else false.
 
 (*|
-We define the top-level oracle that will check if two basic blocks are equivalent after a scheduling
-transformation.
+We define the top-level oracle that will check if two basic blocks are
+equivalent after a scheduling transformation.
 |*)
 
-Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
+Definition empty_trees (bb: list RTLBlock.bb) (bbt: list RTLPar.bb) : bool :=
   match bb with
   | nil =>
     match bbt with
@@ -253,7 +273,8 @@ Top-level Functions
 
 Parameter schedule : RTLBlock.function -> RTLPar.function.
 
-Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :=
+Definition transl_function (f: RTLBlock.function)
+  : Errors.res RTLPar.function :=
   let tfcode := fn_code (schedule f) in
   if check_scheduled_trees f.(fn_code) tfcode then
     Errors.OK (mkfunction f.(fn_sig)
@@ -262,7 +283,8 @@ Definition transl_function (f: RTLBlock.function) : Errors.res RTLPar.function :
                           tfcode
                           f.(fn_entrypoint))
   else
-    Errors.Error (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
+    Errors.Error
+      (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
 
 Definition transl_fundef := transf_partial_fundef transl_function.
 

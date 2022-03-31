@@ -1,6 +1,6 @@
 CC ?= gcc
 VERICERT ?= vericert
-VERICERT_OPTS ?= -fschedule
+VERICERT_OPTS ?= -fschedule -fif-conv
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
@@ -18,7 +18,7 @@ all: $(TESTS)
 	@$(CC) $(CFLAGS) -o $@ $<
 
 %.v: %.c
-	@$(VERICERT) $(VERICERT_OPTS) -o $@ $<
+	$(VERICERT) $(VERICERT_OPTS) -o $@ $<
 
 %.iver: %.v
 	@$(IVERILOG) $(IVERILOG_OPTS) -o $@ -- $<

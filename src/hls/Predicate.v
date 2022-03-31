@@ -24,6 +24,8 @@ Notation "A ∨ B" := (Por A B) (at level 25) : pred_op.
 Notation "⟂" := (Pfalse) : pred_op.
 Notation "'T'" := (Ptrue) : pred_op.
 
+#[local] Open Scope pred_op.
+
 Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   match p with
   | Plit (b, p') => if b then a (Pos.to_nat p') else negb (a (Pos.to_nat p'))
@@ -32,6 +34,234 @@ Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
   | Por p1 p2 => sat_predicate p1 a || sat_predicate p2 a
   end.
+
+Definition sat_equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
+
+Lemma equiv_symm : forall a b, sat_equiv a b -> sat_equiv b a.
+Proof. crush. Qed.
+
+Lemma equiv_trans : forall a b c, sat_equiv a b -> sat_equiv b c -> sat_equiv a c.
+Proof. crush. Qed.
+
+Lemma equiv_refl : forall a, sat_equiv a a.
+Proof. crush. Qed.
+
+#[global]
+Instance Equivalence_SAT : Equivalence sat_equiv :=
+  { Equivalence_Reflexive := equiv_refl ;
+    Equivalence_Symmetric := equiv_symm ;
+    Equivalence_Transitive := equiv_trans ;
+  }.
+
+#[global]
+Instance SATSetoid : Setoid pred_op :=
+  { equiv := sat_equiv; }.
+
+#[global]
+Instance PandProper : Proper (equiv ==> equiv ==> equiv) Pand.
+Proof.
+  unfold Proper. simplify. unfold "==>".
+  intros.
+  unfold sat_equiv in *. intros.
+  simplify. rewrite H0. rewrite H.
+  auto.
+Qed.
+
+#[global]
+Instance PorProper : Proper (equiv ==> equiv ==> equiv) Por.
+Proof.
+  unfold Proper, "==>". simplify.
+  intros.
+  unfold sat_equiv in *. intros.
+  simplify. rewrite H0. rewrite H.
+  auto.
+Qed.
+
+#[global]
+Instance sat_predicate_Proper : Proper (equiv ==> eq ==> eq) sat_predicate.
+Proof.
+  unfold Proper, "==>". simplify.
+  intros.
+  unfold sat_equiv in *. subst.
+  apply H.
+Qed.
+
+Fixpoint negate (p: pred_op) :=
+  match p with
+  | Plit (b, pr) => Plit (negb b, pr)
+  | T => ⟂
+  | ⟂ => T
+  | A ∧ B => negate A ∨ negate B
+  | A ∨ B => negate A ∧ negate B
+  end.
+
+Notation "¬ A" := (negate A) (at level 15) : pred_op.
+
+Lemma negate_correct :
+  forall h a, sat_predicate (negate h) a = negb (sat_predicate h a).
+Proof.
+  induction h; crush.
+  - repeat destruct_match; subst; crush; symmetry; apply negb_involutive.
+  - rewrite negb_andb; crush.
+  - rewrite negb_orb; crush.
+Qed.
+
+Definition unsat p := forall a, sat_predicate p a = false.
+Definition sat p := exists a, sat_predicate p a = true.
+
+Lemma unsat_correct1 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate a c = true ->
+    sat_predicate b c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
+  auto.
+Qed.
+
+Lemma unsat_correct2 :
+  forall a b c,
+    unsat (Pand a b) ->
+    sat_predicate b c = true ->
+    sat_predicate a c = false.
+Proof.
+  unfold unsat in *. intros.
+  simplify. specialize (H c).
+  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
+Qed.
+
+Lemma unsat_not a: unsat (a ∧ (¬ a)).
+Proof.
+  unfold unsat; simplify.
+  rewrite negate_correct.
+  auto with bool.
+Qed.
+
+Lemma unsat_commut a b: unsat (a ∧ b) -> unsat (b ∧ a).
+Proof. unfold unsat; simplify; eauto with bool. Qed.
+
+Lemma sat_imp_equiv :
+  forall a b,
+    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> a == b.
+Proof.
+  simplify; unfold unsat, sat_equiv.
+  intros. specialize (H c); simplify.
+  rewrite negate_correct in *.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+Lemma sat_predicate_and :
+  forall a b c,
+    sat_predicate (a ∧ b) c = sat_predicate a c && sat_predicate b c.
+Proof. crush. Qed.
+
+Lemma sat_predicate_or :
+  forall a b c,
+    sat_predicate (a ∨ b) c = sat_predicate a c || sat_predicate b c.
+Proof. crush. Qed.
+
+Lemma sat_equiv2 :
+  forall a b,
+    a == b -> unsat (a ∧ ¬ b ∨ ¬ a ∧ b).
+Proof.
+  unfold unsat, equiv; simplify.
+  repeat rewrite negate_correct.
+  repeat rewrite H.
+  rewrite andb_negb_r.
+  rewrite andb_negb_l. auto.
+Qed.
+
+Lemma sat_equiv3 :
+  forall a b,
+    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> a == b.
+Proof.
+  simplify. unfold unsat, sat_equiv in *; intros.
+  specialize (H c); simplify.
+  rewrite negate_correct in *.
+  destruct (sat_predicate b c) eqn:X;
+  destruct (sat_predicate a c) eqn:X2;
+  crush.
+Qed.
+
+Lemma sat_equiv4 :
+  forall a b,
+    a == b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
+Proof.
+  unfold unsat, equiv; simplify.
+  repeat rewrite negate_correct.
+  repeat rewrite H.
+  rewrite andb_negb_r. auto.
+Qed.
+
+Definition simplify' (p: pred_op) :=
+  match p with
+  | (Plit (b1, a)) ∧ (Plit (b2, b)) as p' =>
+      if Pos.eqb a b then
+        if negb (xorb b1 b2) then Plit (b1, a) else ⟂
+      else p'
+  | (Plit (b1, a)) ∨ (Plit (b2, b)) as p' =>
+      if Pos.eqb a b then
+        if negb (xorb b1 b2) then Plit (b1, a) else T
+      else p'
+  | A ∧ T => A
+  | T ∧ A => A
+  | _ ∧ ⟂ => ⟂
+  | ⟂ ∧ _ => ⟂
+  | _ ∨ T => T
+  | T ∨ _ => T
+  | A ∨ ⟂ => A
+  | ⟂ ∨ A => A
+  | A => A
+  end.
+
+Lemma pred_op_dec :
+  forall p1 p2: pred_op,
+  { p1 = p2 } + { p1 <> p2 }.
+Proof. pose proof Pos.eq_dec. repeat decide equality. Qed.
+
+Fixpoint simplify (p: pred_op) :=
+  match p with
+  | A ∧ B =>
+    let A' := simplify A in
+    let B' := simplify B in
+    simplify' (A' ∧ B')
+  | A ∨ B =>
+    let A' := simplify A in
+    let B' := simplify B in
+    simplify' (A' ∨ B')
+  | T => T
+  | ⟂ => ⟂
+  | Plit a => Plit a
+  end.
+
+Lemma simplify'_correct :
+  forall h a,
+    sat_predicate (simplify' h) a = sat_predicate h a.
+Proof.
+  (*destruct h; crush; repeat destruct_match; crush;
+  solve [rewrite andb_true_r; auto | rewrite orb_false_r; auto].
+Qed.*) Admitted.
+
+Lemma simplify_correct :
+  forall h a,
+    sat_predicate (simplify h) a = sat_predicate h a.
+Proof.
+  Local Opaque simplify'.
+  induction h; crush.
+  - replace (sat_predicate h1 a && sat_predicate h2 a)
+      with (sat_predicate (simplify h1) a && sat_predicate (simplify h2) a)
+      by crush.
+    rewrite simplify'_correct. crush.
+  - replace (sat_predicate h1 a || sat_predicate h2 a)
+      with (sat_predicate (simplify h1) a || sat_predicate (simplify h2) a)
+      by crush.
+    rewrite simplify'_correct. crush.
+    Local Transparent simplify'.
+Qed.
 
 Fixpoint mult {A: Type} (a b: list (list A)) : list (list A) :=
   match a with
@@ -162,6 +392,161 @@ Fixpoint trans_pred (p: pred_op) :
     apply i0 in H0. auto.
 Defined.
 
+Definition bar (p1: lit): lit := (negb (fst p1), (snd p1)).
+
+Definition stseytin_or (cur p1 p2: lit) : formula :=
+  (bar cur :: p1 :: p2 :: nil)
+    :: (cur :: bar p1 :: nil)
+    :: (cur :: bar p2 :: nil) :: nil.
+
+Definition stseytin_and (cur p1 p2: lit) : formula :=
+  (cur :: bar p1 :: bar p2 :: nil)
+    :: (bar cur :: p1 :: nil)
+    :: (bar cur :: p2 :: nil) :: nil.
+
+Fixpoint xtseytin (next: nat) (p: pred_op) {struct p} : (nat * lit * formula) :=
+  match p with
+  | Plit (b, p') => (next, (b, Pos.to_nat p'), nil)
+  | Ptrue =>
+      ((next+1)%nat, (true, next), ((true, next)::nil)::nil)
+  | Pfalse =>
+      ((next+1)%nat, (true, next), ((false, next)::nil)::nil)
+  | Por p1 p2 =>
+      let '(m1, n1, f1) := xtseytin next p1 in
+      let '(m2, n2, f2) := xtseytin m1 p2 in
+      ((m2+1)%nat, (true, m2), stseytin_or (true, m2) n1 n2 ++ f1 ++ f2)
+  | Pand p1 p2 =>
+      let '(m1, n1, f1) := xtseytin next p1 in
+      let '(m2, n2, f2) := xtseytin m1 p2 in
+      ((m2+1)%nat, (true, m2), stseytin_and (true, m2) n1 n2 ++ f1 ++ f2)
+  end.
+
+Lemma stseytin_and_correct :
+  forall cur p1 p2 fm c,
+    stseytin_and cur p1 p2 = fm ->
+    satLit cur c ->
+    satLit p1 c /\ satLit p2 c ->
+    satFormula fm c.
+Proof.
+  intros.
+  unfold stseytin_and in *. rewrite <- H.
+  unfold satLit in *. destruct p1. destruct p2. destruct cur.
+  simpl in *|-. cbn. unfold satLit. cbn. crush.
+Qed.
+
+Lemma stseytin_and_correct2 :
+  forall cur p1 p2 fm c,
+    stseytin_and cur p1 p2 = fm ->
+    satFormula fm c ->
+    satLit cur c <-> satLit p1 c /\ satLit p2 c.
+Proof.
+  intros. split. intros. inv H1. unfold stseytin_and in *.
+  inv H0; try contradiction. Admitted.
+
+Lemma stseytin_or_correct :
+  forall cur p1 p2 fm c,
+    stseytin_or cur p1 p2 = fm ->
+    satLit cur c ->
+    satLit p1 c \/ satLit p2 c ->
+    satFormula fm c.
+Proof.
+  intros.
+  unfold stseytin_or in *. rewrite <- H. inv H1.
+  unfold satLit in *. destruct p1. destruct p2. destruct cur.
+  simpl in *|-. cbn. unfold satLit. cbn. crush.
+  unfold satLit in *. destruct p1. destruct p2. destruct cur.
+  simpl in *|-. cbn. unfold satLit. cbn. crush.
+Qed.
+
+Lemma stseytin_or_correct2 :
+  forall cur p1 p2 fm c,
+    stseytin_or cur p1 p2 = fm ->
+    satFormula fm c ->
+    satLit cur c <-> satLit p1 c \/ satLit p2 c.
+Proof. Admitted.
+
+Lemma xtseytin_correct :
+  forall p next l n fm c,
+    xtseytin next p = (n, l, fm) ->
+    sat_predicate p c = true <-> satFormula ((l::nil)::fm) c.
+Proof.
+  induction p.
+  - intros. simplify. destruct p.
+    inv H. split.
+    intros. destruct b. split; crush.
+    apply negb_true_iff in H.
+    split; crush.
+    intros. inv H. inv H0; try contradiction.
+    inv H. simplify. rewrite <- H0.
+    destruct b.
+    rewrite -> H0; auto.
+    rewrite -> H0; auto.
+  - admit.
+  - admit.
+  - intros. split. intros. simpl in H0.
+    apply andb_prop in H0. inv H0.
+    cbn in H.
+    repeat destruct_match; try discriminate; []. inv H. eapply IHp1 in Heqp.
+    eapply IHp2 in Heqp1. apply Heqp1 in H2.
+    apply Heqp in H1. inv H1. inv H2.
+    assert
+      (satFormula
+         (((true, n1) :: bar l0 :: bar l1 :: nil)
+             :: (bar (true, n1) :: l0 :: nil)
+             :: (bar (true, n1) :: l1 :: nil) :: nil) c).
+    eapply stseytin_and_correct. unfold stseytin_and. eauto.
+    unfold satLit. simpl. admit.
+    inv H; try contradiction. inv H1; try contradiction. eauto.
+Admitted.
+
+Fixpoint max_predicate (p: pred_op) : positive :=
+  match p with
+  | Plit (b, p) => p
+  | Ptrue => 1
+  | Pfalse => 1
+  | Pand a b => Pos.max (max_predicate a) (max_predicate b)
+  | Por a b => Pos.max (max_predicate a) (max_predicate b)
+  end.
+
+Definition tseytin (p: pred_op) :
+  {fm: formula | forall a,
+      sat_predicate p a = true <-> satFormula fm a}.
+  refine (
+      (match xtseytin (Pos.to_nat (max_predicate p + 1)) p as X
+             return xtseytin (Pos.to_nat (max_predicate p + 1)) p = X ->
+                    {fm: formula | forall a, sat_predicate p a = true <-> satFormula fm a}
+       with (m, n, fm) => fun H => exist _ ((n::nil) :: fm) _
+       end) (eq_refl (xtseytin (Pos.to_nat (max_predicate p + 1)) p))).
+  intros. eapply xtseytin_correct; eauto. Defined.
+
+Definition tseytin_simple (p: pred_op) : formula :=
+    let m := Pos.to_nat (max_predicate p + 1) in
+    let '(m, n, fm) := xtseytin m p in
+    (n::nil) :: fm.
+
+Definition sat_pred_tseytin (p: pred_op) :
+  ({al : alist | sat_predicate p (interp_alist al) = true}
+   + {forall a : asgn, sat_predicate p a = false}).
+  refine
+  ( match tseytin p with
+    | exist _ fm _ =>
+      match satSolve fm with
+      | inleft (exist _ a _) => inleft (exist _ a _)
+      | inright _ => inright _
+      end
+    end ).
+  - apply i in s0. auto.
+  - intros. specialize (n a). specialize (i a).
+    destruct (sat_predicate p a). exfalso.
+    apply n. apply i. auto. auto.
+Defined.
+
+Definition sat_pred_simple (p: pred_op) : option alist :=
+  match sat_pred_tseytin p with
+  | inleft (exist _ a _) => Some a
+  | inright _ => None
+  end.
+
 Definition sat_pred (p: pred_op) :
   ({al : alist | sat_predicate p (interp_alist al) = true}
    + {forall a : asgn, sat_predicate p a = false}).
@@ -179,69 +564,10 @@ Definition sat_pred (p: pred_op) :
     apply n. apply i. auto. auto.
 Defined.
 
-Definition sat_pred_simple (p: pred_op) :=
-  match sat_pred p with
-  | inleft (exist _ al _) => Some al
-  | inright _ => None
-  end.
+#[local] Open Scope positive.
 
-#[local] Open Scope pred_op.
-
-Fixpoint negate (p: pred_op) :=
-  match p with
-  | Plit (b, pr) => Plit (negb b, pr)
-  | T => ⟂
-  | ⟂ => T
-  | A ∧ B => negate A ∨ negate B
-  | A ∨ B => negate A ∧ negate B
-  end.
-
-Notation "¬ A" := (negate A) (at level 15) : pred_op.
-
-Lemma negate_correct :
-  forall h a, sat_predicate (negate h) a = negb (sat_predicate h a).
-Proof.
-  induction h; crush.
-  - repeat destruct_match; subst; crush; symmetry; apply negb_involutive.
-  - rewrite negb_andb; crush.
-  - rewrite negb_orb; crush.
-Qed.
-
-Definition unsat p := forall a, sat_predicate p a = false.
-Definition sat p := exists a, sat_predicate p a = true.
-
-Lemma unsat_correct1 :
-  forall a b c,
-    unsat (Pand a b) ->
-    sat_predicate a c = true ->
-    sat_predicate b c = false.
-Proof.
-  unfold unsat in *. intros.
-  simplify. specialize (H c).
-  apply andb_false_iff in H. inv H. rewrite H0 in H1. discriminate.
-  auto.
-Qed.
-
-Lemma unsat_correct2 :
-  forall a b c,
-    unsat (Pand a b) ->
-    sat_predicate b c = true ->
-    sat_predicate a c = false.
-Proof.
-  unfold unsat in *. intros.
-  simplify. specialize (H c).
-  apply andb_false_iff in H. inv H. auto. rewrite H0 in H1. discriminate.
-Qed.
-
-Lemma unsat_not a: unsat (a ∧ (¬ a)).
-Proof.
-  unfold unsat; simplify.
-  rewrite negate_correct.
-  auto with bool.
-Qed.
-
-Lemma unsat_commut a b: unsat (a ∧ b) -> unsat (b ∧ a).
-Proof. unfold unsat; simplify; eauto with bool. Qed.
+Compute tseytin_simple (Por (negate (Pand (Por (Plit (true, 1)) (Plit (true, 2))) (Plit (true, 3)))) (Plit (false, 4))).
+Compute sat_pred_simple (Por Pfalse (Pand (Plit (true, 1)) (Plit (false, 1)))).
 
 Lemma sat_dec a: {sat a} + {unsat a}.
 Proof.
@@ -252,117 +578,13 @@ Proof.
   intros. tauto.
 Qed.
 
-Definition sat_equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
-
-Lemma equiv_symm : forall a b, sat_equiv a b -> sat_equiv b a.
-Proof. crush. Qed.
-
-Lemma equiv_trans : forall a b c, sat_equiv a b -> sat_equiv b c -> sat_equiv a c.
-Proof. crush. Qed.
-
-Lemma equiv_refl : forall a, sat_equiv a a.
-Proof. crush. Qed.
-
-#[global]
-Instance Equivalence_SAT : Equivalence sat_equiv :=
-  { Equivalence_Reflexive := equiv_refl ;
-    Equivalence_Symmetric := equiv_symm ;
-    Equivalence_Transitive := equiv_trans ;
-  }.
-
-#[global]
-Instance SATSetoid : Setoid pred_op :=
-  { equiv := sat_equiv; }.
-
-#[global]
-Instance PandProper : Proper (equiv ==> equiv ==> equiv) Pand.
-Proof.
-  unfold Proper. simplify. unfold "==>".
-  intros.
-  unfold sat_equiv in *. intros.
-  simplify. rewrite H0. rewrite H.
-  auto.
-Qed.
-
-#[global]
-Instance PorProper : Proper (equiv ==> equiv ==> equiv) Por.
-Proof.
-  unfold Proper, "==>". simplify.
-  intros.
-  unfold sat_equiv in *. intros.
-  simplify. rewrite H0. rewrite H.
-  auto.
-Qed.
-
-#[global]
-Instance sat_predicate_Proper : Proper (equiv ==> eq ==> eq) sat_predicate.
-Proof.
-  unfold Proper, "==>". simplify.
-  intros.
-  unfold sat_equiv in *. subst.
-  apply H.
-Qed.
-
-Lemma sat_imp_equiv :
-  forall a b,
-    unsat (a ∧ ¬ b ∨ ¬ a ∧ b) -> a == b.
-Proof.
-  simplify; unfold unsat, sat_equiv.
-  intros. specialize (H c); simplify.
-  rewrite negate_correct in *.
-  destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
-Qed.
-
-Lemma sat_predicate_and :
-  forall a b c,
-    sat_predicate (a ∧ b) c = sat_predicate a c && sat_predicate b c.
-Proof. crush. Qed.
-
-Lemma sat_predicate_or :
-  forall a b c,
-    sat_predicate (a ∨ b) c = sat_predicate a c || sat_predicate b c.
-Proof. crush. Qed.
-
-Lemma sat_equiv2 :
-  forall a b,
-    a == b -> unsat (a ∧ ¬ b ∨ ¬ a ∧ b).
-Proof.
-  unfold unsat, equiv; simplify.
-  repeat rewrite negate_correct.
-  repeat rewrite H.
-  rewrite andb_negb_r.
-  rewrite andb_negb_l. auto.
-Qed.
-
-Lemma sat_equiv3 :
-  forall a b,
-    unsat (a ∧ ¬ b ∨ b ∧ ¬ a) -> a == b.
-Proof.
-  simplify. unfold unsat, sat_equiv in *; intros.
-  specialize (H c); simplify.
-  rewrite negate_correct in *.
-  destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
-Qed.
-
-Lemma sat_equiv4 :
-  forall a b,
-    a == b -> unsat (a ∧ ¬ b ∨ b ∧ ¬ a).
-Proof.
-  unfold unsat, equiv; simplify.
-  repeat rewrite negate_correct.
-  repeat rewrite H.
-  rewrite andb_negb_r. auto.
-Qed.
-
 Definition equiv_check p1 p2 :=
-  match sat_pred_simple (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1) with
+  match sat_pred_simple (simplify (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1)) with
   | None => true
   | _ => false
   end.
+
+Compute equiv_check Pfalse (Pand (Plit (true, 1%positive)) (Plit (false, 1%positive))).
 
 Lemma equiv_check_correct :
   forall p1 p2, equiv_check p1 p2 = true -> p1 == p2.
@@ -371,16 +593,24 @@ Proof.
   destruct_match; try discriminate; [].
   destruct_match. destruct_match. discriminate.
   eapply sat_equiv3; eauto.
+  unfold unsat; intros.
+  rewrite <- simplify_correct. eauto.
 Qed.
+
+Opaque simplify.
+Opaque simplify'.
 
 Lemma equiv_check_correct2 :
   forall p1 p2, p1 == p2 -> equiv_check p1 p2 = true.
 Proof.
   unfold equiv_check, equiv, sat_pred_simple. intros.
-  destruct_match; auto. destruct_match; try discriminate. destruct_match.
+  destruct_match; auto. destruct_match; try discriminate.
+  destruct_match.
   simplify.
   apply sat_equiv4 in H. unfold unsat in H. simplify.
-  clear Heqs. rewrite H in e. discriminate.
+  clear Heqs. rewrite simplify_correct in e.
+  specialize (H (interp_alist a)). simplify.
+  rewrite H1 in e. rewrite H0 in e. discriminate.
 Qed.
 
 Lemma equiv_check_dec :
@@ -444,60 +674,10 @@ Proof.
   auto.
 Qed.
 
-Definition simplify' (p: pred_op) :=
-  match p with
-  | A ∧ T => A
-  | T ∧ A => A
-  | _ ∧ ⟂ => ⟂
-  | ⟂ ∧ _ => ⟂
-  | _ ∨ T => T
-  | T ∨ _ => T
-  | A ∨ ⟂ => A
-  | ⟂ ∨ A => A
-  | A => A
-  end.
-
-Lemma pred_op_dec :
-  forall p1 p2: pred_op,
-  { p1 = p2 } + { p1 <> p2 }.
-Proof. pose proof Pos.eq_dec. repeat decide equality. Qed.
-
-Fixpoint simplify (p: pred_op) :=
-  match p with
-  | A ∧ B =>
-    let A' := simplify A in
-    let B' := simplify B in
-    simplify' (A' ∧ B')
-  | A ∨ B =>
-    let A' := simplify A in
-    let B' := simplify B in
-    simplify' (A' ∨ B')
-  | T => T
-  | ⟂ => ⟂
-  | Plit a => Plit a
-  end.
-
-Lemma simplify'_correct :
-  forall h a,
-    sat_predicate (simplify' h) a = sat_predicate h a.
+#[global]
+Instance simplifyProper : Proper (equiv ==> equiv) simplify.
 Proof.
-  destruct h; crush; repeat destruct_match; crush;
-  solve [rewrite andb_true_r; auto | rewrite orb_false_r; auto].
-Qed.
-
-Lemma simplify_correct :
-  forall h a,
-    sat_predicate (simplify h) a = sat_predicate h a.
-Proof.
-  Local Opaque simplify'.
-  induction h; crush.
-  - replace (sat_predicate h1 a && sat_predicate h2 a)
-      with (sat_predicate (simplify h1) a && sat_predicate (simplify h2) a)
-      by crush.
-    rewrite simplify'_correct. crush.
-  - replace (sat_predicate h1 a || sat_predicate h2 a)
-      with (sat_predicate (simplify h1) a || sat_predicate (simplify h2) a)
-      by crush.
-    rewrite simplify'_correct. crush.
-    Local Transparent simplify'.
+  unfold Proper, "==>". simplify. unfold "→".
+  intros. unfold sat_equiv; intros.
+  rewrite ! simplify_correct; auto.
 Qed.

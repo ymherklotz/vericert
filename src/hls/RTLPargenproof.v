@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,17 @@ Require Import vericert.hls.Abstr.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
 
+(*|
+==============
+RTLPargenproof
+==============
+
+RTLBlock to abstract translation
+================================
+
+Correctness of translation from RTLBlock to the abstract interpretation language.
+|*)
+
 (*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ m => m end.
 
@@ -45,13 +56,6 @@ Inductive state_lessdef : instr_state -> instr_state -> Prop :=
     forall rs1 rs2 m1,
     (forall x, rs1 !! x = rs2 !! x) ->
     state_lessdef (mk_instr_state rs1 m1) (mk_instr_state rs2 m1).
-
-(*|
-RTLBlock to abstract translation
---------------------------------
-
-Correctness of translation from RTLBlock to the abstract interpretation language.
-|*)
 
 Ltac inv_simp :=
   repeat match goal with
@@ -742,7 +746,11 @@ Lemma sem_update :
   match_states st' st''' ->
   @step_instr A ge sp st''' x st'' ->
   exists tst, sem (mk_ctx st sp ge) (update f x) tst /\ match_states st'' tst.
-Proof. Admitted.
+Proof.
+  intros. destruct x.
+  - inv H1. econstructor. simplify. eauto. symmetry; auto.
+  - inv H1. inv H0. econstructor.
+    Admitted.
 
 Lemma rtlblock_trans_correct :
   forall bb ge sp st st',
@@ -804,8 +812,8 @@ Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
       (STACKS: list_forall2 match_stackframes sf sf')
       (REG: forall x, rs !! x = rs' !! x)
       (REG: forall x, ps !! x = ps' !! x),
-      match_states (State sf f sp pc rs ps m)
-                   (State sf' tf sp pc rs' ps' m)
+      match_states (State sf f sp pc nil rs ps m)
+                   (State sf' tf sp pc nil rs' ps' m)
 | match_returnstate:
     forall stack stack' v m
       (STACKS: list_forall2 match_stackframes stack stack'),
@@ -1092,7 +1100,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eauto. eauto. simplify. eauto. eauto. }
     { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
       inv H2. unfold transl_function in Heqr. destruct_match; crush.
-      inv Heqr. 
+      inv Heqr.
       repeat econstructor; eauto.
       unfold bind in *. destruct_match; crush. }
     { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }

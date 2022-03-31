@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,10 +27,12 @@ Require Import compcert.lib.Maps.
 Require Import vericert.common.Statemonad.
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.AssocMap.
+Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.RTLParFU.
+Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 
@@ -142,6 +144,30 @@ Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
                 s.(st_datapath)
                 s.(st_controllogic))
               (declare_reg_state_incr i s r sz).
+
+Lemma declare_arr_state_incr :
+  forall i s r sz ln,
+    st_incr s
+    (mkstate
+       s.(st_st)
+       s.(st_freshreg)
+       s.(st_freshstate)
+       s.(st_scldecls)
+       (AssocMap.set r (i, VArray sz ln) s.(st_arrdecls))
+       s.(st_datapath)
+       s.(st_controllogic)).
+Proof. Admitted.
+
+Definition declare_arr (i : option io) (r : reg) (sz : nat) (ln : nat) : mon unit :=
+  fun s => OK tt (mkstate
+                s.(st_st)
+                s.(st_freshreg)
+                s.(st_freshstate)
+                s.(st_scldecls)
+                (AssocMap.set r (i, VArray sz ln) s.(st_arrdecls))
+                s.(st_datapath)
+                s.(st_controllogic))
+              (declare_arr_state_incr i s r sz ln).
 
 Lemma add_instr_state_incr :
   forall s n n' st,
@@ -328,6 +354,30 @@ Definition check_address_parameter_signed (p : Z) : bool :=
 Definition check_address_parameter_unsigned (p : Z) : bool :=
   Z.leb p Integers.Ptrofs.max_unsigned.
 
+Lemma create_reg_state_incr:
+  forall s sz i,
+    st_incr s (mkstate
+         s.(st_st)
+         (Pos.succ (st_freshreg s))
+         (st_freshstate s)
+         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+         s.(st_arrdecls)
+         (st_datapath s)
+         (st_controllogic s)).
+Proof. constructor; simpl; auto with htlh. Qed.
+
+Definition create_reg (i : option io) (sz : nat) : mon reg :=
+  fun s => let r := s.(st_freshreg) in
+           OK r (mkstate
+                   s.(st_st)
+                   (Pos.succ r)
+                   (st_freshstate s)
+                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
+                   (st_arrdecls s)
+                   (st_datapath s)
+                   (st_controllogic s))
+              (create_reg_state_incr s sz i).
+
 Definition translate_eff_addressing (a: Op.addressing) (args: list reg)
   : mon expr :=
   match a, args with (* TODO: We should be more methodical here; what are the possibilities?*)
@@ -355,7 +405,10 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg)
   | _, _ => error (Errors.msg "HTLPargen: translate_eff_addressing unsuported addressing")
   end.
 
-(** Translate an instruction to a statement. FIX mulhs mulhu *)
+(*|
+Translate an instruction to a statement. FIX mulhs mulhu
+|*)
+
 Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   match op, args with
   | Op.Omove, r::nil => ret (Vvar r)
@@ -432,28 +485,6 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
     | _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
-Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
-           (args : list reg) (stack : reg) : mon expr :=
-  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
-  | Mint32, Op.Aindexed off, r1::nil =>
-    if (check_address_parameter_signed off)
-    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
-  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
-    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then ret (Vvari stack
-                    (Vbinop Vdivu
-                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
-                            (Vlit (ZToValue 4))))
-    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
-  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
-    let a := Integers.Ptrofs.unsigned a in
-    if (check_address_parameter_unsigned a)
-    then ret (Vvari stack (Vlit (ZToValue (a / 4))))
-    else error (Errors.msg "HTLgen: eff_addressing out of bounds stack offset")
-  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
-  end.
-
 Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
   match ns with
   | n :: ns' => (i, n) :: enumerate (i+1) ns'
@@ -468,30 +499,6 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
-
-Lemma create_reg_state_incr:
-  forall s sz i,
-    st_incr s (mkstate
-         s.(st_st)
-         (Pos.succ (st_freshreg s))
-         (st_freshstate s)
-         (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
-         s.(st_arrdecls)
-         (st_datapath s)
-         (st_controllogic s)).
-Proof. constructor; simpl; auto with htlh. Qed.
-
-Definition create_reg (i : option io) (sz : nat) : mon reg :=
-  fun s => let r := s.(st_freshreg) in
-           OK r (mkstate
-                   s.(st_st)
-                   (Pos.succ r)
-                   (st_freshstate s)
-                   (AssocMap.set s.(st_freshreg) (i, VScalar sz) s.(st_scldecls))
-                   (st_arrdecls s)
-                   (st_datapath s)
-                   (st_controllogic s))
-              (create_reg_state_incr s sz i).
 
 Lemma create_arr_state_incr:
   forall s sz ln i,
@@ -678,23 +685,18 @@ Definition translate_predicate (a : assignment)
     ret (a dst (Vternary (pred_expr preg pos) e dst))
   end.
 
-Definition translate_inst a (fin rtrn stack preg : reg) (n : node) (i : instr)
+Definition translate_inst a (fin rtrn preg : reg) (n : node) (i : instr)
   : mon stmnt :=
   match i with
-  | RBnop =>
+  | FUnop =>
     ret Vskip
-  | RBop p op args dst =>
+  | FUop p op args dst =>
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
     translate_predicate a preg p (Vvar dst) instr
-  | RBload p chunk addr args dst =>
-    do src <- translate_arr_access chunk addr args stack;
-    do _ <- declare_reg None dst 32;
-    translate_predicate a preg p (Vvar dst) src
-  | RBstore p chunk addr args src =>
-    do dst <- translate_arr_access chunk addr args stack;
-    translate_predicate a preg p dst (Vvar src)
-  | RBsetpred _ c args p =>
+  | FUread p1 p2 r => ret Vskip
+  | FUwrite p1 p2 r => ret Vskip
+  | FUsetpred _ c args p =>
     do cond <- translate_condition c args;
     ret (a (pred_expr preg (Plit (true, p))) cond)
   end.
@@ -724,28 +726,28 @@ Definition create_new_state (p: node): mon node :=
                 s.(st_controllogic))
               (create_new_state_state_incr s p).
 
-Definition translate_inst_list (fin rtrn stack preg: reg) (ni : node * node * list (list instr)) :=
+Definition translate_inst_list (fin rtrn preg: reg) (ni : node * node * list (list instr)) :=
   match ni with
   | (n, p, li) =>
     do _ <- collectlist
           (fun l =>
-             do stmnt <- translate_inst Vblock fin rtrn stack preg n l;
+             do stmnt <- translate_inst Vblock fin rtrn preg n l;
              add_data_instr n stmnt) (concat li);
     do st <- get;
     add_control_instr n (state_goto st.(st_st) p)
   end.
 
-Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
+Fixpoint translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
   match cfi with
-  | RBgoto n' =>
+  | FUgoto n' =>
     do st <- get;
     ret (Vskip, state_goto st.(st_st) n')
-  | RBcond c args n1 n2 =>
+  | FUcond c args n1 n2 =>
     do st <- get;
     do e <- translate_condition c args;
     ret (Vskip, state_cond st.(st_st) e n1 n2)
-  | RBreturn r =>
+  | FUreturn r =>
     match r with
     | Some r' =>
       ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r'))),
@@ -754,41 +756,41 @@ Fixpoint translate_cfi' (fin rtrn stack preg: reg) (cfi: cf_instr)
       ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z)))),
            Vskip)
     end
-  | RBpred_cf p c1 c2 =>
-    do (tc1s, tc1c) <- translate_cfi' fin rtrn stack preg c1;
-    do (tc2s, tc2c) <- translate_cfi' fin rtrn stack preg c2;
+  | FUpred_cf p c1 c2 =>
+    do (tc1s, tc1c) <- translate_cfi' fin rtrn preg c1;
+    do (tc2s, tc2c) <- translate_cfi' fin rtrn preg c2;
     ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
-  | RBjumptable r tbl =>
+  | FUjumptable r tbl =>
     do s <- get;
     ret (Vskip, Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr s.(st_st) tbl)) (Some Vskip))
-  | RBcall sig ri rl r n =>
+  | FUcall sig ri rl r n =>
     error (Errors.msg "HTLPargen: RPcall not supported.")
-  | RBtailcall sig ri lr =>
+  | FUtailcall sig ri lr =>
     error (Errors.msg "HTLPargen: RPtailcall not supported.")
-  | RBbuiltin e lb b n =>
+  | FUbuiltin e lb b n =>
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
-Definition translate_cfi (fin rtrn stack preg: reg) (ni: node * cf_instr)
+Definition translate_cfi (fin rtrn preg: reg) (ni: node * cf_instr)
   : mon unit :=
   let (n, cfi) := ni in
-  do (s, c) <- translate_cfi' fin rtrn stack preg cfi;
+  do (s, c) <- translate_cfi' fin rtrn preg cfi;
   do _ <- add_control_instr n c;
   add_data_instr n s.
 
-Definition transf_bblock (fin rtrn stack preg: reg) (ni : node * bblock)
+Definition transf_bblock (fin rtrn preg: reg) (ni : node * bblock)
   : mon unit :=
   let (n, bb) := ni in
   do nstate <- create_new_state ((poslength bb.(bb_body)))%positive;
-  do _ <- collectlist (translate_inst_list fin rtrn stack preg)
+  do _ <- collectlist (translate_inst_list fin rtrn preg)
                       (prange n (nstate + poslength bb.(bb_body) - 1)%positive
                                   bb.(bb_body));
   match bb.(bb_body) with
-  | nil => translate_cfi fin rtrn stack preg (n, bb.(bb_exit))
-  | _ => translate_cfi fin rtrn stack preg (nstate, bb.(bb_exit))
+  | nil => translate_cfi fin rtrn preg (n, bb.(bb_exit))
+  | _ => translate_cfi fin rtrn preg (nstate, bb.(bb_exit))
   end.
 
-Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+(*Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
                           && (d <? e) && (e <? f) && (f <? g))%positive true with
           | left t => left _
@@ -797,56 +799,65 @@ Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}
   simplify; repeat match goal with
                    | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
                    end; unfold module_ordering; auto.
-Defined.
+Defined.*)
 
-Definition transf_module (f: function) : mon HTL.module.
-  refine (
+Lemma clk_greater :
+  forall ram clk r',
+    Some ram = Some r' -> (clk < ram_addr r')%positive.
+Proof. Admitted.
+
+Definition declare_ram (r: ram) : mon unit :=
+  do _ <- declare_reg None r.(ram_en) 1;
+  do _ <- declare_reg None r.(ram_u_en) 1;
+  do _ <- declare_reg None r.(ram_wr_en) 1;
+  do _ <- declare_reg None r.(ram_addr) 32;
+  do _ <- declare_reg None r.(ram_d_in) 32;
+  do _ <- declare_reg None r.(ram_d_out) 32;
+  do _ <- declare_arr None r.(ram_mem) 32 r.(ram_size);
+  ret tt.
+
+Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
-    do (stack, stack_len) <- create_arr None 32
-                                        (Z.to_nat (f.(fn_stacksize) / 4));
     do preg <- create_reg None 32;
-    do _ <- collectlist (transf_bblock fin rtrn stack preg)
+    do _ <- collectlist (transf_bblock fin rtrn preg)
                         (Maps.PTree.elements f.(fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
                         f.(fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
-    do current_state <- get;
-    match zle (Z.pos (max_pc_map current_state.(st_datapath)))
-              Integers.Int.max_unsigned,
+    match get_ram 0 (fn_funct_units f) with
+    | Some (_, r) =>
+        do _ <- declare_ram r;
+        do current_state <- get;
+        match zle (Z.pos (max_pc_map current_state.(st_datapath)))
+                  Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic)))
               Integers.Int.max_unsigned,
-          decide_order (st_st current_state) fin rtrn stack start rst clk,
           max_list_dec (fn_params f) (st_st current_state)
-    with
-    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
-        ret (HTL.mkmodule
-           f.(fn_params)
-           current_state.(st_datapath)
-           current_state.(st_controllogic)
-           f.(fn_entrypoint)
-           current_state.(st_st)
-           stack
-           stack_len
-           fin
-           rtrn
-           start
-           rst
-           clk
-           current_state.(st_scldecls)
-           current_state.(st_arrdecls)
-           None
-           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
-           MORD
-           _
-           WFPARAMS)
-    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
+        with
+        | left LEDATA, left LECTRL, left WFPARAMS =>
+          ret (HTL.mkmodule
+             f.(fn_params)
+             current_state.(st_datapath)
+             current_state.(st_controllogic)
+             f.(fn_entrypoint)
+             current_state.(st_st)
+             fin
+             rtrn
+             start
+             rst
+             clk
+             current_state.(st_scldecls)
+             current_state.(st_arrdecls)
+             r)
+        | _, _, _=> error (Errors.msg "More than 2^32 states.")
+        end
+    | _ => error (Errors.msg "Stack RAM not found.")
     end
-  else error (Errors.msg "Stack size misalignment.")); discriminate.
-Defined.
+  else error (Errors.msg "Stack size misalignment.").
 
 Definition max_state (f: function) : state :=
   let st := Pos.succ (max_reg_function f) in
@@ -863,7 +874,7 @@ Definition transl_module (f : function) : Errors.res HTL.module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition main_is_internal (p : RTLPar.program) : bool :=
+Definition main_is_internal (p : RTLParFU.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
   match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
   | Some b =>
@@ -874,7 +885,7 @@ Definition main_is_internal (p : RTLPar.program) : bool :=
   | _ => false
   end.
 
-Definition transl_program (p : RTLBlockInstr.program) : Errors.res HTL.program :=
+Definition transl_program (p : RTLParFU.program) : Errors.res HTL.program :=
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").

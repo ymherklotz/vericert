@@ -35,6 +35,7 @@ Require Import vericert.hls.Verilog.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Array.
+Require Import vericert.hls.FunctionalUnits.
 
 Local Open Scope positive.
 Local Open Scope assocmap.
@@ -43,7 +44,7 @@ Local Open Scope assocmap.
 #[local] Hint Resolve max_reg_stmnt_lt_stmnt_tree : mgen.
 #[local] Hint Resolve max_stmnt_lt_module : mgen.
 
-Lemma int_eq_not_false : forall x, Int.eq x (Int.not x) = false.
+(*Lemma int_eq_not_false : forall x, Int.eq x (Int.not x) = false.
 Proof.
   intros. unfold Int.eq.
   rewrite Int.unsigned_not.
@@ -459,8 +460,8 @@ Lemma forall_ram_lt :
     forall_ram (fun x => x < max_reg_module m + 1) r.
 Proof.
   assert (X: forall a b c, a < b + 1 -> a < Pos.max c b + 1) by lia.
-  unfold forall_ram; simplify; unfold max_reg_module; repeat apply X;
-  unfold max_reg_ram; rewrite H; try lia.
+  unfold forall_ram; simplify; unfold HTL.max_reg_module; repeat apply X;
+  unfold HTL.max_reg_ram; rewrite H; try lia.
 Qed.
 #[local] Hint Resolve forall_ram_lt : mgen.
 
@@ -3201,3 +3202,4 @@ Section CORRECTNESS.
   Qed.
 
 End CORRECTNESS.
+*)

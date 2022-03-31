@@ -119,7 +119,6 @@ Lemma satLit_contra : forall s l a cl,
     -> satClause cl a.
   unfold satLit, upd; simpl; intros.
   destruct (eq_nat_dec (snd l) (snd l)); intuition.
-  assert False; intuition.
 Qed.
 
 #[local] Hint Resolve satLit_contra : core.
@@ -287,6 +286,7 @@ Lemma unitClauseTrue : forall l a fm,
   induction fm; intuition.
   inversion H.
   inversion H; subst; simpl in H0; intuition.
+  apply IHfm; eauto. inv H0. eauto.
 Qed.
 
 #[local] Hint Resolve unitClauseTrue : core.

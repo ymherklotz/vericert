@@ -1,0 +1,11 @@
+(require 'package)
+(package-initialize)
+(add-to-list 'package-archives '("nongnu" . "https://elpa.nongnu.org/nongnu/") t)
+(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+(add-to-list 'package-archives '("gnu-devel" . "https://elpa.gnu.org/devel/") t)
+(package-refresh-contents)
+
+(package-install 'org)
+(package-install 'org-contrib)
+(package-install 'org-transclusion)
+(package-install 'htmlize)

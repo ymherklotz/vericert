@@ -1,6 +1,6 @@
- (*
+(*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+(* [[file:../../docs/basic-block-generation.org::partition-main][partition-main]] *)
 open Printf
 open Clflags
 open Camlcoq
@@ -28,7 +29,7 @@ open Op
 open RTLBlockInstr
 open RTLBlock
 
-(* Assuming that the nodes of the CFG [code] are numbered in reverse postorder (cf. pass
+(** Assuming that the nodes of the CFG [code] are numbered in reverse postorder (cf. pass
    [Renumber]), an edge from [n] to [s] is a normal edge if [s < n] and a back-edge otherwise. *)
 let find_edge i n =
   let succ = RTL.successors_instr i in
@@ -65,14 +66,14 @@ let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
   match trans_inst, succ with
   | (None, Some i'), _ ->
     if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = []; bb_exit = RBgoto s }
+      Errors.OK { bb_body = [RBnop]; bb_exit = RBgoto s }
     else
-      Errors.OK { bb_body = []; bb_exit = i' }
+      Errors.OK { bb_body = [RBnop]; bb_exit = i' }
   | (Some i', None), (s', Some i_n)::[] ->
     if List.exists (fun x -> x = s) (fst e) then
       Errors.OK { bb_body = [i']; bb_exit = RBgoto s' }
     else if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = []; bb_exit = RBgoto s }
+      Errors.OK { bb_body = [RBnop]; bb_exit = RBgoto s }
     else begin
       match next_bblock_from_RTL false e c s' i_n with
       | Errors.OK bb ->
@@ -122,3 +123,4 @@ let function_from_RTL f =
               }
 
 let partition = function_from_RTL
+(* partition-main ends here *)

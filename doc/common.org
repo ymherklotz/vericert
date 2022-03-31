@@ -1,0 +1,15 @@
+#+author: Yann Herklotz
+#+email: git@ymhg.org
+
+#+macro: version 1.2.2
+#+macro: modified 2022-02-24
+
+#+macro: base_url https://vericert.ymhg.org
+
+#+macro: link src_emacs-lisp[:results raw]{(ymhg/link "$1" "$2")}
+
+#+macro: texinfo_head (eval (if (eq org-export-current-backend 'texinfo) "#+exclude_tags: noexport_texinfo" "#+exclude_tags: onlyexport_texinfo"))
+#+macro: latex_head (eval (if (eq org-export-current-backend 'latex) "#+exclude_tags: noexport_latex" "#+exclude_tags: onlyexport_latex"))
+#+macro: hugo_head (eval (if (eq org-export-current-backend 'hugo) "#+exclude_tags: noexport_hugo" "#+exclude_tags: onlyexport_hugo"))
+{{{texinfo_head}}}
+{{{latex_head}}}
