@@ -70,16 +70,7 @@ instructions in one big step, inductively traversing the list of instructions
 and applying the ``step_instr``.
 |*)
 
-  Inductive step_instr_list:
-    val -> instr_state -> list instr -> instr_state -> Prop :=
-  | exec_RBcons:
-    forall state i state' state'' instrs sp,
-      step_instr ge sp state i state' ->
-      step_instr_list sp state' instrs state'' ->
-      step_instr_list sp state (i :: instrs) state''
-  | exec_RBnil:
-    forall state sp,
-      step_instr_list sp state nil state.
+  Definition step_instr_list := step_list (step_instr ge).
 
 (*|
 Top-level step
@@ -95,16 +86,17 @@ then show a transition from basic block to basic block.
       f.(fn_code)!pc = Some bb ->
       step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body)
                          (mk_instr_state rs' pr' m') ->
-      step_cf_instr ge (State s f sp pc nil rs' pr' m') bb.(bb_exit) t s' ->
-      step (State s f sp pc nil rs pr m) t s'
+      step_cf_instr ge (State s f sp pc (mk_bblock nil bb.(bb_exit)) rs' pr' m') t s' ->
+      step (State s f sp pc bb rs pr m) t s'
   | exec_function_internal:
-    forall s f args m m' stk,
+    forall s f args m m' stk bb,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+      f.(fn_code) ! (f.(fn_entrypoint)) = Some bb ->
       step (Callstate s (Internal f) args m)
            E0 (State s f
                      (Vptr stk Ptrofs.zero)
                      f.(fn_entrypoint)
-                         nil
+                         bb
                          (init_regs args f.(fn_params))
                          (PMap.init false)
                          m')

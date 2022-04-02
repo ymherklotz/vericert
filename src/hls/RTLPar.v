@@ -46,38 +46,8 @@ Section RELSEM.
 
   Context (ge: genv).
 
-  Inductive step_instr_list:
-    val -> instr_state -> list instr -> instr_state -> Prop :=
-  | exec_RBcons:
-    forall state i state' state'' instrs sp,
-      step_instr ge sp state i state' ->
-      step_instr_list sp state' instrs state'' ->
-      step_instr_list sp state (i :: instrs) state''
-  | exec_RBnil:
-    forall state sp,
-      step_instr_list sp state nil state.
-
-  Inductive step_instr_seq (sp : val)
-    : instr_state -> list (list instr) -> instr_state -> Prop :=
-  | exec_instr_seq_cons:
-    forall state i state' state'' instrs,
-      step_instr_list sp state i state' ->
-      step_instr_seq sp state' instrs state'' ->
-      step_instr_seq sp state (i :: instrs) state''
-  | exec_instr_seq_nil:
-    forall state,
-      step_instr_seq sp state nil state.
-
-  Inductive step_instr_block (sp : val)
-    : instr_state -> list bb -> instr_state -> Prop :=
-  | exec_instr_block_cons:
-    forall state i state' state'' instrs,
-      step_instr_seq sp state i state' ->
-      step_instr_block sp state' instrs state'' ->
-      step_instr_block sp state (i :: instrs) state''
-  | exec_instr_block_nil:
-    forall state,
-      step_instr_block sp state nil state.
+  Definition step_instr_block :=
+    step_list (step_list (step_list (step_instr ge))).
 
   Inductive step: state -> trace -> state -> Prop :=
   | exec_bblock:
@@ -86,7 +56,7 @@ Section RELSEM.
       step_instr_block sp (mk_instr_state rs pr m) bb.(bb_body)
                           (mk_instr_state rs' pr' m') ->
       step_cf_instr ge (State s f sp pc nil rs' pr' m') bb.(bb_exit) t s' ->
-      step (State s f sp pc nil rs pr m) t s'
+      step (State s f sp pc bb rs pr m) t s'
   | exec_function_internal:
     forall s f args m m' stk,
       Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
