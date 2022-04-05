@@ -245,6 +245,7 @@ Section DEFINITION.
            (f: function)         (**r calling function *)
            (sp: val)             (**r stack pointer in calling function *)
            (pc: node)            (**r program point in calling function *)
+           (bb: bblock)
            (rs: regset)          (**r register state in calling function *)
            (pr: predset),        (**r predicate state of the calling
                                         function *)
@@ -383,44 +384,51 @@ Step Control-Flow Instruction
 
   Inductive step_cf_instr: state -> trace -> state -> Prop :=
   | exec_RBcall:
-    forall s f sp rs m res fd ros sig args pc pc' pr,
+    forall s f sp rs m res fd ros sig args pc pc' pr bb,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
-      step_cf_instr (State s f sp pc (mk_bblock nil (RBcall sig ros args res pc')) rs pr m)
-                    E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
+      f.(fn_code) ! pc' = Some bb ->
+      step_cf_instr
+        (State s f sp pc (mk_bblock nil (RBcall sig ros args res pc')) rs pr m)
+        E0 (Callstate (Stackframe res f sp pc' bb rs pr :: s) fd rs##args m)
   | exec_RBtailcall:
     forall s f stk rs m sig ros args fd m' pc pr,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc (mk_bblock nil (RBtailcall sig ros args)) rs pr m)
-                    E0 (Callstate s fd rs##args m')
+      step_cf_instr
+        (State s f (Vptr stk Ptrofs.zero) pc (mk_bblock nil (RBtailcall sig ros args)) rs pr m)
+        E0 (Callstate s fd rs##args m')
   | exec_RBbuiltin:
     forall s f sp rs m ef args res pc' vargs t vres m' pc pr bb,
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
       f.(fn_code) ! pc' = Some bb ->
-      step_cf_instr (State s f sp pc (mk_bblock nil (RBbuiltin ef args res pc')) rs pr m)
-                    t (State s f sp pc' bb (regmap_setres res vres rs) pr m')
+      step_cf_instr
+        (State s f sp pc (mk_bblock nil (RBbuiltin ef args res pc')) rs pr m)
+        t (State s f sp pc' bb (regmap_setres res vres rs) pr m')
   | exec_RBcond:
     forall s f sp rs m cond args ifso ifnot b pc pc' pr bb,
       eval_condition cond rs##args m = Some b ->
       pc' = (if b then ifso else ifnot) ->
       f.(fn_code) ! pc' = Some bb ->
-      step_cf_instr (State s f sp pc (mk_bblock nil (RBcond cond args ifso ifnot)) rs pr m)
-                    E0 (State s f sp pc' bb rs pr m)
+      step_cf_instr
+        (State s f sp pc (mk_bblock nil (RBcond cond args ifso ifnot)) rs pr m)
+        E0 (State s f sp pc' bb rs pr m)
   | exec_RBjumptable:
     forall s f sp rs m arg tbl n pc pc' pr bb,
       rs#arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some pc' ->
       f.(fn_code) ! pc' = Some bb ->
-      step_cf_instr (State s f sp pc (mk_bblock nil (RBjumptable arg tbl)) rs pr m)
-                    E0 (State s f sp pc' bb rs pr m)
+      step_cf_instr
+        (State s f sp pc (mk_bblock nil (RBjumptable arg tbl)) rs pr m)
+        E0 (State s f sp pc' bb rs pr m)
   | exec_RBreturn:
     forall s f stk rs m or pc m' pr,
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr (State s f (Vptr stk Ptrofs.zero) pc (mk_bblock nil (RBreturn or)) rs pr m)
-                    E0 (Returnstate s (regmap_optget or Vundef rs) m')
+      step_cf_instr
+        (State s f (Vptr stk Ptrofs.zero) pc (mk_bblock nil (RBreturn or)) rs pr m)
+        E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_RBgoto:
     forall s f sp pc rs pr m pc' bb,
       f.(fn_code) ! pc' = Some bb ->
@@ -428,8 +436,12 @@ Step Control-Flow Instruction
                     (State s f sp pc' bb rs pr m)
   | exec_RBpred_cf:
     forall s f sp pc rs pr m cf1 cf2 st' p t,
-      step_cf_instr (State s f sp pc (mk_bblock nil (if eval_predf pr p then cf1 else cf2)) rs pr m) t st' ->
-      step_cf_instr (State s f sp pc (mk_bblock nil (RBpred_cf p cf1 cf2)) rs pr m)
-                     t st'.
+      step_cf_instr
+        (State s f sp pc
+               (mk_bblock nil (if eval_predf pr p then cf1 else cf2))
+               rs pr m) t st' ->
+      step_cf_instr
+        (State s f sp pc (mk_bblock nil (RBpred_cf p cf1 cf2)) rs pr m)
+        t st'.
 
 End RELSEM.

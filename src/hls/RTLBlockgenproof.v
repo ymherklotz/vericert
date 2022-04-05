@@ -87,15 +87,15 @@ Variant transl_code_spec (c: RTL.code) (tc: code) :=
   forall x x' i i',
     c ! x = Some i ->
     find_instr_spec tc x i x' i' ->
-    check_instr x i i' = true ->
+    Is_true (check_instr x i i') ->
     transl_code_spec c tc
 | transl_code_standard_cf :
   forall x x' i i' il,
     c ! x = Some i ->
     tc ! x' = Some il ->
     find_instr_spec tc x i x' i' ->
-    check_cf_instr_body i i' = true ->
-    check_cf_instr i il.(bb_exit) = true ->
+    Is_true (check_cf_instr_body i i') ->
+    Is_true (check_cf_instr i il.(bb_exit)) ->
     transl_code_spec c tc
 .
 
@@ -112,12 +112,12 @@ Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
 
 Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
 | match_state :
-  forall stk stk' f tf sp pc rs m pc' ps
+  forall stk stk' f tf sp pc rs m pc' ps bb
          (TF: transl_function f = OK tf)
          (PC: find_block_spec tf.(fn_code) pc pc')
          (STK: Forall2 match_stackframe stk stk'),
     match_states (RTL.State stk f sp pc rs m)
-                 (State stk' tf sp pc' nil rs ps m).
+                 (State stk' tf sp pc' bb rs ps m).
 
 Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.

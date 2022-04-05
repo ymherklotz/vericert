@@ -631,7 +631,7 @@ Qed.
 
 Lemma step_instr_seq_matches :
   forall a ge sp st st',
-  step_instr_seq ge sp st a st' ->
+   step_instr_seq ge sp st a st' ->
   forall tst, match_states st tst ->
               exists tst', step_instr_seq ge sp tst a tst'
                            /\ match_states st' tst'.

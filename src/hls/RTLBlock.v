@@ -68,6 +68,9 @@ Instruction list step
 The ``step_instr_list`` definition describes the execution of a list of
 instructions in one big step, inductively traversing the list of instructions
 and applying the ``step_instr``.
+
+This is simply using the high-level function ``step_list``, which is a general
+function that can execute lists of things, given their execution rule.
 |*)
 
   Definition step_instr_list := step_list (step_instr ge).
@@ -77,7 +80,13 @@ Top-level step
 --------------
 
 The step function itself then uses this big step of the list of instructions to
-then show a transition from basic block to basic block.
+then show a transition from basic block to basic block.  The one particular
+aspect of this is that the basic block is also part of the state, which has to
+be correctly set during the execution of the function.  Function calls and
+function returns then also need to set the basic block properly.  This means
+that the basic block of the returning function also needs to be stored in the
+stackframe, as that is the only assumption one can make when returning from a
+function.
 |*)
 
   Variant step: state -> trace -> state -> Prop :=
@@ -106,9 +115,9 @@ then show a transition from basic block to basic block.
       step (Callstate s (External ef) args m)
            t (Returnstate s res m')
   | exec_return:
-    forall res f sp pc rs s vres m pr,
-      step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
-           E0 (State s f sp pc nil (rs#res <- vres) pr m).
+    forall res f sp pc rs s vres m pr bb,
+      step (Returnstate (Stackframe res f sp pc bb rs pr :: s) vres m)
+           E0 (State s f sp pc bb (rs#res <- vres) pr m).
 
 End RELSEM.
 
