@@ -115,7 +115,12 @@ Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
   forall stk stk' f tf sp pc rs m pc' ps bb
          (TF: transl_function f = OK tf)
          (PC: find_block_spec tf.(fn_code) pc pc')
-         (STK: Forall2 match_stackframe stk stk'),
+         (STK: Forall2 match_stackframe stk stk')
+         (BB: forall i bb',
+             f.(RTL.fn_code) ! pc = Some i ->
+             tf.(fn_code) ! pc' = Some bb' ->
+             list_drop (Pos.to_nat pc' - Pos.to_nat pc)%nat bb'.(bb_body) = i' :: bb
+         ),
     match_states (RTL.State stk f sp pc rs m)
                  (State stk' tf sp pc' bb rs ps m).
 

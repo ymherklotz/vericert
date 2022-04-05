@@ -46,8 +46,9 @@ Section RELSEM.
 
   Context (ge: genv).
 
-  Definition step_instr_block :=
-    step_list (step_list (step_list (step_instr ge))).
+  Definition step_instr_list := step_list (step_instr ge).
+  Definition step_instr_seq := step_list step_instr_list.
+  Definition step_instr_block := step_list step_instr_seq.
 
   Inductive step: state -> trace -> state -> Prop :=
   | exec_bblock:
