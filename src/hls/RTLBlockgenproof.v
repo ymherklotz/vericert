@@ -63,12 +63,14 @@ then the equivalent control-flow instruction ending the basic block.
 
 Parameter find_block_spec : code -> node -> node -> Prop.
 
+Definition offset (pc pc': positive): nat := Pos.to_nat pc' - Pos.to_nat pc.
+
 Definition find_instr_spec (c: code) (n: node) (i: RTL.instruction)
            (n': node) (i': instr) :=
-    find_block_spec c n n'
-    /\ exists il,
+  find_block_spec c n n' /\
+  exists il,
       c ! n' = Some il
-      /\ nth_error il.(bb_body) (Pos.to_nat n - Pos.to_nat n')%nat = Some i'.
+      /\ nth_error il.(bb_body) (offset n n') = Some i'.
 
 (*|
 .. index::
@@ -80,49 +82,61 @@ Translation Specification
 This specification should describe the translation that the unverified
 transformation performs.  This should be proven from the validation of the
 transformation.
+
+This also specifies ``x'`` relative to x given the code.
 |*)
 
-Variant transl_code_spec (c: RTL.code) (tc: code) :=
+Variant transl_code_spec (c: RTL.code) (tc: code) (x x': node): Prop :=
 | transl_code_standard_bb :
-  forall x x' i i',
+  forall i i',
     c ! x = Some i ->
     find_instr_spec tc x i x' i' ->
     Is_true (check_instr x i i') ->
-    transl_code_spec c tc
+    transl_code_spec c tc x x'
 | transl_code_standard_cf :
-  forall x x' i i' il,
+  forall i i' il,
     c ! x = Some i ->
     tc ! x' = Some il ->
     find_instr_spec tc x i x' i' ->
     Is_true (check_cf_instr_body i i') ->
     Is_true (check_cf_instr i il.(bb_exit)) ->
-    transl_code_spec c tc
+    transl_code_spec c tc x x'
 .
 
-Lemma transl_function_correct :
-  forall f tf,
-    transl_function f = OK tf ->
-    transl_code_spec f.(RTL.fn_code) tf.(fn_code).
-Proof. Admitted.
+(*|
+Matches the basic block that should be present in the state.  This simulates the
+small step execution of the basic block from the big step semantics that are
+currently present.
+|*)
+
+Variant match_bblock (tc: code) (pc pc': node): list instr -> Prop :=
+| match_bblock_intro :
+  forall bb cf,
+    tc ! pc' = Some (mk_bblock bb cf) ->
+    match_bblock tc pc pc' (list_drop (offset pc pc') bb).
 
 Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
 | match_stackframe_init :
-  forall a b,
-    match_stackframe a b.
+  forall res f tf sp pc pc' rs
+    (TF: transl_function f = OK tf)
+    (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc'),
+    match_stackframe (RTL.Stackframe res f sp pc rs)
+                     (Stackframe res tf sp pc' rs (PMap.init false)).
+
+(*|
+The ``match_states`` predicate defines how to find the correct ``bb`` that
+should be executed, as well as the value of ``pc``.
+|*)
 
 Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
 | match_state :
-  forall stk stk' f tf sp pc rs m pc' ps bb
+  forall stk stk' f tf sp pc rs m pc' bb
          (TF: transl_function f = OK tf)
-         (PC: find_block_spec tf.(fn_code) pc pc')
+         (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc')
          (STK: Forall2 match_stackframe stk stk')
-         (BB: forall i bb',
-             f.(RTL.fn_code) ! pc = Some i ->
-             tf.(fn_code) ! pc' = Some bb' ->
-             list_drop (Pos.to_nat pc' - Pos.to_nat pc)%nat bb'.(bb_body) = i' :: bb
-         ),
+         (BB: match_bblock tf.(fn_code) pc pc' bb),
     match_states (RTL.State stk f sp pc rs m)
-                 (State stk' tf sp pc' bb rs ps m).
+                 (State stk' tf sp pc' bb rs (PMap.init false) m).
 
 Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
@@ -151,7 +165,10 @@ Section CORRECTNESS.
       Smallstep.initial_state (RTL.semantics prog) s1 ->
       exists s2 : Smallstep.state (semantics tprog),
         Smallstep.initial_state (semantics tprog) s2 /\ match_states s1 s2.
-  Proof. Admitted.
+  Proof.
+    induction 1.
+
+    econstructor. simplify. econstructor.
 
   Lemma transl_final_states :
     forall (s1 : Smallstep.state (RTL.semantics prog))

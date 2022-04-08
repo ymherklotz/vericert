@@ -28,8 +28,6 @@ therefore at the top-level of the instructions.
 .. coq:: none
 |*)
 
-Require Import Coq.micromega.Lia.
-
 Require Import compcert.backend.Registers.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.
@@ -245,7 +243,6 @@ Section DEFINITION.
            (f: function)         (**r calling function *)
            (sp: val)             (**r stack pointer in calling function *)
            (pc: node)            (**r program point in calling function *)
-           (bb: bblock)
            (rs: regset)          (**r register state in calling function *)
            (pr: predset),        (**r predicate state of the calling
                                         function *)
@@ -255,7 +252,41 @@ Section DEFINITION.
 State Definition
 ----------------
 
-Definition of the ``state`` type, which is used by the ``step`` functions.
+Definition of the ``state`` type, which is used by the ``step`` functions.  This
+state definition is a bit strange when compared to other state definitions in
+CompCert.  The main reason for that is the inclusion of ``list bblock_body``,
+even though theoretically this is not necessary as one can use the program
+counter ``pc`` to index the current function and find the whole basic block that
+needs to be executed.
+
+However, the state definition needs to be viable for a translation from ``RTL``
+into ``RTLBlock``, as well as larger grained optimisations such as scheduling.
+The proof of semantic correctness of the first translation requires that the
+instructions are executed one after another.  As it is not possible to perform
+multiple steps in the input language for one step in the output language,
+without showing that the ``state`` is reduced by some measure, the current basic
+block needs to be present inside of the state.
+
+The ideal solution to this would be to have two indices, one which finds the
+current basic block to execute, and another which keeps track of the offset.
+This would make the basic block generation proof much simpler, because there is
+a direct correlation between the program counter in ``RTL`` and the program
+counter in addition to the offset in ``RTLBlock``.
+
+On the other hand, the best solution for proving scheduling correct would be a
+pure big step style semantics for executing the basic block.  This would not
+need to include anything relating to the basic block in the state, as it would
+execute each basic block at a time.  Referring to each instruction individually
+becomes impossible then, because the state transition skips over it directly.
+
+Finally, the way the state is actually implemented is using a mixture of the two
+methods above.  Instead of having two indices, the internal index is instead a
+list of remaining instructions to executed in the current block.  In case of
+transformations that need to reason about each instruction individually, the
+list of instructions will be reduced one instruction at a time.  However, in the
+case of transformations that only need to reason about basic blocks at a time
+will only use the fact that one can transform a list of instructions into a next
+state transition (``JumpState``).
 |*)
 
   Variant state : Type :=
@@ -264,12 +295,21 @@ Definition of the ``state`` type, which is used by the ``step`` functions.
              (f: function)            (**r current function *)
              (sp: val)                (**r stack pointer *)
              (pc: node)               (**r current program point in [c] *)
-             (il: bblock)   (**r basic block body that is
-                                 currently executing. *)
+             (il: list bblock_body)   (**r basic block body that is
+                                           currently executing. *)
              (rs: regset)             (**r register state *)
              (pr: predset)            (**r predicate register state *)
              (m: mem),                (**r memory state *)
         state
+    | JumpState:
+        forall (stack: list stackframe) (**r call stack *)
+               (f: function)            (**r current function *)
+               (sp: val)                (**r stack pointer *)
+               (pc: node)               (**r current program point in [c] *)
+               (rs: regset)             (**r register state *)
+               (pr: predset)            (**r predicate register state *)
+               (m: mem),                (**r memory state *)
+          state
     | Callstate:
       forall (stack: list stackframe) (**r call stack *)
              (f: fundef)              (**r function to call *)
@@ -382,66 +422,68 @@ Step Control-Flow Instruction
 =============================
 |*)
 
-  Inductive step_cf_instr: state -> trace -> state -> Prop :=
+  Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
   | exec_RBcall:
-    forall s f sp rs m res fd ros sig args pc pc' pr bb,
+    forall s f sp rs m res fd ros sig args pc pc' pr,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
-      f.(fn_code) ! pc' = Some bb ->
       step_cf_instr
-        (State s f sp pc (mk_bblock nil (RBcall sig ros args res pc')) rs pr m)
-        E0 (Callstate (Stackframe res f sp pc' bb rs pr :: s) fd rs##args m)
+        (JumpState s f sp pc rs pr m) (RBcall sig ros args res pc')
+        E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
   | exec_RBtailcall:
     forall s f stk rs m sig ros args fd m' pc pr,
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step_cf_instr
-        (State s f (Vptr stk Ptrofs.zero) pc (mk_bblock nil (RBtailcall sig ros args)) rs pr m)
+        (JumpState s f (Vptr stk Ptrofs.zero) pc rs pr m)
+        (RBtailcall sig ros args)
         E0 (Callstate s fd rs##args m')
   | exec_RBbuiltin:
-    forall s f sp rs m ef args res pc' vargs t vres m' pc pr bb,
+    forall s f sp rs m ef args res pc' vargs t vres m' pc pr bb' cf',
+      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
-      f.(fn_code) ! pc' = Some bb ->
       step_cf_instr
-        (State s f sp pc (mk_bblock nil (RBbuiltin ef args res pc')) rs pr m)
-        t (State s f sp pc' bb (regmap_setres res vres rs) pr m')
+        (JumpState s f sp pc rs pr m) (RBbuiltin ef args res pc')
+        t (State s f sp pc' bb' (regmap_setres res vres rs) pr m')
   | exec_RBcond:
-    forall s f sp rs m cond args ifso ifnot b pc pc' pr bb,
+    forall s f sp rs m cond args ifso ifnot b pc pc' pr bb' cf',
+      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
       eval_condition cond rs##args m = Some b ->
       pc' = (if b then ifso else ifnot) ->
-      f.(fn_code) ! pc' = Some bb ->
       step_cf_instr
-        (State s f sp pc (mk_bblock nil (RBcond cond args ifso ifnot)) rs pr m)
-        E0 (State s f sp pc' bb rs pr m)
+        (JumpState s f sp pc rs pr m)
+        (RBcond cond args ifso ifnot)
+        E0 (State s f sp pc' bb' rs pr m)
   | exec_RBjumptable:
-    forall s f sp rs m arg tbl n pc pc' pr bb,
+    forall s f sp rs m arg tbl n pc pc' pr bb' cf',
+      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
       rs#arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some pc' ->
-      f.(fn_code) ! pc' = Some bb ->
       step_cf_instr
-        (State s f sp pc (mk_bblock nil (RBjumptable arg tbl)) rs pr m)
-        E0 (State s f sp pc' bb rs pr m)
+        (JumpState s f sp pc rs pr m)
+        (RBjumptable arg tbl)
+        E0 (State s f sp pc' bb' rs pr m)
   | exec_RBreturn:
     forall s f stk rs m or pc m' pr,
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step_cf_instr
-        (State s f (Vptr stk Ptrofs.zero) pc (mk_bblock nil (RBreturn or)) rs pr m)
+        (JumpState s f (Vptr stk Ptrofs.zero) pc rs pr m)
+        (RBreturn or)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_RBgoto:
-    forall s f sp pc rs pr m pc' bb,
-      f.(fn_code) ! pc' = Some bb ->
-      step_cf_instr (State s f sp pc (mk_bblock nil (RBgoto pc')) rs pr m) E0
-                    (State s f sp pc' bb rs pr m)
+    forall s f sp pc rs pr m pc' bb' cf',
+      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
+      step_cf_instr (JumpState s f sp pc rs pr m)
+                    (RBgoto pc') E0 (State s f sp pc' bb' rs pr m)
   | exec_RBpred_cf:
     forall s f sp pc rs pr m cf1 cf2 st' p t,
       step_cf_instr
-        (State s f sp pc
-               (mk_bblock nil (if eval_predf pr p then cf1 else cf2))
-               rs pr m) t st' ->
+        (JumpState s f sp pc
+               rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
       step_cf_instr
-        (State s f sp pc (mk_bblock nil (RBpred_cf p cf1 cf2)) rs pr m)
+        (JumpState s f sp pc rs pr m) (RBpred_cf p cf1 cf2)
         t st'.
 
 End RELSEM.
