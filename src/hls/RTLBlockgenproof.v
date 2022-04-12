@@ -136,7 +136,16 @@ Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
          (STK: Forall2 match_stackframe stk stk')
          (BB: match_bblock tf.(fn_code) pc pc' bb),
     match_states (RTL.State stk f sp pc rs m)
-                 (State stk' tf sp pc' bb rs (PMap.init false) m).
+                 (State stk' tf sp pc' bb rs (PMap.init false) m)
+| match_callstate :
+  forall cs cs' f tf args m
+    (TF: transl_fundef f = OK tf)
+    (STK: Forall2 match_stackframe cs cs'),
+    match_states (RTL.Callstate cs f args m) (Callstate cs' tf args m)
+| match_returnstate :
+  forall cs cs' v m
+    (STK: Forall2 match_stackframe cs cs'),
+    match_states (RTL.Returnstate cs v m) (Returnstate cs' v m).
 
 Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
@@ -160,6 +169,26 @@ Section CORRECTNESS.
   Proof using TRANSL. intros; eapply (Genv.senv_transf_partial TRANSL). Qed.
   #[local] Hint Resolve senv_preserved : rtlgp.
 
+  Lemma function_ptr_translated:
+    forall (b: positive) (f: RTL.fundef),
+      Genv.find_funct_ptr ge b = Some f ->
+      exists tf,
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = OK tf.
+  Proof
+    (Genv.find_funct_ptr_transf_partial TRANSL).
+
+  Lemma sig_transl_function:
+    forall (f: RTL.fundef) (tf: RTLBlock.fundef),
+      transl_fundef f = OK tf ->
+      RTLBlock.funsig tf = RTL.funsig f.
+  Proof using.
+    unfold transl_fundef. unfold transf_partial_fundef.
+    intros. destruct_match. unfold bind in *. destruct_match; try discriminate.
+    inv H. unfold transl_function in Heqr.
+    repeat (destruct_match; try discriminate). inv Heqr. auto.
+    inv H; auto.
+  Qed.
+
   Lemma transl_initial_states :
     forall s1 : Smallstep.state (RTL.semantics prog),
       Smallstep.initial_state (RTL.semantics prog) s1 ->
@@ -167,8 +196,13 @@ Section CORRECTNESS.
         Smallstep.initial_state (semantics tprog) s2 /\ match_states s1 s2.
   Proof.
     induction 1.
-
+    exploit function_ptr_translated; eauto. intros [tf [A B]].
     econstructor. simplify. econstructor.
+    apply (Genv.init_mem_transf_partial TRANSL); eauto.
+    replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+    symmetry; eapply Linking.match_program_main; eauto. eauto.
+    erewrite sig_transl_function; eauto. constructor. auto. auto.
+  Qed.
 
   Lemma transl_final_states :
     forall (s1 : Smallstep.state (RTL.semantics prog))

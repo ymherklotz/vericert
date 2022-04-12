@@ -179,7 +179,8 @@ Definition transl_function (f: RTL.function) :=
       let blockids := map fst (PTree.elements f'.(fn_code)) in
       if forall_ptree (check_present_blocks f'.(fn_code) blockids (fold_right Pos.max 1 blockids))
                       f.(RTL.fn_code) then
-        Errors.OK f'
+        Errors.OK
+          (mkfunction f.(RTL.fn_sig) f.(RTL.fn_params) f.(RTL.fn_stacksize) f'.(fn_code) f.(RTL.fn_entrypoint))
       else Errors.Error (Errors.msg "check_present_blocks failed")
   | Errors.Error msg => Errors.Error msg
   end.
