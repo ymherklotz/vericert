@@ -28,6 +28,7 @@ Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.lib.Maps.
+Require Import compcert.backend.Registers.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
@@ -59,18 +60,24 @@ part of the basic block.
 
 For case number 3, there should be a ``nop`` instruction in the basic block, and
 then the equivalent control-flow instruction ending the basic block.
+
+In the end though, it seems like two cases are actually enough, as the last two
+cases are similar enough that they can be merged into one.
 |*)
 
-Parameter find_block_spec : code -> node -> node -> Prop.
+Definition all_max {A} (c: PTree.t A) p: Prop :=
+  Forall (fun x => x <= p) (map fst (PTree.elements c)).
+
+Definition find_block_spec (c: code) (n1 n2: node): Prop :=
+  forall x, all_max c x -> find_block x (map fst (PTree.elements c)) n1 = n2.
 
 Definition offset (pc pc': positive): nat := Pos.to_nat pc' - Pos.to_nat pc.
 
 Definition find_instr_spec (c: code) (n: node) (i: RTL.instruction)
            (n': node) (i': instr) :=
   find_block_spec c n n' /\
-  exists il,
-      c ! n' = Some il
-      /\ nth_error il.(bb_body) (offset n n') = Some i'.
+  exists il, c ! n' = Some il
+        /\ nth_error il.(bb_body) (offset n n') = Some i'.
 
 (*|
 .. index::
@@ -107,6 +114,11 @@ Variant transl_code_spec (c: RTL.code) (tc: code) (x x': node): Prop :=
 Matches the basic block that should be present in the state.  This simulates the
 small step execution of the basic block from the big step semantics that are
 currently present.
+
+Why does it not need to find the pc' value using ``find_block``?
+
+It doesn't have to find the value because it's given as an input, and the
+finding is actually done at that higher level already.
 |*)
 
 Variant match_bblock (tc: code) (pc pc': node): list instr -> Prop :=
@@ -170,10 +182,9 @@ Section CORRECTNESS.
   #[local] Hint Resolve senv_preserved : rtlgp.
 
   Lemma function_ptr_translated:
-    forall (b: positive) (f: RTL.fundef),
+    forall b f,
       Genv.find_funct_ptr ge b = Some f ->
-      exists tf,
-        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = OK tf.
+      exists tf, Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = OK tf.
   Proof
     (Genv.find_funct_ptr_transf_partial TRANSL).
 
@@ -190,11 +201,9 @@ Section CORRECTNESS.
   Qed.
 
   Lemma transl_initial_states :
-    forall s1 : Smallstep.state (RTL.semantics prog),
-      Smallstep.initial_state (RTL.semantics prog) s1 ->
-      exists s2 : Smallstep.state (semantics tprog),
-        Smallstep.initial_state (semantics tprog) s2 /\ match_states s1 s2.
-  Proof.
+    forall s1, RTL.initial_state prog s1 ->
+      exists s2, RTLBlock.initial_state tprog s2 /\ match_states s1 s2.
+  Proof using TRANSL.
     induction 1.
     exploit function_ptr_translated; eauto. intros [tf [A B]].
     econstructor. simplify. econstructor.
@@ -205,22 +214,68 @@ Section CORRECTNESS.
   Qed.
 
   Lemma transl_final_states :
-    forall (s1 : Smallstep.state (RTL.semantics prog))
-           (s2 : Smallstep.state (semantics tprog))
-           (r : Integers.Int.int),
+    forall s1 s2 r,
       match_states s1 s2 ->
-      Smallstep.final_state (RTL.semantics prog) s1 r ->
-      Smallstep.final_state (semantics tprog) s2 r.
-  Proof. Admitted.
+      RTL.final_state s1 r ->
+      RTLBlock.final_state s2 r.
+  Proof using.
+    inversion 2; crush. subst. inv H. inv STK. econstructor.
+  Qed.
+
+  Lemma transl_Inop_correct:
+    forall s f sp pc rs m pc',
+      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
+      forall s2, match_states (RTL.State s f sp pc rs m) s2 ->
+        exists s2', Smallstep.plus step tge s2 Events.E0 s2'
+               /\ match_states (RTL.State s f sp pc' rs m) s2'.
+  Proof.
+    intros s f sp pc rs m pc' H.
+  Admitted.
+
+  Lemma transl_Iop_correct:
+    forall s f sp pc rs m op args res pc' v,
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
+      Op.eval_operation ge sp op rs##args m = Some v ->
+      forall s2, match_states (RTL.State s f sp pc rs m) s2 ->
+        exists s2', Smallstep.plus step tge s2 Events.E0 s2'
+               /\ match_states (RTL.State s f sp pc' (Registers.Regmap.set res v rs) m) s2'.
+  Proof.
+    intros s f sp pc rs m op args res pc' v H H0.
+  Admitted.
+
+  Lemma transl_Iload_correct:
+    forall s f sp pc rs m chunk addr args dst pc' a v,
+      (RTL.fn_code f) ! pc = Some (RTL.Iload chunk addr args dst pc') ->
+      Op.eval_addressing ge sp addr rs##args = Some a ->
+      Memory.Mem.loadv chunk m a = Some v ->
+      forall s2, match_states (RTL.State s f sp pc rs m) s2 ->
+        exists s2', Smallstep.plus step tge s2 Events.E0 s2'
+               /\ match_states (RTL.State s f sp pc' (Registers.Regmap.set dst v rs) m) s2'.
+  Proof.
+    intros s f sp pc rs m chunk addr args dst pc' a v H H0 H1.
+  Admitted.
+
+  Lemma transl_correct:
+    forall s1 t s1',
+      RTL.step ge s1 t s1' ->
+      forall s2, match_states s1 s2 ->
+        exists s2', Smallstep.plus step tge s2 t s2' /\ match_states s1' s2'.
+  Proof.
+    induction 1.
+    - eauto using transl_Inop_correct.
+    - eauto using transl_Iop_correct.
+    - eauto using transl_Iload_correct.
+  Admitted.
 
   Theorem transf_program_correct:
     Smallstep.forward_simulation (RTL.semantics prog)
                                  (RTLBlock.semantics tprog).
-  Proof.
+  Proof using TRANSL.
     eapply Smallstep.forward_simulation_plus.
     apply senv_preserved.
-    admit.
-    eauto using transl_final_states.
-    Admitted.
+    eauto using transl_initial_states.
+    eapply transl_final_states.
+    eauto using transl_correct.
+  Qed.
 
 End CORRECTNESS.

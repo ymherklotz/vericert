@@ -39,12 +39,20 @@ Require Import vericert.hls.RTLBlock.
 (*|
 ``find_block max nodes index``: Does not need to be sorted, because we use
 filter and the max fold function to find the desired element.
+
+    Compute find_block 100 (2::94::48::39::19::nil) 40
+      = 48
+      : positive
+
+It wants to find the nearest block that is greater than or equal to the current
+block.
 |*)
 
-Definition find_block (max: positive) (nodes: list positive) (index: positive) : positive :=
+Definition find_block (max: positive) (nodes: list positive) (index: positive)
+  : positive :=
   List.fold_right Pos.min max (List.filter (fun x => (index <=? x)) nodes).
 
-(*Compute find_block 100 (2::94::48::39::19::nil) 40.*)
+(*Compute (find_block 100 (2::94::48::39::19::nil) 40 =? 48).*)
 
 (*|
 .. index::
