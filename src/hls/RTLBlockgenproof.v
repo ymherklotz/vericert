@@ -230,6 +230,9 @@ Section CORRECTNESS.
                /\ match_states (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros s f sp pc rs m pc' H.
+    inversion 1; simplify. inv H1. inv H0. inv BB0.
+    inv PC0.
+    -
   Admitted.
 
   Lemma transl_Iop_correct:
