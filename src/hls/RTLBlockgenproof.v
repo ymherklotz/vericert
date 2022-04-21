@@ -29,6 +29,7 @@ Require Import compcert.common.Errors.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.lib.Maps.
 Require Import compcert.backend.Registers.
+Require compcert.common.Smallstep.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
@@ -222,17 +223,36 @@ Section CORRECTNESS.
     inversion 2; crush. subst. inv H. inv STK. econstructor.
   Qed.
 
+  Compute (hd_error (list_drop 3 (1::2::3::4::5::nil))).
+  Compute (nth_error (1::2::3::4::5::nil) 3).
+
+  Lemma hd_nth_equiv:
+    forall A n (l: list A), hd_error (list_drop n l) = nth_error l n.
+  Proof. induction n; destruct l; crush. Qed.
+
+  Lemma hd_error_Some_exists:
+    forall A (l: list A) n, hd_error l = Some n -> l = n :: tl l.
+  Proof. induction l; crush. Qed.
+
   Lemma transl_Inop_correct:
     forall s f sp pc rs m pc',
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       forall s2, match_states (RTL.State s f sp pc rs m) s2 ->
-        exists s2', Smallstep.plus step tge s2 Events.E0 s2'
+        exists s2', Smallstep.star step tge s2 Events.E0 s2'
                /\ match_states (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros s f sp pc rs m pc' H.
     inversion 1; simplify. inv H1. inv H0. inv BB0.
     inv PC0.
-    -
+    - inv H2. inv H5. inv H2. rewrite <- hd_nth_equiv in H6.
+      assert (bb_body x = bb0).
+      { rewrite H5 in H0. inv H0. auto. }
+      subst.
+      apply hd_error_Some_exists in H6. rewrite H6.
+      rewrite H1 in H. simplify.
+      destruct i'; crush.
+      econstructor. split.
+
   Admitted.
 
   Lemma transl_Iop_correct:
