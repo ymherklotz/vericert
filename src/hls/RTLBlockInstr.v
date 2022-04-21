@@ -213,7 +213,7 @@ Section DEFINITION.
   Context {bblock_body: Type}.
 
   Record bblock : Type := mk_bblock {
-                             bb_body: list bblock_body;
+                             bb_body: bblock_body;
                              bb_exit: cf_instr
                            }.
 
@@ -252,12 +252,44 @@ Section DEFINITION.
 State Definition
 ----------------
 
-Definition of the ``state`` type, which is used by the ``step`` functions.  This
-state definition is a bit strange when compared to other state definitions in
-CompCert.  The main reason for that is the inclusion of ``list bblock_body``,
-even though theoretically this is not necessary as one can use the program
-counter ``pc`` to index the current function and find the whole basic block that
-needs to be executed.
+The definition of ``state`` is normal now, and is directly the same as in other
+intermediate languages.  The main difference in the execution of the semantics,
+though is that executing basic blocks uses big-step semantics.
+|*)
+
+  Variant state : Type :=
+    | State:
+      forall (stack: list stackframe) (**r call stack *)
+             (f: function)            (**r current function *)
+             (sp: val)                (**r stack pointer *)
+             (pc: node)               (**r current program point in [c] *)
+             (rs: regset)             (**r register state *)
+             (pr: predset)            (**r predicate register state *)
+             (m: mem),                (**r memory state *)
+        state
+    | Callstate:
+      forall (stack: list stackframe) (**r call stack *)
+             (f: fundef)              (**r function to call *)
+             (args: list val)         (**r arguments to the call *)
+             (m: mem),                (**r memory state *)
+        state
+    | Returnstate:
+      forall (stack: list stackframe) (**r call stack *)
+             (v: val)                 (**r return value for the call *)
+             (m: mem),                (**r memory state *)
+        state.
+
+End DEFINITION.
+
+(*|
+Old version of state
+~~~~~~~~~~~~~~~~~~~~
+
+The definition of state used to be a bit strange when compared to other state
+definitions in CompCert.  The main reason for that is the inclusion of ``list
+bblock_body``, even though theoretically this is not necessary as one can use
+the program counter ``pc`` to index the current function and find the whole
+basic block that needs to be executed.
 
 However, the state definition needs to be viable for a translation from ``RTL``
 into ``RTLBlock``, as well as larger grained optimisations such as scheduling.
@@ -287,44 +319,7 @@ list of instructions will be reduced one instruction at a time.  However, in the
 case of transformations that only need to reason about basic blocks at a time
 will only use the fact that one can transform a list of instructions into a next
 state transition (``JumpState``).
-|*)
 
-  Variant state : Type :=
-    | State:
-      forall (stack: list stackframe) (**r call stack *)
-             (f: function)            (**r current function *)
-             (sp: val)                (**r stack pointer *)
-             (pc: node)               (**r current program point in [c] *)
-             (il: list bblock_body)   (**r basic block body that is
-                                           currently executing. *)
-             (rs: regset)             (**r register state *)
-             (pr: predset)            (**r predicate register state *)
-             (m: mem),                (**r memory state *)
-        state
-    | JumpState:
-        forall (stack: list stackframe) (**r call stack *)
-               (f: function)            (**r current function *)
-               (sp: val)                (**r stack pointer *)
-               (pc: node)               (**r current program point in [c] *)
-               (rs: regset)             (**r register state *)
-               (pr: predset)            (**r predicate register state *)
-               (m: mem),                (**r memory state *)
-          state
-    | Callstate:
-      forall (stack: list stackframe) (**r call stack *)
-             (f: fundef)              (**r function to call *)
-             (args: list val)         (**r arguments to the call *)
-             (m: mem),                (**r memory state *)
-        state
-    | Returnstate:
-      forall (stack: list stackframe) (**r call stack *)
-             (v: val)                 (**r return value for the call *)
-             (m: mem),                (**r memory state *)
-        state.
-
-End DEFINITION.
-
-(*|
 Semantics
 =========
 |*)
@@ -403,6 +398,12 @@ Step Instruction
       step_instr sp (mk_instr_state rs pr m)
                  (RBsetpred p' c args p) ist.
 
+(*|
+A big-step semantics describing the execution of a list of instructions.  This
+uses a higher-order function ``step_i``, so that this ``Inductive`` can be
+nested to describe the execution of nested lists.
+|*)
+
   Inductive step_list {A} (step_i: val -> instr_state -> A -> instr_state -> Prop):
     val -> instr_state -> list A -> instr_state -> Prop :=
   | exec_RBcons:
@@ -420,6 +421,10 @@ Step Instruction
 
 Step Control-Flow Instruction
 =============================
+
+These control-flow instruction semantics are essentially the same as in RTL,
+with the addition of a recursive conditional instruction, which is used to
+support if-conversion.
 |*)
 
   Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
@@ -428,7 +433,7 @@ Step Control-Flow Instruction
       find_function ros rs = Some fd ->
       funsig fd = sig ->
       step_cf_instr
-        (JumpState s f sp pc rs pr m) (RBcall sig ros args res pc')
+        (State s f sp pc rs pr m) (RBcall sig ros args res pc')
         E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
   | exec_RBtailcall:
     forall s f stk rs m sig ros args fd m' pc pr,
@@ -436,54 +441,50 @@ Step Control-Flow Instruction
       funsig fd = sig ->
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step_cf_instr
-        (JumpState s f (Vptr stk Ptrofs.zero) pc rs pr m)
+        (State s f (Vptr stk Ptrofs.zero) pc rs pr m)
         (RBtailcall sig ros args)
         E0 (Callstate s fd rs##args m')
   | exec_RBbuiltin:
-    forall s f sp rs m ef args res pc' vargs t vres m' pc pr bb' cf',
-      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
+    forall s f sp rs m ef args res pc' vargs t vres m' pc pr,
       eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
       external_call ef ge vargs m t vres m' ->
       step_cf_instr
-        (JumpState s f sp pc rs pr m) (RBbuiltin ef args res pc')
-        t (State s f sp pc' bb' (regmap_setres res vres rs) pr m')
+        (State s f sp pc rs pr m) (RBbuiltin ef args res pc')
+        t (State s f sp pc' (regmap_setres res vres rs) pr m')
   | exec_RBcond:
-    forall s f sp rs m cond args ifso ifnot b pc pc' pr bb' cf',
-      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
+    forall s f sp rs m cond args ifso ifnot b pc pc' pr,
       eval_condition cond rs##args m = Some b ->
       pc' = (if b then ifso else ifnot) ->
       step_cf_instr
-        (JumpState s f sp pc rs pr m)
+        (State s f sp pc rs pr m)
         (RBcond cond args ifso ifnot)
-        E0 (State s f sp pc' bb' rs pr m)
+        E0 (State s f sp pc' rs pr m)
   | exec_RBjumptable:
-    forall s f sp rs m arg tbl n pc pc' pr bb' cf',
-      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
+    forall s f sp rs m arg tbl n pc pc' pr,
       rs#arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some pc' ->
       step_cf_instr
-        (JumpState s f sp pc rs pr m)
+        (State s f sp pc rs pr m)
         (RBjumptable arg tbl)
-        E0 (State s f sp pc' bb' rs pr m)
+        E0 (State s f sp pc' rs pr m)
   | exec_RBreturn:
     forall s f stk rs m or pc m' pr,
       Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
       step_cf_instr
-        (JumpState s f (Vptr stk Ptrofs.zero) pc rs pr m)
+        (State s f (Vptr stk Ptrofs.zero) pc rs pr m)
         (RBreturn or)
         E0 (Returnstate s (regmap_optget or Vundef rs) m')
   | exec_RBgoto:
-    forall s f sp pc rs pr m pc' bb' cf',
-      f.(fn_code)!pc' = Some (mk_bblock bb' cf') ->
-      step_cf_instr (JumpState s f sp pc rs pr m)
-                    (RBgoto pc') E0 (State s f sp pc' bb' rs pr m)
+    forall s f sp pc rs pr m pc',
+      step_cf_instr (State s f sp pc rs pr m)
+                    (RBgoto pc') E0 (State s f sp pc' rs pr m)
   | exec_RBpred_cf:
     forall s f sp pc rs pr m cf1 cf2 st' p t,
       step_cf_instr
-        (JumpState s f sp pc
+        (State s f sp pc
                rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
       step_cf_instr
-        (JumpState s f sp pc rs pr m) (RBpred_cf p cf1 cf2)
+        (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2)
         t st'.
 
 End RELSEM.

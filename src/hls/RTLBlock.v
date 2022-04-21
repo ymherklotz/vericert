@@ -36,7 +36,7 @@ RTLBlock
 ========
 |*)
 
-Definition bb := instr.
+Definition bb := list instr.
 
 Definition bblock := @bblock bb.
 Definition code := @code bb.
@@ -90,37 +90,32 @@ function.
 |*)
 
   Variant step: state -> trace -> state -> Prop :=
-  | exec_bblock:
-    forall s f sp pc rs rs' m m' bb pr pr',
-      step_instr_list sp (mk_instr_state rs pr m) bb
-                         (mk_instr_state rs' pr' m') ->
-      step (State s f sp pc bb rs pr m) E0 (JumpState s f sp pc rs' pr' m')
-  | exec_jumpstate :
-    forall s f sp pc rs pr m block t st,
-      f.(fn_code) ! pc = Some block ->
-      step_cf_instr ge (JumpState s f sp pc rs pr m) block.(bb_exit) t st ->
-      step (JumpState s f sp pc rs pr m) t st
-  | exec_function_internal:
-    forall s f args m m' stk bb cf,
-      Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
-      f.(fn_code) ! (f.(fn_entrypoint)) = Some (mk_bblock bb cf) ->
-      step (Callstate s (Internal f) args m)
-           E0 (State s f
-                     (Vptr stk Ptrofs.zero)
-                     f.(fn_entrypoint)
-                         bb
-                         (init_regs args f.(fn_params))
-                         (PMap.init false)
-                         m')
-  | exec_function_external:
-    forall s ef args res t m m',
-      external_call ef ge args m t res m' ->
-      step (Callstate s (External ef) args m)
-           t (Returnstate s res m')
-  | exec_return:
-    forall res f sp pc rs s vres m pr,
-      step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
-           E0 (JumpState s f sp pc (rs#res <- vres) pr m).
+    | exec_bblock:
+      forall s f sp pc rs rs' m m' bb pr pr' t state,
+        f.(fn_code) ! pc = Some bb ->
+        step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
+        step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t state ->
+        step (State s f sp pc rs pr m) E0 state
+    | exec_function_internal:
+      forall s f args m m' stk bb cf,
+        Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+        f.(fn_code) ! (f.(fn_entrypoint)) = Some (mk_bblock bb cf) ->
+        step (Callstate s (Internal f) args m)
+             E0 (State s f
+                       (Vptr stk Ptrofs.zero)
+                       f.(fn_entrypoint)
+                       (init_regs args f.(fn_params))
+                       (PMap.init false)
+                       m')
+    | exec_function_external:
+      forall s ef args res t m m',
+        external_call ef ge args m t res m' ->
+        step (Callstate s (External ef) args m)
+             t (Returnstate s res m')
+    | exec_return:
+      forall res f sp pc rs s vres m pr,
+        step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
+             E0 (State s f sp pc (rs#res <- vres) pr m).
 
 End RELSEM.
 
