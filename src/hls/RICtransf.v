@@ -49,11 +49,10 @@ Fixpoint existsb_val {A B} (f: A -> option B) (l : list A) : option B :=
       end
   end.
 
-Definition includes_setpred (bb: list (list instr)) :=
-  existsb_val (existsb_val (fun x => match x with RBsetpred a _ _ _ => Some a | _ => None end)) bb.
+Definition includes_setpred (bb: bb) :=
+  existsb_val (existsb_val (existsb_val (fun x => match x with RBsetpred a _ _ _ => Some a | _ => None end))) bb.
 
-Definition add_bb (should_split: bool) (i: list (list instr))
-           (bbc: list (list (list instr)) * list (list (list instr))) :=
+Definition add_bb (should_split: bool) (i: bb) (bbc: list bb * list bb) :=
   match bbc with
   | (a, b) => if should_split then (a, i::b) else (i::a, b)
   end.

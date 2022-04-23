@@ -30,6 +30,7 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.lib.Maps.
 Require Import compcert.backend.Registers.
 Require compcert.common.Smallstep.
+Require Import compcert.common.Events.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
@@ -94,22 +95,27 @@ transformation.
 This also specifies ``x'`` relative to x given the code.
 |*)
 
-Variant transl_code_spec (c: RTL.code) (tc: code) (x x': node): Prop :=
+Variant transl_code_spec (c: RTL.code) (tc: code) (x x': node) (i: RTL.instruction) (i': instr): Prop :=
 | transl_code_standard_bb :
-  forall i i',
     c ! x = Some i ->
-    find_instr_spec tc x i x' i' ->
     Is_true (check_instr x i i') ->
-    transl_code_spec c tc x x'
+    transl_code_spec c tc x x' i i'
 | transl_code_standard_cf :
-  forall i i' il,
+  forall il,
     c ! x = Some i ->
     tc ! x' = Some il ->
-    find_instr_spec tc x i x' i' ->
     Is_true (check_cf_instr_body i i') ->
     Is_true (check_cf_instr i il.(bb_exit)) ->
-    transl_code_spec c tc x x'
+    transl_code_spec c tc x x' i i'
 .
+
+Section CORRECTNESS.
+
+  Context (prog : RTL.program).
+  Context (tprog : RTLBlock.program).
+
+  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
+  Let tge : genv := Globalenvs.Genv.globalenv tprog.
 
 (*|
 Matches the basic block that should be present in the state.  This simulates the
@@ -122,56 +128,58 @@ It doesn't have to find the value because it's given as an input, and the
 finding is actually done at that higher level already.
 |*)
 
-Variant match_bblock (tc: code) (pc pc': node): list instr -> Prop :=
-| match_bblock_intro :
-  forall bb cf,
-    tc ! pc' = Some (mk_bblock bb cf) ->
-    match_bblock tc pc pc' (list_drop (offset pc pc') bb).
+  Variant match_bblock (tc: code) (pc pc': node): list instr -> Prop :=
+    | match_bblock_intro :
+      forall bb cf,
+        tc ! pc' = Some (mk_bblock bb cf) ->
+        match_bblock tc pc pc' (list_drop (offset pc pc') bb).
 
-Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
-| match_stackframe_init :
-  forall res f tf sp pc pc' rs
-    (TF: transl_function f = OK tf)
-    (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc'),
-    match_stackframe (RTL.Stackframe res f sp pc rs)
-                     (Stackframe res tf sp pc' rs (PMap.init false)).
+  Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
+    | match_stackframe_init :
+      forall res f tf sp pc pc' rs i i'
+        (TF: transl_function f = OK tf)
+        (TF: find_instr_spec tf.(fn_code) pc i pc' i')
+        (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc' i i'),
+        match_stackframe (RTL.Stackframe res f sp pc rs)
+                         (Stackframe res tf sp pc' rs (PMap.init false)).
 
 (*|
-The ``match_states`` predicate defines how to find the correct ``bb`` that
-should be executed, as well as the value of ``pc``.
+Initially, the idea was to define the ``match_states`` predicate normally to
+defines how to find the correct ``bb`` that should be executed, as well as the
+value of ``pc``.  However, this does not quite work when proving the equivalence
+of the translation from ``RTL`` to ``RTLBlock``, because one cannot match one
+transition to a transition in RTLBlock.  The alternative to this is to include a
+proof inside of the ``match_states`` that shows that the execution from the
+``pc`` of the start of the basic block to the current point is the same as the
+whole execution (in one big step) of the basic block.
 |*)
 
-Variant match_states : RTL.state -> RTLBlock.state -> Prop :=
-| match_state :
-  forall stk stk' f tf sp pc rs m pc' bb
-         (TF: transl_function f = OK tf)
-         (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc')
-         (STK: Forall2 match_stackframe stk stk')
-         (BB: match_bblock tf.(fn_code) pc pc' bb),
-    match_states (RTL.State stk f sp pc rs m)
-                 (State stk' tf sp pc' bb rs (PMap.init false) m)
-| match_callstate :
-  forall cs cs' f tf args m
-    (TF: transl_fundef f = OK tf)
-    (STK: Forall2 match_stackframe cs cs'),
-    match_states (RTL.Callstate cs f args m) (Callstate cs' tf args m)
-| match_returnstate :
-  forall cs cs' v m
-    (STK: Forall2 match_stackframe cs cs'),
-    match_states (RTL.Returnstate cs v m) (Returnstate cs' v m).
+  Variant match_states : option bb -> RTL.state -> RTLBlock.state -> Prop :=
+    | match_state :
+      forall stk stk' f tf sp pc rs m rs' m' pc0 bb i i' b rs0 m0
+        (TF: transl_function f = OK tf)
+        (TF: find_instr_spec tf.(fn_code) pc i pc0 i')
+        (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc0 i i')
+        (STK: Forall2 match_stackframe stk stk')
+        (STARSIMU: Smallstep.star RTL.step ge (RTL.State stk f sp pc0 rs0 m0)
+                                  E0 (RTL.State stk f sp pc rs m))
+        (BB: match_bblock tf.(fn_code) pc pc0 bb),
+        match_states (Some b) (RTL.State stk f sp pc rs m)
+                     (State stk' tf sp pc0 rs' (PMap.init false) m')
+    | match_callstate :
+      forall cs cs' f tf args m
+        (TF: transl_fundef f = OK tf)
+        (STK: Forall2 match_stackframe cs cs'),
+        match_states None (RTL.Callstate cs f args m) (Callstate cs' tf args m)
+    | match_returnstate :
+      forall cs cs' v m
+        (STK: Forall2 match_stackframe cs cs'),
+        match_states None (RTL.Returnstate cs v m) (Returnstate cs' v m).
 
-Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
-  Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
-
-Section CORRECTNESS.
-
-  Context (prog : RTL.program).
-  Context (tprog : RTLBlock.program).
+  Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
+    Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
 
   Context (TRANSL : match_prog prog tprog).
-
-  Let ge : RTL.genv := Globalenvs.Genv.globalenv prog.
-  Let tge : genv := Globalenvs.Genv.globalenv tprog.
 
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.

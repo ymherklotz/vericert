@@ -93,9 +93,10 @@ function.
     | exec_bblock:
       forall s f sp pc rs rs' m m' bb pr pr' t state,
         f.(fn_code) ! pc = Some bb ->
-        step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body) (mk_instr_state rs' pr' m') ->
+        step_instr_list sp (mk_instr_state rs pr m) bb.(bb_body)
+                           (mk_instr_state rs' pr' m') ->
         step_cf_instr ge (State s f sp pc rs' pr' m') bb.(bb_exit) t state ->
-        step (State s f sp pc rs pr m) E0 state
+        step (State s f sp pc rs pr m) t state
     | exec_function_internal:
       forall s f args m m' stk bb cf,
         Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
