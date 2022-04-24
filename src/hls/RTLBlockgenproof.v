@@ -128,22 +128,105 @@ It doesn't have to find the value because it's given as an input, and the
 finding is actually done at that higher level already.
 |*)
 
-  Variant match_bblock (tc: code) (pc pc': node): list instr -> Prop :=
+(*  Variant match_bblock (tc: code) (pc pc': node): list instr -> Prop :=
     | match_bblock_intro :
       forall bb cf,
         tc ! pc' = Some (mk_bblock bb cf) ->
-        match_bblock tc pc pc' (list_drop (offset pc pc') bb).
+        match_bblock tc pc pc' (list_drop (offset pc pc') bb).*)
+
+  Inductive match_block (c: RTL.code) (pc: node): bb -> cf_instr -> Prop :=
+  (*
+   * Basic Block Instructions
+   *)
+  | match_block_nop b cf:
+    c ! pc = Some (RTL.Inop (Pos.pred pc)) ->
+    match_block c (Pos.pred pc) b cf ->
+    match_block c pc (RBnop :: b) cf
+  | match_block_op cf b op args dst:
+    c ! pc = Some (RTL.Iop op args dst (Pos.pred pc)) ->
+    match_block c (Pos.pred pc) b cf ->
+    match_block c pc (RBop None op args dst :: b) cf
+  | match_block_load cf b chunk addr args dst:
+    c ! pc = Some (RTL.Iload chunk addr args dst (Pos.pred pc)) ->
+    match_block c (Pos.pred pc) b cf ->
+    match_block c pc (RBload None chunk addr args dst :: b) cf
+  | match_block_store cf b chunk addr args src:
+    c ! pc = Some (RTL.Istore chunk addr args src (Pos.pred pc)) ->
+    match_block c (Pos.pred pc) b cf ->
+    match_block c pc (RBstore None chunk addr args src :: b) cf
+  (*
+   * Control flow instructions using goto
+   *)
+  | match_block_goto pc':
+    pc' <> Pos.pred pc ->
+    c ! pc = Some (RTL.Inop pc') ->
+    match_block c pc (RBnop :: nil) (RBgoto pc')
+  | match_block_op_cf pc' op args dst:
+    pc' <> Pos.pred pc ->
+    c ! pc = Some (RTL.Iop op args dst pc') ->
+    match_block c pc (RBop None op args dst :: nil) (RBgoto pc')
+  | match_block_load_cf pc' chunk addr args dst:
+    pc' <> Pos.pred pc ->
+    c ! pc = Some (RTL.Iload chunk addr args dst pc') ->
+    match_block c pc (RBload None chunk addr args dst :: nil) (RBgoto pc')
+  | match_block_store_cf pc' chunk addr args src:
+    pc' <> Pos.pred pc ->
+    c ! pc = Some (RTL.Istore chunk addr args src pc') ->
+    match_block c pc (RBstore None chunk addr args src :: nil) (RBgoto pc')
+  (*
+   * Standard control flow instructions
+   *)
+  | match_block_call sig ident args dst pc' :
+    c ! pc = Some (RTL.Icall sig ident args dst pc') ->
+    match_block c pc (RBnop :: nil) (RBcall sig ident args dst pc')
+  | match_block_tailcall sig ident args :
+    c ! pc = Some (RTL.Itailcall sig ident args) ->
+    match_block c pc (RBnop :: nil) (RBtailcall sig ident args)
+  | match_block_builtin ident args dst pc' :
+    c ! pc = Some (RTL.Ibuiltin ident args dst pc') ->
+    match_block c pc (RBnop :: nil) (RBbuiltin ident args dst pc')
+  | match_block_cond cond args pct pcf :
+    c ! pc = Some (RTL.Icond cond args pct pcf) ->
+    match_block c pc (RBnop :: nil) (RBcond cond args pct pcf)
+  | match_block_return r :
+    c ! pc = Some (RTL.Ireturn r) ->
+    match_block c pc (RBnop :: nil) (RBreturn r)
+  .
+
+(*|
+Match the code
+~~~~~~~~~~~~~~
+
+The ``match_code`` predicate asserts that for any node in the original
+control-flow graph, there is now a basic block in the new control- and data-flow
+graph that contains the same instruction, but also that the whole basic block
+matches some sequence of instructions starting at the node that corresponds to
+the basic block.
+|*)
+
+  Definition match_code (c: RTL.code) (tc: code) (pc: node) :=
+    forall n1 i,
+      c ! n1 = Some i ->
+      exists b,
+        find_block_spec tc n1 pc /\ tc ! pc = Some b
+        /\ match_block c pc b.(bb_body) b.(bb_exit).
 
   Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
     | match_stackframe_init :
-      forall res f tf sp pc pc' rs i i'
-        (TF: transl_function f = OK tf)
-        (TF: find_instr_spec tf.(fn_code) pc i pc' i')
-        (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc' i i'),
+      forall res f tf sp pc rs (TF: transl_function f = OK tf),
         match_stackframe (RTL.Stackframe res f sp pc rs)
-                         (Stackframe res tf sp pc' rs (PMap.init false)).
+                         (Stackframe res tf sp pc rs (PMap.init false)).
+
+  Definition sem_extrap f pc sp in_s in_s' block :=
+    forall out_s block2,
+      step_instr_list tge sp in_s block out_s ->
+      f.(fn_code) ! pc = Some block2 ->
+      step_instr_list tge sp in_s' block2.(bb_body) out_s.
 
 (*|
+Matching states
+~~~~~~~~~~~~~~~
+
 Initially, the idea was to define the ``match_states`` predicate normally to
 defines how to find the correct ``bb`` that should be executed, as well as the
 value of ``pc``.  However, this does not quite work when proving the equivalence
@@ -156,16 +239,20 @@ whole execution (in one big step) of the basic block.
 
   Variant match_states : option bb -> RTL.state -> RTLBlock.state -> Prop :=
     | match_state :
-      forall stk stk' f tf sp pc rs m rs' m' pc0 bb i i' b rs0 m0
+      forall stk stk' f tf sp pc rs m pc0 b rs0 m0
         (TF: transl_function f = OK tf)
-        (TF: find_instr_spec tf.(fn_code) pc i pc0 i')
-        (PC: transl_code_spec f.(RTL.fn_code) tf.(fn_code) pc pc0 i i')
+        (CODE: match_code f.(RTL.fn_code) tf.(fn_code) pc0)
+        (BLOCK: forall i b',
+            f.(RTL.fn_code) ! pc = Some i ->
+            tf.(fn_code) ! pc0 = Some b' ->
+            match_block f.(RTL.fn_code) pc b b'.(bb_exit))
         (STK: Forall2 match_stackframe stk stk')
         (STARSIMU: Smallstep.star RTL.step ge (RTL.State stk f sp pc0 rs0 m0)
                                   E0 (RTL.State stk f sp pc rs m))
-        (BB: match_bblock tf.(fn_code) pc pc0 bb),
+        (BB: sem_extrap tf pc0 sp (mk_instr_state rs (PMap.init false) m)
+                        (mk_instr_state rs0 (PMap.init false) m0) b),
         match_states (Some b) (RTL.State stk f sp pc rs m)
-                     (State stk' tf sp pc0 rs' (PMap.init false) m')
+                     (State stk' tf sp pc0 rs0 (PMap.init false) m0)
     | match_callstate :
       forall cs cs' f tf args m
         (TF: transl_fundef f = OK tf)
@@ -174,7 +261,8 @@ whole execution (in one big step) of the basic block.
     | match_returnstate :
       forall cs cs' v m
         (STK: Forall2 match_stackframe cs cs'),
-        match_states None (RTL.Returnstate cs v m) (Returnstate cs' v m).
+        match_states None (RTL.Returnstate cs v m) (Returnstate cs' v m)
+  .
 
   Definition match_prog (p: RTL.program) (tp: RTLBlock.program) :=
     Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
@@ -211,11 +299,11 @@ whole execution (in one big step) of the basic block.
 
   Lemma transl_initial_states :
     forall s1, RTL.initial_state prog s1 ->
-      exists s2, RTLBlock.initial_state tprog s2 /\ match_states s1 s2.
+      exists b s2, RTLBlock.initial_state tprog s2 /\ match_states b s1 s2.
   Proof using TRANSL.
     induction 1.
     exploit function_ptr_translated; eauto. intros [tf [A B]].
-    econstructor. simplify. econstructor.
+    do 2 econstructor. simplify. econstructor.
     apply (Genv.init_mem_transf_partial TRANSL); eauto.
     replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
     symmetry; eapply Linking.match_program_main; eauto. eauto.
@@ -223,8 +311,8 @@ whole execution (in one big step) of the basic block.
   Qed.
 
   Lemma transl_final_states :
-    forall s1 s2 r,
-      match_states s1 s2 ->
+    forall s1 s2 r b,
+      match_states b s1 s2 ->
       RTL.final_state s1 r ->
       RTLBlock.final_state s2 r.
   Proof using.
@@ -242,26 +330,51 @@ whole execution (in one big step) of the basic block.
     forall A (l: list A) n, hd_error l = Some n -> l = n :: tl l.
   Proof. induction l; crush. Qed.
 
+  Lemma transl_Inop_correct_nj:
+    forall s f sp pc rs m stk' tf pc1 rs1 m1 b x,
+      (RTL.fn_code f) ! pc = Some (RTL.Inop (Pos.pred pc)) ->
+      match_states (Some (RBnop :: b)) (RTL.State s f sp pc rs m)
+                   (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
+      (RTL.fn_code f) ! pc = Some (RTL.Inop (Pos.pred pc)) ->
+      match_block (RTL.fn_code f) (Pos.pred pc) b x ->
+      exists b' s2',
+        Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
+          match_states b' (RTL.State s f sp (Pos.pred pc) rs m) s2'.
+  Proof.
+    intros s f sp pc rs m H stk' tf pc1 rs1 m1 b H0 x H1 H3. Admitted.
+
+  Lemma transl_Inop_correct_j:
+    forall s f sp pc rs m pc' stk' tf pc1 rs1 m1,
+      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
+      match_states (Some (RBnop :: nil)) (RTL.State s f sp pc rs m)
+                   (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
+      pc' <> Pos.pred pc ->
+      exists b' s2',
+        Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2'
+        /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
+  Proof.
+    intros * H0 H1 H2.
+    inv H1. unfold match_code in *.
+    pose proof (CODE _ _ H0); simplify.
+    do 3 econstructor. apply Smallstep.star_one.
+    econstructor. eassumption.
+    eapply BB; [econstructor; constructor | eassumption].
+    Admitted.
+
   Lemma transl_Inop_correct:
     forall s f sp pc rs m pc',
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
-      forall s2, match_states (RTL.State s f sp pc rs m) s2 ->
-        exists s2', Smallstep.star step tge s2 Events.E0 s2'
-               /\ match_states (RTL.State s f sp pc' rs m) s2'.
+      forall b s2, match_states b (RTL.State s f sp pc rs m) s2 ->
+        exists b' s2', Smallstep.star step tge s2 Events.E0 s2'
+               /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros s f sp pc rs m pc' H.
-    inversion 1; simplify. inv H1. inv H0. inv BB0.
-    inv PC0.
-    - inv H2. inv H5. inv H2. rewrite <- hd_nth_equiv in H6.
-      assert (bb_body x = bb0).
-      { rewrite H5 in H0. inv H0. auto. }
-      subst.
-      apply hd_error_Some_exists in H6. rewrite H6.
-      rewrite H1 in H. simplify.
-      destruct i'; crush.
-      econstructor. split.
-
-  Admitted.
+    inversion 1; subst; simplify.
+    unfold match_code in *.
+    pose proof (CODE _ _ H) as X. simplify.
+    pose proof (BLOCK _ _ H H1); simplify. inv H3; crush. admit.
+    eauto using transl_Inop_correct_nj, transl_Inop_correct_j.
+  Qed.
 
   Lemma transl_Iop_correct:
     forall s f sp pc rs m op args res pc' v,
