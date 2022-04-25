@@ -134,6 +134,8 @@ finding is actually done at that higher level already.
         tc ! pc' = Some (mk_bblock bb cf) ->
         match_bblock tc pc pc' (list_drop (offset pc pc') bb).*)
 
+  Definition imm_succ (pc pc': node) : Prop := pc' = Pos.succ pc.
+
   Inductive match_block (c: RTL.code) (pc: node): bb -> cf_instr -> Prop :=
   (*
    * Basic Block Instructions
@@ -211,6 +213,14 @@ the basic block.
         find_block_spec tc n1 pc /\ tc ! pc = Some b
         /\ match_block c pc b.(bb_body) b.(bb_exit).
 
+  Definition match_code' (c: RTL.code) (tc: code) : Prop :=
+    forall i pc pc',
+      c ! pc = Some i ->
+      In pc' (RTL.successors_instr i) ->
+      ~ imm_succ pc pc' ->
+      exists b, tc ! pc' = Some b /\ match_block c pc b.(bb_body) b.(bb_exit).
+
+
   Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
     | match_stackframe_init :
       forall res f tf sp pc rs (TF: transl_function f = OK tf),
@@ -241,7 +251,7 @@ whole execution (in one big step) of the basic block.
     | match_state :
       forall stk stk' f tf sp pc rs m pc0 b rs0 m0
         (TF: transl_function f = OK tf)
-        (CODE: match_code f.(RTL.fn_code) tf.(fn_code) pc0)
+        (CODE: match_code' f.(RTL.fn_code) tf.(fn_code))
         (BLOCK: forall i b',
             f.(RTL.fn_code) ! pc = Some i ->
             tf.(fn_code) ! pc0 = Some b' ->
@@ -344,22 +354,29 @@ whole execution (in one big step) of the basic block.
     intros s f sp pc rs m H stk' tf pc1 rs1 m1 b H0 x H1 H3. Admitted.
 
   Lemma transl_Inop_correct_j:
-    forall s f sp pc rs m pc' stk' tf pc1 rs1 m1,
+    forall s f sp pc rs m pc' stk' tf pc1 rs1 m1 x,
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       match_states (Some (RBnop :: nil)) (RTL.State s f sp pc rs m)
                    (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
+      find_block_spec (fn_code tf) pc pc1 ->
+      (fn_code tf) ! pc1 = Some x ->
+      match_block (RTL.fn_code f) pc1 (bb_body x) (bb_exit x) ->
+      RBgoto pc' = bb_exit x ->
+      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       pc' <> Pos.pred pc ->
       exists b' s2',
-        Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2'
-        /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
+        Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
+          match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
-    intros * H0 H1 H2.
-    inv H1. unfold match_code in *.
-    pose proof (CODE _ _ H0); simplify.
-    do 3 econstructor. apply Smallstep.star_one.
-    econstructor. eassumption.
-    eapply BB; [econstructor; constructor | eassumption].
-    Admitted.
+    intros * H H0 H2 H1 H4 H5 H8 H6.
+    inv H0.
+    do 3 econstructor. apply Smallstep.star_one. econstructor.
+    eassumption. eapply BB; [econstructor; constructor | eassumption].
+    setoid_rewrite <- H5. econstructor.
+
+    econstructor; try eassumption. Admitted.
+  (*   apply Smallstep.star_refl. admit. *)
+  (* Admitted. *)
 
   Lemma transl_Inop_correct:
     forall s f sp pc rs m pc',
@@ -370,9 +387,9 @@ whole execution (in one big step) of the basic block.
   Proof.
     intros s f sp pc rs m pc' H.
     inversion 1; subst; simplify.
-    unfold match_code in *.
+    unfold match_code' in *.
     pose proof (CODE _ _ H) as X. simplify.
-    pose proof (BLOCK _ _ H H1); simplify. inv H3; crush. admit.
+    pose proof (BLOCK _ _ H H1); simplify. inv H3; crush;
     eauto using transl_Inop_correct_nj, transl_Inop_correct_j.
   Qed.
 
