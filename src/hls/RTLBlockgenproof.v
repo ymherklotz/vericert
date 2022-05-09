@@ -134,45 +134,49 @@ finding is actually done at that higher level already.
         tc ! pc' = Some (mk_bblock bb cf) ->
         match_bblock tc pc pc' (list_drop (offset pc pc') bb).*)
 
-  Definition imm_succ (pc pc': node) : Prop := pc' = Pos.succ pc.
+  Definition imm_succ (pc pc': node) : Prop := pc' = Pos.pred pc.
 
   Inductive match_block (c: RTL.code) (pc: node): bb -> cf_instr -> Prop :=
   (*
    * Basic Block Instructions
    *)
-  | match_block_nop b cf:
-    c ! pc = Some (RTL.Inop (Pos.pred pc)) ->
-    match_block c (Pos.pred pc) b cf ->
+  | match_block_nop b cf pc':
+    imm_succ pc pc' ->
+    c ! pc = Some (RTL.Inop pc') ->
+    match_block c pc' b cf ->
     match_block c pc (RBnop :: b) cf
-  | match_block_op cf b op args dst:
-    c ! pc = Some (RTL.Iop op args dst (Pos.pred pc)) ->
-    match_block c (Pos.pred pc) b cf ->
+  | match_block_op cf b op args dst pc':
+    imm_succ pc pc' ->
+    c ! pc = Some (RTL.Iop op args dst pc') ->
+    match_block c pc' b cf ->
     match_block c pc (RBop None op args dst :: b) cf
-  | match_block_load cf b chunk addr args dst:
-    c ! pc = Some (RTL.Iload chunk addr args dst (Pos.pred pc)) ->
-    match_block c (Pos.pred pc) b cf ->
+  | match_block_load cf b chunk addr args dst pc':
+    imm_succ pc pc' ->
+    c ! pc = Some (RTL.Iload chunk addr args dst pc') ->
+    match_block c pc' b cf ->
     match_block c pc (RBload None chunk addr args dst :: b) cf
-  | match_block_store cf b chunk addr args src:
-    c ! pc = Some (RTL.Istore chunk addr args src (Pos.pred pc)) ->
-    match_block c (Pos.pred pc) b cf ->
+  | match_block_store cf b chunk addr args src pc':
+    imm_succ pc pc' ->
+    c ! pc = Some (RTL.Istore chunk addr args src pc') ->
+    match_block c pc' b cf ->
     match_block c pc (RBstore None chunk addr args src :: b) cf
   (*
    * Control flow instructions using goto
    *)
   | match_block_goto pc':
-    pc' <> Pos.pred pc ->
+    ~ imm_succ pc pc' ->
     c ! pc = Some (RTL.Inop pc') ->
     match_block c pc (RBnop :: nil) (RBgoto pc')
   | match_block_op_cf pc' op args dst:
-    pc' <> Pos.pred pc ->
+    ~ imm_succ pc pc' ->
     c ! pc = Some (RTL.Iop op args dst pc') ->
     match_block c pc (RBop None op args dst :: nil) (RBgoto pc')
   | match_block_load_cf pc' chunk addr args dst:
-    pc' <> Pos.pred pc ->
+    ~ imm_succ pc pc' ->
     c ! pc = Some (RTL.Iload chunk addr args dst pc') ->
     match_block c pc (RBload None chunk addr args dst :: nil) (RBgoto pc')
   | match_block_store_cf pc' chunk addr args src:
-    pc' <> Pos.pred pc ->
+    ~ imm_succ pc pc' ->
     c ! pc = Some (RTL.Istore chunk addr args src pc') ->
     match_block c pc (RBstore None chunk addr args src :: nil) (RBgoto pc')
   (*
@@ -225,7 +229,11 @@ the basic block.
       c ! pc = Some i ->
       In pc' (RTL.successors_instr i) ->
       imm_succ pc pc' ->
-      exists b, tc ! pc' = Some b /\ match_block c pc b.(bb_body) b.(bb_exit).
+      exists b, tc ! pc' = Some b.
+
+  Definition match_code3 (c: RTL.code) (tc: code) : Prop :=
+    (forall pc b, tc ! pc = Some b -> match_block c pc b.(bb_body) b.(bb_exit))
+    /\ match_code' c tc.
 
   Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
     | match_stackframe_init :
@@ -257,7 +265,7 @@ whole execution (in one big step) of the basic block.
     | match_state :
       forall stk stk' f tf sp pc rs m pc0 b rs0 m0
         (TF: transl_function f = OK tf)
-        (CODE: match_code' f.(RTL.fn_code) tf.(fn_code))
+        (CODE: match_code3 f.(RTL.fn_code) tf.(fn_code))
         (BLOCK: exists b',
             tf.(fn_code) ! pc0 = Some b' /\ match_block f.(RTL.fn_code) pc b b'.(bb_exit))
         (STK: Forall2 match_stackframe stk stk')
@@ -345,15 +353,16 @@ whole execution (in one big step) of the basic block.
   Proof. induction l; crush. Qed.
 
   Lemma transl_Inop_correct_nj:
-    forall s f sp pc rs m stk' tf pc1 rs1 m1 b x,
-      (RTL.fn_code f) ! pc = Some (RTL.Inop (Pos.pred pc)) ->
+    forall s f sp pc rs m stk' tf pc1 rs1 m1 b x pc',
+      imm_succ pc pc' ->
+      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       match_states (Some (RBnop :: b)) (RTL.State s f sp pc rs m)
                    (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
-      (RTL.fn_code f) ! pc = Some (RTL.Inop (Pos.pred pc)) ->
-      match_block (RTL.fn_code f) (Pos.pred pc) b x ->
+      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
+      match_block (RTL.fn_code f) pc' b x ->
       exists b' s2',
         Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
-          match_states b' (RTL.State s f sp (Pos.pred pc) rs m) s2'.
+          match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros s f sp pc rs m H stk' tf pc1 rs1 m1 b H0 x H1 H3. Admitted.
 
@@ -366,7 +375,7 @@ whole execution (in one big step) of the basic block.
       match_block (RTL.fn_code f) pc1 (bb_body x) (bb_exit x) ->
       RBgoto pc' = bb_exit x ->
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
-      pc' <> Pos.pred pc ->
+      ~ imm_succ pc pc' ->
       exists b' s2',
         Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
           match_states b' (RTL.State s f sp pc' rs m) s2'.
@@ -387,6 +396,12 @@ whole execution (in one big step) of the basic block.
     decide equality.
   Defined.
 
+  Lemma imm_succ_refl pc : imm_succ pc (Pos.pred pc).
+  Proof. unfold imm_succ; auto. Qed.
+
+  Lemma imm_succ_refl2 pc : imm_succ (Pos.succ pc) pc.
+  Proof. unfold imm_succ; auto using Pos.pred_succ. Qed.
+
   Lemma transl_Inop_correct:
     forall s f sp pc rs m pc',
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
@@ -396,14 +411,13 @@ whole execution (in one big step) of the basic block.
   Proof.
     intros s f sp pc rs m pc' H.
     inversion 1; subst; simplify.
-    unfold match_code' in *.
+    unfold match_code3 in *.
     assert (X1: In pc' (RTL.successors_instr (RTL.Inop pc'))) by (crush).
     destruct (imm_succ_dec pc pc').
-    { admit. }
-    { pose proof (CODE _ _ pc' H X1 n) as X. simplify.
-      inv H3; crush. admit.
-      eapply transl_Inop_correct_j; eauto.
-      eauto using transl_Inop_correct_nj, transl_Inop_correct_j. }
+    { inv H3; crush. eapply transl_Inop_correct_nj; eauto. }
+    { pose proof (CODE _ _ H2) as X.
+      inv H3; crush.
+      eapply transl_Inop_correct_j; eauto. }
   Qed.
 
   Lemma transl_Iop_correct:
