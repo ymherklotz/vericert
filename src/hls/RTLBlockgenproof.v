@@ -341,9 +341,6 @@ whole execution (in one big step) of the basic block.
     inversion 2; crush. subst. inv H. inv STK. econstructor.
   Qed.
 
-  Compute (hd_error (list_drop 3 (1::2::3::4::5::nil))).
-  Compute (nth_error (1::2::3::4::5::nil) 3).
-
   Lemma hd_nth_equiv:
     forall A n (l: list A), hd_error (list_drop n l) = nth_error l n.
   Proof. induction n; destruct l; crush. Qed.
@@ -353,18 +350,34 @@ whole execution (in one big step) of the basic block.
   Proof. induction l; crush. Qed.
 
   Lemma transl_Inop_correct_nj:
-    forall s f sp pc rs m stk' tf pc1 rs1 m1 b x pc',
+    forall s f sp pc rs m stk' tf pc1 rs1 m1 b pc',
       imm_succ pc pc' ->
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       match_states (Some (RBnop :: b)) (RTL.State s f sp pc rs m)
                    (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
-      match_block (RTL.fn_code f) pc' b x ->
       exists b' s2',
         Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
           match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
-    intros s f sp pc rs m H stk' tf pc1 rs1 m1 b H0 x H1 H3. Admitted.
+    intros * H1 H2 H3 H4.
+    inv H3. simplify. pose proof CODE as CODE'.
+    unfold match_code3, match_code' in *. inv CODE.
+    pose proof (H _ _ H0).
+    do 3 econstructor.
+    eapply Smallstep.star_refl.
+    instantiate (1 := Some b).
+    econstructor; try eassumption.
+    do 2 econstructor; try eassumption.
+    inv H3; crush.
+    eapply Smallstep.star_right; eauto.
+    eapply RTL.exec_Inop; eauto. auto.
+
+    unfold sem_extrap in *. intros.
+    eapply BB. econstructor; eauto.
+    constructor; auto.
+    auto.
+  Qed.
 
   Lemma transl_Inop_correct_j:
     forall s f sp pc rs m pc' stk' tf pc1 rs1 m1 x,
@@ -382,17 +395,16 @@ whole execution (in one big step) of the basic block.
           match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros * H H0 H1 H4 H5 H8.
-    inv H0.
-    simplify.
+    inv H0. simplify.
     do 3 econstructor. apply Smallstep.star_one. econstructor.
     eassumption. eapply BB; [econstructor; constructor | eassumption].
     setoid_rewrite <- H5. econstructor.
 
     econstructor. eassumption. eassumption. eauto. eassumption.
-
-  (*   apply Smallstep.star_refl. admit. *)
-  (* Admitted. *)
-    Admitted.
+    eapply Smallstep.star_refl.
+    unfold sem_extrap. intros. setoid_rewrite H8 in H3.
+    crush.
+  Qed.
 
   Definition imm_succ_dec pc pc' : {imm_succ pc pc'} + {~ imm_succ pc pc'}.
   Proof.
