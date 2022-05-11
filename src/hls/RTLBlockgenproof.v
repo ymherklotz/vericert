@@ -222,7 +222,7 @@ the basic block.
       c ! pc = Some i ->
       In pc' (RTL.successors_instr i) ->
       ~ imm_succ pc pc' ->
-      exists b, tc ! pc' = Some b /\ match_block c pc b.(bb_body) b.(bb_exit).
+      exists b, tc ! pc' = Some b /\ match_block c pc' b.(bb_body) b.(bb_exit).
 
   Definition match_code2' (c: RTL.code) (tc: code) : Prop :=
     forall i pc pc',
@@ -374,21 +374,25 @@ whole execution (in one big step) of the basic block.
       (fn_code tf) ! pc1 = Some x ->
       match_block (RTL.fn_code f) pc1 (bb_body x) (bb_exit x) ->
       RBgoto pc' = bb_exit x ->
-      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
-      ~ imm_succ pc pc' ->
+      (exists b' : RTLBlockInstr.bblock,
+        (fn_code tf) ! pc' = Some b'
+        /\ match_block (RTL.fn_code f) pc' (bb_body b') (bb_exit b')) ->
       exists b' s2',
         Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
           match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
-    intros * H H0 H1 H4 H5 H8 H6.
+    intros * H H0 H1 H4 H5 H8.
     inv H0.
+    simplify.
     do 3 econstructor. apply Smallstep.star_one. econstructor.
     eassumption. eapply BB; [econstructor; constructor | eassumption].
     setoid_rewrite <- H5. econstructor.
 
-    econstructor; try eassumption. Admitted.
+    econstructor. eassumption. eassumption. eauto. eassumption.
+
   (*   apply Smallstep.star_refl. admit. *)
   (* Admitted. *)
+    Admitted.
 
   Definition imm_succ_dec pc pc' : {imm_succ pc pc'} + {~ imm_succ pc pc'}.
   Proof.
@@ -411,13 +415,14 @@ whole execution (in one big step) of the basic block.
   Proof.
     intros s f sp pc rs m pc' H.
     inversion 1; subst; simplify.
-    unfold match_code3 in *.
+    unfold match_code3, match_code' in *.
     assert (X1: In pc' (RTL.successors_instr (RTL.Inop pc'))) by (crush).
     destruct (imm_succ_dec pc pc').
     { inv H3; crush. eapply transl_Inop_correct_nj; eauto. }
-    { pose proof (CODE _ _ H2) as X.
+    { inversion CODE as [CODE1 CODE2]. pose proof (CODE1 _ _ H2) as X.
       inv H3; crush.
-      eapply transl_Inop_correct_j; eauto. }
+      eapply transl_Inop_correct_j; eauto.
+    }
   Qed.
 
   Lemma transl_Iop_correct:
