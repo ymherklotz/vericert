@@ -29,8 +29,10 @@ Require Import compcert.common.Errors.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.lib.Maps.
 Require Import compcert.backend.Registers.
-Require compcert.common.Smallstep.
+Require Import compcert.common.Smallstep.
 Require Import compcert.common.Events.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Values.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.RTLBlockInstr.
@@ -136,67 +138,77 @@ finding is actually done at that higher level already.
 
   Definition imm_succ (pc pc': node) : Prop := pc' = Pos.pred pc.
 
-  Inductive match_block (c: RTL.code) (pc: node): bb -> cf_instr -> Prop :=
+  Definition valid_succ (tc: code) (pc: node) : Prop := exists b, tc ! pc = Some b.
+
+  Inductive match_block (c: RTL.code) (tc: code) (pc: node): bb -> cf_instr -> Prop :=
   (*
    * Basic Block Instructions
    *)
   | match_block_nop b cf pc':
-    b <> nil ->
     imm_succ pc pc' ->
     c ! pc = Some (RTL.Inop pc') ->
-    match_block c pc' b cf ->
-    match_block c pc (RBnop :: b) cf
+    match_block c tc pc' b cf ->
+    match_block c tc pc (RBnop :: b) cf
   | match_block_op cf b op args dst pc':
-    b <> nil ->
     imm_succ pc pc' ->
     c ! pc = Some (RTL.Iop op args dst pc') ->
-    match_block c pc' b cf ->
-    match_block c pc (RBop None op args dst :: b) cf
+    match_block c tc pc' b cf ->
+    match_block c tc pc (RBop None op args dst :: b) cf
   | match_block_load cf b chunk addr args dst pc':
-    b <> nil ->
     imm_succ pc pc' ->
     c ! pc = Some (RTL.Iload chunk addr args dst pc') ->
-    match_block c pc' b cf ->
-    match_block c pc (RBload None chunk addr args dst :: b) cf
+    match_block c tc pc' b cf ->
+    match_block c tc pc (RBload None chunk addr args dst :: b) cf
   | match_block_store cf b chunk addr args src pc':
-    b <> nil ->
     imm_succ pc pc' ->
     c ! pc = Some (RTL.Istore chunk addr args src pc') ->
-    match_block c pc' b cf ->
-    match_block c pc (RBstore None chunk addr args src :: b) cf
+    match_block c tc pc' b cf ->
+    match_block c tc pc (RBstore None chunk addr args src :: b) cf
   (*
    * Control flow instructions using goto
    *)
   | match_block_goto pc':
     c ! pc = Some (RTL.Inop pc') ->
-    match_block c pc (RBnop :: nil) (RBgoto pc')
+    valid_succ tc pc' ->
+    match_block c tc pc (RBnop :: nil) (RBgoto pc')
   | match_block_op_cf pc' op args dst:
     c ! pc = Some (RTL.Iop op args dst pc') ->
-    match_block c pc (RBop None op args dst :: nil) (RBgoto pc')
+    valid_succ tc pc' ->
+    match_block c tc pc (RBop None op args dst :: nil) (RBgoto pc')
   | match_block_load_cf pc' chunk addr args dst:
     c ! pc = Some (RTL.Iload chunk addr args dst pc') ->
-    match_block c pc (RBload None chunk addr args dst :: nil) (RBgoto pc')
+    valid_succ tc pc' ->
+    match_block c tc pc (RBload None chunk addr args dst :: nil) (RBgoto pc')
   | match_block_store_cf pc' chunk addr args src:
     c ! pc = Some (RTL.Istore chunk addr args src pc') ->
-    match_block c pc (RBstore None chunk addr args src :: nil) (RBgoto pc')
+    valid_succ tc pc' ->
+    match_block c tc pc (RBstore None chunk addr args src :: nil) (RBgoto pc')
   (*
    * Standard control flow instructions
    *)
   | match_block_call sig ident args dst pc' :
     c ! pc = Some (RTL.Icall sig ident args dst pc') ->
-    match_block c pc (RBnop :: nil) (RBcall sig ident args dst pc')
+    valid_succ tc pc' ->
+    match_block c tc pc (RBnop :: nil) (RBcall sig ident args dst pc')
   | match_block_tailcall sig ident args :
     c ! pc = Some (RTL.Itailcall sig ident args) ->
-    match_block c pc (RBnop :: nil) (RBtailcall sig ident args)
+    match_block c tc pc (RBnop :: nil) (RBtailcall sig ident args)
   | match_block_builtin ident args dst pc' :
     c ! pc = Some (RTL.Ibuiltin ident args dst pc') ->
-    match_block c pc (RBnop :: nil) (RBbuiltin ident args dst pc')
+    valid_succ tc pc' ->
+    match_block c tc pc (RBnop :: nil) (RBbuiltin ident args dst pc')
   | match_block_cond cond args pct pcf :
     c ! pc = Some (RTL.Icond cond args pct pcf) ->
-    match_block c pc (RBnop :: nil) (RBcond cond args pct pcf)
+    valid_succ tc pct ->
+    valid_succ tc pcf ->
+    match_block c tc pc (RBnop :: nil) (RBcond cond args pct pcf)
+  | match_block_jumptable r ns :
+    c ! pc = Some (RTL.Ijumptable r ns) ->
+    Forall (valid_succ tc) ns ->
+    match_block c tc pc (RBnop :: nil) (RBjumptable r ns)
   | match_block_return r :
     c ! pc = Some (RTL.Ireturn r) ->
-    match_block c pc (RBnop :: nil) (RBreturn r)
+    match_block c tc pc (RBnop :: nil) (RBreturn r)
   .
 
 (*|
@@ -210,37 +222,36 @@ matches some sequence of instructions starting at the node that corresponds to
 the basic block.
 |*)
 
-  Definition match_code (c: RTL.code) (tc: code) (pc: node) :=
+  Definition match_code' (c: RTL.code) (tc: code) (pc: node) :=
     forall n1 i,
       c ! n1 = Some i ->
       exists b,
         find_block_spec tc n1 pc /\ tc ! pc = Some b
-        /\ match_block c pc b.(bb_body) b.(bb_exit).
+        /\ match_block c tc pc b.(bb_body) b.(bb_exit).
 
-  Definition match_code' (c: RTL.code) (tc: code) : Prop :=
+  Definition match_code'' (c: RTL.code) (tc: code) : Prop :=
     forall i pc pc0 b bb' i' pc',
       c ! pc = Some i ->
       tc ! pc0 = Some b ->
       b.(bb_body) = bb' ++ i' :: nil ->
-      match_block c pc (i' :: nil) b.(bb_exit) ->
+      match_block c tc pc (i' :: nil) b.(bb_exit) ->
       In pc' (RTL.successors_instr i) ->
-      exists b, tc ! pc' = Some b /\ match_block c pc' b.(bb_body) b.(bb_exit).
+      exists b, tc ! pc' = Some b /\ match_block c tc pc' b.(bb_body) b.(bb_exit).
 
-  Definition match_code'' (c: RTL.code) (tc: code) : Prop :=
+  Definition match_code''' (c: RTL.code) (tc: code) : Prop :=
     forall i pc pc',
       c ! pc = Some i ->
       In pc' (RTL.successors_instr i) ->
       (exists pc0 b b' bb i',
           tc ! pc0 = Some b /\
-          tc ! pc' = Some b' /\ match_block c pc' b'.(bb_body) b'.(bb_exit)
-          /\ b.(bb_body) = bb ++ i'::nil /\ match_block c pc (i'::nil) b.(bb_exit))
+          tc ! pc' = Some b' /\ match_block c tc pc' b'.(bb_body) b'.(bb_exit)
+          /\ b.(bb_body) = bb ++ i'::nil /\ match_block c tc pc (i'::nil) b.(bb_exit))
       \/ (exists pc0 b i' bb1 bb2, tc ! pc0 = Some b /\
                                imm_succ pc pc' /\ b.(bb_body) = bb1 ++ i' :: bb2 /\ bb2 <> nil
-                             /\ match_block c pc (i'::bb2) b.(bb_exit)).
+                             /\ match_block c tc pc (i'::bb2) b.(bb_exit)).
 
-  Definition match_code3 (c: RTL.code) (tc: code) : Prop :=
-    (forall pc b, tc ! pc = Some b -> match_block c pc b.(bb_body) b.(bb_exit))
-    /\ match_code'' c tc.
+  Definition match_code (c: RTL.code) (tc: code) : Prop :=
+    forall pc b, tc ! pc = Some b -> match_block c tc pc b.(bb_body) b.(bb_exit).
 
   Variant match_stackframe : RTL.stackframe -> stackframe -> Prop :=
     | match_stackframe_init :
@@ -253,6 +264,17 @@ the basic block.
       step_instr_list tge sp in_s block out_s ->
       f.(fn_code) ! pc = Some block2 ->
       step_instr_list tge sp in_s' block2.(bb_body) out_s.
+
+  Lemma match_block_exists_instr :
+    forall c tc pc a b,
+      match_block c tc pc a b ->
+      exists i, c ! pc = Some i.
+  Proof. inversion 1; eexists; eauto. Qed.
+
+  Lemma match_block_not_nil :
+    forall c tc pc a b,
+      match_block c tc pc a b -> a <> nil.
+  Proof. inversion 1; crush. Qed.
 
 (*|
 Matching states
@@ -272,11 +294,12 @@ whole execution (in one big step) of the basic block.
     | match_state :
       forall stk stk' f tf sp pc rs m pc0 b rs0 m0
         (TF: transl_function f = OK tf)
-        (CODE: match_code3 f.(RTL.fn_code) tf.(fn_code))
+        (CODE: match_code f.(RTL.fn_code) tf.(fn_code))
         (BLOCK: exists b',
-            tf.(fn_code) ! pc0 = Some b' /\ match_block f.(RTL.fn_code) pc b b'.(bb_exit))
+            tf.(fn_code) ! pc0 = Some b'
+            /\ match_block f.(RTL.fn_code) tf.(fn_code) pc b b'.(bb_exit))
         (STK: Forall2 match_stackframe stk stk')
-        (STARSIMU: Smallstep.star RTL.step ge (RTL.State stk f sp pc0 rs0 m0)
+        (STARSIMU: star RTL.step ge (RTL.State stk f sp pc0 rs0 m0)
                                   E0 (RTL.State stk f sp pc rs m))
         (BB: sem_extrap tf pc0 sp (mk_instr_state rs (PMap.init false) m)
                         (mk_instr_state rs0 (PMap.init false) m0) b),
@@ -325,9 +348,15 @@ whole execution (in one big step) of the basic block.
     inv H; auto.
   Qed.
 
+  Definition measure (b: option bb): nat :=
+    match b with
+    | None => 0
+    | Some b' => 1 + length b'
+    end.
+
   Lemma transl_initial_states :
     forall s1, RTL.initial_state prog s1 ->
-      exists b s2, RTLBlock.initial_state tprog s2 /\ match_states b s1 s2.
+      exists s2, RTLBlock.initial_state tprog s2 /\ match_states None s1 s2.
   Proof using TRANSL.
     induction 1.
     exploit function_ptr_translated; eauto. intros [tf [A B]].
@@ -362,22 +391,24 @@ whole execution (in one big step) of the basic block.
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       match_states (Some (RBnop :: b)) (RTL.State s f sp pc rs m)
                    (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
-      (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       exists b' s2',
-        Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
-          match_states b' (RTL.State s f sp pc' rs m) s2'.
+        star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2'
+        /\ ltof _ measure b' (Some (RBnop :: b))
+        /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
-    intros * NIL H1 H2 H3 H4.
+    intros * NIL H1 H2 H3.
     inv H3. simplify. pose proof CODE as CODE'.
-    unfold match_code3, match_code' in *. inv CODE.
-    pose proof (H _ _ H0).
+    unfold match_code in *.
+    pose proof (CODE' _ _ H0).
     do 3 econstructor.
-    eapply Smallstep.star_refl.
+    eapply star_refl.
+    econstructor.
     instantiate (1 := Some b).
+    unfold ltof; auto.
     econstructor; try eassumption.
     do 2 econstructor; try eassumption.
     inv H3; crush.
-    eapply Smallstep.star_right; eauto.
+    eapply star_right; eauto.
     eapply RTL.exec_Inop; eauto. auto.
 
     unfold sem_extrap in *. intros.
@@ -392,23 +423,22 @@ whole execution (in one big step) of the basic block.
       match_states (Some (RBnop :: nil)) (RTL.State s f sp pc rs m)
                    (State stk' tf sp pc1 rs1 (PMap.init false) m1) ->
       (fn_code tf) ! pc1 = Some x ->
-      match_block (RTL.fn_code f) pc1 (bb_body x) (bb_exit x) ->
+      match_block f.(RTL.fn_code) tf.(fn_code) pc1 (bb_body x) (bb_exit x) ->
       RBgoto pc' = bb_exit x ->
       (exists b' : RTLBlockInstr.bblock,
         (fn_code tf) ! pc' = Some b'
-        /\ match_block (RTL.fn_code f) pc' (bb_body b') (bb_exit b')) ->
-      exists b' s2',
-        Smallstep.star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2' /\
-          match_states b' (RTL.State s f sp pc' rs m) s2'.
+        /\ match_block (RTL.fn_code f) tf.(fn_code) pc' (bb_body b') (bb_exit b')) ->
+      exists b' s2', plus step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2'
+                /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros * H H0 H1 H4 H5 H8.
     inv H0. simplify.
-    do 3 econstructor. apply Smallstep.star_one. econstructor.
+    do 3 econstructor. apply plus_one. econstructor.
     eassumption. eapply BB; [econstructor; constructor | eassumption].
     setoid_rewrite <- H5. econstructor.
 
     econstructor. eassumption. eassumption. eauto. eassumption.
-    eapply Smallstep.star_refl.
+    eapply star_refl.
     unfold sem_extrap. intros. setoid_rewrite H8 in H3.
     crush.
   Qed.
@@ -425,28 +455,136 @@ whole execution (in one big step) of the basic block.
   Lemma imm_succ_refl2 pc : imm_succ (Pos.succ pc) pc.
   Proof. unfold imm_succ; auto using Pos.pred_succ. Qed.
 
+  Lemma sim_star :
+    forall s1 b s,
+      (exists b' s2,
+        star step tge s1 E0 s2 /\ ltof _ measure b' b
+        /\ match_states b' s s2) ->
+      exists b' s2,
+        (plus step tge s1 E0 s2 \/
+           star step tge s1 E0 s2 /\ ltof _ measure b' b) /\
+          match_states b' s s2.
+  Proof. intros; simplify. do 3 econstructor; eauto. Qed.
+
+  Lemma sim_plus :
+    forall s1 b s,
+      (exists b' s2, plus step tge s1 E0 s2 /\ match_states b' s s2) ->
+      exists b' s2,
+        (plus step tge s1 E0 s2 \/
+           star step tge s1 E0 s2 /\ ltof _ measure b' b) /\
+          match_states b' s s2.
+  Proof. intros; simplify. do 3 econstructor; eauto. Qed.
+
   Lemma transl_Inop_correct:
     forall s f sp pc rs m pc',
       (RTL.fn_code f) ! pc = Some (RTL.Inop pc') ->
       forall b s2, match_states b (RTL.State s f sp pc rs m) s2 ->
-        exists b' s2', Smallstep.star step tge s2 Events.E0 s2'
-               /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
+        exists b' s2',
+          (plus step tge s2 E0 s2'
+           \/ star step tge s2 E0 s2' /\ ltof _ measure b' b)
+          /\ match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
-    intros s f sp pc rs m pc' H.
+    intros * H.
     inversion 1; subst; simplify.
-    unfold match_code3, match_code'' in *.
-    assert (X1: In pc' (RTL.successors_instr (RTL.Inop pc'))) by (crush).
-    inversion CODE as [CODE1 CODE2].
-    pose proof (CODE2 _ _ _ _ _ H H2 X1) as X.
-    inv X; simplify. admit.
-    { inv H7; crush. eapply transl_Inop_correct_nj; eauto. constructor; eauto. unfold match_code3; auto.
-      do 2 econstructor; eauto. econstructor; eauto.
-      admit.
+    unfold match_code in *.
+    match goal with H: match_block _ _ _ _ _ |- _ => inv H end; simplify.
+    { apply sim_star. eapply transl_Inop_correct_nj; eauto.
+      eapply match_block_not_nil; eassumption.
     }
-    { pose proof (H3 _ _ H2) as X.
-      eapply transl_Inop_correct_j; eauto.
-      eapply H4; eauto.
+    { apply sim_plus. eapply transl_Inop_correct_j; eauto.
+      assert (X: In pc' (RTL.successors_instr (RTL.Inop pc'))) by crush.
+      unfold valid_succ in H6; simplify. pose proof (CODE _ _ H3).
+      eauto.
     }
+  Qed.
+
+  Lemma eval_op_eq:
+    forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
+      Op.eval_operation ge sp0 op vl m = Op.eval_operation tge sp0 op vl m.
+  Proof using TRANSL.
+    intros.
+    destruct op; auto; unfold Op.eval_operation, Genv.symbol_address, Op.eval_addressing32;
+    [| destruct a; unfold Genv.symbol_address ];
+    try rewrite symbols_preserved; auto.
+  Qed.
+
+  Lemma eval_addressing_eq:
+    forall sp addr vl,
+      Op.eval_addressing ge sp addr vl = Op.eval_addressing tge sp addr vl.
+  Proof using TRANSL.
+    intros.
+    destruct addr;
+      unfold Op.eval_addressing, Op.eval_addressing32;
+      unfold Genv.symbol_address;
+      try rewrite symbols_preserved; auto.
+  Qed.
+
+  Lemma transl_Iop_correct_nj:
+    forall s f sp pc rs m op args res pc' v stk' tf pc1 rs1 m1 b x,
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
+      Op.eval_operation ge sp op rs ## args m = Some v ->
+      transl_function f = OK tf ->
+      (forall pc0 b0,
+          (fn_code tf) ! pc0 = Some b0 -> match_block (RTL.fn_code f) (fn_code tf) pc0 (bb_body b0) (bb_exit b0)) ->
+      Forall2 match_stackframe s stk' ->
+      star RTL.step ge (RTL.State s f sp pc1 rs1 m1) E0 (RTL.State s f sp pc rs m) ->
+      sem_extrap tf pc1 sp {| is_rs := rs; is_ps := PMap.init false; is_mem := m |}
+                 {| is_rs := rs1; is_ps := PMap.init false; is_mem := m1 |} (RBop None op args res :: b) ->
+      (fn_code tf) ! pc1 = Some x ->
+      match_block (RTL.fn_code f) (fn_code tf) pc' b (bb_exit x) ->
+      imm_succ pc pc' ->
+      exists b' s2',
+        star step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2'
+        /\ ltof _ measure b' (Some (RBop None op args res :: b))
+        /\ match_states b' (RTL.State s f sp pc' rs # res <- v m) s2'.
+  Proof.
+    intros * IOP EVAL TR MATCHB STK STAR BB INCODE MATCHB2 IMSUCC.
+    do 3 econstructor. eapply star_refl. constructor.
+    instantiate (1 := Some b); unfold ltof; auto.
+
+    constructor; try eassumption. econstructor; eauto.
+    eapply star_right; eauto.
+    eapply RTL.exec_Iop; eauto. auto.
+
+    unfold sem_extrap in *. intros.
+    eapply BB. econstructor; eauto.
+    econstructor; eauto.
+    rewrite <- eval_op_eq; eassumption.
+    constructor. auto.
+  Qed.
+
+  Lemma transl_Iop_correct_j:
+    forall s f sp pc rs m op args res pc' v stk' tf pc1 rs1 m1 x,
+      (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
+      Op.eval_operation ge sp op rs ## args m = Some v ->
+      transl_function f = OK tf ->
+      (forall (pc0 : positive) (b : RTLBlockInstr.bblock),
+          (fn_code tf) ! pc0 = Some b -> match_block (RTL.fn_code f) (fn_code tf) pc0 (bb_body b) (bb_exit b)) ->
+      Forall2 match_stackframe s stk' ->
+      star RTL.step ge (RTL.State s f sp pc1 rs1 m1) E0 (RTL.State s f sp pc rs m) ->
+      sem_extrap tf pc1 sp {| is_rs := rs; is_ps := PMap.init false; is_mem := m |}
+                 {| is_rs := rs1; is_ps := PMap.init false; is_mem := m1 |} (RBop None op args res :: nil) ->
+      (fn_code tf) ! pc1 = Some x ->
+      RBgoto pc' = bb_exit x ->
+      valid_succ (fn_code tf) pc' ->
+      exists b' s2,
+        plus step tge (State stk' tf sp pc1 rs1 (PMap.init false) m1) E0 s2 /\
+          match_states b' (RTL.State s f sp pc' rs # res <- v m) s2.
+  Proof.
+    intros * H H0 TF CODE STK STARSIMU BB H3 H2 H7.
+    inv H0. simplify.
+    unfold valid_succ in H7; simplify.
+    do 3 econstructor. apply plus_one. econstructor.
+    eassumption. eapply BB; [| eassumption ].
+    econstructor; econstructor; eauto.
+    rewrite <- eval_op_eq; eassumption.
+    constructor. setoid_rewrite <- H2.
+    econstructor.
+
+    econstructor; try eassumption. eauto.
+    eapply star_refl.
+    unfold sem_extrap. intros. setoid_rewrite H0 in H5.
+    crush.
   Qed.
 
   Lemma transl_Iop_correct:
@@ -454,45 +592,203 @@ whole execution (in one big step) of the basic block.
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
       Op.eval_operation ge sp op rs##args m = Some v ->
       forall b s2, match_states b (RTL.State s f sp pc rs m) s2 ->
-        exists b' s2', Smallstep.plus step tge s2 Events.E0 s2'
-               /\ match_states b' (RTL.State s f sp pc' (Registers.Regmap.set res v rs) m) s2'.
+        exists b' s2',
+          (plus step tge s2 E0 s2'
+           \/ star step tge s2 E0 s2' /\ ltof _ measure b' b)
+          /\ match_states b' (RTL.State s f sp pc' (rs # res <- v) m) s2'.
   Proof.
     intros * H H0.
-  Admitted.
+    inversion 1; subst; simplify.
+    unfold match_code in *.
+    match goal with H: match_block _ _ _ _ _ |- _ => inv H end; simplify.
+    { apply sim_star; eapply transl_Iop_correct_nj; eassumption. }
+    { apply sim_plus. eapply transl_Iop_correct_j; eassumption. }
+  Qed.
 
   Lemma transl_Iload_correct:
     forall s f sp pc rs m chunk addr args dst pc' a v,
       (RTL.fn_code f) ! pc = Some (RTL.Iload chunk addr args dst pc') ->
       Op.eval_addressing ge sp addr rs##args = Some a ->
-      Memory.Mem.loadv chunk m a = Some v ->
-      forall s2, match_states (RTL.State s f sp pc rs m) s2 ->
-        exists s2', Smallstep.plus step tge s2 Events.E0 s2'
-               /\ match_states (RTL.State s f sp pc' (Registers.Regmap.set dst v rs) m) s2'.
+      Mem.loadv chunk m a = Some v ->
+      forall b s2, match_states b (RTL.State s f sp pc rs m) s2 ->
+        exists b' s2',
+          (plus step tge s2 E0 s2'
+           \/ star step tge s2 E0 s2' /\ ltof _ measure b' b)
+          /\ match_states b' (RTL.State s f sp pc' (rs # dst <- v) m) s2'.
   Proof.
-    intros s f sp pc rs m chunk addr args dst pc' a v H H0 H1.
-  Admitted.
+    intros * H H0 H1.
+    inversion 1; subst; simplify.
+    unfold match_code in *.
+    match goal with H: match_block _ _ _ _ _ |- _ => inv H end; simplify.
+    { apply sim_star.
+      do 3 econstructor. eapply star_refl. constructor.
+      instantiate (1 := Some b); unfold ltof; auto.
+
+      constructor; try eassumption. econstructor; eauto.
+      eapply star_right; eauto.
+      eapply RTL.exec_Iload; eauto. auto.
+
+      unfold sem_extrap in *. intros.
+      eapply BB. econstructor; eauto.
+      econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption.
+      constructor. auto.
+    }
+    { apply sim_plus.
+      inv H0. simplify.
+      unfold valid_succ in H8; simplify.
+      do 3 econstructor. apply plus_one. econstructor.
+      eassumption. eapply BB; [| eassumption ].
+      econstructor; econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption.
+      constructor. setoid_rewrite <- H3.
+      econstructor.
+
+      econstructor; try eassumption. eauto.
+      eapply star_refl.
+      unfold sem_extrap. intros. setoid_rewrite H0 in H8.
+      crush.
+    }
+  Qed.
+
+  Lemma transl_Istore_correct:
+    forall s f sp pc rs m chunk addr args src pc' a m',
+      (RTL.fn_code f) ! pc = Some (RTL.Istore chunk addr args src pc') ->
+      Op.eval_addressing ge sp addr rs##args = Some a ->
+      Mem.storev chunk m a rs#src = Some m' ->
+      forall b s2, match_states b (RTL.State s f sp pc rs m) s2 ->
+        exists b' s2',
+          (plus step tge s2 E0 s2'
+           \/ star step tge s2 E0 s2' /\ ltof _ measure b' b)
+          /\ match_states b' (RTL.State s f sp pc' rs m') s2'.
+  Proof.
+    intros * H H0 H1.
+    inversion 1; subst; simplify.
+    unfold match_code in *.
+    match goal with H: match_block _ _ _ _ _ |- _ => inv H end; simplify.
+    { apply sim_star.
+      do 3 econstructor. eapply star_refl. constructor.
+      instantiate (1 := Some b); unfold ltof; auto.
+
+      constructor; try eassumption. econstructor; eauto.
+      eapply star_right; eauto.
+      eapply RTL.exec_Istore; eauto. auto.
+
+      unfold sem_extrap in *. intros.
+      eapply BB. econstructor; eauto.
+      econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption.
+      constructor. auto.
+    }
+    { apply sim_plus.
+      inv H0. simplify.
+      unfold valid_succ in H8; simplify.
+      do 3 econstructor. apply plus_one. econstructor.
+      eassumption. eapply BB; [| eassumption ].
+      econstructor; econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption.
+      constructor. setoid_rewrite <- H3.
+      econstructor.
+
+      econstructor; try eassumption. eauto.
+      eapply star_refl.
+      unfold sem_extrap. intros. setoid_rewrite H0 in H8.
+      crush.
+    }
+  Qed.
+
+  Lemma functions_translated:
+    forall (v: Values.val) (f: RTL.fundef),
+      Genv.find_funct ge v = Some f ->
+      exists tf,
+        Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
+  Proof using TRANSL.
+    intros. exploit (Genv.find_funct_match TRANSL); eauto.
+    intros (cu & tf & P & Q & R); exists tf; auto.
+  Qed.
+
+  Lemma find_function_translated:
+    forall ros rs rs' f,
+      (forall x, rs !! x = rs' !! x) ->
+      RTL.find_function ge ros rs = Some f ->
+      exists tf, find_function tge ros rs' = Some tf
+                 /\ transl_fundef f = OK tf.
+  Proof using TRANSL.
+    Ltac ffts := match goal with
+                 | [ H: forall _, Val.lessdef _ _, r: Registers.reg |- _ ] =>
+                   specialize (H r); inv H
+                 | [ H: Vundef = ?r, H1: Genv.find_funct _ ?r = Some _ |- _ ] =>
+                   rewrite <- H in H1
+                 | [ H: Genv.find_funct _ Vundef = Some _ |- _] => solve [inv H]
+                 | _ => solve [exploit functions_translated; eauto]
+                 end.
+    destruct ros; simplify; try rewrite <- H;
+    [| rewrite symbols_preserved; destruct_match;
+      try (apply function_ptr_translated); crush ];
+    intros;
+    repeat ffts.
+  Qed.
+
+  Lemma transl_Icall_correct:
+    forall s f sp pc rs m sig ros args res pc' fd,
+      (RTL.fn_code f) ! pc = Some (RTL.Icall sig ros args res pc') ->
+      RTL.find_function ge ros rs = Some fd ->
+      RTL.funsig fd = sig ->
+      forall b s2, match_states b (RTL.State s f sp pc rs m) s2 ->
+        exists b' s2',
+          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof _ measure b' b) /\
+            match_states b' (RTL.Callstate (RTL.Stackframe res f sp pc' rs :: s) fd rs ## args m) s2'.
+  Proof.
+    intros * H H0 H1.
+    inversion 1; subst; simplify.
+    unfold match_code in *.
+    match goal with H: match_block _ _ _ _ _ |- _ => inv H end; simplify;
+    apply sim_plus.
+    inv H0. simplify.
+    unfold valid_succ in H7; simplify.
+    exploit find_function_translated; eauto; simplify.
+    do 3 econstructor. apply plus_one. econstructor.
+    eassumption. eapply BB; [| eassumption ].
+    econstructor; econstructor; eauto.
+    setoid_rewrite <- H1.
+    econstructor; eauto.
+    apply sig_transl_function; auto.
+
+    econstructor; try eassumption.
+    constructor. constructor; auto. auto.
+  Qed.
 
   Lemma transl_correct:
     forall s1 t s1',
       RTL.step ge s1 t s1' ->
-      forall s2, match_states s1 s2 ->
-        exists s2', Smallstep.plus step tge s2 t s2' /\ match_states s1' s2'.
+      forall b s2, match_states b s1 s2 ->
+        exists b' s2',
+          (plus step tge s2 t s2' \/
+             (star step tge s2 t s2' /\ ltof _ measure b' b))
+          /\ match_states b' s1' s2'.
   Proof.
     induction 1.
     - eauto using transl_Inop_correct.
     - eauto using transl_Iop_correct.
     - eauto using transl_Iload_correct.
+    - eauto using transl_Istore_correct.
+    - eauto using transl_Icall_correct.
   Admitted.
 
   Theorem transf_program_correct:
-    Smallstep.forward_simulation (RTL.semantics prog)
+    forward_simulation (RTL.semantics prog)
                                  (RTLBlock.semantics tprog).
   Proof using TRANSL.
-    eapply Smallstep.forward_simulation_plus.
-    apply senv_preserved.
-    eauto using transl_initial_states.
-    eapply transl_final_states.
-    eauto using transl_correct.
+    eapply (Forward_simulation
+              (L1:=RTL.semantics prog)
+              (L2:=RTLBlock.semantics tprog)
+              (ltof _ measure) match_states).
+    constructor.
+    - apply well_founded_ltof.
+    - eauto using transl_initial_states.
+    - intros; eapply transl_final_states; eauto.
+    - eapply transl_correct.
+    - apply senv_preserved.
   Qed.
 
 End CORRECTNESS.

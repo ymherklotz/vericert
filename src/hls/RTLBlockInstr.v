@@ -354,7 +354,7 @@ Section RELSEM.
       eval_predf (is_ps i) p = false ->
       eval_pred (Some p) i i' i
   | eval_pred_none:
-    forall i i', eval_pred None i i' i.
+    forall i i', eval_pred None i i' i'.
 
 (*|
 .. index::
