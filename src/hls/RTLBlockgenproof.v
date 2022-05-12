@@ -35,6 +35,7 @@ Require Import compcert.common.Memory.
 Require Import compcert.common.Values.
 
 Require Import vericert.common.Vericertlib.
+Require Import vericert.common.DecEq.
 Require Import vericert.hls.RTLBlockInstr.
 Require Import vericert.hls.RTLBlock.
 Require Import vericert.hls.RTLBlockgen.
@@ -324,6 +325,65 @@ whole execution (in one big step) of the basic block.
     | None => 0
     | Some b' => 1 + length b'
     end.
+
+  Lemma check_valid_node_correct :
+    forall a b, check_valid_node a b = true -> valid_succ a b.
+  Proof.
+    intros. unfold valid_succ, check_valid_node in *.
+    destruct_match; try discriminate; eauto.
+  Qed.
+
+  Lemma transl_entrypoint_exists :
+    forall f tf,
+      transl_function f = OK tf ->
+      valid_succ (fn_code tf) (fn_entrypoint tf).
+  Proof.
+    unfold transl_function; intros.
+    repeat (destruct_match; try discriminate; []). inv H. simplify.
+    eauto using check_valid_node_correct.
+  Qed.
+
+  Lemma ceq_eq :
+    forall A a (b: A) c,
+      ceq a b c = true ->
+      b = c.
+  Proof.
+    intros. unfold ceq in H. destruct_match; try discriminate. auto.
+  Qed.
+
+  Ltac unfold_ands :=
+    repeat match goal with
+           | H: _ && _ = true |- _ => apply andb_prop in H
+           | H: _ /\ _ |- _ => inv H
+           | H: ceq _ _ _ = true |- _ => apply ceq_eq in H; subst
+           end.
+
+  Lemma transl_match_code' :
+    forall c tc b pc i,
+      check_code' c tc pc b i = true ->
+      match_block c tc pc b i.
+  Proof.
+    induction b; [crush|].
+    intros. unfold check_code' in H.
+    do 4 (destruct_match; try discriminate);
+    try (repeat (destruct_match; try discriminate; []); unfold_ands; constructor; auto using check_valid_node_correct);
+    fold check_code' in *;
+    try (destruct_match; try discriminate; unfold_ands; econstructor; eauto);
+    apply Forall_forall; intros. eapply forallb_forall in H1; eauto using check_valid_node_correct.
+  Qed.
+
+  Lemma transl_match_code :
+    forall f tf,
+      transl_function f = OK tf ->
+      match_code f.(RTL.fn_code) tf.(fn_code).
+  Proof.
+    unfold transl_function; intros.
+    repeat (destruct_match; try discriminate; []). inv H. simplify.
+    unfold match_code; intros.
+    eapply forall_ptree_true in Heqb0; eauto.
+    unfold check_code in *.
+    eauto using transl_match_code'.
+  Qed.
 
   Lemma transl_initial_states :
     forall s1, RTL.initial_state prog s1 ->
@@ -751,18 +811,6 @@ whole execution (in one big step) of the basic block.
     unfold sem_extrap. intros. setoid_rewrite H5 in H8. crush.
   Qed.
 
-  Lemma transl_entrypoint_exists :
-    forall f tf,
-      transl_function f = OK tf ->
-      exists b, (fn_code tf) ! (fn_entrypoint tf) = Some b.
-  Proof. Admitted.
-
-  Lemma transl_match_code :
-    forall f tf,
-      transl_function f = OK tf ->
-      match_code f.(RTL.fn_code) tf.(fn_code).
-  Proof. Admitted.
-
   Lemma init_regs_equiv :
     forall b a, init_regs a b = RTL.init_regs a b.
   Proof. induction b; crush. Qed.
@@ -781,9 +829,8 @@ whole execution (in one big step) of the basic block.
     inversion 1; subst; simplify.
     monadInv TF. inv H0.
     pose proof (transl_match_code _ _ EQ).
-    pose proof (transl_entrypoint_exists _ _ EQ).
+    pose proof (transl_entrypoint_exists _ _ EQ). unfold valid_succ in H1.
     simplify.
-    exploit transl_entrypoint_exists; eauto; simplify.
     destruct x0.
     apply sim_plus. do 3 econstructor.
     assert (fn_stacksize x = RTL.fn_stacksize f).
@@ -802,14 +849,14 @@ whole execution (in one big step) of the basic block.
       repeat (destruct_match; try discriminate; []).
       inv EQ; auto. }
     unfold match_code in H0.
-    pose proof (H0 _ _ H3).
+    pose proof (H0 _ _ H2).
     econstructor; eauto.
     rewrite <- H1. eauto.
     rewrite H1.
-    rewrite init_regs_equiv. rewrite H4. eapply star_refl.
+    rewrite init_regs_equiv. rewrite H3. eapply star_refl.
     unfold sem_extrap; intros.
-    setoid_rewrite H2 in H7; simplify.
-    rewrite H4. eauto.
+    setoid_rewrite H2 in H6; simplify.
+    rewrite H3. eauto.
   Qed.
 
   Lemma transl_externalcall_correct:

@@ -179,17 +179,117 @@ Definition check_present_blocks (c: code) (n: list positive) (max: positive) (i:
   | None => false
   end.
 
+Definition check_valid_node (tc: code) (e: node) :=
+  match tc ! e with
+  | Some _ => true
+  | _ => false
+  end.
+
+Fixpoint check_code' (c: RTL.code) (tc: code) (pc: node) (b: bb) (i: cf_instr) :=
+  match b, i, c ! pc with
+  | RBnop :: (_ :: _) as b', _, Some (RTL.Inop pc') =>
+      check_code' c tc pc' b' i
+  | RBop None op args dst :: (_ :: _) as b', _, Some (RTL.Iop op' args' dst' pc') =>
+      ceq operation_eq op op'
+      && ceq list_pos_eq args args'
+      && ceq peq dst dst'
+      && check_code' c tc pc' b' i
+  | RBload None chunk addr args dst :: (_ :: _) as b', _,
+    Some (RTL.Iload chunk' addr' args' dst' pc') =>
+      ceq memory_chunk_eq chunk chunk'
+      && ceq addressing_eq addr addr'
+      && ceq list_pos_eq args args'
+      && ceq peq dst dst'
+      && check_code' c tc pc' b' i
+  | RBstore None chunk addr args src :: (_ :: _) as b', _,
+    Some (RTL.Istore chunk' addr' args' src' pc') =>
+      ceq memory_chunk_eq chunk chunk'
+      && ceq addressing_eq addr addr'
+      && ceq list_pos_eq args args'
+      && ceq peq src src'
+      && check_code' c tc pc' b' i
+  | RBnop :: nil, RBgoto pc', Some (RTL.Inop pc'') =>
+      check_valid_node tc pc'
+      && ceq peq pc' pc''
+  | RBop None op args dst :: nil, RBgoto pc', Some (RTL.Iop op' args' dst' pc'') =>
+      check_valid_node tc pc'
+      && ceq peq pc' pc''
+      && ceq operation_eq op op'
+      && ceq list_pos_eq args args'
+      && ceq peq dst dst'
+  | RBload None chunk addr args dst :: nil, RBgoto pc',
+    Some (RTL.Iload chunk' addr' args' dst' pc'') =>
+      check_valid_node tc pc'
+      && ceq peq pc' pc''
+      && ceq memory_chunk_eq chunk chunk'
+      && ceq addressing_eq addr addr'
+      && ceq list_pos_eq args args'
+      && ceq peq dst dst'
+  | RBstore None chunk addr args src :: nil, RBgoto pc',
+    Some (RTL.Istore chunk' addr' args' src' pc'') =>
+      check_valid_node tc pc'
+      && ceq peq pc' pc''
+      && ceq memory_chunk_eq chunk chunk'
+      && ceq addressing_eq addr addr'
+      && ceq list_pos_eq args args'
+      && ceq peq src src'
+  | RBnop :: nil, RBcall sig (inl r) args dst pc',
+    Some (RTL.Icall sig' (inl r') args' dst' pc'') =>
+      check_valid_node tc pc'
+      && ceq peq pc' pc''
+      && ceq signature_eq sig sig'
+      && ceq peq r r'
+      && ceq list_pos_eq args args'
+      && ceq peq dst dst'
+  | RBnop :: nil, RBcall sig (inr i) args dst pc',
+    Some (RTL.Icall sig' (inr i') args' dst' pc'') =>
+      check_valid_node tc pc'
+      && ceq peq pc' pc''
+      && ceq signature_eq sig sig'
+      && ceq peq i i'
+      && ceq list_pos_eq args args'
+      && ceq peq dst dst'
+  | RBnop :: nil, RBtailcall sig' (inl r') args',
+    Some (RTL.Itailcall sig (inl r) args) =>
+      ceq signature_eq sig sig'
+      && ceq peq r r'
+      && ceq list_pos_eq args args'
+  | RBnop :: nil, RBtailcall sig' (inr r') args',
+    Some (RTL.Itailcall sig (inr r) args) =>
+      ceq signature_eq sig sig'
+      && ceq peq r r'
+      && ceq list_pos_eq args args'
+  | RBnop :: nil, RBcond cond' args' n1' n2', Some (RTL.Icond cond args n1 n2) =>
+      check_valid_node tc n1
+      && check_valid_node tc n2
+      && ceq condition_eq cond cond'
+      && ceq list_pos_eq args args'
+      && ceq peq n1 n1'
+      && ceq peq n2 n2'
+  | RBnop :: nil, RBjumptable r' ns', Some (RTL.Ijumptable r ns) =>
+      ceq peq r r'
+      && ceq list_pos_eq ns ns'
+      && forallb (check_valid_node tc) ns
+  | RBnop :: nil, RBreturn (Some r'), Some (RTL.Ireturn (Some r)) =>
+      ceq peq r r'
+  | RBnop :: nil, RBreturn None, Some (RTL.Ireturn None) => true
+  | _, _, _ => false
+  end.
+
+Definition check_code c tc pc b :=
+  check_code' c tc pc b.(bb_body) b.(bb_exit).
+
 Parameter partition : RTL.function -> Errors.res function.
 
 Definition transl_function (f: RTL.function) :=
   match partition f with
   | Errors.OK f' =>
-      let blockids := map fst (PTree.elements f'.(fn_code)) in
-      if forall_ptree (check_present_blocks f'.(fn_code) blockids (fold_right Pos.max 1 blockids))
-                      f.(RTL.fn_code) then
-        Errors.OK
-          (mkfunction f.(RTL.fn_sig) f.(RTL.fn_params) f.(RTL.fn_stacksize) f'.(fn_code) f.(RTL.fn_entrypoint))
-      else Errors.Error (Errors.msg "check_present_blocks failed")
+      if check_valid_node f'.(fn_code) f.(RTL.fn_entrypoint) then
+        if forall_ptree (check_code f.(RTL.fn_code) f'.(fn_code)) f'.(fn_code) then
+          Errors.OK
+            (mkfunction f.(RTL.fn_sig) f.(RTL.fn_params) f.(RTL.fn_stacksize) f'.(fn_code) f.(RTL.fn_entrypoint))
+        else Errors.Error (Errors.msg "check_present_blocks failed")
+      else Errors.Error (Errors.msg "entrypoint does not exists")
   | Errors.Error msg => Errors.Error msg
   end.
 
