@@ -73,7 +73,7 @@ let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
     if List.exists (fun x -> x = s) (fst e) then
       Errors.OK { bb_body = [i']; bb_exit = RBgoto s' }
     else if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = [RBnop]; bb_exit = RBgoto s }
+      Errors.OK { bb_body = []; bb_exit = RBgoto s }
     else begin
       match next_bblock_from_RTL false e c s' i_n with
       | Errors.OK bb ->

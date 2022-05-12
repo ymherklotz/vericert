@@ -38,7 +38,7 @@ lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
 
-install: docs/vericert.1
+install: doc/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
 	install -d $(PREFIX)/bin
 	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin

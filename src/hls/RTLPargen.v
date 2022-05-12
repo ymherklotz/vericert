@@ -227,7 +227,7 @@ We define the top-level oracle that will check if two basic blocks are
 equivalent after a scheduling transformation.
 |*)
 
-Definition empty_trees (bb: list RTLBlock.bb) (bbt: list RTLPar.bb) : bool :=
+Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
   match bb with
   | nil =>
     match bbt with
