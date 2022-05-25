@@ -60,8 +60,8 @@ Require vericert.hls.Verilog.
 Require vericert.hls.Veriloggen.
 Require vericert.hls.Veriloggenproof.
 Require vericert.hls.HTLgen.
-Require vericert.hls.RTLBlock.
-Require vericert.hls.RTLBlockgen.
+Require vericert.hls.GibleSeq.
+Require vericert.hls.GibleSeqgen.
 Require vericert.hls.RTLPargen.
 Require vericert.hls.RTLParFUgen.
 Require vericert.hls.HTLPargen.

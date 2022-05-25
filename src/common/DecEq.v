@@ -28,8 +28,7 @@ Require Import compcert.lib.Integers.
 Require Import compcert.lib.Floats.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLBlock.
+Require Import vericert.hls.Gible.
 
 Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
 Proof.
@@ -115,6 +114,10 @@ Proof.
   generalize Pos.eq_dec; intro.
   generalize typ_eq; intro.
   generalize Int.eq_dec; intro.
+  generalize Ptrofs.eq_dec; intro.
+  generalize Int64.eq_dec; intro.
+  generalize Float.eq_dec; intro.
+  generalize Float32.eq_dec; intro.
   generalize memory_chunk_eq; intro.
   generalize addressing_eq; intro.
   generalize operation_eq; intro.

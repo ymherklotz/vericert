@@ -68,3 +68,4 @@ function that can execute lists of things, given their execution rule.
 End BB.
 
 Module GibleSeq := Gible(BB).
+Export GibleSeq.
