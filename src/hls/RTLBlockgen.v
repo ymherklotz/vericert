@@ -31,8 +31,8 @@ Require Import compcert.lib.Floats.
 
 Require Import vericert.common.DecEq.
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLBlock.
+Require Import vericert.hls.Gible.
+Require Import vericert.hls.GibleSeq.
 
 #[local] Open Scope positive.
 

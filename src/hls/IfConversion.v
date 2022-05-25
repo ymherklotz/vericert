@@ -106,7 +106,7 @@ Fixpoint get_loops (b: bourdoncle): list node :=
   end.
 
 Definition is_loop (b: list node) (n: node) :=
-  any (fun x => Pos.eqb x n) b.
+  any (Pos.eqb n) b.
 
 Definition is_flat_cfi (n: cf_instr) :=
   match n with

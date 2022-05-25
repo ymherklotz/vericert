@@ -35,6 +35,7 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Values.
 Require Import compcert.lib.Integers.
+Require Import compcert.common.Smallstep.
 Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
@@ -55,17 +56,6 @@ they won't branch.  The main changes to how instructions are defined in ``RTL``,
 is that these instructions don't have a next node, as they will be in a basic
 block, and they also have an optional predicate (``pred_op``).
 |*)
-
-Inductive instr : Type :=
-| RBnop : instr
-| RBop :
-  option pred_op -> operation -> list reg -> reg -> instr
-| RBload :
-  option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
-| RBstore :
-  option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
-| RBsetpred :
-  option pred_op -> condition -> list reg -> predicate -> instr.
 
 (*|
 .. index::
@@ -89,6 +79,18 @@ Inductive cf_instr : Type :=
 | RBgoto : node -> cf_instr
 | RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
 
+Inductive instr : Type :=
+| RBnop : instr
+| RBop :
+  option pred_op -> operation -> list reg -> reg -> instr
+| RBload :
+  option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBstore :
+  option pred_op -> memory_chunk -> addressing -> list reg -> reg -> instr
+| RBsetpred :
+  option pred_op -> condition -> list reg -> predicate -> instr
+| RBexit : option pred_op -> cf_instr -> instr.
+
 (*|
 Helper Functions
 ================
@@ -105,19 +107,6 @@ Fixpoint successors_instr (i : cf_instr) : list node :=
   | RBgoto n => n :: nil
   | RBpred_cf p c1 c2 =>
       concat (successors_instr c1 :: successors_instr c2 :: nil)
-  end.
-
-Definition max_reg_instr (m: positive) (i: instr) :=
-  match i with
-  | RBnop => m
-  | RBop p op args res =>
-      fold_left Pos.max args (Pos.max res m)
-  | RBload p chunk addr args dst =>
-      fold_left Pos.max args (Pos.max dst m)
-  | RBstore p chunk addr args src =>
-      fold_left Pos.max args (Pos.max src m)
-  | RBsetpred p' c args p =>
-      fold_left Pos.max args m
   end.
 
 Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
@@ -139,6 +128,20 @@ Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
   | RBreturn (Some arg) => Pos.max arg m
   | RBgoto n => m
   | RBpred_cf p c1 c2 => Pos.max (max_reg_cfi m c1) (max_reg_cfi m c2)
+  end.
+
+Definition max_reg_instr (m: positive) (i: instr) :=
+  match i with
+  | RBnop => m
+  | RBop p op args res =>
+      fold_left Pos.max args (Pos.max res m)
+  | RBload p chunk addr args dst =>
+      fold_left Pos.max args (Pos.max dst m)
+  | RBstore p chunk addr args src =>
+      fold_left Pos.max args (Pos.max src m)
+  | RBsetpred p' c args p =>
+      fold_left Pos.max args m
+  | RBexit _ c => max_reg_cfi m c
   end.
 
 Definition regset := Regmap.t val.
@@ -203,21 +206,119 @@ Record instr_state := mk_instr_state {
                          is_mem: mem;
                        }.
 
+Variant istate : Type :=
+  | Iexec : instr_state -> istate
+  | Iterm : instr_state -> cf_instr -> istate.
+
+Inductive eval_pred:
+  option pred_op -> instr_state -> instr_state -> instr_state -> Prop :=
+| eval_pred_true:
+  forall i i' p,
+    eval_predf (is_ps i) p = true ->
+    eval_pred (Some p) i i' i'
+| eval_pred_false:
+  forall i i' p,
+    eval_predf (is_ps i) p = false ->
+    eval_pred (Some p) i i' i
+| eval_pred_none:
+  forall i i', eval_pred None i i' i'.
+
+Section RELABSTR.
+
+  Context {A B : Type} (ge : Genv.t A B).
+
+(*|
+.. index::
+   triple: semantics; RTLBlockInstr; instruction
+
+Step Instruction
+=============================
+|*)
+
+Variant step_instr: val -> istate -> instr -> istate -> Prop :=
+  | exec_RBnop:
+    forall sp ist,
+      step_instr sp ist RBnop ist
+  | exec_RBop:
+    forall op v res args rs m sp p ist pr,
+      eval_operation ge sp op rs##args m = Some v ->
+      eval_pred p (mk_instr_state rs pr m)
+                (mk_instr_state (rs#res <- v) pr m) ist ->
+      step_instr sp (Iexec (mk_instr_state rs pr m)) (RBop p op args res) (Iexec ist)
+  | exec_RBload:
+    forall addr rs args a chunk m v dst sp p pr ist,
+      eval_addressing ge sp addr rs##args = Some a ->
+      Mem.loadv chunk m a = Some v ->
+      eval_pred p (mk_instr_state rs pr m)
+                (mk_instr_state (rs#dst <- v) pr m) ist ->
+      step_instr sp (Iexec (mk_instr_state rs pr m))
+                 (RBload p chunk addr args dst) (Iexec ist)
+  | exec_RBstore:
+    forall addr rs args a chunk m src m' sp p pr ist,
+      eval_addressing ge sp addr rs##args = Some a ->
+      Mem.storev chunk m a rs#src = Some m' ->
+      eval_pred p (mk_instr_state rs pr m)
+                (mk_instr_state rs pr m') ist ->
+      step_instr sp (Iexec (mk_instr_state rs pr m))
+                 (RBstore p chunk addr args src) (Iexec ist)
+  | exec_RBsetpred:
+    forall sp rs pr m p c b args p' ist,
+      Op.eval_condition c rs##args m = Some b ->
+      eval_pred p' (mk_instr_state rs pr m)
+                (mk_instr_state rs (pr#p <- b) m) ist ->
+      step_instr sp (Iexec (mk_instr_state rs pr m))
+                 (RBsetpred p' c args p) (Iexec ist)
+  | exec_RBexit_Some:
+    forall p c sp b i,
+      eval_predf (is_ps i) p = b ->
+      step_instr sp (Iexec i) (RBexit (Some p) c) (if b then Iterm i c else Iexec i)
+  | exec_RBexit_None:
+    forall c sp i,
+      step_instr sp (Iexec i) (RBexit None c) (Iterm i c)
+.
+
+End RELABSTR.
+
+(*|
+A big-step semantics describing the execution of a list of instructions.  This
+uses a higher-order function ``step_i``, so that this ``Inductive`` can be
+nested to describe the execution of nested lists.
+|*)
+
+Inductive step_list {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> istate -> list A -> istate -> Prop :=
+| exec_RBcons:
+  forall state i state' state'' instrs sp,
+    step_i sp state i state' ->
+    step_list step_i sp state' instrs state'' ->
+    step_list step_i sp state (i :: instrs) state''
+| exec_RBnil:
+  forall state sp,
+    step_list step_i sp state nil state.
+
 (*|
 Top-Level Type Definitions
 ==========================
 |*)
 
-Section DEFINITION.
+Module Type BlockType.
 
-  Context {bblock_body: Type}.
+  Parameter t: Type.
 
-  Record bblock : Type := mk_bblock {
-                             bb_body: bblock_body;
-                             bb_exit: cf_instr
-                           }.
+  Section STEP.
+    Context {A B : Type}.
+    Parameter step: Genv.t A B -> val -> istate -> t -> istate -> Prop.
+  End STEP.
 
-  Definition code: Type := PTree.t bblock.
+  Parameter max_reg : positive -> node -> t -> positive.
+
+  Parameter length : t -> nat.
+
+End BlockType.
+
+Module Gible(B : BlockType).
+
+  Definition code: Type := PTree.t B.t.
 
   Record function: Type := mkfunction {
                               fn_sig: signature;
@@ -279,8 +380,6 @@ though is that executing basic blocks uses big-step semantics.
              (m: mem),                (**r memory state *)
         state.
 
-End DEFINITION.
-
 (*|
 Old version of state
 ~~~~~~~~~~~~~~~~~~~~
@@ -324,96 +423,22 @@ Semantics
 =========
 |*)
 
-Section RELSEM.
+  Section RELSEM.
 
-  Context {bblock_body : Type}.
+    Definition genv := Genv.t fundef unit.
 
-  Definition genv := Genv.t (@fundef bblock_body) unit.
+    Context (ge: genv).
 
-  Context (ge: genv).
-
-  Definition find_function
-             (ros: reg + ident) (rs: regset) : option fundef :=
-    match ros with
-    | inl r => Genv.find_funct ge rs#r
-    | inr symb =>
-        match Genv.find_symbol ge symb with
-        | None => None
-        | Some b => Genv.find_funct_ptr ge b
-        end
-    end.
-
-  Inductive eval_pred:
-    option pred_op -> instr_state -> instr_state -> instr_state -> Prop :=
-  | eval_pred_true:
-    forall i i' p,
-      eval_predf (is_ps i) p = true ->
-      eval_pred (Some p) i i' i'
-  | eval_pred_false:
-    forall i i' p,
-      eval_predf (is_ps i) p = false ->
-      eval_pred (Some p) i i' i
-  | eval_pred_none:
-    forall i i', eval_pred None i i' i'.
-
-(*|
-.. index::
-   triple: semantics; RTLBlockInstr; instruction
-
-Step Instruction
-=============================
-|*)
-
-  Variant step_instr: val -> instr_state -> instr -> instr_state -> Prop :=
-  | exec_RBnop:
-    forall sp ist,
-      step_instr sp ist RBnop ist
-  | exec_RBop:
-    forall op v res args rs m sp p ist pr,
-      eval_operation ge sp op rs##args m = Some v ->
-      eval_pred p (mk_instr_state rs pr m)
-                (mk_instr_state (rs#res <- v) pr m) ist ->
-      step_instr sp (mk_instr_state rs pr m) (RBop p op args res) ist
-  | exec_RBload:
-    forall addr rs args a chunk m v dst sp p pr ist,
-      eval_addressing ge sp addr rs##args = Some a ->
-      Mem.loadv chunk m a = Some v ->
-      eval_pred p (mk_instr_state rs pr m)
-                (mk_instr_state (rs#dst <- v) pr m) ist ->
-      step_instr sp (mk_instr_state rs pr m)
-                 (RBload p chunk addr args dst) ist
-  | exec_RBstore:
-    forall addr rs args a chunk m src m' sp p pr ist,
-      eval_addressing ge sp addr rs##args = Some a ->
-      Mem.storev chunk m a rs#src = Some m' ->
-      eval_pred p (mk_instr_state rs pr m)
-                (mk_instr_state rs pr m') ist ->
-      step_instr sp (mk_instr_state rs pr m)
-                 (RBstore p chunk addr args src) ist
-  | exec_RBsetpred:
-    forall sp rs pr m p c b args p' ist,
-      Op.eval_condition c rs##args m = Some b ->
-      eval_pred p' (mk_instr_state rs pr m)
-                (mk_instr_state rs (pr#p <- b) m) ist ->
-      step_instr sp (mk_instr_state rs pr m)
-                 (RBsetpred p' c args p) ist.
-
-(*|
-A big-step semantics describing the execution of a list of instructions.  This
-uses a higher-order function ``step_i``, so that this ``Inductive`` can be
-nested to describe the execution of nested lists.
-|*)
-
-  Inductive step_list {A} (step_i: val -> instr_state -> A -> instr_state -> Prop):
-    val -> instr_state -> list A -> instr_state -> Prop :=
-  | exec_RBcons:
-    forall state i state' state'' instrs sp,
-      step_i sp state i state' ->
-      step_list step_i sp state' instrs state'' ->
-      step_list step_i sp state (i :: instrs) state''
-  | exec_RBnil:
-    forall state sp,
-      step_list step_i sp state nil state.
+    Definition find_function
+               (ros: reg + ident) (rs: regset) : option fundef :=
+      match ros with
+      | inl r => Genv.find_funct ge rs#r
+      | inr symb =>
+          match Genv.find_symbol ge symb with
+          | None => None
+          | Some b => Genv.find_funct_ptr ge b
+          end
+      end.
 
 (*|
 .. index::
@@ -427,64 +452,144 @@ with the addition of a recursive conditional instruction, which is used to
 support if-conversion.
 |*)
 
-  Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
-  | exec_RBcall:
-    forall s f sp rs m res fd ros sig args pc pc' pr,
-      find_function ros rs = Some fd ->
-      funsig fd = sig ->
-      step_cf_instr
-        (State s f sp pc rs pr m) (RBcall sig ros args res pc')
-        E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
-  | exec_RBtailcall:
-    forall s f stk rs m sig ros args fd m' pc pr,
-      find_function ros rs = Some fd ->
-      funsig fd = sig ->
-      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr
-        (State s f (Vptr stk Ptrofs.zero) pc rs pr m)
-        (RBtailcall sig ros args)
-        E0 (Callstate s fd rs##args m')
-  | exec_RBbuiltin:
-    forall s f sp rs m ef args res pc' vargs t vres m' pc pr,
-      eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
-      external_call ef ge vargs m t vres m' ->
-      step_cf_instr
-        (State s f sp pc rs pr m) (RBbuiltin ef args res pc')
-        t (State s f sp pc' (regmap_setres res vres rs) pr m')
-  | exec_RBcond:
-    forall s f sp rs m cond args ifso ifnot b pc pc' pr,
-      eval_condition cond rs##args m = Some b ->
-      pc' = (if b then ifso else ifnot) ->
-      step_cf_instr
-        (State s f sp pc rs pr m)
-        (RBcond cond args ifso ifnot)
-        E0 (State s f sp pc' rs pr m)
-  | exec_RBjumptable:
-    forall s f sp rs m arg tbl n pc pc' pr,
-      rs#arg = Vint n ->
-      list_nth_z tbl (Int.unsigned n) = Some pc' ->
-      step_cf_instr
-        (State s f sp pc rs pr m)
-        (RBjumptable arg tbl)
-        E0 (State s f sp pc' rs pr m)
-  | exec_RBreturn:
-    forall s f stk rs m or pc m' pr,
-      Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
-      step_cf_instr
-        (State s f (Vptr stk Ptrofs.zero) pc rs pr m)
-        (RBreturn or)
-        E0 (Returnstate s (regmap_optget or Vundef rs) m')
-  | exec_RBgoto:
-    forall s f sp pc rs pr m pc',
-      step_cf_instr (State s f sp pc rs pr m)
-                    (RBgoto pc') E0 (State s f sp pc' rs pr m)
-  | exec_RBpred_cf:
-    forall s f sp pc rs pr m cf1 cf2 st' p t,
-      step_cf_instr
-        (State s f sp pc
-               rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
-      step_cf_instr
-        (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2)
-        t st'.
+    Inductive step_cf_instr: state -> cf_instr -> trace -> state -> Prop :=
+    | exec_RBcall:
+      forall s f sp rs m res fd ros sig args pc pc' pr,
+        find_function ros rs = Some fd ->
+        funsig fd = sig ->
+        step_cf_instr
+          (State s f sp pc rs pr m) (RBcall sig ros args res pc')
+          E0 (Callstate (Stackframe res f sp pc' rs pr :: s) fd rs##args m)
+    | exec_RBtailcall:
+      forall s f stk rs m sig ros args fd m' pc pr,
+        find_function ros rs = Some fd ->
+        funsig fd = sig ->
+        Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+        step_cf_instr
+          (State s f (Vptr stk Ptrofs.zero) pc rs pr m)
+          (RBtailcall sig ros args)
+          E0 (Callstate s fd rs##args m')
+    | exec_RBbuiltin:
+      forall s f sp rs m ef args res pc' vargs t vres m' pc pr,
+        eval_builtin_args ge (fun r => rs#r) sp m args vargs ->
+        external_call ef ge vargs m t vres m' ->
+        step_cf_instr
+          (State s f sp pc rs pr m) (RBbuiltin ef args res pc')
+          t (State s f sp pc' (regmap_setres res vres rs) pr m')
+    | exec_RBcond:
+      forall s f sp rs m cond args ifso ifnot b pc pc' pr,
+        eval_condition cond rs##args m = Some b ->
+        pc' = (if b then ifso else ifnot) ->
+        step_cf_instr
+          (State s f sp pc rs pr m)
+          (RBcond cond args ifso ifnot)
+          E0 (State s f sp pc' rs pr m)
+    | exec_RBjumptable:
+      forall s f sp rs m arg tbl n pc pc' pr,
+        rs#arg = Vint n ->
+        list_nth_z tbl (Int.unsigned n) = Some pc' ->
+        step_cf_instr
+          (State s f sp pc rs pr m)
+          (RBjumptable arg tbl)
+          E0 (State s f sp pc' rs pr m)
+    | exec_RBreturn:
+      forall s f stk rs m or pc m' pr,
+        Mem.free m stk 0 f.(fn_stacksize) = Some m' ->
+        step_cf_instr
+          (State s f (Vptr stk Ptrofs.zero) pc rs pr m)
+          (RBreturn or)
+          E0 (Returnstate s (regmap_optget or Vundef rs) m')
+    | exec_RBgoto:
+      forall s f sp pc rs pr m pc',
+        step_cf_instr (State s f sp pc rs pr m)
+                      (RBgoto pc') E0 (State s f sp pc' rs pr m)
+    | exec_RBpred_cf:
+      forall s f sp pc rs pr m cf1 cf2 st' p t,
+        step_cf_instr
+          (State s f sp pc
+                 rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
+        step_cf_instr
+          (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2)
+          t st'.
 
-End RELSEM.
+(*|
+Top-level step
+--------------
+
+The step function itself then uses this big step of the list of instructions to
+then show a transition from basic block to basic block.  The one particular
+aspect of this is that the basic block is also part of the state, which has to
+be correctly set during the execution of the function.  Function calls and
+function returns then also need to set the basic block properly.  This means
+that the basic block of the returning function also needs to be stored in the
+stackframe, as that is the only assumption one can make when returning from a
+function.
+|*)
+
+    Variant step: state -> trace -> state -> Prop :=
+      | exec_bblock:
+        forall s f sp pc rs rs' m m' bb pr pr' t state cf,
+          f.(fn_code) ! pc = Some bb ->
+          B.step ge sp (Iexec (mk_instr_state rs pr m)) bb (Iterm (mk_instr_state rs' pr' m') cf) ->
+          step_cf_instr (State s f sp pc rs' pr' m') cf t state ->
+          step (State s f sp pc rs pr m) t state
+      | exec_function_internal:
+        forall s f args m m' stk,
+          Mem.alloc m 0 f.(fn_stacksize) = (m', stk) ->
+          step (Callstate s (Internal f) args m)
+               E0 (State s f
+                         (Vptr stk Ptrofs.zero)
+                         f.(fn_entrypoint)
+                         (init_regs args f.(fn_params))
+                         (PMap.init false)
+                         m')
+      | exec_function_external:
+        forall s ef args res t m m',
+          external_call ef ge args m t res m' ->
+          step (Callstate s (External ef) args m)
+               t (Returnstate s res m')
+      | exec_return:
+        forall res f sp pc rs s vres m pr,
+          step (Returnstate (Stackframe res f sp pc rs pr :: s) vres m)
+               E0 (State s f sp pc (rs#res <- vres) pr m).
+
+  End RELSEM.
+
+  Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      funsig f = signature_main ->
+      initial_state p (Callstate nil f nil m0).
+
+  Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall r m,
+      final_state (Returnstate nil (Vint r) m) r.
+
+(*|
+Semantics
+=========
+
+We first describe the semantics by assuming a global program environment with
+type ~genv~ which was declared earlier.
+|*)
+
+  Definition semantics (p: program) :=
+    Semantics step (initial_state p) final_state (Genv.globalenv p).
+
+  Definition max_reg_function (f: function) :=
+    Pos.max
+      (PTree.fold B.max_reg f.(fn_code) 1%positive)
+      (fold_left Pos.max f.(fn_params) 1%positive).
+
+  Definition max_pc_function (f: function) : positive :=
+    PTree.fold
+      (fun m pc i =>
+         (Pos.max m
+                  (pc + match Z.of_nat (B.length i)
+                        with Z.pos p => p | _ => 1 end))%positive)
+      f.(fn_code) 1%positive.
+
+End Gible.
