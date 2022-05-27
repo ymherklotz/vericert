@@ -27,11 +27,12 @@ Require Import compcert.lib.Maps.
 Require compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlock.
-Require Import vericert.hls.RTLPar.
-Require Import vericert.hls.RTLBlockInstr.
+Require Import vericert.hls.GibleSeq.
+Require Import vericert.hls.GiblePar.
+Require Import vericert.hls.Gible.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
+Require Import vericert.common.DecEq.
 Import NE.NonEmptyNotation.
 
 #[local] Open Scope positive.
@@ -166,37 +167,41 @@ This is done by multiplying the predicates together, and assigning the negation
 of the expression to the other predicates.
 |*)
 
-Definition update (f : forest) (i : instr) : forest :=
+Definition forest_state : Type := forest * list (cf_instr * option pred_op * forest).
+
+Definition update (flist : forest_state) (i : instr): forest_state :=
+  let (f, fl) := flist in
   match i with
-  | RBnop => f
+  | RBnop => flist
   | RBop p op rl r =>
-    f # (Reg r) <-
+    (f # (Reg r) <-
     (app_predicated p
        (f # (Reg r))
-       (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f))))
+       (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f)))), fl)
   | RBload p chunk addr rl r =>
-    f # (Reg r) <-
+    (f # (Reg r) <-
       (app_predicated p
          (f # (Reg r))
          (map_predicated
             (map_predicated (pred_ret (Eload chunk addr))
                             (merge (list_translation rl f)))
-            (f # Mem)))
+            (f # Mem))), fl)
   | RBstore p chunk addr rl r =>
-    f # Mem <-
+    (f # Mem <-
       (app_predicated p
          (f # Mem)
          (map_predicated
             (map_predicated
                (predicated_apply2 (map_predicated (pred_ret Estore)
                                                   (f # (Reg r))) chunk addr)
-               (merge (list_translation rl f))) (f # Mem)))
+               (merge (list_translation rl f))) (f # Mem))), fl)
   | RBsetpred p' c args p =>
-    f # (Pred p) <-
+    (f # (Pred p) <-
     (app_predicated p'
        (f # (Pred p))
        (map_predicated (pred_ret (Esetpred c))
-                       (merge (list_translation args f))))
+                       (merge (list_translation args f)))), fl)
+  | RBexit p c => (f, (c, p, f) :: fl)
   end.
 
 (*|
@@ -207,7 +212,7 @@ code than in the RTLBlock code.
 Get a sequence from the basic block.
 |*)
 
-Fixpoint abstract_sequence (f : forest) (b : list instr) : forest :=
+Fixpoint abstract_sequence (f : forest_state) (b : list instr) : forest_state :=
   match b with
   | nil => f
   | i :: l => abstract_sequence (update f i) l
@@ -227,7 +232,7 @@ We define the top-level oracle that will check if two basic blocks are
 equivalent after a scheduling transformation.
 |*)
 
-Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
+Definition empty_trees (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   match bb with
   | nil =>
     match bbt with
@@ -237,11 +242,10 @@ Definition empty_trees (bb: RTLBlock.bb) (bbt: RTLPar.bb) : bool :=
   | _ => true
   end.
 
-Definition schedule_oracle (bb: RTLBlock.bblock) (bbt: RTLPar.bblock) : bool :=
-  check (abstract_sequence empty (bb_body bb))
-        (abstract_sequence empty (concat (concat (bb_body bbt)))) &&
-  check_control_flow_instr (bb_exit bb) (bb_exit bbt) &&
-  empty_trees (bb_body bb) (bb_body bbt).
+Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
+  check (fst (abstract_sequence (empty, nil) bb))
+        (fst (abstract_sequence (empty, nil) (concat (concat bbt)))) &&
+  empty_trees bb bbt.
 
 Definition check_scheduled_trees := beq2 schedule_oracle.
 
@@ -271,22 +275,22 @@ Top-level Functions
 ===================
 |*)
 
-Parameter schedule : RTLBlock.function -> RTLPar.function.
+Parameter schedule : GibleSeq.function -> GiblePar.function.
 
-Definition transl_function (f: RTLBlock.function)
-  : Errors.res RTLPar.function :=
+Definition transl_function (f: GibleSeq.function)
+  : Errors.res GiblePar.function :=
   let tfcode := fn_code (schedule f) in
-  if check_scheduled_trees f.(fn_code) tfcode then
-    Errors.OK (mkfunction f.(fn_sig)
-                          f.(fn_params)
-                          f.(fn_stacksize)
+  if check_scheduled_trees f.(GibleSeq.fn_code) tfcode then
+    Errors.OK (mkfunction f.(GibleSeq.fn_sig)
+                          f.(GibleSeq.fn_params)
+                          f.(GibleSeq.fn_stacksize)
                           tfcode
-                          f.(fn_entrypoint))
+                          f.(GibleSeq.fn_entrypoint))
   else
     Errors.Error
       (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
 
 Definition transl_fundef := transf_partial_fundef transl_function.
 
-Definition transl_program (p : RTLBlock.program) : Errors.res RTLPar.program :=
+Definition transl_program (p : GibleSeq.program) : Errors.res GiblePar.program :=
   transform_partial_program transl_fundef p.

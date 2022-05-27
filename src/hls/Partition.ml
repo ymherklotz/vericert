@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
-(* [[file:../../docs/basic-block-generation.org::partition-main][partition-main]] *)
 open Printf
 open Clflags
 open Camlcoq
@@ -26,8 +25,9 @@ open Maps
 open AST
 open Kildall
 open Op
-open RTLBlockInstr
-open RTLBlock
+open Gible
+open GibleSeq
+open GibleSeq
 
 (** Assuming that the nodes of the CFG [code] are numbered in reverse postorder (cf. pass
    [Renumber]), an edge from [n] to [s] is a normal edge if [s < n] and a back-edge otherwise. *)
@@ -41,8 +41,10 @@ let find_edges c =
       let f = find_edge i n in
       (List.append (fst f) (fst l), List.append (snd f) (snd l))) c ([], [])
 
-let prepend_instr i = function
-  | {bb_body = bb; bb_exit = e} -> {bb_body = (i :: bb); bb_exit = e}
+(* let prepend_instr i = function *)
+(*   | {bb_body = bb; bb_exit = e} -> {bb_body = (i :: bb); bb_exit = e} *)
+
+let prepend_instr i b = i :: b
 
 let translate_inst = function
   | RTL.Inop _ -> Some RBnop
@@ -66,14 +68,14 @@ let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
   match trans_inst, succ with
   | (None, Some i'), _ ->
     if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = [RBnop]; bb_exit = RBgoto s }
+      Errors.OK [RBnop; RBexit (None, (RBgoto s))]
     else
-      Errors.OK { bb_body = [RBnop]; bb_exit = i' }
+      Errors.OK [RBnop; RBexit (None, i')]
   | (Some i', None), (s', Some i_n)::[] ->
     if List.exists (fun x -> x = s) (fst e) then
-      Errors.OK { bb_body = [i']; bb_exit = RBgoto s' }
+      Errors.OK [i'; RBexit (None, (RBgoto s'))]
     else if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK { bb_body = []; bb_exit = RBgoto s }
+      Errors.OK [RBnop; RBexit (None, (RBgoto s))]
     else begin
       match next_bblock_from_RTL false e c s' i_n with
       | Errors.OK bb ->
@@ -102,12 +104,12 @@ let rec translate_all edge c s res =
      | Some i ->
        match next_bblock_from_RTL true edge c s i with
        | Errors.Error msg -> Errors.Error msg
-       | Errors.OK {bb_body = bb; bb_exit = e} ->
-         let succ = List.filter (fun x -> P.lt x s) (successors_instr e) in
+       | Errors.OK bb ->
+         let succ = List.filter (fun x -> P.lt x s) (all_successors bb) in
          (match traverseacc (translate_all edge c) succ (c_bb, s :: translated) with
           | Errors.Error msg -> Errors.Error msg
           | Errors.OK (c', t') ->
-            Errors.OK (PTree.set s {bb_body = bb; bb_exit = e} c', t')))
+            Errors.OK (PTree.set s bb c', t')))
 
 (* Partition a function and transform it into RTLBlock. *)
 let function_from_RTL f =
@@ -123,4 +125,3 @@ let function_from_RTL f =
               }
 
 let partition = function_from_RTL
-(* partition-main ends here *)

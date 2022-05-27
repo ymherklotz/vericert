@@ -35,9 +35,16 @@ RTLBlock
 ========
 |*)
 
-Module BB <: BlockType.
+Module ParBB <: BlockType.
 
   Definition t := list (list (list instr)).
+
+  Definition foldl (A: Type) (f: A -> instr -> A) (bb : t) (m : A): A :=
+    fold_left
+      (fun x l => fold_left (fun x' l' => fold_left f l' x') l x)
+      bb m.
+
+  Definition length : t -> nat := @length (list (list instr)).
 
   Section RELSEM.
 
@@ -63,13 +70,7 @@ function that can execute lists of things, given their execution rule.
 
   End RELSEM.
 
-  Definition max_reg (m : positive) (pc : node) (bb : t) :=
-    fold_left
-      (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x)
-      bb m.
+End ParBB.
 
-  Definition length : t -> nat := @length (list (list instr)).
-
-End BB.
-
-Module GiblePar := Gible(BB).
+Module GiblePar := Gible(ParBB).
+Export GiblePar.

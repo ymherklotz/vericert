@@ -65,9 +65,8 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintClight.destination option_dclight ".light.c";
   set_dest Vericert.PrintCminor.destination option_dcminor ".cm";
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
-  set_dest Vericert.PrintRTLBlock.destination option_drtlblock ".rtlblock";
-  set_dest Vericert.PrintRTLPar.destination option_drtlpar ".rtlpar";
-  set_dest Vericert.PrintRTLParFU.destination option_drtlparfu ".rtlparfu";
+  set_dest Vericert.PrintGibleSeq.destination option_dgblseq ".gblseq";
+  set_dest Vericert.PrintGiblePar.destination option_dgblpar ".gblpar";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
@@ -266,7 +265,8 @@ HLS Optimisations:
   -dclight       Save generated Clight in <file>.light.c
   -dcminor       Save generated Cminor in <file>.cm
   -drtl          Save RTL at various optimization points in <file>.rtl.<n>
-  -drtlblock     Save RTLBlock <file>.rtlblock
+  -dgblseq       Save GibleSeq <file>.gblseq
+  -dgblpar       Save GiblePar <file>.gblpar
   -dhtl          Save HTL before Verilog generation <file>.htl
   -dltl          Save LTL after register allocation in <file>.ltl
   -dmach         Save generated Mach code in <file>.mach
@@ -392,9 +392,8 @@ let cmdline_actions =
   Exact "-dclight", Set option_dclight;
   Exact "-dcminor", Set option_dcminor;
   Exact "-drtl", Set option_drtl;
-  Exact "-drtlblock", Set option_drtlblock;
-  Exact "-drtlpar", Set option_drtlpar;
-  Exact "-drtlparfu", Set option_drtlparfu;
+  Exact "-dgblseq", Set option_dgblseq;
+  Exact "-dgblpar", Set option_dgblpar;
   Exact "-dhtl", Set option_dhtl;
   Exact "-dltl", Set option_dltl;
   Exact "-dalloctrace", Set option_dalloctrace;
@@ -407,9 +406,8 @@ let cmdline_actions =
     option_dclight := true;
     option_dcminor := true;
     option_drtl := true;
-    option_drtlblock := true;
-    option_drtlpar := true;
-    option_drtlparfu := true;
+    option_dgblseq := true;
+    option_dgblpar := true;
     option_dhtl := true;
     option_dltl := true;
     option_dalloctrace := true;

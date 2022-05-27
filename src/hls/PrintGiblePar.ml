@@ -17,10 +17,11 @@ open Camlcoq
 open Datatypes
 open Maps
 open AST
-open RTLBlockInstr
-open RTLBlock
+open Gible
+open GiblePar
+open GiblePar
 open PrintAST
-open PrintRTLBlockInstr
+open PrintGible
 
 (* Printing of RTL code *)
 
@@ -38,8 +39,9 @@ let ros pp = function
 
 let print_bblock pp (pc, i) =
   fprintf pp "%5d:{\n" pc;
-  List.iter (print_bblock_body pp) i.bb_body;
-  print_bblock_exit pp i.bb_exit;
+  List.iter (fun x -> fprintf pp "{\n";
+              List.iter (fun x -> fprintf pp "( "; List.iter (print_bblock_body pp) x; fprintf pp " )") x;
+              fprintf pp "}\n") i;
   fprintf pp "\t}\n\n"
 
 let print_function pp id f =

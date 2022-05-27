@@ -30,8 +30,8 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.Gible.
+Require Import vericert.hls.GiblePar.
 Require Import vericert.hls.RTLParFU.
 Require Import vericert.hls.FunctionalUnits.
 
@@ -43,7 +43,7 @@ Definition update {A: Type} (i: positive) (f: option A -> A) (pt: PTree.t A) :=
 Definition add_instr (instr_: instr) x :=
   match x with Some i => instr_ :: i | None => instr_ :: nil end.
 
-Definition transl_instr (res: resources) (cycle: positive) (i: RTLBlockInstr.instr)
+Definition transl_instr (res: resources) (cycle: positive) (i: Gible.instr)
            (li: Errors.res (list instr * PTree.t (list instr))):
   Errors.res (list instr * PTree.t (list instr)) :=
   do (instr_list, d_tree) <- li;
@@ -74,9 +74,10 @@ Definition transl_instr (res: resources) (cycle: positive) (i: RTLBlockInstr.ins
       | _ => Errors.Error (Errors.msg "Could not find RAM")
       end
   | RBsetpred op c args p => Errors.OK (FUsetpred op c args p :: instr_list, d_tree)
+  | RBexit po cf => Errors.Error (Errors.msg "Wrong.")
   end.
 
-Fixpoint transl_cf_instr (i: RTLBlockInstr.cf_instr): RTLParFU.cf_instr :=
+Definition transl_cf_instr (i: Gible.cf_instr): RTLParFU.cf_instr :=
   match i with
   | RBcall sig r args d n => FUcall sig r args d n
   | RBtailcall sig r args => FUtailcall sig r args
@@ -85,7 +86,6 @@ Fixpoint transl_cf_instr (i: RTLBlockInstr.cf_instr): RTLParFU.cf_instr :=
   | RBjumptable r ns => FUjumptable r ns
   | RBreturn r => FUreturn r
   | RBgoto n => FUgoto n
-  | RBpred_cf po c1 c2 => FUpred_cf po (transl_cf_instr c1) (transl_cf_instr c2)
   end.
 
 Definition list_split {A:Type} (l: list (Z * A)) : (list (Z * A)) * (list (Z * A)) :=
@@ -101,7 +101,7 @@ Fixpoint map_error {A B : Type} (f : A -> res B) (l : list A) {struct l} : res (
     OK (y::ys)
   end.
 
-Definition transl_op_chain_block (res: resources) (cycle: positive) (instrs: list RTLBlockInstr.instr)
+Definition transl_op_chain_block (res: resources) (cycle: positive) (instrs: list Gible.instr)
            (state: Errors.res (list (list instr) * PTree.t (list instr)))
   : Errors.res (list (list instr) * PTree.t (list instr)) :=
   do (li, tr) <- state;
@@ -110,7 +110,7 @@ Definition transl_op_chain_block (res: resources) (cycle: positive) (instrs: lis
 
 (*Compute transl_op_chain_block initial_resources 10%nat (RBop None (Op.Ointconst (Int.repr 1)) nil 1%positive::RBnop::RBnop::RBnop::nil) (OK (nil, PTree.empty _)).*)
 
-Definition transl_par_block (res: resources) (cycle: positive) (instrs: list (list RTLBlockInstr.instr))
+Definition transl_par_block (res: resources) (cycle: positive) (instrs: list (list Gible.instr))
            (state: Errors.res (list (list (list instr)) * PTree.t (list instr)))
   : Errors.res (list (list (list instr)) * PTree.t (list instr)) :=
   do (li, tr) <- state;
@@ -119,7 +119,7 @@ Definition transl_par_block (res: resources) (cycle: positive) (instrs: list (li
 
 (*Compute transl_par_block initial_resources 10%nat ((RBop None (Op.Ointconst (Int.repr 1)) nil 1%positive::RBnop::nil)::(RBop None (Op.Ointconst (Int.repr 2)) nil 2%positive::RBnop::nil)::nil) (OK (((FUnop::nil)::nil)::nil, PTree.empty _)).*)
 
-Definition transl_seq_block (res: resources) (b: list (list RTLBlockInstr.instr))
+Definition transl_seq_block (res: resources) (b: list (list Gible.instr))
            (a: Errors.res (list (list (list instr)) * PTree.t (list instr) * positive)) :=
   do (litr, n) <- a;
   let (li, tr) := litr in
@@ -134,14 +134,13 @@ Definition insert_extra (pt: PTree.t (list instr)) (curr: list (list instr))
   | None => ((cycle + 1)%positive, curr :: bb)
   end.
 
-Definition transl_bb (res: resources) (bb: RTLPar.bb): Errors.res RTLParFU.bblock_body :=
+Definition transl_bb (res: resources) (bb: ParBB.t): Errors.res RTLParFU.bblock_body :=
   do (litr, n) <- fold_right (transl_seq_block res) (OK (nil, PTree.empty _, 1%positive)) bb;
   let (li, tr) := litr in
   OK (snd (fold_right (insert_extra tr) (1%positive, nil) li)).
 
-Definition transl_bblock (res: resources) (bb: RTLPar.bblock): Errors.res bblock :=
-  do bb' <- transl_bb res (RTLBlockInstr.bb_body bb);
-  OK (mk_bblock bb' (transl_cf_instr (RTLBlockInstr.bb_exit bb))).
+(*Definition transl_bblock (res: resources) (bb: ParBB.t): Errors.res ParBB.t :=
+  transl_bb res bb.
 
 Definition error_map_ptree {A B: Type} (f: positive -> A -> res B) (pt: PTree.t A) :=
   do ptl' <- map_error (fun x => do x' <- uncurry f x; OK (fst x, x')) (PTree.elements pt);
@@ -175,3 +174,4 @@ Definition transl_fundef p :=
 
 Definition transl_program (p : RTLPar.program) : Errors.res RTLParFU.program :=
   transform_partial_program transl_fundef p.
+*)

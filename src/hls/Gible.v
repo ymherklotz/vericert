@@ -68,7 +68,7 @@ These are the instructions that count as control-flow, and will be placed at the
 end of the basic blocks.
 |*)
 
-Inductive cf_instr : Type :=
+Variant cf_instr : Type :=
 | RBcall : signature -> reg + ident -> list reg -> reg -> node -> cf_instr
 | RBtailcall : signature -> reg + ident -> list reg -> cf_instr
 | RBbuiltin : external_function -> list (builtin_arg reg) ->
@@ -76,10 +76,9 @@ Inductive cf_instr : Type :=
 | RBcond : condition -> list reg -> node -> node -> cf_instr
 | RBjumptable : reg -> list node -> cf_instr
 | RBreturn : option reg -> cf_instr
-| RBgoto : node -> cf_instr
-| RBpred_cf : pred_op -> cf_instr -> cf_instr -> cf_instr.
+| RBgoto : node -> cf_instr.
 
-Inductive instr : Type :=
+Variant instr : Type :=
 | RBnop : instr
 | RBop :
   option pred_op -> operation -> list reg -> reg -> instr
@@ -96,7 +95,7 @@ Helper Functions
 ================
 |*)
 
-Fixpoint successors_instr (i : cf_instr) : list node :=
+Definition successors_instr (i : cf_instr) : list node :=
   match i with
   | RBcall sig ros args res s => s :: nil
   | RBtailcall sig ros args => nil
@@ -105,11 +104,9 @@ Fixpoint successors_instr (i : cf_instr) : list node :=
   | RBjumptable arg tbl => tbl
   | RBreturn optarg => nil
   | RBgoto n => n :: nil
-  | RBpred_cf p c1 c2 =>
-      concat (successors_instr c1 :: successors_instr c2 :: nil)
   end.
 
-Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
+Definition max_reg_cfi (m : positive) (i : cf_instr) :=
   match i with
   | RBcall sig (inl r) args res s =>
       fold_left Pos.max args (Pos.max r (Pos.max res m))
@@ -127,7 +124,6 @@ Fixpoint max_reg_cfi (m : positive) (i : cf_instr) :=
   | RBreturn None => m
   | RBreturn (Some arg) => Pos.max arg m
   | RBgoto n => m
-  | RBpred_cf p c1 c2 => Pos.max (max_reg_cfi m c1) (max_reg_cfi m c2)
   end.
 
 Definition max_reg_instr (m: positive) (i: instr) :=
@@ -304,15 +300,12 @@ Top-Level Type Definitions
 Module Type BlockType.
 
   Parameter t: Type.
-
-  Section STEP.
-    Context {A B : Type}.
-    Parameter step: Genv.t A B -> val -> istate -> t -> istate -> Prop.
-  End STEP.
-
-  Parameter max_reg : positive -> node -> t -> positive.
-
+  Parameter foldl : forall A, (A -> instr -> A) -> t -> A -> A.
   Parameter length : t -> nat.
+  Parameter step: forall A B, Genv.t A B -> val -> istate -> t -> istate -> Prop.
+
+  Arguments step [A B].
+  Arguments foldl [A].
 
 End BlockType.
 
@@ -502,15 +495,7 @@ support if-conversion.
     | exec_RBgoto:
       forall s f sp pc rs pr m pc',
         step_cf_instr (State s f sp pc rs pr m)
-                      (RBgoto pc') E0 (State s f sp pc' rs pr m)
-    | exec_RBpred_cf:
-      forall s f sp pc rs pr m cf1 cf2 st' p t,
-        step_cf_instr
-          (State s f sp pc
-                 rs pr m) (if eval_predf pr p then cf1 else cf2) t st' ->
-        step_cf_instr
-          (State s f sp pc rs pr m) (RBpred_cf p cf1 cf2)
-          t st'.
+                      (RBgoto pc') E0 (State s f sp pc' rs pr m).
 
 (*|
 Top-level step
@@ -579,9 +564,11 @@ type ~genv~ which was declared earlier.
   Definition semantics (p: program) :=
     Semantics step (initial_state p) final_state (Genv.globalenv p).
 
+  Definition max_reg_block (m: positive) (n: node) (i: B.t) := B.foldl max_reg_instr i m.
+
   Definition max_reg_function (f: function) :=
     Pos.max
-      (PTree.fold B.max_reg f.(fn_code) 1%positive)
+      (PTree.fold max_reg_block f.(fn_code) 1%positive)
       (fold_left Pos.max f.(fn_params) 1%positive).
 
   Definition max_pc_function (f: function) : positive :=
@@ -591,5 +578,13 @@ type ~genv~ which was declared earlier.
                   (pc + match Z.of_nat (B.length i)
                         with Z.pos p => p | _ => 1 end))%positive)
       f.(fn_code) 1%positive.
+
+  Definition all_successors (b: B.t) : list node :=
+    B.foldl (fun ns i =>
+               match i with
+               | RBexit _ cf => successors_instr cf ++ ns
+               | _ => ns
+               end
+            ) b nil.
 
 End Gible.

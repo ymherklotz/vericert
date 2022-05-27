@@ -29,11 +29,12 @@ Require Import compcert.lib.Maps.
 Require compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlock.
-Require Import vericert.hls.RTLPar.
-Require Import vericert.hls.RTLBlockInstr.
+Require Import vericert.hls.GibleSeq.
+Require Import vericert.hls.GiblePar.
+Require Import vericert.hls.Gible.
 Require Import vericert.hls.HashTree.
 Require Import vericert.hls.Predicate.
+Require Import vericert.common.DecEq.
 
 #[local] Open Scope positive.
 #[local] Open Scope pred_op.
@@ -63,121 +64,6 @@ needed.
 Lemma resource_eq : forall (r1 r2 : resource), {r1 = r2} + {r1 <> r2}.
 Proof.
   decide equality; apply Pos.eq_dec.
-Defined.
-
-Lemma comparison_eq: forall (x y : comparison), {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Defined.
-
-Lemma condition_eq: forall (x y : Op.condition), {x = y} + {x <> y}.
-Proof.
-  generalize comparison_eq; intro.
-  generalize Int.eq_dec; intro.
-  generalize Int64.eq_dec; intro.
-  decide equality.
-Defined.
-
-Lemma addressing_eq : forall (x y : Op.addressing), {x = y} + {x <> y}.
-Proof.
-  generalize Int.eq_dec; intro.
-  generalize AST.ident_eq; intro.
-  generalize Z.eq_dec; intro.
-  generalize Ptrofs.eq_dec; intro.
-  decide equality.
-Defined.
-
-Lemma typ_eq : forall (x y : AST.typ), {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Defined.
-
-Lemma operation_eq: forall (x y : Op.operation), {x = y} + {x <> y}.
-Proof.
-  generalize Int.eq_dec; intro.
-  generalize Int64.eq_dec; intro.
-  generalize Float.eq_dec; intro.
-  generalize Float32.eq_dec; intro.
-  generalize AST.ident_eq; intro.
-  generalize condition_eq; intro.
-  generalize addressing_eq; intro.
-  generalize typ_eq; intro.
-  decide equality.
-Defined.
-
-Lemma memory_chunk_eq : forall (x y : AST.memory_chunk), {x = y} + {x <> y}.
-Proof.
-  decide equality.
-Defined.
-
-Lemma list_typ_eq: forall (x y : list AST.typ), {x = y} + {x <> y}.
-Proof.
-  generalize typ_eq; intro.
-  decide equality.
-Defined.
-
-Lemma option_typ_eq : forall (x y : option AST.typ), {x = y} + {x <> y}.
-Proof.
-  generalize typ_eq; intro.
-  decide equality.
-Defined.
-
-Lemma signature_eq: forall (x y : AST.signature), {x = y} + {x <> y}.
-Proof.
-  repeat decide equality.
-Defined.
-
-Lemma list_operation_eq : forall (x y : list Op.operation), {x = y} + {x <> y}.
-Proof.
-  generalize operation_eq; intro.
-  decide equality.
-Defined.
-
-Lemma list_reg_eq : forall (x y : list reg), {x = y} + {x <> y}.
-Proof.
-  generalize Pos.eq_dec; intros.
-  decide equality.
-Defined.
-
-Lemma sig_eq : forall (x y : AST.signature), {x = y} + {x <> y}.
-Proof.
-  repeat decide equality.
-Defined.
-
-Lemma instr_eq: forall (x y : instr), {x = y} + {x <> y}.
-Proof.
-  generalize Pos.eq_dec; intro.
-  generalize typ_eq; intro.
-  generalize Int.eq_dec; intro.
-  generalize memory_chunk_eq; intro.
-  generalize addressing_eq; intro.
-  generalize operation_eq; intro.
-  generalize condition_eq; intro.
-  generalize signature_eq; intro.
-  generalize list_operation_eq; intro.
-  generalize list_reg_eq; intro.
-  generalize AST.ident_eq; intro.
-  repeat decide equality.
-Defined.
-
-Lemma cf_instr_eq: forall (x y : cf_instr), {x = y} + {x <> y}.
-Proof.
-  generalize Pos.eq_dec; intro.
-  generalize typ_eq; intro.
-  generalize Int.eq_dec; intro.
-  generalize Int64.eq_dec; intro.
-  generalize Float.eq_dec; intro.
-  generalize Float32.eq_dec; intro.
-  generalize Ptrofs.eq_dec; intro.
-  generalize memory_chunk_eq; intro.
-  generalize addressing_eq; intro.
-  generalize operation_eq; intro.
-  generalize condition_eq; intro.
-  generalize signature_eq; intro.
-  generalize list_operation_eq; intro.
-  generalize list_reg_eq; intro.
-  generalize AST.ident_eq; intro.
-  repeat decide equality.
 Defined.
 
 (*|
@@ -945,8 +831,8 @@ Qed.*)
 
 Section CORRECT.
 
-  Definition fd := @fundef RTLBlock.bb.
-  Definition tfd := @fundef RTLPar.bb.
+  Definition fd := GibleSeq.fundef.
+  Definition tfd := GiblePar.fundef.
 
   Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
 

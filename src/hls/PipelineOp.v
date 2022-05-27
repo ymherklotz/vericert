@@ -28,8 +28,8 @@ Require Import compcert.verilog.Op.
 
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLPar.
+Require Import vericert.hls.Gible.
+Require Import vericert.hls.GiblePar.
 Require Import vericert.hls.FunctionalUnits.
 
 Import Option.Notation.
@@ -56,8 +56,8 @@ Definition div_pos_in_block (il: nat * list (nat * nat * nat)) bb :=
   let dp := snd (List.fold_left div_pos_in_list bb (0%nat, nil)) in
   (S i, (List.map (fun (yx : nat * nat) => let (y, x) := yx in (i, y, x)) dp) ++ l).
 
-Definition find_divs (bb: bblock) :=
-  snd (List.fold_left div_pos_in_block bb.(bb_body) (0%nat, nil)).
+Definition find_divs (bb: ParBB.t) :=
+  snd (List.fold_left div_pos_in_block bb (0%nat, nil)).
 
 Fixpoint mapi' {A B: Type} (n: nat) (f: nat -> A -> B) (l: list A): list B :=
   match l with

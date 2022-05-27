@@ -19,10 +19,10 @@
 From vericert Require
      Verilog
      Compiler
-     RTLBlockgen
-     RTLBlock
-     RTLPar
-     RTLBlockInstr
+     GibleSeqgen
+     GibleSeq
+     GiblePar
+     Gible
      HTLgen
      (*Pipeline*)
      HLSOpts
@@ -145,11 +145,9 @@ Extract Constant Compiler.print_Clight => "PrintClight.print_if".
 Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
-Extract Constant Compiler.print_RTLBlock => "PrintRTLBlock.print_if".
-Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
+Extract Constant Compiler.print_GibleSeq => "PrintGibleSeq.print_if".
+Extract Constant Compiler.print_GiblePar => "PrintGiblePar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
-Extract Constant Compiler.print_RTLPar => "PrintRTLPar.print_if".
-Extract Constant Compiler.print_RTLParFU => "PrintRTLParFU.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
@@ -184,8 +182,8 @@ Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
 (*Extract Constant Pipeline.pipeline => "pipelining.pipeline".*)
-Extract Constant RTLBlockgen.partition => "Partition.partition".
-Extract Constant RTLPargen.schedule => "Schedule.schedule_fn".
+Extract Constant GibleSeqgen.partition => "Partition.partition".
+Extract Constant GiblePargen.schedule => "Schedule.schedule_fn".
 
 (* Loop normalization *)
 Extract Constant IfConversion.build_bourdoncle => "BourdoncleAux.build_bourdoncle".
@@ -197,7 +195,7 @@ Cd "src/extraction".
 Separate Extraction
          Verilog.module vericert.Compiler.transf_hls
          vericert.Compiler.transf_hls_temp
-         RTLBlockgen.transl_program RTLBlockInstr.successors_instr
+         GibleSeqgen.transl_program Gible.successors_instr
          HTLgen.tbl_to_case_expr
          Predicate.sat_pred_simple
          Verilog.stmnt_to_list

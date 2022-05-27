@@ -62,8 +62,7 @@ Require vericert.hls.Veriloggenproof.
 Require vericert.hls.HTLgen.
 Require vericert.hls.GibleSeq.
 Require vericert.hls.GibleSeqgen.
-Require vericert.hls.RTLPargen.
-Require vericert.hls.RTLParFUgen.
+Require vericert.hls.GiblePargen.
 Require vericert.hls.HTLPargen.
 (*Require vericert.hls.Pipeline.*)
 Require vericert.hls.IfConversion.
@@ -84,9 +83,8 @@ intermediate steps in the compilation, such as ``print_RTL``, ``print_HTL`` and
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: Z -> HTL.program -> unit.
-Parameter print_RTLBlock: Z -> RTLBlock.program -> unit.
-Parameter print_RTLPar: Z -> RTLPar.program -> unit.
-Parameter print_RTLParFU: Z -> RTLParFU.program -> unit.
+Parameter print_GibleSeq: Z -> GibleSeq.GibleSeq.program -> unit.
+Parameter print_GiblePar: Z -> GiblePar.GiblePar.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -260,14 +258,12 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 6)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
-  @@@ RTLBlockgen.transl_program
-   @@ print (print_RTLBlock 0)
+  @@@ GibleSeqgen.transl_program
+   @@ print (print_GibleSeq 0)
    @@ total_if HLSOpts.optim_if_conversion IfConversion.transf_program
-   @@ print (print_RTLBlock 1)
-  @@@ RTLPargen.transl_program
-   @@ print (print_RTLPar 0)
-  @@@ RTLParFUgen.transl_program
-   @@ print (print_RTLParFU 0)
+   @@ print (print_GibleSeq 1)
+  @@@ GiblePargen.transl_program
+   @@ print (print_GiblePar 0)
   @@@ HTLPargen.transl_program
    @@ print (print_HTL 0)
    @@ Veriloggen.transl_program.

@@ -36,13 +36,13 @@ RTLBlock
 ========
 |*)
 
-Module BB <: BlockType.
+Module SeqBB <: BlockType.
 
   Definition t := list instr.
 
-  Section RELSEM.
+  Definition foldl {A: Type}: (A -> instr -> A) -> t -> A -> A := @fold_left A instr.
 
-    Context {A B: Type} (ge: Genv.t A B).
+  Definition length : t -> nat := @length instr.
 
 (*|
 Instruction list step
@@ -56,16 +56,9 @@ This is simply using the high-level function ``step_list``, which is a general
 function that can execute lists of things, given their execution rule.
 |*)
 
-    Definition step := step_list (step_instr ge).
+  Definition step {A B: Type} (ge: Genv.t A B) := step_list (step_instr ge).
 
-  End RELSEM.
+End SeqBB.
 
-  Definition max_reg (m : positive) (n: node) (i : t) : positive :=
-    fold_left max_reg_instr i m.
-
-  Definition length : t -> nat := @length instr.
-
-End BB.
-
-Module GibleSeq := Gible(BB).
+Module GibleSeq := Gible(SeqBB).
 Export GibleSeq.

@@ -23,8 +23,8 @@ Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLBlock.
+Require Import vericert.hls.Gible.
+Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.Predicate.
 Require Import vericert.bourdoncle.Bourdoncle.
 
@@ -52,27 +52,36 @@ Definition map_if_convert (p: pred_op) (i: instr) :=
     RBload (Some (combine_pred p p')) chunk addr args dst
   | RBstore p' chunk addr args src =>
     RBstore (Some (combine_pred p p')) chunk addr args src
+  | RBsetpred p' c l pred =>
+      RBsetpred (Some (combine_pred p p')) c l pred
+  | RBexit p' cf => RBexit (Some (combine_pred p p')) cf
   | _ => i
   end.
 
-Definition if_convert_block (c: code) (p: predicate) (bb: bblock) : bblock :=
-  let cfi := bb_exit bb in
-  match cfi with
-  | RBcond cond args n1 n2 =>
+Definition get_unconditional_exit (bb: SeqBB.t) := List.nth_error bb (length bb - 1).
+
+Definition if_convert_block (c: code) (p: predicate) (bb: SeqBB.t) : SeqBB.t :=
+  match get_unconditional_exit bb with
+  | Some (RBexit None (RBcond cond args n1 n2)) =>
     match PTree.get n1 c, PTree.get n2 c with
     | Some bb1, Some bb2 =>
-      let bb1' := List.map (map_if_convert (Plit (true, p))) bb1.(bb_body) in
-      let bb2' := List.map (map_if_convert (Plit (false, p))) bb2.(bb_body) in
-      mk_bblock (List.concat (bb.(bb_body) :: ((RBsetpred None cond args p) :: bb1') :: bb2' :: nil))
-                (RBpred_cf (Plit (true, p)) bb1.(bb_exit) bb2.(bb_exit))
+      let bb1' := List.map (map_if_convert (Plit (true, p))) bb1 in
+      let bb2' := List.map (map_if_convert (Plit (false, p))) bb2 in
+      List.concat (bb :: ((RBsetpred None cond args p) :: bb1') :: bb2' :: nil)
     | _, _ => bb
     end
   | _ => bb
   end.
 
-Definition is_cond_cfi (cfi: cf_instr) :=
+Definition is_cond_cfi' (cfi: cf_instr) :=
   match cfi with
   | RBcond _ _ _ _ => true
+  | _ => false
+  end.
+
+Definition is_cond_cfi (b: SeqBB.t) :=
+  match get_unconditional_exit b with
+  | Some (RBexit None (RBcond _ _ _ _)) => true
   | _ => false
   end.
 
@@ -88,9 +97,9 @@ Fixpoint all {A: Type} (f: A -> bool) (a: list A) :=
   | nil => true
   end.
 
-Definition find_backedge (nb: node * bblock) :=
+Definition find_backedge (nb: node * SeqBB.t) :=
   let (n, b) := nb in
-  let succs := successors_instr b.(bb_exit) in
+  let succs := all_successors b in
   filter (fun x => Pos.ltb n x) succs.
 
 Definition find_all_backedges (c: code) : list node :=
@@ -108,29 +117,31 @@ Fixpoint get_loops (b: bourdoncle): list node :=
 Definition is_loop (b: list node) (n: node) :=
   any (Pos.eqb n) b.
 
-Definition is_flat_cfi (n: cf_instr) :=
+Definition is_flat_cfi' (n: cf_instr) :=
   match n with
   | RBcond _ _ _ _ => false
   | RBjumptable _ _ => false
-  | RBpred_cf _ _ _ => false
   | _ => true
   end.
 
+Definition is_flat_cfi (n: SeqBB.t) :=
+  (length (all_successors n) =? 1)%nat.
+
 Definition is_flat (c: code) (succ: node) :=
   match c ! succ with
-  | Some bblock => is_flat_cfi bblock.(bb_exit)
+  | Some bblock => is_flat_cfi bblock
   | None => false
   end.
 
-Definition find_blocks_with_cond ep (b: list node) (c: code) : list (node * bblock) :=
+Definition find_blocks_with_cond ep (b: list node) (c: code) : list (node * SeqBB.t) :=
   let backedges := find_all_backedges c in
-  List.filter (fun x => is_cond_cfi (snd x).(bb_exit) &&
+  List.filter (fun x => is_cond_cfi (snd x) &&
                         (negb (is_loop b (fst x)) || Pos.eqb (fst x) ep) &&
                         all (fun x' => is_flat c x')
-                            (successors_instr (snd x).(bb_exit))
+                            (all_successors (snd x))
               ) (PTree.elements c).
 
-Definition if_convert_code (p: nat * code) (nb: node * bblock) :=
+Definition if_convert_code (p: nat * code) (nb: node * SeqBB.t) :=
   let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in
   (S (fst p), PTree.set (fst nb) nbb (snd p)).
 

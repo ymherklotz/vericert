@@ -26,10 +26,10 @@ Require Import compcert.common.Values.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
-Require Import vericert.hls.RTLBlock.
-Require Import vericert.hls.RTLPar.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLPargen.
+Require Import vericert.hls.GibleSeq.
+Require Import vericert.hls.GiblePar.
+Require Import vericert.hls.Gible.
+Require Import vericert.hls.GiblePargen.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 
@@ -89,7 +89,7 @@ Proof. induction l; crush. Qed.
 Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
 Proof. destruct (check_dest_l i r); tauto. Qed.
 
-Lemma check_dest_update :
+(*Lemma check_dest_update :
   forall f i r,
   check_dest i r = false ->
   (update f i) # (Reg r) = f # (Reg r).
@@ -1145,3 +1145,4 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
 End CORRECTNESS.
+*)

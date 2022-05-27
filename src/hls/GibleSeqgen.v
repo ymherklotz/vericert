@@ -42,7 +42,7 @@ Definition check_valid_node (tc: code) (e: node) :=
   | _ => false
   end.
 
-Fixpoint check_code (c: RTL.code) (tc: code) (pc: node) (b: BB.t) :=
+Fixpoint check_code (c: RTL.code) (tc: code) (pc: node) (b: SeqBB.t) :=
   match c ! pc, b with
   | Some (RTL.Inop pc'), RBnop :: (_ :: _ :: _) as b' =>
       check_code c tc pc' b'

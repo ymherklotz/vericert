@@ -104,7 +104,7 @@ finding is actually done at that higher level already.
 
   Definition valid_succ (tc: code) (pc: node) : Prop := exists b, tc ! pc = Some b.
 
-  Inductive match_block (c: RTL.code) (tc: code) (pc: node): BB.t -> Prop :=
+  Inductive match_block (c: RTL.code) (tc: code) (pc: node): SeqBB.t -> Prop :=
   (*
    * Basic Block Instructions
    *)
@@ -195,9 +195,9 @@ the basic block.
 
   Definition sem_extrap f pc sp in_s in_s' block :=
     forall out_s block2,
-      BB.step tge sp in_s block out_s ->
+      SeqBB.step tge sp in_s block out_s ->
       f.(fn_code) ! pc = Some block2 ->
-      BB.step tge sp in_s' block2 out_s.
+      SeqBB.step tge sp in_s' block2 out_s.
 
   Lemma match_block_exists_instr :
     forall c tc pc a,
@@ -224,7 +224,7 @@ proof inside of the ``match_states`` that shows that the execution from the
 whole execution (in one big step) of the basic block.
 |*)
 
-  Variant match_states : option BB.t -> RTL.state -> state -> Prop :=
+  Variant match_states : option SeqBB.t -> RTL.state -> state -> Prop :=
     | match_state :
       forall stk stk' f tf sp pc rs m pc0 b rs0 m0
         (TF: transl_function f = OK tf)
@@ -282,7 +282,7 @@ whole execution (in one big step) of the basic block.
     inv H; auto.
   Qed.
 
-  Definition measure (b: option BB.t): nat :=
+  Definition measure (b: option SeqBB.t): nat :=
     match b with
     | None => 0
     | Some b' => 1 + length b'
@@ -528,7 +528,7 @@ whole execution (in one big step) of the basic block.
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res pc') ->
       Op.eval_operation ge sp op rs ## args m = Some v ->
       transl_function f = OK tf ->
-      (forall (pc0 : positive) (b : BB.t),
+      (forall (pc0 : positive) (b : SeqBB.t),
           (fn_code tf) ! pc0 = Some b -> match_block (RTL.fn_code f) (fn_code tf) pc0 b) ->
       Forall2 match_stackframe s stk' ->
       star RTL.step ge (RTL.State s f sp pc1 rs1 m1) E0 (RTL.State s f sp pc rs m) ->
@@ -737,7 +737,7 @@ whole execution (in one big step) of the basic block.
       forall b s2,
         match_states b (RTL.State s f (Vptr stk Integers.Ptrofs.zero) pc rs m) s2 ->
         exists b' s2',
-          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option BB.t) measure b' b) /\
+          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option SeqBB.t) measure b' b) /\
             match_states b' (RTL.Callstate s fd rs ## args m') s2'.
   Proof.
     intros * H H0 H1 H2.
@@ -802,7 +802,7 @@ whole execution (in one big step) of the basic block.
       forall b s2,
         match_states b (RTL.Callstate s (Internal f) args m) s2 ->
         exists b' s2',
-          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option BB.t) measure b' b) /\
+          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option SeqBB.t) measure b' b) /\
             match_states b'
                          (RTL.State s f (Vptr stk Integers.Ptrofs.zero) (RTL.fn_entrypoint f) (RTL.init_regs args (RTL.fn_params f)) m') s2'.
   Proof.
@@ -845,7 +845,7 @@ whole execution (in one big step) of the basic block.
       forall b s2,
         match_states b (RTL.Callstate s (External ef) args m) s2 ->
         exists b' s2',
-          (plus step tge s2 t s2' \/ star step tge s2 t s2' /\ ltof (option BB.t) measure b' b) /\
+          (plus step tge s2 t s2' \/ star step tge s2 t s2' /\ ltof (option SeqBB.t) measure b' b) /\
             match_states b' (RTL.Returnstate s res m') s2'.
   Proof.
     intros * H.
@@ -861,7 +861,7 @@ whole execution (in one big step) of the basic block.
     forall res f sp pc rs s vres m b s2,
       match_states b (RTL.Returnstate (RTL.Stackframe res f sp pc rs :: s) vres m) s2 ->
       exists b' s2',
-        (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option BB.t) measure b' b) /\
+        (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option SeqBB.t) measure b' b) /\
           match_states b' (RTL.State s f sp pc rs # res <- vres m) s2'.
   Proof.
     intros.
@@ -884,7 +884,7 @@ whole execution (in one big step) of the basic block.
       forall b0 s2,
         match_states b0 (RTL.State s f sp pc rs m) s2 ->
         exists b' s2',
-          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option BB.t) measure b' b0) /\
+          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option SeqBB.t) measure b' b0) /\
             match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros * H H0 H1.
@@ -920,7 +920,7 @@ whole execution (in one big step) of the basic block.
       forall b s2,
         match_states b (RTL.State s f sp pc rs m) s2 ->
         exists b' s2',
-          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option BB.t) measure b' b) /\
+          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option SeqBB.t) measure b' b) /\
             match_states b' (RTL.State s f sp pc' rs m) s2'.
   Proof.
     intros * H H0 H1.
@@ -947,7 +947,7 @@ whole execution (in one big step) of the basic block.
       forall b s2,
         match_states b (RTL.State s f (Vptr stk Integers.Ptrofs.zero) pc rs m) s2 ->
         exists b' s2',
-          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option BB.t) measure b' b) /\
+          (plus step tge s2 E0 s2' \/ star step tge s2 E0 s2' /\ ltof (option SeqBB.t) measure b' b) /\
             match_states b' (RTL.Returnstate s (regmap_optget or Vundef rs) m') s2'.
   Proof.
     intros * H H0.

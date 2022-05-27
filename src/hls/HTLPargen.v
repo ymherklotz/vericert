@@ -30,8 +30,8 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.Predicate.
-Require Import vericert.hls.RTLBlockInstr.
-Require Import vericert.hls.RTLParFU.
+Require Import vericert.hls.GiblePar.
+Require Import vericert.hls.Gible.
 Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
@@ -685,20 +685,26 @@ Definition translate_predicate (a : assignment)
     ret (a dst (Vternary (pred_expr preg pos) e dst))
   end.
 
-Definition translate_inst a (fin rtrn preg : reg) (n : node) (i : instr)
-  : mon stmnt :=
-  match i with
-  | FUnop =>
-    ret Vskip
-  | FUop p op args dst =>
-    do instr <- translate_instr op args;
-    do _ <- declare_reg None dst 32;
-    translate_predicate a preg p (Vvar dst) instr
-  | FUread p1 p2 r => ret Vskip
-  | FUwrite p1 p2 r => ret Vskip
-  | FUsetpred _ c args p =>
-    do cond <- translate_condition c args;
-    ret (a (pred_expr preg (Plit (true, p))) cond)
+Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
+           (args : list reg) (stack : reg) : mon expr :=
+  match mem, addr, args with (* TODO: We should be more methodical here; what are the possibilities?*)
+  | Mint32, Op.Aindexed off, r1::nil =>
+    if (check_address_parameter_signed off)
+    then ret (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
+    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
+  | Mint32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
+    then ret (Vvari stack
+                    (Vbinop Vdivu
+                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+                            (Vlit (ZToValue 4))))
+    else error (Errors.msg "HTLgen: translate_arr_access address out of bounds")
+  | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in
+    if (check_address_parameter_unsigned a)
+    then ret (Vvari stack (Vlit (ZToValue (a / 4))))
+    else error (Errors.msg "HTLgen: eff_addressing out of bounds stack offset")
+  | _, _, _ => error (Errors.msg "HTLgen: translate_arr_access unsuported addressing")
   end.
 
 Lemma create_new_state_state_incr:
@@ -726,28 +732,17 @@ Definition create_new_state (p: node): mon node :=
                 s.(st_controllogic))
               (create_new_state_state_incr s p).
 
-Definition translate_inst_list (fin rtrn preg: reg) (ni : node * node * list (list instr)) :=
-  match ni with
-  | (n, p, li) =>
-    do _ <- collectlist
-          (fun l =>
-             do stmnt <- translate_inst Vblock fin rtrn preg n l;
-             add_data_instr n stmnt) (concat li);
-    do st <- get;
-    add_control_instr n (state_goto st.(st_st) p)
-  end.
-
-Fixpoint translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
+Definition translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
   match cfi with
-  | FUgoto n' =>
+  | RBgoto n' =>
     do st <- get;
     ret (Vskip, state_goto st.(st_st) n')
-  | FUcond c args n1 n2 =>
+  | RBcond c args n1 n2 =>
     do st <- get;
     do e <- translate_condition c args;
     ret (Vskip, state_cond st.(st_st) e n1 n2)
-  | FUreturn r =>
+  | RBreturn r =>
     match r with
     | Some r' =>
       ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r'))),
@@ -756,18 +751,14 @@ Fixpoint translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
       ret ((Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z)))),
            Vskip)
     end
-  | FUpred_cf p c1 c2 =>
-    do (tc1s, tc1c) <- translate_cfi' fin rtrn preg c1;
-    do (tc2s, tc2c) <- translate_cfi' fin rtrn preg c2;
-    ret ((Vcond (pred_expr preg p) tc1s tc2s), (Vcond (pred_expr preg p) tc1c tc2c))
-  | FUjumptable r tbl =>
+  | RBjumptable r tbl =>
     do s <- get;
     ret (Vskip, Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr s.(st_st) tbl)) (Some Vskip))
-  | FUcall sig ri rl r n =>
+  | RBcall sig ri rl r n =>
     error (Errors.msg "HTLPargen: RPcall not supported.")
-  | FUtailcall sig ri lr =>
+  | RBtailcall sig ri lr =>
     error (Errors.msg "HTLPargen: RPtailcall not supported.")
-  | FUbuiltin e lb b n =>
+  | RBbuiltin e lb b n =>
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
@@ -778,17 +769,50 @@ Definition translate_cfi (fin rtrn preg: reg) (ni: node * cf_instr)
   do _ <- add_control_instr n c;
   add_data_instr n s.
 
-Definition transf_bblock (fin rtrn preg: reg) (ni : node * bblock)
+Definition translate_inst a (fin rtrn preg stack : reg) (n : node) (i : instr) :=
+  match i with
+  | RBnop =>
+    do stmnt <- ret Vskip;
+    add_data_instr n stmnt
+  | RBop p op args dst =>
+    do instr <- translate_instr op args;
+    do _ <- declare_reg None dst 32;
+    do stmnt <- translate_predicate a preg p (Vvar dst) instr;
+    add_data_instr n stmnt
+  | RBload p mem addr args dst =>
+      do src <- translate_arr_access mem addr args stack;
+      do _ <- declare_reg None dst 32;
+      do stmnt <- translate_predicate a preg p (Vvar dst) src;
+      add_data_instr n stmnt
+  | RBstore p mem addr args src =>
+      do dst <- translate_arr_access mem addr args stack;
+      do stmnt <- translate_predicate a preg p dst (Vvar src);
+      add_data_instr n stmnt
+  | RBsetpred _ c args p =>
+    do cond <- translate_condition c args;
+    do stmnt <- ret (a (pred_expr preg (Plit (true, p))) cond);
+    add_data_instr n stmnt
+  | RBexit p cf =>
+      translate_cfi fin rtrn preg (n, cf)
+  end.
+
+Definition translate_inst_list (fin rtrn preg stack: reg) (ni : node * node * list (list instr)) :=
+  match ni with
+  | (n, p, li) =>
+    do _ <- collectlist
+          (fun l => translate_inst Vblock fin rtrn preg stack n l) (concat li);
+    do st <- get;
+    add_control_instr n (state_goto st.(st_st) p)
+  end.
+
+Definition transf_bblock (fin rtrn preg stack: reg) (ni : node * ParBB.t)
   : mon unit :=
   let (n, bb) := ni in
-  do nstate <- create_new_state ((poslength bb.(bb_body)))%positive;
-  do _ <- collectlist (translate_inst_list fin rtrn preg)
-                      (prange n (nstate + poslength bb.(bb_body) - 1)%positive
-                                  bb.(bb_body));
-  match bb.(bb_body) with
-  | nil => translate_cfi fin rtrn preg (n, bb.(bb_exit))
-  | _ => translate_cfi fin rtrn preg (nstate, bb.(bb_exit))
-  end.
+  do nstate <- create_new_state ((poslength bb))%positive;
+  do _ <- collectlist (translate_inst_list fin rtrn preg stack)
+                      (prange n (nstate + poslength bb - 1)%positive
+                                  bb);
+  add_control_instr nstate Vskip.
 
 (*Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
@@ -821,41 +845,43 @@ Definition transf_module (f: function) : mon HTL.module :=
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
     do preg <- create_reg None 32;
-    do _ <- collectlist (transf_bblock fin rtrn preg)
+    do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
+    do _ <- collectlist (transf_bblock fin rtrn preg stack)
                         (Maps.PTree.elements f.(fn_code));
     do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32)
                         f.(fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
-    match get_ram 0 (fn_funct_units f) with
-    | Some (_, r) =>
-        do _ <- declare_ram r;
-        do current_state <- get;
-        match zle (Z.pos (max_pc_map current_state.(st_datapath)))
-                  Integers.Int.max_unsigned,
-          zle (Z.pos (max_pc_map current_state.(st_controllogic)))
+    do r_en <- create_reg None 1;
+    do r_u_en <- create_reg None 1;
+    do r_addr <- create_reg None 32;
+    do r_wr_en <- create_reg None 1;
+    do r_d_in <- create_reg None 32;
+    do r_d_out <- create_reg None 32;
+    do current_state <- get;
+    match zle (Z.pos (max_pc_map current_state.(st_datapath)))
               Integers.Int.max_unsigned,
-          max_list_dec (fn_params f) (st_st current_state)
-        with
-        | left LEDATA, left LECTRL, left WFPARAMS =>
-          ret (HTL.mkmodule
-             f.(fn_params)
-             current_state.(st_datapath)
-             current_state.(st_controllogic)
-             f.(fn_entrypoint)
-             current_state.(st_st)
-             fin
-             rtrn
-             start
-             rst
-             clk
-             current_state.(st_scldecls)
-             current_state.(st_arrdecls)
-             r)
-        | _, _, _=> error (Errors.msg "More than 2^32 states.")
-        end
-    | _ => error (Errors.msg "Stack RAM not found.")
+      zle (Z.pos (max_pc_map current_state.(st_controllogic)))
+          Integers.Int.max_unsigned,
+      max_list_dec (fn_params f) (st_st current_state)
+    with
+    | left LEDATA, left LECTRL, left WFPARAMS =>
+        ret (HTL.mkmodule
+        f.(fn_params)
+        current_state.(st_datapath)
+        current_state.(st_controllogic)
+        f.(fn_entrypoint)
+        current_state.(st_st)
+        fin
+        rtrn
+        start
+        rst
+        clk
+        current_state.(st_scldecls)
+        current_state.(st_arrdecls)
+        (mk_ram stack_len stack r_en r_u_en r_addr r_wr_en r_d_in r_d_out))
+    | _, _, _=> error (Errors.msg "More than 2^32 states.")
     end
   else error (Errors.msg "Stack size misalignment.").
 
@@ -874,7 +900,7 @@ Definition transl_module (f : function) : Errors.res HTL.module :=
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
-Definition main_is_internal (p : RTLParFU.program) : bool :=
+Definition main_is_internal (p : GiblePar.program) : bool :=
   let ge := Globalenvs.Genv.globalenv p in
   match Globalenvs.Genv.find_symbol ge p.(AST.prog_main) with
   | Some b =>
@@ -885,7 +911,7 @@ Definition main_is_internal (p : RTLParFU.program) : bool :=
   | _ => false
   end.
 
-Definition transl_program (p : RTLParFU.program) : Errors.res HTL.program :=
+Definition transl_program (p : GiblePar.program) : Errors.res HTL.program :=
   if main_is_internal p
   then transform_partial_program transl_fundef p
   else Errors.Error (Errors.msg "Main function is not Internal.").

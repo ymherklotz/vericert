@@ -25,9 +25,12 @@ open Maps
 open AST
 open Kildall
 open Op
-open RTLBlockInstr
+open Gible
 open Predicate
-open RTLBlock
+open GibleSeq
+open GibleSeq
+open GiblePar
+open GiblePar
 open HTL
 open Verilog
 open HTLgen
@@ -286,6 +289,7 @@ let comb_delay = function
      | Omod -> 72
      | Omodu -> 72
      | _ -> 1)
+  | RBexit _ -> 8
   | _ -> 1
 
 let pipeline_stages = function
@@ -330,6 +334,11 @@ let accumulate_RAW_deps map dfg curr =
   | RBload (op, _mem, _addr, rs, dst) -> acc_dep_instruction rs dst
   | RBsetpred (_op, _mem, rs, _p) -> acc_dep_instruction_nodst rs
   | RBstore (op, _mem, _addr, rs, src) -> acc_dep_instruction_nodst (src :: rs)
+  | RBexit (_, RBcall (_, _, rs, _, _)) -> acc_dep_instruction_nodst rs
+  | RBexit (_, RBtailcall (_, _, rs)) -> acc_dep_instruction_nodst rs
+  | RBexit (_, RBcond (_, rs, _, _)) -> acc_dep_instruction_nodst rs
+  | RBexit (_, RBjumptable (r, _)) -> acc_dep_instruction_nodst [r]
+  | RBexit (_, RBreturn (Some r)) -> acc_dep_instruction_nodst [r]
   | _ -> (i + 1, dst_map, graph)
 
 (** Finds the next write to the [dst] register.  This is a small optimisation so that only one
@@ -356,8 +365,13 @@ let rec find_all_next_dst_read i dst i' curr =
   | RBop (_, _, rs, _) :: curr' -> check_dst rs curr'
   | RBload (_, _, _, rs, _) :: curr' -> check_dst rs curr'
   | RBstore (_, _, _, rs, src) :: curr' -> check_dst (src :: rs) curr'
-  | RBnop :: curr' -> find_all_next_dst_read i dst (i' + 1) curr'
   | RBsetpred (_, _, rs, _) :: curr' -> check_dst rs curr'
+  | RBexit (_, RBcall (_, _, rs, _, _)) :: curr' -> check_dst rs curr'
+  | RBexit (_, RBtailcall (_, _, rs)) :: curr' -> check_dst rs curr'
+  | RBexit (_, RBcond (_, rs, _, _)) :: curr' -> check_dst rs curr'
+  | RBexit (_, RBjumptable (r, _)) :: curr' -> check_dst [r] curr'
+  | RBexit (_, RBreturn (Some r)) :: curr' -> check_dst [r] curr'
+  | _ :: curr' -> check_dst [] curr'
 
 let drop i lst =
   let rec drop' i' lst' =
@@ -525,6 +539,7 @@ let get_pred = function
   | RBop (op, _, _, _) -> op
   | RBload (op, _, _, _, _) -> op
   | RBstore (op, _, _, _, _) -> op
+  | RBexit (op, _) -> op
   | RBsetpred (_, _, _, _) -> None
 
 let independant_pred p p' =
@@ -551,14 +566,14 @@ let remove_unnecessary_deps graph =
    before the sink of the basic block.  After that, there should be constraints for data
    dependencies between nodes. *)
 let gather_bb_constraints debug bb =
-  let ibody = List.mapi (fun i a -> (i, a)) bb.bb_body in
+  let ibody = List.mapi (fun i a -> (i, a)) bb in
   let dfg = List.fold_left (fun dfg v -> DFG.add_vertex dfg v) DFG.empty ibody in
   let _, _, dfg' =
     List.fold_left (accumulate_RAW_deps ibody)
       (0, PTree.empty, dfg)
-      bb.bb_body
+      bb
   in
-  let dfg'' = List.fold_left (fun dfg f -> List.fold_left (f bb.bb_body) dfg ibody) dfg'
+  let dfg'' = List.fold_left (fun dfg f -> List.fold_left (f bb) dfg ibody) dfg'
       [ accumulate_WAW_deps;
         accumulate_WAR_deps;
         accumulate_RAW_mem_deps;
@@ -570,7 +585,7 @@ let gather_bb_constraints debug bb =
       ]
   in
   let dfg''' = remove_unnecessary_deps dfg'' in
-  (List.length bb.bb_body, dfg''', successors_instr bb.bb_exit)
+  (List.length bb, dfg''', GibleSeq.all_successors bb)
 
 let encode_var bbn n i = { sv_type = VarType (bbn, n); sv_num = i }
 let encode_bb bbn i = { sv_type = BBType bbn; sv_num = i }
@@ -690,15 +705,15 @@ let add_resource_constr n dfg constr =
   |> get_constraints (List.rev res.res_udiv)
   |> get_constraints (List.rev res.res_sdiv)
 
-let gather_cfg_constraints c constr curr =
+let gather_cfg_constraints (c: GibleSeq.code) constr curr =
   let (n, dfg) = curr in
   match PTree.get (P.of_int n) c with
   | None -> assert false
-  | Some { bb_exit = ctrl; _ } ->
+  | Some bb ->
     add_super_nodes n dfg constr
     |> add_initial_sv n dfg
     |> add_data_deps n dfg
-    |> add_ctrl_deps n (successors_instr ctrl
+    |> add_ctrl_deps n (GibleSeq.all_successors bb
                         |> List.map P.to_int
                         |> List.filter (fun n' -> n' < n))
     |> add_cycle_constr 8 n dfg
@@ -802,10 +817,10 @@ let range s e =
 
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c c' schedule =
-  let f i bb : RTLPar.bblock =
+  let f i bb : ParBB.t =
     match bb with
-    | { bb_body = []; bb_exit = c } -> { bb_body = []; bb_exit = c }
-    | { bb_body = bb_body'; bb_exit = ctrl_flow } ->
+    | bb_body' ->
+    (* | { bb_body = bb_body'; bb_exit = ctrl_flow } -> *)
       let dfg = match PTree.get i c' with None -> assert false | Some x -> x in
       let bb_st_e =
         let m = IMap.find (P.to_int i) (snd schedule) in
@@ -836,13 +851,12 @@ let transf_rtlpar c c' schedule =
                                            (*|> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
                                            |> List.rev) body2*)
       in
-      { bb_body = final_body2;
-        bb_exit = ctrl_flow
-      }
+      final_body2
+    | _ -> List.map (fun i -> [[i]]) bb
   in
   PTree.map f c
 
-let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
+let schedule entry (c : GibleSeq.code) =
   let debug = true in
   let transf_graph (_, dfg, _) = dfg in
   let c' = PTree.map1 (fun x -> gather_bb_constraints false x |> transf_graph) c in
@@ -859,22 +873,22 @@ let schedule entry (c : RTLBlock.bb RTLBlockInstr.code) =
   (**printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
   transf_rtlpar c c' schedule'
 
-let rec find_reachable_states c e =
-  match PTree.get e c with
-  | Some { bb_exit = ex; _ } ->
-    e :: List.fold_left (fun x a -> List.concat [x; find_reachable_states c a]) []
-      (successors_instr ex |> List.filter (fun x -> P.lt x e))
-  | None -> assert false
+(* let rec find_reachable_states c e = *)
+(*   match PTree.get e c with *)
+(*   | Some bb -> *)
+(*     e :: List.fold_left (fun x a -> List.concat [x; find_reachable_states c a]) [] *)
+(*       (all_successors bb |> List.filter (fun x -> P.lt x e)) *)
+(*   | None -> assert false *)
 
 let add_to_tree c nt i =
   match PTree.get i c with
   | Some p -> PTree.set i p nt
   | None -> assert false
 
-let schedule_fn (f : RTLBlock.coq_function) : RTLPar.coq_function =
+let schedule_fn (f : GibleSeq.coq_function) : GiblePar.coq_function =
   let scheduled = schedule f.fn_entrypoint f.fn_code in
-  let reachable = find_reachable_states scheduled f.fn_entrypoint
-                  |> List.to_seq |> SS.of_seq |> SS.to_seq |> List.of_seq in
+  (* let reachable = find_reachable_states scheduled f.fn_entrypoint *)
+  (*                 |> List.to_seq |> SS.of_seq |> SS.to_seq |> List.of_seq in *)
   { fn_sig = f.fn_sig;
     fn_params = f.fn_params;
     fn_stacksize = f.fn_stacksize;
