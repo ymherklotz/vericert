@@ -243,8 +243,9 @@ Definition empty_trees (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   end.
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
-  check (fst (abstract_sequence (empty, nil) bb))
-        (fst (abstract_sequence (empty, nil) (concat (concat bbt)))) &&
+  forallb (fun x => match x with ((_, _, f1), (_, _, f2)) => check f1 f2 end)
+          (combine (snd (abstract_sequence (empty, nil) bb))
+                   (snd (abstract_sequence (empty, nil) (concat (concat bbt))))) &&
   empty_trees bb bbt.
 
 Definition check_scheduled_trees := beq2 schedule_oracle.

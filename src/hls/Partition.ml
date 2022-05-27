@@ -68,14 +68,14 @@ let rec next_bblock_from_RTL is_start e (c : RTL.code) s i =
   match trans_inst, succ with
   | (None, Some i'), _ ->
     if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK [RBnop; RBexit (None, (RBgoto s))]
+      Errors.OK [RBexit (None, (RBgoto s))]
     else
       Errors.OK [RBnop; RBexit (None, i')]
   | (Some i', None), (s', Some i_n)::[] ->
     if List.exists (fun x -> x = s) (fst e) then
       Errors.OK [i'; RBexit (None, (RBgoto s'))]
     else if List.exists (fun x -> x = s) (snd e) && not is_start then
-      Errors.OK [RBnop; RBexit (None, (RBgoto s))]
+      Errors.OK [RBexit (None, (RBgoto s))]
     else begin
       match next_bblock_from_RTL false e c s' i_n with
       | Errors.OK bb ->

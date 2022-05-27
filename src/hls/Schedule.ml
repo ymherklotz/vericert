@@ -441,6 +441,7 @@ let get_predicate = function
   | RBload (p, _, _, _, _) -> p
   | RBstore (p, _, _, _, _) -> p
   | RBsetpred (p, _, _, _) -> p
+  | RBexit (p, _) -> p
   | _ -> None
 
 let rec next_setpred p i = function
@@ -465,6 +466,7 @@ let rec next_preduse p i instr=
   | RBstore (Some p', _, _, _, _) :: rst -> next p' rst
   | RBop (Some p', _, _, _) :: rst -> next p' rst
   | RBsetpred (Some p', _, _, _) :: rst -> next p' rst
+  | RBexit (Some p', _) :: rst -> next p' rst
   | _ :: rst -> next_load (i + 1) rst
 
 let accumulate_RAW_pred_deps instrs dfg curri =
@@ -513,6 +515,28 @@ let accumulate_WAW_deps instrs dfg curri =
       | Some i' -> DFG.add_edge dfg (gen_vertex instrs i) (gen_vertex instrs i') )
   | _ -> dfg
 
+let accumulate_pre_exit_deps instrs dfg curri =
+  let i, curr = curri in
+  match curr with
+  | RBexit (_, _) ->
+    List.fold_left (fun ndfg -> function (i', instr') ->
+        if i' < i
+        then DFG.add_edge ndfg (gen_vertex instrs i') (gen_vertex instrs i)
+        else ndfg
+      ) dfg (List.mapi (fun i x -> (i, x)) instrs)
+  | _ -> dfg
+
+let accumulate_post_exit_deps instrs dfg curri =
+  let i, curr = curri in
+  match curr with
+  | RBexit (_, _) ->
+    List.fold_left (fun ndfg -> function (i', instr') ->
+        if i' > i
+        then DFG.add_edge ndfg (gen_vertex instrs i) (gen_vertex instrs i')
+        else ndfg
+      ) dfg (List.mapi (fun i x -> (i, x)) instrs)
+  | _ -> dfg
+
 let accumulate_WAR_deps instrs dfg curri =
   let i, curr = curri in
   let dst_dep dst =
@@ -533,6 +557,7 @@ let assigned_vars vars = function
   | RBload (_, _, _, _, dst) -> dst :: vars
   | RBstore (_, _, _, _, _) -> vars
   | RBsetpred (_, _, _, _) -> vars
+  | RBexit (_, _) -> vars
 
 let get_pred = function
   | RBnop -> None
@@ -581,7 +606,9 @@ let gather_bb_constraints debug bb =
         accumulate_WAW_mem_deps;
         accumulate_RAW_pred_deps;
         accumulate_WAR_pred_deps;
-        accumulate_WAW_pred_deps
+        accumulate_WAW_pred_deps;
+        accumulate_pre_exit_deps;
+        accumulate_post_exit_deps
       ]
   in
   let dfg''' = remove_unnecessary_deps dfg'' in

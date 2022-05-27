@@ -663,6 +663,23 @@ Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
       (AssocMap.set n st s.(st_controllogic)))
    (add_control_instr_force_state_incr s n st).
 
+Definition add_control_instr_try (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    match check_empty_node_controllogic s n with
+    | left CTRL =>
+      OK tt (mkstate
+           s.(st_st)
+           s.(st_freshreg)
+           (st_freshstate s)
+           s.(st_scldecls)
+           s.(st_arrdecls)
+           s.(st_datapath)
+           (AssocMap.set n st s.(st_controllogic)))
+         (add_control_instr_state_incr s n st CTRL)
+    | _ =>
+      OK tt s (st_refl s)
+    end.
+
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with
   | Plit (b, pred) =>
@@ -802,17 +819,17 @@ Definition translate_inst_list (fin rtrn preg stack: reg) (ni : node * node * li
     do _ <- collectlist
           (fun l => translate_inst Vblock fin rtrn preg stack n l) (concat li);
     do st <- get;
-    add_control_instr n (state_goto st.(st_st) p)
+    add_control_instr_try n (state_goto st.(st_st) p)
   end.
 
 Definition transf_bblock (fin rtrn preg stack: reg) (ni : node * ParBB.t)
   : mon unit :=
   let (n, bb) := ni in
   do nstate <- create_new_state ((poslength bb))%positive;
-  do _ <- collectlist (translate_inst_list fin rtrn preg stack)
+  do _ <- add_control_instr nstate Vskip;
+  collectlist (translate_inst_list fin rtrn preg stack)
                       (prange n (nstate + poslength bb - 1)%positive
-                                  bb);
-  add_control_instr nstate Vskip.
+                                  bb).
 
 (*Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
