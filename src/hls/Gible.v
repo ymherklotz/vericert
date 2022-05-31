@@ -234,7 +234,7 @@ Step Instruction
 Variant step_instr: val -> istate -> instr -> istate -> Prop :=
   | exec_RBnop:
     forall sp ist,
-      step_instr sp ist RBnop ist
+      step_instr sp (Iexec ist) RBnop (Iexec ist)
   | exec_RBop:
     forall op v res args rs m sp p ist pr,
       eval_operation ge sp op rs##args m = Some v ->
@@ -283,14 +283,15 @@ nested to describe the execution of nested lists.
 
 Inductive step_list {A} (step_i: val -> istate -> A -> istate -> Prop):
   val -> istate -> list A -> istate -> Prop :=
-| exec_RBcons:
-  forall state i state' state'' instrs sp,
-    step_i sp state i state' ->
-    step_list step_i sp state' instrs state'' ->
-    step_list step_i sp state (i :: instrs) state''
-| exec_RBnil:
-  forall state sp,
-    step_list step_i sp state nil state.
+| exec_RBcons :
+  forall state i state' state'' instrs sp cf,
+    step_i sp (Iexec state) i (Iexec state') ->
+    step_list step_i sp (Iexec state') instrs (Iterm state'' cf) ->
+    step_list step_i sp (Iexec state) (i :: instrs) (Iterm state'' cf)
+| exec_RBterm :
+  forall state sp i state' cf instrs,
+    step_i sp (Iexec state) i (Iterm state' cf) ->
+    step_list step_i sp (Iexec state) (i :: instrs) (Iterm state' cf).
 
 (*|
 Top-Level Type Definitions
