@@ -559,12 +559,17 @@ let assigned_vars vars = function
   | RBsetpred (_, _, _, _) -> vars
   | RBexit (_, _) -> vars
 
+(** To be able to properly eliminate dependencies on control-flow, one needs to be able to handle
+    comparisons of a register that has a value in one version, and no value in the other, which the
+    checker currently does not. *)
+
 let get_pred = function
   | RBnop -> None
   | RBop (op, _, _, _) -> op
   | RBload (op, _, _, _, _) -> op
   | RBstore (op, _, _, _, _) -> op
-  | RBexit (op, _) -> op
+  (* | RBexit (op, _) -> op *)
+  | RBexit (op, _) -> None
   | RBsetpred (_, _, _, _) -> None
 
 let independant_pred p p' =
