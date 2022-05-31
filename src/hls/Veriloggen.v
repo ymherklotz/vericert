@@ -59,10 +59,11 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
   let ram := m.(HTL.mod_ram) in
   let body :=
-        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
-                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
-                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
-                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
+        Valways (Vposedge m.(HTL.mod_clk))
+                (Vseq (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
+                      (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
+                             (Vblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
+                             (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip))))
                 :: inst_ram m.(HTL.mod_clk) ram
                 :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
