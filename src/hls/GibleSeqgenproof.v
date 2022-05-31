@@ -450,17 +450,19 @@ whole execution (in one big step) of the basic block.
       eapply star_right; eauto.
       eapply RTL.exec_Inop; eauto. auto.
 
-      unfold sem_extrap in *. intros.
-      eapply BB. econstructor; eauto.
+      unfold sem_extrap in *. intros. inv H3.
+      eapply BB. econstructor; eauto. econstructor.
       econstructor; eauto. auto.
+      inv H4; inv H8.
     }
     { apply sim_plus.
       inv H0. simplify.
       unfold valid_succ in *; simplify.
       do 3 econstructor. apply plus_one. econstructor.
-      eassumption. eapply BB; [| eassumption ].
-      econstructor; econstructor; eauto.
-      econstructor. econstructor. econstructor.
+      eassumption.
+      eapply BB; [| eassumption ].
+      econstructor. econstructor. eapply exec_RBterm. econstructor.
+      econstructor.
 
       econstructor; try eassumption. eauto.
       eapply star_refl.
@@ -516,11 +518,11 @@ whole execution (in one big step) of the basic block.
     eapply star_right; eauto.
     eapply RTL.exec_Iop; eauto. auto.
 
-    unfold sem_extrap in *. intros.
-    eapply BB. econstructor; eauto.
-    econstructor; eauto.
+    unfold sem_extrap in *. intros. inv H.
+    eapply BB. econstructor; eauto. econstructor.
     rewrite <- eval_op_eq; eassumption.
-    constructor. auto.
+    constructor. econstructor; eauto. auto.
+    inv MATCHB2; inv H3.
   Qed.
 
   Lemma transl_Iop_correct_j:
@@ -544,11 +546,12 @@ whole execution (in one big step) of the basic block.
     inv H0. simplify.
     unfold valid_succ in H7; simplify.
     do 3 econstructor. apply plus_one. econstructor.
-    eassumption. eapply BB; [| eassumption ].
-    econstructor; econstructor; eauto.
-    rewrite <- eval_op_eq; eassumption.
-    constructor. econstructor. econstructor.
-    econstructor.
+    eassumption.
+
+
+    eapply BB; [| eassumption ]. econstructor. econstructor.
+    rewrite <- eval_op_eq; eassumption. constructor.
+    eapply exec_RBterm. econstructor. econstructor.
 
     econstructor; try eassumption. eauto.
     eapply star_refl.
@@ -597,21 +600,21 @@ whole execution (in one big step) of the basic block.
       eapply star_right; eauto.
       eapply RTL.exec_Iload; eauto. auto.
 
-      unfold sem_extrap in *. intros.
-      eapply BB. econstructor; eauto.
-      econstructor; eauto.
-      rewrite <- eval_addressing_eq; eassumption.
-      constructor. auto.
+      unfold sem_extrap in *. intros. inv H5.
+      eapply BB. econstructor; eauto. econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption. constructor.
+      econstructor; eauto. auto.
+      inv H6; inv H10.
     }
     { apply sim_plus.
       inv H0. simplify.
       unfold valid_succ in H6; simplify.
       do 3 econstructor. apply plus_one. econstructor.
-      eassumption. eapply BB; [| eassumption ].
-      econstructor; econstructor; eauto.
-      rewrite <- eval_addressing_eq; eassumption.
-      constructor. econstructor. econstructor.
-      econstructor.
+      eassumption.
+
+      eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption. constructor.
+      eapply exec_RBterm. econstructor. econstructor.
 
       econstructor; try eassumption. eauto.
       eapply star_refl.
@@ -643,21 +646,21 @@ whole execution (in one big step) of the basic block.
       eapply star_right; eauto.
       eapply RTL.exec_Istore; eauto. auto.
 
-      unfold sem_extrap in *. intros.
-      eapply BB. econstructor; eauto.
-      econstructor; eauto.
-      rewrite <- eval_addressing_eq; eassumption.
-      constructor. auto.
+      unfold sem_extrap in *. intros. inv H5.
+      eapply BB. econstructor; eauto. econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption. constructor.
+      econstructor; eauto. auto.
+      inv H6; inv H10.
     }
     { apply sim_plus.
       inv H0. simplify.
       unfold valid_succ in H6; simplify.
       do 3 econstructor. apply plus_one. econstructor.
-      eassumption. eapply BB; [| eassumption ].
-      econstructor; econstructor; eauto.
-      rewrite <- eval_addressing_eq; eassumption.
-      constructor. econstructor. econstructor.
-      econstructor.
+      eassumption.
+
+      eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
+      rewrite <- eval_addressing_eq; eassumption. constructor.
+      eapply exec_RBterm. econstructor. econstructor.
 
       econstructor; try eassumption. eauto.
       eapply star_refl.
@@ -717,10 +720,10 @@ whole execution (in one big step) of the basic block.
     unfold valid_succ in H5; simplify.
     exploit find_function_translated; eauto; simplify.
     do 3 econstructor. apply plus_one. econstructor.
-    eassumption. eapply BB; [| eassumption ].
-    econstructor; econstructor; eauto.
-    econstructor. econstructor.
-    econstructor; eauto.
+    eassumption.
+
+    eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
+    constructor. econstructor; eauto. econstructor; eauto.
     apply sig_transl_function; auto.
 
     econstructor; try eassumption.
@@ -749,11 +752,12 @@ whole execution (in one big step) of the basic block.
     unfold valid_succ in H6; simplify.
     exploit find_function_translated; eauto; simplify.
     do 3 econstructor. apply plus_one. econstructor.
-    eassumption. eapply BB; [| eassumption ].
-    econstructor; econstructor; eauto.
-    econstructor. econstructor.
-    econstructor; eauto.
+    eassumption.
+
+    eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
+    constructor. econstructor; eauto. econstructor; eauto.
     apply sig_transl_function; auto.
+
     assert (fn_stacksize tf = RTL.fn_stacksize f).
     { unfold transl_function in TF.
       repeat (destruct_match; try discriminate; []).
@@ -781,9 +785,10 @@ whole execution (in one big step) of the basic block.
     eapply sim_plus.
     unfold valid_succ in H6; simplify.
     do 3 econstructor. apply plus_one. econstructor.
-    eassumption. eapply BB; [| eassumption ].
-    econstructor; econstructor; eauto.
-    econstructor. econstructor. econstructor; eauto.
+    eassumption.
+
+    eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
+    constructor. econstructor; eauto. econstructor; eauto.
     eauto using eval_builtin_args_preserved, symbols_preserved.
     eauto using external_call_symbols_preserved, senv_preserved.
 
@@ -896,16 +901,18 @@ whole execution (in one big step) of the basic block.
     unfold valid_succ in *; simplify.
     destruct b.
     { do 3 econstructor. apply plus_one.
-      econstructor; eauto. eapply BB. econstructor. econstructor.
-      econstructor. econstructor. econstructor. eauto.
+      econstructor; eauto.
+
+      eapply BB. econstructor. econstructor.
+      eapply exec_RBterm. econstructor; eauto. assumption.
       econstructor; eauto.
       constructor; eauto using star_refl.
       unfold sem_extrap; intros. setoid_rewrite H4 in H6. inv H6. auto.
     }
     { do 3 econstructor. apply plus_one.
-      econstructor; eauto. eapply BB.
-      econstructor. econstructor.
-      econstructor. econstructor. econstructor. eauto.
+      econstructor; eauto.
+      eapply BB. econstructor. econstructor.
+      eapply exec_RBterm. econstructor; eauto. assumption.
       econstructor; eauto.
       constructor; eauto using star_refl.
       unfold sem_extrap; intros. setoid_rewrite H0 in H6. inv H6. auto.
@@ -932,8 +939,8 @@ whole execution (in one big step) of the basic block.
     unfold valid_succ in H6; simplify.
     do 3 econstructor. apply plus_one.
     econstructor; eauto. eapply BB.
-    econstructor. econstructor. econstructor. econstructor. econstructor.
-    eauto.
+    econstructor. econstructor. eapply exec_RBterm.
+    econstructor. assumption.
     econstructor; eauto.
 
     constructor; eauto using star_refl.
@@ -961,10 +968,10 @@ whole execution (in one big step) of the basic block.
       inv TF; auto. }
     do 3 econstructor. apply plus_one. econstructor; eauto.
     eapply BB.
-    econstructor. econstructor. econstructor. econstructor.
+    econstructor. econstructor. eapply exec_RBterm.
     econstructor. eauto.
     econstructor; eauto.
-        rewrite H4. eauto.
+    rewrite H4. eauto.
     constructor; eauto.
   Qed.
 

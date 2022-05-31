@@ -62,3 +62,12 @@ End SeqBB.
 
 Module GibleSeq := Gible(SeqBB).
 Export GibleSeq.
+
+Fixpoint replace_section {A: Type} (f: A -> instr -> (A * SeqBB.t)) (s: A) (b: SeqBB.t): A * SeqBB.t :=
+  match b with
+  | i :: b' =>
+      let (s', b'') := replace_section f s b' in
+      let (s'', i') := f s' i in
+      (s'', i' ++ b'')
+  | nil => (s, nil)
+  end.
