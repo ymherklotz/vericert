@@ -16,6 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
 
+Require Import Coq.Structures.Orders.
+Require Import Coq.Sorting.Mergesort.
+
 Require Import compcert.common.AST.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Globalenvs.
@@ -39,39 +42,63 @@ This conversion is a verified conversion from RTLBlock back to itself, which
 performs if-conversion on basic blocks to make basic blocks larger.
 |*)
 
-Definition combine_pred (p: pred_op) (optp: option pred_op) :=
-  match optp with
-  | Some p' => Pand p p'
-  | None => p
+Definition map_if_convert (p: option pred_op) (i: instr) :=
+  match i with
+  | RBop p' op args dst => RBop (combine_pred p p') op args dst
+  | RBload p' chunk addr args dst =>
+      RBload (combine_pred p p') chunk addr args dst
+  | RBstore p' chunk addr args src =>
+      RBstore (combine_pred p p') chunk addr args src
+  | RBsetpred p' c l pred =>
+      RBsetpred (combine_pred p p') c l pred
+  | RBexit p' cf => RBexit (combine_pred p p') cf
+  | _ => i
   end.
 
-Definition map_if_convert (p: pred_op) (i: instr) :=
+Definition if_convert_block (next: node) (b_next: SeqBB.t) (u: unit) (i: instr) :=
   match i with
-  | RBop p' op args dst => RBop (Some (combine_pred p p')) op args dst
-  | RBload p' chunk addr args dst =>
-    RBload (Some (combine_pred p p')) chunk addr args dst
-  | RBstore p' chunk addr args src =>
-    RBstore (Some (combine_pred p p')) chunk addr args src
-  | RBsetpred p' c l pred =>
-      RBsetpred (Some (combine_pred p p')) c l pred
-  | RBexit p' cf => RBexit (Some (combine_pred p p')) cf
-  | _ => i
+  | RBexit p (RBgoto next') =>
+      if (next =? next')%positive
+      then (u, map (map_if_convert p) b_next)
+      else (u, i::nil)
+  | _ => (u, i::nil)
+  end.
+
+Definition predicated_store i :=
+  match i with
+  | RBstore _ _ _ _ _ => true
+  | _ => false
+  end.
+
+Definition no_predicated_store bb :=
+  match filter predicated_store bb with
+  | nil => true
+  | _ => false
+  end.
+
+Definition if_convert (c: code) (main next: node) :=
+  match c ! main, c ! next with
+  | Some b_main, Some b_next =>
+      if (length b_next <=? 50)%nat && no_predicated_store b_next then
+        PTree.set main (snd (replace_section (if_convert_block next b_next) tt b_main)) c
+      else c
+  | _, _ => c
   end.
 
 Definition get_unconditional_exit (bb: SeqBB.t) := List.nth_error bb (length bb - 1).
 
-Definition if_convert_block (c: code) (p: predicate) (bb: SeqBB.t) : SeqBB.t :=
-  match get_unconditional_exit bb with
-  | Some (RBexit None (RBcond cond args n1 n2)) =>
-    match PTree.get n1 c, PTree.get n2 c with
-    | Some bb1, Some bb2 =>
-      let bb1' := List.map (map_if_convert (Plit (true, p))) bb1 in
-      let bb2' := List.map (map_if_convert (Plit (false, p))) bb2 in
-      List.concat (bb :: ((RBsetpred None cond args p) :: bb1') :: bb2' :: nil)
-    | _, _ => bb
-    end
-  | _ => bb
-  end.
+(* Definition if_convert_block (c: code) (p: predicate) (bb: SeqBB.t) : SeqBB.t := *)
+(*   match get_unconditional_exit bb with *)
+(*   | Some (RBexit None (RBcond cond args n1 n2)) => *)
+(*     match PTree.get n1 c, PTree.get n2 c with *)
+(*     | Some bb1, Some bb2 => *)
+(*       let bb1' := List.map (map_if_convert (Plit (true, p))) bb1 in *)
+(*       let bb2' := List.map (map_if_convert (Plit (false, p))) bb2 in *)
+(*       List.concat (bb :: ((RBsetpred None cond args p) :: bb1') :: bb2' :: nil) *)
+(*     | _, _ => bb *)
+(*     end *)
+(*   | _ => bb *)
+(*   end. *)
 
 Definition is_cond_cfi' (cfi: cf_instr) :=
   match cfi with
@@ -141,16 +168,39 @@ Definition find_blocks_with_cond ep (b: list node) (c: code) : list (node * SeqB
                             (all_successors (snd x))
               ) (PTree.elements c).
 
-Definition if_convert_code (p: nat * code) (nb: node * SeqBB.t) :=
-  let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in
-  (S (fst p), PTree.set (fst nb) nbb (snd p)).
+Module TupOrder <: TotalLeBool.
+  Definition t : Type := positive * positive.
+  Definition leb (x y: t) := (fst x <=? fst y)%positive.
+  Infix "<=?" := leb (at level 70, no associativity).
+  Theorem leb_total : forall a1 a2, (a1 <=? a2) = true \/ (a2 <=? a1) = true.
+  Proof. unfold leb; intros; repeat rewrite Pos.leb_le; lia. Qed.
+End TupOrder.
+
+Module Import TupSort := Sort TupOrder.
+
+Definition ifconv_list (headers: list node) (c: code) :=
+  let all_succ := PTree.fold (fun l n i => (n, all_successors i) :: l) c nil in
+  let filtered := filter (fun x => match x with (_, l) => (length l <=? 2)%nat end) all_succ in
+  let expanded :=
+    fold_left (fun l (e: node * list node) =>
+                 let (e1, e2) := e in
+                 map (fun x => (e1, x)) e2 ++ l
+              ) filtered nil in
+  let filtered2 := filter (fun x: node * node =>
+                             let (x1, x2) := x in
+                             negb (is_loop headers x2)
+                          ) expanded in
+  sort filtered2.
+
+(* Definition if_convert_code (p: nat * code) (nb: node * SeqBB.t) := *)
+(*   let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in *)
+(*   (S (fst p), PTree.set (fst nb) nbb (snd p)). *)
 
 Definition transf_function (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
-  let (_, c) := List.fold_left if_convert_code
-                               (find_blocks_with_cond f.(fn_entrypoint) b' f.(fn_code))
-                               (1%nat, f.(fn_code)) in
+  let iflist := ifconv_list b' f.(fn_code) in
+  let c := fold_left (fun c n => if_convert c (fst n) (snd n)) iflist f.(fn_code) in
   mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize) c f.(fn_entrypoint).
 
 Definition transf_fundef (fd: fundef) : fundef :=
