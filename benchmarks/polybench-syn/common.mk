@@ -1,11 +1,11 @@
 VERICERT ?= vericert
-VERICERT_OPTS ?= -DSYNTHESIS -fschedule
+VERICERT_OPTS ?= -DSYNTHESIS -fschedule -fif-conv
 
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
 VERILATOR ?= verilator
-VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe /home/ymherklotz/projects/vericert/scripts/verilator_main.cpp
+VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe $(HOME)/projects/vericert/scripts/verilator_main.cpp
 
 TARGETS ?=
 
