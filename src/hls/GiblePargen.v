@@ -169,6 +169,17 @@ of the expression to the other predicates.
 
 Definition forest_state : Type := forest * list (cf_instr * option pred_op * forest).
 
+Definition upd_pred_forest (p: option pred_op) (f: forest) :=
+  match p with
+  | Some p' =>
+      PTree.map (fun i e =>
+                   NE.map (fun (x: pred_op * expression) =>
+                             let (pred, expr) := x in
+                             (Pand p' pred, expr)
+                          ) e) f
+  | None => f
+  end.
+
 Definition update (flist : forest_state) (i : instr): forest_state :=
   let (f, fl) := flist in
   match i with
@@ -201,7 +212,7 @@ Definition update (flist : forest_state) (i : instr): forest_state :=
        (f # (Pred p))
        (map_predicated (pred_ret (Esetpred c))
                        (merge (list_translation args f)))), fl)
-  | RBexit p c => (f, (c, p, f) :: fl)
+  | RBexit p c => ((upd_pred_forest (option_map negate p) f), (c, p, upd_pred_forest p f) :: fl)
   end.
 
 (*|
