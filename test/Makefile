@@ -17,10 +17,10 @@ all: $(TESTS)
 %.gcc: %.o
 	@$(CC) $(CFLAGS) -o $@ $<
 
-%.v: %.c
+%.sv: %.c
 	$(VERICERT) $(VERICERT_OPTS) -o $@ $<
 
-%.iver: %.v
+%.iver: %.sv
 	@$(IVERILOG) $(IVERILOG_OPTS) -o $@ -- $<
 
 %.veri.out: %.iver
@@ -31,4 +31,4 @@ all: $(TESTS)
 	@printf "\033[0;36mOK\033[0m\t$(patsubst %.check,%,$@)\n"
 
 clean:
-	rm -f *.check *.gcc *.gcc.out *.o *.v *.iver *.veri.out
+	rm -f *.check *.gcc *.gcc.out *.o *.sv *.iver *.veri.out
