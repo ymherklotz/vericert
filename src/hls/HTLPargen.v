@@ -103,11 +103,33 @@ Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
 Export MonadNotation.
 
-Definition state_goto (st : reg) (n : node) : stmnt :=
-  Vnonblock (Vvar st) (Vlit (posToValue n)).
+Fixpoint pred_expr (preg: reg) (p: pred_op) :=
+  match p with
+  | Plit (b, pred) =>
+    if b
+    then Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
+    else Vunop Vnot (Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred)))
+  | Ptrue => Vlit (ZToValue 1)
+  | Pfalse => Vlit (ZToValue 0)
+  | Pand p1 p2 =>
+    Vbinop Vand (pred_expr preg p1) (pred_expr preg p2)
+  | Por p1 p2 =>
+    Vbinop Vor (pred_expr preg p1) (pred_expr preg p2)
+  end.
 
-Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
-  Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
+Definition translate_predicate (a : assignment)
+           (preg: reg) (p: option pred_op) (dst e: expr) :=
+  match p with
+  | None => a dst e
+  | Some pos =>
+    a dst (Vternary (pred_expr preg pos) e dst)
+  end.
+
+Definition state_goto (preg: reg) (p: option pred_op) (st : reg) (n : node) : stmnt :=
+  translate_predicate Vblock preg p (Vvar st) (Vlit (posToValue n)).
+
+Definition state_cond (preg: reg) (p: option pred_op) (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
+  translate_predicate Vblock preg p (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
@@ -170,7 +192,7 @@ Definition declare_arr (i : option io) (r : reg) (sz : nat) (ln : nat) : mon uni
               (declare_arr_state_incr i s r sz ln).
 
 Lemma add_instr_state_incr :
-  forall s n n' st,
+  forall s preg p n n' st,
     (st_controllogic s)!n = None ->
     st_incr s
     (mkstate
@@ -180,14 +202,14 @@ Lemma add_instr_state_incr :
        s.(st_scldecls)
        s.(st_arrdecls)
        (AssocMap.set n st s.(st_datapath))
-       (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic))).
+       (AssocMap.set n (state_goto preg p s.(st_st) n') s.(st_controllogic))).
 Proof.
   constructor; intros;
     try (simpl; destruct (peq n n0); subst);
     auto with htlh.
 Qed.
 
-Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
+Definition add_instr (preg: reg) (p: option pred_op) (n : node) (n' : node) (st : stmnt) : mon unit :=
   fun s =>
     match check_empty_node_controllogic s n with
     | left TRANS =>
@@ -198,8 +220,8 @@ Definition add_instr (n : node) (n' : node) (st : stmnt) : mon unit :=
                s.(st_scldecls)
                s.(st_arrdecls)
                (AssocMap.set n st s.(st_datapath))
-               (AssocMap.set n (state_goto s.(st_st) n') s.(st_controllogic)))
-         (add_instr_state_incr s n n' st TRANS)
+               (AssocMap.set n (state_goto preg p s.(st_st) n') s.(st_controllogic)))
+         (add_instr_state_incr s preg p n n' st TRANS)
     | _ => Error (Errors.msg "HTL.add_instr")
     end.
 
@@ -453,7 +475,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   end.
 
 Lemma add_branch_instr_state_incr:
-  forall s e n n1 n2,
+  forall s preg p e n n1 n2,
     (st_controllogic s) ! n = None ->
     st_incr s (mkstate
                  s.(st_st)
@@ -462,14 +484,14 @@ Lemma add_branch_instr_state_incr:
                 s.(st_scldecls)
                 s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
-                (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s))).
+                (AssocMap.set n (state_cond preg p s.(st_st) e n1 n2) (st_controllogic s))).
 Proof.
   intros. apply state_incr_intro; simpl;
             try (intros; destruct (peq n0 n); subst);
             auto with htlh.
 Qed.
 
-Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
+Definition add_branch_instr preg p (e: expr) (n n1 n2: node) : mon unit :=
   fun s =>
     match check_empty_node_controllogic s n with
     | left NTRANS =>
@@ -480,8 +502,8 @@ Definition add_branch_instr (e: expr) (n n1 n2: node) : mon unit :=
                 s.(st_scldecls)
                 s.(st_arrdecls)
                 (AssocMap.set n Vskip (st_datapath s))
-                (AssocMap.set n (state_cond s.(st_st) e n1 n2) (st_controllogic s)))
-         (add_branch_instr_state_incr s e n n1 n2 NTRANS)
+                (AssocMap.set n (state_cond preg p s.(st_st) e n1 n2) (st_controllogic s)))
+         (add_branch_instr_state_incr s preg p e n n1 n2 NTRANS)
     | _ => Error (Errors.msg "Htlgen: add_branch_instr")
     end.
 
@@ -493,7 +515,7 @@ Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
 
 Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
   List.map (fun a => match a with
-                    (i, n) => (Vlit (natToValue i), Vnonblock (Vvar st) (Vlit (posToValue n)))
+                    (i, n) => (Vlit (natToValue i), Vblock (Vvar st) (Vlit (posToValue n)))
                   end)
            (enumerate 0 ns).
 
@@ -651,6 +673,31 @@ Definition add_control_instr_force_state_incr :
        (AssocMap.set n st s.(st_controllogic))).
 Admitted.
 
+Definition update_control_instr (n : node) (st : stmnt) : mon unit :=
+  fun s =>
+    match s.(st_controllogic) ! n with
+    | Some st' =>
+      OK tt (mkstate
+           s.(st_st)
+           s.(st_freshreg)
+           (st_freshstate s)
+           s.(st_scldecls)
+           s.(st_arrdecls)
+           s.(st_datapath)
+           (AssocMap.set n (Vseq st' st) s.(st_controllogic)))
+         (add_control_instr_force_state_incr s n (Vseq st' st))
+    | None =>
+      OK tt (mkstate
+           s.(st_st)
+           s.(st_freshreg)
+           (st_freshstate s)
+           s.(st_scldecls)
+           s.(st_arrdecls)
+           s.(st_datapath)
+           (AssocMap.set n st s.(st_controllogic)))
+         (add_control_instr_force_state_incr s n st)
+    end.
+
 Definition add_control_instr_force (n : node) (st : stmnt) : mon unit :=
   fun s =>
     OK tt (mkstate
@@ -679,28 +726,6 @@ Definition add_control_instr_try (n : node) (st : stmnt) : mon unit :=
     | _ =>
       OK tt s (st_refl s)
     end.
-
-Fixpoint pred_expr (preg: reg) (p: pred_op) :=
-  match p with
-  | Plit (b, pred) =>
-    if b
-    then Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred))
-    else Vunop Vnot (Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred)))
-  | Ptrue => Vlit (ZToValue 1)
-  | Pfalse => Vlit (ZToValue 0)
-  | Pand p1 p2 =>
-    Vbinop Vand (pred_expr preg p1) (pred_expr preg p2)
-  | Por p1 p2 =>
-    Vbinop Vor (pred_expr preg p1) (pred_expr preg p2)
-  end.
-
-Definition translate_predicate (a : assignment)
-           (preg: reg) (p: option pred_op) (dst e: expr) :=
-  match p with
-  | None => ret (a dst e)
-  | Some pos =>
-    ret (a dst (Vternary (pred_expr preg pos) e dst))
-  end.
 
 Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
            (args : list reg) (stack : reg) : mon expr :=
@@ -749,16 +774,16 @@ Definition create_new_state (p: node): mon node :=
                 s.(st_controllogic))
               (create_new_state_state_incr s p).
 
-Definition translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
+Definition translate_cfi' (fin rtrn preg: reg) p (cfi: cf_instr)
   : mon (stmnt * stmnt) :=
   match cfi with
   | RBgoto n' =>
     do st <- get;
-    ret (Vskip, state_goto st.(st_st) n')
+    ret (Vskip, state_goto preg p st.(st_st) n')
   | RBcond c args n1 n2 =>
     do st <- get;
     do e <- translate_condition c args;
-    ret (Vskip, state_cond st.(st_st) e n1 n2)
+    ret (Vskip, state_cond preg p st.(st_st) e n1 n2)
   | RBreturn r =>
     match r with
     | Some r' =>
@@ -779,11 +804,10 @@ Definition translate_cfi' (fin rtrn preg: reg) (cfi: cf_instr)
     error (Errors.msg "HTLPargen: RPbuildin not supported.")
   end.
 
-Definition translate_cfi (fin rtrn preg: reg) (ni: node * cf_instr)
-  : mon unit :=
+Definition translate_cfi (fin rtrn preg: reg) p (ni: node * cf_instr) : mon unit :=
   let (n, cfi) := ni in
-  do (s, c) <- translate_cfi' fin rtrn preg cfi;
-  do _ <- add_control_instr n c;
+  do (s, c) <- translate_cfi' fin rtrn preg p cfi;
+  do _ <- update_control_instr n c;
   add_data_instr n s.
 
 Definition translate_inst a (fin rtrn preg stack : reg) (n : node) (i : instr) :=
@@ -794,32 +818,28 @@ Definition translate_inst a (fin rtrn preg stack : reg) (n : node) (i : instr) :
   | RBop p op args dst =>
     do instr <- translate_instr op args;
     do _ <- declare_reg None dst 32;
-    do stmnt <- translate_predicate a preg p (Vvar dst) instr;
-    add_data_instr n stmnt
+    add_data_instr n (translate_predicate a preg p (Vvar dst) instr)
   | RBload p mem addr args dst =>
-      do src <- translate_arr_access mem addr args stack;
-      do _ <- declare_reg None dst 32;
-      do stmnt <- translate_predicate a preg p (Vvar dst) src;
-      add_data_instr n stmnt
+    do src <- translate_arr_access mem addr args stack;
+    do _ <- declare_reg None dst 32;
+    add_data_instr n (translate_predicate a preg p (Vvar dst) src)
   | RBstore p mem addr args src =>
-      do dst <- translate_arr_access mem addr args stack;
-      do stmnt <- translate_predicate a preg p dst (Vvar src);
-      add_data_instr n stmnt
+    do dst <- translate_arr_access mem addr args stack;
+    add_data_instr n (translate_predicate a preg p dst (Vvar src))
   | RBsetpred _ c args p =>
     do cond <- translate_condition c args;
     do stmnt <- ret (a (pred_expr preg (Plit (true, p))) cond);
     add_data_instr n stmnt
   | RBexit p cf =>
-      translate_cfi fin rtrn preg (n, cf)
+    translate_cfi fin rtrn preg p (n, cf)
   end.
 
 Definition translate_inst_list (fin rtrn preg stack: reg) (ni : node * node * list (list instr)) :=
   match ni with
   | (n, p, li) =>
-    do _ <- collectlist
-          (fun l => translate_inst Vblock fin rtrn preg stack n l) (concat li);
-    do st <- get;
-    add_control_instr_try n (state_goto st.(st_st) p)
+      do st <- get;
+      do _ <- add_control_instr n (state_goto preg None st.(st_st) p);
+      collectlist (fun l => translate_inst Vblock fin rtrn preg stack n l) (concat li)
   end.
 
 Definition transf_bblock (fin rtrn preg stack: reg) (ni : node * ParBB.t)
@@ -861,7 +881,7 @@ Definition transf_module (f: function) : mon HTL.module :=
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
-    do preg <- create_reg None 32;
+    do preg <- create_reg None 128;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
     do _ <- collectlist (transf_bblock fin rtrn preg stack)
                         (Maps.PTree.elements f.(fn_code));
