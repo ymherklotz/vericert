@@ -681,3 +681,10 @@ Proof.
   intros. unfold sat_equiv; intros.
   rewrite ! simplify_correct; auto.
 Qed.
+
+Definition combine_pred (p1 p2: option pred_op): option pred_op :=
+  match p1, p2 with
+  | Some p1, Some p2 => Some (Pand p1 p2)
+  | Some p, _ | _, Some p => Some p
+  | None, None => None
+  end.
