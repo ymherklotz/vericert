@@ -66,6 +66,8 @@ Require vericert.hls.GiblePargen.
 Require vericert.hls.HTLPargen.
 (*Require vericert.hls.Pipeline.*)
 Require vericert.hls.IfConversion.
+Require vericert.hls.CondElim.
+Require vericert.hls.DeadBlocks.
 (*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
@@ -260,8 +262,12 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 7)
   @@@ GibleSeqgen.transl_program
    @@ print (print_GibleSeq 0)
-   @@ total_if HLSOpts.optim_if_conversion IfConversion.transf_program
+   @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
    @@ print (print_GibleSeq 1)
+   @@ total_if HLSOpts.optim_if_conversion IfConversion.transf_program
+   @@ print (print_GibleSeq 2)
+  @@@ DeadBlocks.transf_program
+   @@ print (print_GibleSeq 3)
   @@@ GiblePargen.transl_program
    @@ print (print_GiblePar 0)
   @@@ HTLPargen.transl_program
