@@ -140,6 +140,16 @@ Definition max_reg_instr (m: positive) (i: instr) :=
   | RBexit _ c => max_reg_cfi m c
   end.
 
+Definition max_pred_instr (m: positive) (i: instr) :=
+  match i with
+  | RBop (Some p) op args res => Pos.max m (max_predicate p)
+  | RBload (Some p) chunk addr args dst => Pos.max m (max_predicate p)
+  | RBstore (Some p) chunk addr args src => Pos.max m (max_predicate p)
+  | RBsetpred (Some p') c args p => Pos.max m (Pos.max p (max_predicate p'))
+  | RBexit (Some p) c => Pos.max m (max_predicate p)
+  | _ => m
+  end.
+
 Definition regset := Regmap.t val.
 Definition predset := PMap.t bool.
 
@@ -292,6 +302,16 @@ Inductive step_list {A} (step_i: val -> istate -> A -> istate -> Prop):
   forall state sp i state' cf instrs,
     step_i sp (Iexec state) i (Iterm state' cf) ->
     step_list step_i sp (Iexec state) (i :: instrs) (Iterm state' cf).
+
+Inductive step_list2 {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> istate -> list A -> istate -> Prop :=
+| exec_RBcons2 :
+  forall i0 i1 i2 i instrs sp,
+    step_i sp i0 i i1 ->
+    step_list2 step_i sp i1 instrs i2 ->
+    step_list2 step_i sp i0 (i :: instrs) i2
+| exec_RBnil2 :
+  forall sp i, step_list2 step_i sp i nil i.
 
 (*|
 Top-Level Type Definitions

@@ -61,13 +61,80 @@ Lemma random1 :
 Proof.
 Admitted.
 
+Lemma append :
+  forall A B cf i0 i1 l0 l1 sp ge,
+      (exists i0', @SeqBB.step A B ge sp (Iexec i0) l0 (Iexec i0') /\
+                    @SeqBB.step A B ge sp (Iexec i0') l1 (Iterm i1 cf)) ->
+    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
+Proof. Admitted.
+
+Lemma append2 :
+  forall A B cf i0 i1 l0 l1 sp ge,
+    @SeqBB.step A B ge sp (Iexec i0) l0 (Iterm i1 cf) ->
+    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
+Proof. Admitted.
+
+Definition to_state stk f sp pc c :=
+  match c with
+  | Iexec (mk_instr_state rs ps m)
+  | Iterm (mk_instr_state rs ps m) _ =>
+      State stk f sp pc rs ps m
+  end.
+
+Definition to_cf c :=
+  match c with | Iterm _ cf => Some cf | _ => None end.
+
+#[local] Notation "'mki'" := (mk_instr_state) (at level 1).
+
+Definition max_predset (ps: predset) :=
+  fold_left Pos.max (map fst (PTree.elements (snd ps))) 1.
+
+Variant match_ps : positive -> predset -> predset -> Prop :=
+| match_ps_intro :
+  forall ps ps' m,
+    (forall x, x <= m -> ps !! x = ps' !! x) ->
+    match_ps m ps ps'.
+
+Lemma elim_cond_s_spec :
+  forall A B ge sp rs m rs' m' ps tps ps' p a p0 l v,
+    step_instr ge sp (Iexec (mki rs ps m)) a (Iexec (mki rs' ps' m')) ->
+    max_pred_instr v a <= v ->
+    match_ps v ps tps ->
+    elim_cond_s p a = (p0, l) ->
+    exists tps',
+      step_list2 (@step_instr A B ge) sp (Iexec (mki rs tps m)) l (Iexec (mki rs' tps' m'))
+      /\ match_ps v ps' tps'.
+Proof.
+  inversion 1; subst; simplify; inv H.
+  - inv H2. econstructor. split; eauto; econstructor; econstructor.
+  - inv H2. econstructor. split; eauto; econstructor; econstructor. eauto.
+
+
 Lemma replace_section_spec :
-  forall A B ge sp is_ is_' bb cf,
-    @SeqBB.step A B ge sp (Iexec is_) bb (Iterm is_' cf) ->
-    exists p,
-      @SeqBB.step A B ge sp (Iexec is_)
-                  (snd (replace_section elim_cond_s p bb))
-                  (Iterm is_' cf). Admitted.
+  forall ge sp bb rs ps m rs' ps' m' stk f t cf pc pc' rs'' ps'' m'' tps,
+    SeqBB.step ge sp (Iexec (mki rs ps m)) bb (Iterm (mki rs' ps' m') cf) ->
+    step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
+    match_ps ps tps ->
+    exists p tps' tps'',
+      SeqBB.step ge sp (Iexec (mki rs tps m)) (snd (replace_section elim_cond_s p bb))
+                 (Iterm (mki rs' tps' m') cf)
+      /\ match_ps ps' tps'
+      /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf t (State stk f sp pc' rs'' tps'' m'')
+      /\ match_ps ps'' tps''.
+Proof.
+  induction bb; simplify; inv H.
+  - destruct state'.
+    econstructor; simplify; repeat destruct_match; simplify.
+    exploit IHbb; eauto; simplify.
+    eapply append. econstructor; simplify.
+    eapply F_correct; eauto. rewrite Heqp in H. eauto.
+    eauto.
+  - econstructor; simplify; repeat destruct_match; simplify.
+    eapply append2. eapply F_correct; eauto. eauto.
+    Unshelve. exact default.
+Qed.
+
+End REPLACE.
 
 Lemma transf_block_spec :
   forall f pc b,

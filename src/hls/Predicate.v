@@ -566,8 +566,8 @@ Defined.
 
 #[local] Open Scope positive.
 
-Compute tseytin_simple (Por (negate (Pand (Por (Plit (true, 1)) (Plit (true, 2))) (Plit (true, 3)))) (Plit (false, 4))).
-Compute sat_pred_simple (Por Pfalse (Pand (Plit (true, 1)) (Plit (false, 1)))).
+(* Compute tseytin_simple (Por (negate (Pand (Por (Plit (true, 1)) (Plit (true, 2))) (Plit (true, 3)))) (Plit (false, 4))). *)
+(* Compute sat_pred_simple (Por Pfalse (Pand (Plit (true, 1)) (Plit (false, 1)))). *)
 
 Lemma sat_dec a: {sat a} + {unsat a}.
 Proof.
@@ -584,7 +584,7 @@ Definition equiv_check p1 p2 :=
   | _ => false
   end.
 
-Compute equiv_check Pfalse (Pand (Plit (true, 1%positive)) (Plit (false, 1%positive))).
+(* Compute equiv_check Pfalse (Pand (Plit (true, 1%positive)) (Plit (false, 1%positive))). *)
 
 Lemma equiv_check_correct :
   forall p1 p2, equiv_check p1 p2 = true -> p1 == p2.

@@ -32,7 +32,7 @@ Require Import vericert.hls.Gible.
 
 (*|
 ========
-RTLBlock
+GibleSeq
 ========
 |*)
 

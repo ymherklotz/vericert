@@ -246,13 +246,13 @@ Definition setFormulaSimple (fm : formula) (l : lit) :=
   | inright _ => None
   end.
 
-Eval compute in setFormulaSimple (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil) (true, 1%nat).
-Eval compute in setFormulaSimple nil (true, 0).
-Eval compute in setFormulaSimple (((true, 0) :: nil) :: nil) (true, 0).
-Eval compute in setFormulaSimple (((false, 0) :: nil) :: nil) (true, 0).
-Eval compute in setFormulaSimple (((false, 1) :: nil) :: nil) (true, 0).
-Eval compute in setFormulaSimple (((false, 1) :: (true, 0) :: nil) :: nil) (true, 0).
-Eval compute in setFormulaSimple (((false, 1) :: (false, 0) :: nil) :: nil) (true, 0).
+(* Eval compute in setFormulaSimple (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil) (true, 1%nat). *)
+(* Eval compute in setFormulaSimple nil (true, 0). *)
+(* Eval compute in setFormulaSimple (((true, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in setFormulaSimple (((false, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in setFormulaSimple (((false, 1) :: nil) :: nil) (true, 0). *)
+(* Eval compute in setFormulaSimple (((false, 1) :: (true, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in setFormulaSimple (((false, 1) :: (false, 0) :: nil) :: nil) (true, 0). *)
 
 #[local] Hint Extern 1 False => discriminate : core.
 
@@ -483,7 +483,7 @@ Definition lit_set_cl (cl: clause) :=
 Definition lit_set (fm: formula) :=
   fold_right NSet.union NSet.empty (map lit_set_cl fm).
 
-Compute NSet.cardinal (lit_set (((true, 1)::(true, 1)::(true, 1)::nil)::nil)).
+(* Compute NSet.cardinal (lit_set (((true, 1)::(true, 1)::(true, 1)::nil)::nil)). *)
 
 Definition sat_measure (fm: formula) := NSet.cardinal (lit_set fm).
 
@@ -658,4 +658,4 @@ Definition satSolveSimple (fm : formula) :=
   | inright _ => None
   end.
 
-Eval compute in satSolveSimple nil.
+(* Eval compute in satSolveSimple nil. *)

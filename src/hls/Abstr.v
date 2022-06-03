@@ -728,11 +728,11 @@ Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
 
 Definition check := Rtree.beq beq_pred_expr.
 
-Compute (check (empty # (Reg 2) <-
-                ((((Pand (Plit (true, 4)) (¬ (Plit (true, 4))))), (Ebase (Reg 9))) ::|
-                                                                      (NE.singleton (((Plit (true, 2))), (Ebase (Reg 3))))))
-               (empty # (Reg 2) <- (NE.singleton (((Por (Plit (true, 2)) (Pand (Plit (true, 3)) (¬ (Plit (true, 3)))))),
-                                                  (Ebase (Reg 3)))))).
+(* Compute (check (empty # (Reg 2) <- *)
+(*                 ((((Pand (Plit (true, 4)) (¬ (Plit (true, 4))))), (Ebase (Reg 9))) ::| *)
+(*                                                                       (NE.singleton (((Plit (true, 2))), (Ebase (Reg 3)))))) *)
+(*                (empty # (Reg 2) <- (NE.singleton (((Por (Plit (true, 2)) (Pand (Plit (true, 3)) (¬ (Plit (true, 3)))))), *)
+(*                                                   (Ebase (Reg 3)))))). *)
 
 Lemma inj_asgn_eg : forall a b, (a =? b)%nat = (a =? a)%nat -> a = b.
 Proof.
