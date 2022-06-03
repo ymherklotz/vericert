@@ -38,6 +38,7 @@ Require Import vericert.common.DecEq.
 Require Import vericert.hls.Gible.
 Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.CondElim.
+Require Import vericert.hls.Predicate.
 
 #[local] Open Scope positive.
 
@@ -63,7 +64,7 @@ Admitted.
 
 Lemma append :
   forall A B cf i0 i1 l0 l1 sp ge,
-      (exists i0', @SeqBB.step A B ge sp (Iexec i0) l0 (Iexec i0') /\
+      (exists i0', step_list2 (@step_instr A B ge) sp (Iexec i0) l0 (Iexec i0') /\
                     @SeqBB.step A B ge sp (Iexec i0') l1 (Iterm i1 cf)) ->
     @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
 Proof. Admitted.
@@ -74,26 +75,35 @@ Lemma append2 :
     @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
 Proof. Admitted.
 
-Definition to_state stk f sp pc c :=
-  match c with
-  | Iexec (mk_instr_state rs ps m)
-  | Iterm (mk_instr_state rs ps m) _ =>
-      State stk f sp pc rs ps m
-  end.
-
 Definition to_cf c :=
   match c with | Iterm _ cf => Some cf | _ => None end.
 
 #[local] Notation "'mki'" := (mk_instr_state) (at level 1).
-
-Definition max_predset (ps: predset) :=
-  fold_left Pos.max (map fst (PTree.elements (snd ps))) 1.
 
 Variant match_ps : positive -> predset -> predset -> Prop :=
 | match_ps_intro :
   forall ps ps' m,
     (forall x, x <= m -> ps !! x = ps' !! x) ->
     match_ps m ps ps'.
+
+Lemma eval_pred_under_match:
+  forall rs m rs' m' ps tps tps' ps' v p1 rs'' ps'' m'',
+    eval_pred (Some p1) (mki rs ps m) (mki rs' ps' m') (mki rs'' ps'' m'') ->
+    max_predicate p1 <= v ->
+    match_ps v ps tps ->
+    match_ps v ps' tps' ->
+    exists tps'',
+      eval_pred (Some p1) (mki rs tps m) (mki rs' tps' m') (mki rs'' tps'' m'')
+      /\ match_ps v ps'' tps''.
+Proof.
+  inversion 1; subst; simplify.
+    Admitted.
+
+Lemma eval_pred_eq_predset :
+  forall p rs ps m rs' m' ps' rs'' m'',
+    eval_pred p (mki rs ps m) (mki rs' ps m') (mki rs'' ps' m'') ->
+    ps' = ps.
+Proof. inversion 1; subst; crush. Qed.
 
 Lemma elim_cond_s_spec :
   forall A B ge sp rs m rs' m' ps tps ps' p a p0 l v,
@@ -107,34 +117,69 @@ Lemma elim_cond_s_spec :
 Proof.
   inversion 1; subst; simplify; inv H.
   - inv H2. econstructor. split; eauto; econstructor; econstructor.
-  - inv H2. econstructor. split; eauto; econstructor; econstructor. eauto.
+  - inv H2. destruct p1.
+    + exploit eval_pred_under_match; eauto; try lia; simplify.
+      econstructor. split. econstructor. econstructor; eauto. eauto. econstructor.
+      eauto.
+    + inv H15. econstructor. split. econstructor. econstructor. eauto. constructor; eauto.
+      constructor. auto.
+  - inv H2. destruct p1.
+    + exploit eval_pred_under_match; eauto; try lia; simplify.
+      econstructor. split. econstructor. econstructor; eauto.
+      constructor. eauto.
+    + inv H18. econstructor. split. econstructor. econstructor; eauto. constructor; eauto.
+      constructor. auto.
+  - inv H2. destruct p1.
+    + exploit eval_pred_under_match; eauto; try lia; simplify.
+      econstructor. split. econstructor. econstructor; eauto.
+      constructor. auto.
+    + inv H18. econstructor. split. econstructor. econstructor; eauto. constructor; eauto.
+      constructor. auto.
+  - inv H2. destruct p'.
+    exploit eval_pred_under_match; eauto. lia. Admitted.
 
+Lemma elim_cond_s_spec2 :
+  forall ge rs m rs' m' ps tps ps' p a p0 l v cf stk f sp pc t pc' rs'' m'' ps'',
+    step_instr ge sp (Iexec (mki rs ps m)) a (Iterm (mki rs' ps' m') cf) ->
+    step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
+    max_pred_instr v a <= v ->
+    match_ps v ps tps ->
+    elim_cond_s p a = (p0, l) ->
+    exists tps' tps'' cf',
+      SeqBB.step ge sp (Iexec (mki rs tps m)) l (Iterm (mki rs' tps' m') cf')
+      /\ match_ps v ps' tps'
+      /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf' t (State stk f sp pc' rs'' tps'' m'')
+      /\ match_ps v ps'' tps''.
+Proof.
+  inversion 1; subst; simplify; inv H.
+    Admitted.
 
 Lemma replace_section_spec :
-  forall ge sp bb rs ps m rs' ps' m' stk f t cf pc pc' rs'' ps'' m'' tps,
+  forall ge sp bb rs ps m rs' ps' m' stk f t cf pc pc' rs'' ps'' m'' tps v n p p' bb',
     SeqBB.step ge sp (Iexec (mki rs ps m)) bb (Iterm (mki rs' ps' m') cf) ->
     step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
-    match_ps ps tps ->
-    exists p tps' tps'',
-      SeqBB.step ge sp (Iexec (mki rs tps m)) (snd (replace_section elim_cond_s p bb))
-                 (Iterm (mki rs' tps' m') cf)
-      /\ match_ps ps' tps'
-      /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf t (State stk f sp pc' rs'' tps'' m'')
-      /\ match_ps ps'' tps''.
+    match_ps v ps tps ->
+    max_pred_block v n bb <= v ->
+    replace_section elim_cond_s p bb = (p', bb') ->
+    exists tps' tps'' cf',
+      SeqBB.step ge sp (Iexec (mki rs tps m)) bb' (Iterm (mki rs' tps' m') cf')
+      /\ match_ps v ps' tps'
+      /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf' t (State stk f sp pc' rs'' tps'' m'')
+      /\ match_ps v ps'' tps''.
 Proof.
   induction bb; simplify; inv H.
-  - destruct state'.
-    econstructor; simplify; repeat destruct_match; simplify.
-    exploit IHbb; eauto; simplify.
+  - destruct state'. repeat destruct_match. inv H3.
+    exploit elim_cond_s_spec; eauto. admit. simplify.
+    exploit IHbb; eauto; simplify. admit.
+    do 3 econstructor. simplify.
     eapply append. econstructor; simplify.
-    eapply F_correct; eauto. rewrite Heqp in H. eauto.
-    eauto.
-  - econstructor; simplify; repeat destruct_match; simplify.
-    eapply append2. eapply F_correct; eauto. eauto.
-    Unshelve. exact default.
-Qed.
-
-End REPLACE.
+    eauto. eauto. eauto. eauto. eauto.
+  - repeat destruct_match; simplify. inv H3.
+    exploit elim_cond_s_spec2; eauto. admit. simplify.
+    do 3 econstructor; simplify; eauto.
+    eapply append2; eauto.
+    Unshelve. exact 1.
+Admitted.
 
 Lemma transf_block_spec :
   forall f pc b,
@@ -153,7 +198,8 @@ Variant match_states : state -> state -> Prop :=
   | match_state :
     forall stk stk' f tf sp pc rs p p0 m
            (TF: transf_function f = tf)
-           (STK: Forall2 match_stackframe stk stk'),
+           (STK: Forall2 match_stackframe stk stk')
+           (PS: match_ps (max_pred_function f) p p0),
       match_states (State stk f sp pc rs p m) (State stk' tf sp pc rs p0 m)
   | match_callstate :
     forall cs cs' f tf args m
@@ -230,7 +276,9 @@ Section CORRECTNESS.
   Proof.
     induction 1; intros.
     + inv H2. eapply cf_in_step in H0; simplify.
-      do 2 econstructor. econstructor; eauto. admit. Admitted.
+      exploit transf_block_spec; eauto; simplify.
+      do 2 econstructor. econstructor; eauto.
+      simplify. Admitted.
 
   Theorem transf_program_correct:
     forward_simulation (semantics prog) (semantics tprog).

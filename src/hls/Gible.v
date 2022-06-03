@@ -587,10 +587,15 @@ type ~genv~ which was declared earlier.
 
   Definition max_reg_block (m: positive) (n: node) (i: B.t) := B.foldl max_reg_instr i m.
 
+  Definition max_pred_block (m: positive) (n: node) (i: B.t) := B.foldl max_pred_instr i m.
+
   Definition max_reg_function (f: function) :=
     Pos.max
       (PTree.fold max_reg_block f.(fn_code) 1%positive)
       (fold_left Pos.max f.(fn_params) 1%positive).
+
+  Definition max_pred_function (f: function) :=
+    PTree.fold max_pred_block f.(fn_code) 1%positive.
 
   Definition max_pc_function (f: function) : positive :=
     PTree.fold
