@@ -138,12 +138,86 @@ Proof.
   - inv H2. destruct p'.
     exploit eval_pred_under_match; eauto. lia. Admitted.
 
+Definition wf_predicate (v: predicate) (p: predicate) := v < p.
+
+Lemma eval_predf_match_ps :
+  forall p p' p0 v,
+    match_ps v p p' ->
+    max_predicate p0 <= v ->
+    eval_predf p p0 = eval_predf p' p0.
+  Admitted.
+
+Lemma step_cf_instr_ps_const :
+  forall ge stk f sp pc rs' ps' m' cf t pc' rs'' ps'' m'',
+    step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
+    ps' = ps''.
+Proof. inversion 1; subst; auto. Qed.
+
+Lemma step_cf_instr_ps_idem :
+  forall ge stk f sp pc rs' ps' m' cf t pc' rs'' ps'' m'' tps',
+    step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
+    step_cf_instr ge (State stk f sp pc rs' tps' m') cf t (State stk f sp pc' rs'' tps' m'').
+Proof. inversion 1; subst; simplify; econstructor; eauto. Qed.
+
+Lemma step_instr_inv_exit :
+  forall A B ge sp i p cf,
+    eval_predf (is_ps i) p = true ->
+    @step_instr A B ge sp (Iexec i) (RBexit (Some p) cf) (Iterm i cf).
+Proof.
+  intros.
+  replace (Iterm i cf) with (if (eval_predf (is_ps i) p) then Iterm i cf else Iexec i).
+  constructor; auto.
+  rewrite H; auto.
+Qed.
+
+Lemma step_instr_inv_exit2 :
+  forall A B ge sp i p cf,
+    eval_predf (is_ps i) p = false ->
+    @step_instr A B ge sp (Iexec i) (RBexit (Some p) cf) (Iexec i).
+Proof.
+  intros.
+  replace (Iexec i) with (if (eval_predf (is_ps i) p) then Iterm i cf else Iexec i) at 2.
+  constructor; auto.
+  rewrite H; auto.
+Qed.
+
+Lemma eval_predf_in_ps :
+  forall v ps ps' p1 b p tps,
+    eval_predf ps p1 = true ->
+    max_predicate p1 <= v ->
+    wf_predicate v p ->
+    match_ps v ps ps' ->
+    eval_predf tps # p <- b (Pand (Plit (b, p)) p1) = true.
+Admitted.
+
+Lemma eval_predf_in_ps2 :
+  forall v ps ps' p1 b b' p tps,
+    eval_predf ps p1 = true ->
+    max_predicate p1 <= v ->
+    wf_predicate v p ->
+    match_ps v ps ps' ->
+    b <> b' ->
+    eval_predf tps # p <- b (Pand (Plit (b', p)) p1) = false.
+Admitted.
+
+Lemma match_ps_set_gt :
+  forall v ps tps p b,
+    wf_predicate v p ->
+    match_ps v ps tps ->
+    match_ps v ps tps # p <- b.
+Proof.
+  intros. constructor. intros.
+  unfold wf_predicate in *. inv H0.
+  rewrite PMap.gso; auto; lia.
+Qed.
+
 Lemma elim_cond_s_spec2 :
   forall ge rs m rs' m' ps tps ps' p a p0 l v cf stk f sp pc t pc' rs'' m'' ps'',
     step_instr ge sp (Iexec (mki rs ps m)) a (Iterm (mki rs' ps' m') cf) ->
     step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
     max_pred_instr v a <= v ->
     match_ps v ps tps ->
+    wf_predicate v p ->
     elim_cond_s p a = (p0, l) ->
     exists tps' tps'' cf',
       SeqBB.step ge sp (Iexec (mki rs tps m)) l (Iterm (mki rs' tps' m') cf')
@@ -151,8 +225,43 @@ Lemma elim_cond_s_spec2 :
       /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf' t (State stk f sp pc' rs'' tps'' m'')
       /\ match_ps v ps'' tps''.
 Proof.
-  inversion 1; subst; simplify; inv H.
-    Admitted.
+  inversion 1; subst; simplify.
+  - destruct (eval_predf ps p1) eqn:?; [|discriminate].
+    inv H2. destruct cf; inv H5.
+    + exists tps. exists tps. exists (RBcall s s0 l0 r n).
+      simplify. constructor.
+      replace (Iterm (mki rs' tps m') (RBcall s s0 l0 r n)) with (if eval_predf ps' p1 then (Iterm (mki rs' tps m') (RBcall s s0 l0 r n)) else (Iexec (mki rs' tps m'))).
+      constructor. simplify.
+      symmetry; eapply eval_predf_match_ps. eauto. lia.
+      rewrite Heqb. trivial. auto.
+      eapply step_cf_instr_ps_idem. eauto.
+      assert (ps' = ps'') by (eauto using step_cf_instr_ps_const); subst. auto.
+    + admit.
+    + admit.
+    + inv H0; destruct b.
+      * do 3 econstructor; simplify.
+        econstructor. econstructor; eauto. eapply eval_pred_true.
+        erewrite <- eval_predf_match_ps; eauto. simpl. lia.
+        constructor. apply step_instr_inv_exit. simpl.
+        eapply eval_predf_in_ps; eauto. lia.
+        apply match_ps_set_gt; auto.
+        constructor; auto.
+        apply match_ps_set_gt; auto.
+      * do 3 econstructor; simplify.
+        econstructor. econstructor; eauto. eapply eval_pred_true.
+        erewrite <- eval_predf_match_ps; eauto. simpl. lia.
+        econstructor. apply step_instr_inv_exit2. simpl.
+        eapply eval_predf_in_ps2; eauto. lia.
+        constructor. apply step_instr_inv_exit. simpl.
+        eapply eval_predf_in_ps; eauto; lia.
+        apply match_ps_set_gt; auto.
+        constructor; auto.
+        apply match_ps_set_gt; auto.
+    + admit.
+    + admit.
+    + admit.
+  - admit.
+Admitted.
 
 Lemma replace_section_spec :
   forall ge sp bb rs ps m rs' ps' m' stk f t cf pc pc' rs'' ps'' m'' tps v n p p' bb',
