@@ -409,13 +409,13 @@ Section CORRECTNESS.
   Proof.
     inversion 1; subst; simplify; clear H;
       match goal with H: context[match_states] |- _ => inv H end.
-    - inv H1. do 2 econstructor. rewrite <- sig_transf_function. econstructor; eauto.
+    - do 2 econstructor. rewrite <- sig_transf_function. econstructor; eauto.
       eauto using find_function_translated. auto.
       econstructor; auto. repeat (constructor; auto).
-    - inv H1. do 2 econstructor. econstructor. eauto using find_function_translated.
+    - do 2 econstructor. econstructor. eauto using find_function_translated.
       eauto using sig_transf_function. eauto.
       econstructor; auto.
-    - inv H2.
+    - do 2 econstructor.
 
   Lemma step_list2_ge :
     forall sp l i i',
