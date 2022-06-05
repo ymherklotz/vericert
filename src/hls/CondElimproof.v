@@ -183,18 +183,6 @@ Variant match_states : state -> state -> Prop :=
       match_states (Returnstate cs v m) (Returnstate cs' v m)
 .
 
-Lemma step_cf_instr_ps_idem_gen :
-  forall ge cf t st st' tst,
-    step_cf_instr ge st cf t st' ->
-    match_states st tst ->
-    exists tst',
-      step_cf_instr ge tst cf t tst'
-      /\ match_states st' tst'.
-Proof.
-  inversion 1; subst; simplify.
-  - inv H1. econstructor; split.
-    eapply exec_RBcall.
-
 Lemma step_instr_inv_exit :
   forall A B ge sp i p cf,
     eval_predf (is_ps i) p = true ->
@@ -247,79 +235,6 @@ Proof.
   rewrite PMap.gso; auto; lia.
 Qed.
 
-Lemma elim_cond_s_spec2 :
-  forall ge rs m rs' m' ps tps ps' p a p0 l v cf stk f sp pc t st,
-    step_instr ge sp (Iexec (mki rs ps m)) a (Iterm (mki rs' ps' m') cf) ->
-    step_cf_instr ge (State stk f sp pc rs' ps' m') cf t st ->
-    max_pred_instr v a <= v ->
-    match_ps v ps tps ->
-    wf_predicate v p ->
-    elim_cond_s p a = (p0, l) ->
-    exists tps' cf' st',
-      SeqBB.step ge sp (Iexec (mki rs tps m)) l (Iterm (mki rs' tps' m') cf')
-      /\ match_ps v ps' tps'
-      /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf' t st'
-      /\ match_states st st'.
-Proof.
-  inversion 1; subst; simplify.
-  - destruct (eval_predf ps p1) eqn:?; [|discriminate]. inv H2.
-    destruct cf; inv H5;
-      try (do 3 econstructor; simplify;
-           [ constructor; apply step_instr_inv_exit; erewrite <- eval_predf_match_ps; eauto; lia
-           | auto
-           | eauto using step_cf_instr_ps_idem
-           | assert (ps' = ps'') by (eauto using step_cf_instr_ps_const); subst; auto ]).
-    do 3 econstructor; simplify.
-    constructor; apply step_instr_inv_exit; erewrite <- eval_predf_match_ps; eauto; lia.
-    auto.
-    inv H0; destruct b.
-    + do 3 econstructor; simplify.
-      econstructor. econstructor; eauto. eapply eval_pred_true.
-      erewrite <- eval_predf_match_ps; eauto. simpl. lia.
-      constructor. apply step_instr_inv_exit. simpl.
-      eapply eval_predf_in_ps; eauto. lia.
-      apply match_ps_set_gt; auto.
-      constructor; auto.
-      apply match_ps_set_gt; auto.
-    + do 3 econstructor; simplify.
-      econstructor. econstructor; eauto. eapply eval_pred_true.
-      erewrite <- eval_predf_match_ps; eauto. simpl. lia.
-      econstructor. apply step_instr_inv_exit2. simpl.
-      eapply eval_predf_in_ps2; eauto. lia.
-      constructor. apply step_instr_inv_exit. simpl.
-      eapply eval_predf_in_ps; eauto; lia.
-      apply match_ps_set_gt; auto.
-      constructor; auto.
-      apply match_ps_set_gt; auto.
-  -
-
-Lemma replace_section_spec :
-  forall ge sp bb rs ps m rs' ps' m' stk f t cf pc pc' rs'' ps'' m'' tps v n p p' bb',
-    SeqBB.step ge sp (Iexec (mki rs ps m)) bb (Iterm (mki rs' ps' m') cf) ->
-    step_cf_instr ge (State stk f sp pc rs' ps' m') cf t (State stk f sp pc' rs'' ps'' m'') ->
-    match_ps v ps tps ->
-    max_pred_block v n bb <= v ->
-    replace_section elim_cond_s p bb = (p', bb') ->
-    exists tps' tps'' cf',
-      SeqBB.step ge sp (Iexec (mki rs tps m)) bb' (Iterm (mki rs' tps' m') cf')
-      /\ match_ps v ps' tps'
-      /\ step_cf_instr ge (State stk f sp pc rs' tps' m') cf' t (State stk f sp pc' rs'' tps'' m'')
-      /\ match_ps v ps'' tps''.
-Proof.
-  induction bb; simplify; inv H.
-  - destruct state'. repeat destruct_match. inv H3.
-    exploit elim_cond_s_spec; eauto. admit. simplify.
-    exploit IHbb; eauto; simplify. admit.
-    do 3 econstructor. simplify.
-    eapply append. econstructor; simplify.
-    eauto. eauto. eauto. eauto. eauto.
-  - repeat destruct_match; simplify. inv H3.
-    exploit elim_cond_s_spec2; eauto. admit. admit. simplify.
-    do 3 econstructor; simplify; eauto.
-    eapply append2; eauto.
-    Unshelve. exact 1.
-Admitted.
-
 Lemma transf_block_spec :
   forall f pc b,
     f.(fn_code) ! pc = Some b ->
@@ -361,6 +276,34 @@ Section CORRECTNESS.
     unfold transf_function. auto. auto.
   Qed.
 
+  Lemma functions_translated:
+    forall (v: Values.val) (f: GibleSeq.fundef),
+      Genv.find_funct ge v = Some f ->
+      Genv.find_funct tge v = Some (transf_fundef f).
+  Proof using TRANSL.
+    intros. exploit (Genv.find_funct_match TRANSL); eauto. simplify. eauto.
+  Qed.
+
+  Lemma find_function_translated:
+    forall ros rs f,
+      find_function ge ros rs = Some f ->
+      find_function tge ros rs = Some (transf_fundef f).
+  Proof using TRANSL.
+    Ltac ffts := match goal with
+                 | [ H: forall _, Val.lessdef _ _, r: Registers.reg |- _ ] =>
+                     specialize (H r); inv H
+                 | [ H: Vundef = ?r, H1: Genv.find_funct _ ?r = Some _ |- _ ] =>
+                     rewrite <- H in H1
+                 | [ H: Genv.find_funct _ Vundef = Some _ |- _] => solve [inv H]
+                 | _ => solve [exploit functions_translated; eauto]
+                 end.
+    destruct ros; simplify; try rewrite <- H;
+      [| rewrite symbols_preserved; destruct_match;
+         try (apply function_ptr_translated); crush ];
+      intros;
+      repeat ffts.
+  Qed.
+
   Lemma transf_initial_states :
     forall s1,
       initial_state prog s1 ->
@@ -381,6 +324,147 @@ Section CORRECTNESS.
   Proof using.
     inversion 2; crush. subst. inv H. inv STK. econstructor.
   Qed.
+
+  Lemma elim_cond_s_spec2 :
+    forall rs m rs' m' ps tps ps' p a p0 l v cf stk f sp pc t st,
+      step_instr ge sp (Iexec (mki rs ps m)) a (Iterm (mki rs' ps' m') cf) ->
+      step_cf_instr ge (State stk f sp pc rs' ps' m') cf t st ->
+      max_pred_instr v a <= v ->
+      match_ps v ps tps ->
+      wf_predicate v p ->
+      elim_cond_s p a = (p0, l) ->
+      exists tps' cf' st',
+        SeqBB.step tge sp (Iexec (mki rs tps m)) l (Iterm (mki rs' tps' m') cf')
+        /\ match_ps v ps' tps'
+        /\ step_cf_instr tge (State stk f sp pc rs' tps' m') cf' t st'
+        /\ match_states st st'.
+  Proof.
+    inversion 1; subst; simplify.
+    - destruct (eval_predf ps p1) eqn:?; [|discriminate]. inv H2.
+      destruct cf; inv H5;
+        try (do 3 econstructor; simplify;
+             [ constructor; apply step_instr_inv_exit; erewrite <- eval_predf_match_ps; eauto; lia
+             | auto
+             | eauto using step_cf_instr_ps_idem
+             | assert (ps' = ps'') by (eauto using step_cf_instr_ps_const); subst; auto ]).
+      do 3 econstructor; simplify.
+      constructor; apply step_instr_inv_exit; erewrite <- eval_predf_match_ps; eauto; lia.
+      auto.
+      (*inv H0; destruct b.
+      + do 3 econstructor; simplify.
+        econstructor. econstructor; eauto. eapply eval_pred_true.
+        erewrite <- eval_predf_match_ps; eauto. simpl. lia.
+        constructor. apply step_instr_inv_exit. simpl.
+        eapply eval_predf_in_ps; eauto. lia.
+        apply match_ps_set_gt; auto.
+        constructor; auto.
+        apply match_ps_set_gt; auto.
+      + do 3 econstructor; simplify.
+        econstructor. econstructor; eauto. eapply eval_pred_true.
+        erewrite <- eval_predf_match_ps; eauto. simpl. lia.
+        econstructor. apply step_instr_inv_exit2. simpl.
+        eapply eval_predf_in_ps2; eauto. lia.
+        constructor. apply step_instr_inv_exit. simpl.
+        eapply eval_predf_in_ps; eauto; lia.
+        apply match_ps_set_gt; auto.
+        constructor; auto.
+        apply match_ps_set_gt; auto.
+    -*) Admitted.
+
+  Lemma eval_op_eq:
+    forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
+      Op.eval_operation ge sp0 op vl m = Op.eval_operation tge sp0 op vl m.
+  Proof using TRANSL.
+    intros.
+    destruct op; auto; unfold Op.eval_operation, Genv.symbol_address, Op.eval_addressing32;
+    [| destruct a; unfold Genv.symbol_address ];
+    try rewrite symbols_preserved; auto.
+  Qed.
+
+  Lemma eval_addressing_eq:
+    forall sp addr vl,
+      Op.eval_addressing ge sp addr vl = Op.eval_addressing tge sp addr vl.
+  Proof using TRANSL.
+    intros.
+    destruct addr;
+      unfold Op.eval_addressing, Op.eval_addressing32;
+      unfold Genv.symbol_address;
+      try rewrite symbols_preserved; auto.
+  Qed.
+
+  Lemma step_instr_ge :
+    forall sp i a i',
+      step_instr ge sp i a i' ->
+      step_instr tge sp i a i'.
+  Proof using TRANSL.
+    inversion 1; subst; simplify; clear H; econstructor; eauto;
+      try (rewrite <- eval_op_eq; auto); rewrite <- eval_addressing_eq; auto.
+  Qed.
+
+  Lemma step_cf_instr_ge :
+    forall st cf t st' tst,
+      step_cf_instr ge st cf t st' ->
+      match_states st tst ->
+      exists tst', step_cf_instr tge tst cf t tst' /\ match_states st' tst'.
+  Proof.
+    inversion 1; subst; simplify; clear H;
+      match goal with H: context[match_states] |- _ => inv H end.
+    - inv H1. do 2 econstructor. rewrite <- sig_transf_function. econstructor; eauto.
+      eauto using find_function_translated. auto.
+      econstructor; auto. repeat (constructor; auto).
+    - inv H1. do 2 econstructor. econstructor. eauto using find_function_translated.
+      eauto using sig_transf_function. eauto.
+      econstructor; auto.
+    - inv H2.
+
+  Lemma step_list2_ge :
+    forall sp l i i',
+      step_list2 (step_instr ge) sp i l i' ->
+      step_list2 (step_instr tge) sp i l i'.
+  Proof using TRANSL.
+    induction l; simplify; inv H.
+    - constructor.
+    - econstructor. apply step_instr_ge; eauto.
+      eauto.
+  Qed.
+
+  Lemma step_list_ge :
+    forall sp l i i',
+      step_list (step_instr ge) sp i l i' ->
+      step_list (step_instr tge) sp i l i'.
+  Proof using TRANSL.
+    induction l; simplify; inv H.
+    - eauto using exec_RBcons, step_instr_ge.
+    - eauto using exec_RBterm, step_instr_ge.
+  Qed.
+
+  Lemma replace_section_spec :
+    forall sp bb rs ps m rs' ps' m' stk f t cf pc tps v n p p' bb' st st',
+      SeqBB.step ge sp (Iexec (mki rs ps m)) bb (Iterm (mki rs' ps' m') cf) ->
+      step_cf_instr ge (State stk f sp pc rs' ps' m') cf t st ->
+      match_ps v ps tps ->
+      max_pred_block v n bb <= v ->
+      replace_section elim_cond_s p bb = (p', bb') ->
+      exists tps' cf',
+        SeqBB.step tge sp (Iexec (mki rs tps m)) bb' (Iterm (mki rs' tps' m') cf')
+        /\ match_ps v ps' tps'
+        /\ step_cf_instr tge (State stk f sp pc rs' tps' m') cf' t st'
+        /\ match_states st st'.
+  Proof.
+    induction bb; simplify; inv H.
+    - destruct state'. repeat destruct_match. inv H3.
+      exploit elim_cond_s_spec; eauto. admit. simplify.
+      exploit IHbb; eauto; simplify. admit.
+      do 2 econstructor. simplify.
+      eapply append. econstructor; simplify.
+      eapply step_list2_ge; eauto. eauto.
+      eauto. eauto. eauto.
+    - repeat destruct_match; simplify. inv H3.
+      exploit elim_cond_s_spec2; eauto. admit. admit. simplify.
+      do 3 econstructor; simplify; eauto.
+      eapply append2; eauto using step_list2_ge.
+      Unshelve. exact 1.
+  Admitted.
 
   Lemma transf_step_correct:
     forall (s1 : state) (t : trace) (s1' : state),
