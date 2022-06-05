@@ -28,6 +28,8 @@ Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.Predicate.
 Require Import vericert.bourdoncle.Bourdoncle.
 
+#[local] Open Scope positive.
+
 Definition elim_cond_s (fresh: predicate) (i: instr) :=
   match i with
   | RBexit p (RBcond c args n1 n2) =>
@@ -61,7 +63,7 @@ Definition elim_cond_fold (state: predicate * PTree.t SeqBB.t) (n: node) (b: Seq
 
 Definition transf_function (f: function) : function :=
   mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
-             (snd (PTree.fold elim_cond_fold f.(fn_code) (1%positive, PTree.empty _)))
+             (snd (PTree.fold elim_cond_fold f.(fn_code) (max_pred_function f + 1, PTree.empty _)))
              f.(fn_entrypoint).
 
 Definition transf_fundef (fd: fundef) : fundef :=

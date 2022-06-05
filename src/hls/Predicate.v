@@ -508,6 +508,15 @@ Fixpoint max_predicate (p: pred_op) : positive :=
   | Por a b => Pos.max (max_predicate a) (max_predicate b)
   end.
 
+Fixpoint predicate_use (p: pred_op) : list positive :=
+  match p with
+  | Plit (b, p) => p :: nil
+  | Ptrue => nil
+  | Pfalse => nil
+  | Pand a b => predicate_use a ++ predicate_use b
+  | Por a b => predicate_use a ++ predicate_use b
+  end.
+
 Definition tseytin (p: pred_op) :
   {fm: formula | forall a,
       sat_predicate p a = true <-> satFormula fm a}.

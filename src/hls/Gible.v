@@ -613,4 +613,14 @@ type ~genv~ which was declared earlier.
                end
             ) b nil.
 
+    Definition pred_uses i :=
+      match i with
+      | RBop (Some p) _ _ _
+      | RBload (Some p) _ _ _ _
+      | RBstore (Some p) _ _ _ _
+      | RBexit (Some p) _ => predicate_use p
+      | RBsetpred (Some p) _ _ p' => p' :: predicate_use p
+      | _ => nil
+      end.
+
 End Gible.
