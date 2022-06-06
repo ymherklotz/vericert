@@ -42,57 +42,6 @@ Require Import vericert.hls.Predicate.
 
 #[local] Open Scope positive.
 
-Lemma forbidden_term_trans :
-  forall A B ge sp i c b i' c',
-    ~ @SeqBB.step A B ge sp (Iterm i c) b (Iterm i' c').
-Proof. induction b; unfold not; intros; inv H. Qed.
-
-Lemma step_instr_false :
-  forall A B ge sp i c a i0,
-    ~ @step_instr A B ge sp (Iterm i c) a (Iexec i0).
-Proof. destruct a; unfold not; intros; inv H. Qed.
-
-Lemma step_list2_false :
-  forall A B ge l0 sp i c i0',
-    ~ step_list2 (@step_instr A B ge) sp (Iterm i c) l0 (Iexec i0').
-Proof.
-  induction l0; unfold not; intros.
-  inv H. inv H. destruct i1. eapply step_instr_false in H4. auto.
-  eapply IHl0; eauto.
-Qed.
-
-Lemma append' :
-  forall A B l0 cf i0 i1 l1 sp ge i0',
-    step_list2 (@step_instr A B ge) sp (Iexec i0) l0 (Iexec i0') ->
-    @SeqBB.step A B ge sp (Iexec i0') l1 (Iterm i1 cf) ->
-    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
-Proof.
-  induction l0; crush. inv H. eauto. inv H. destruct i3.
-  econstructor; eauto. eapply IHl0; eauto.
-  eapply step_list2_false in H7. exfalso; auto.
-Qed.
-
-Lemma append :
-  forall A B cf i0 i1 l0 l1 sp ge,
-      (exists i0', step_list2 (@step_instr A B ge) sp (Iexec i0) l0 (Iexec i0') /\
-                    @SeqBB.step A B ge sp (Iexec i0') l1 (Iterm i1 cf)) ->
-    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
-Proof. intros. simplify. eapply append'; eauto. Qed.
-
-Lemma append2 :
-  forall A B l0 cf i0 i1 l1 sp ge,
-    @SeqBB.step A B ge sp (Iexec i0) l0 (Iterm i1 cf) ->
-    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
-Proof.
-  induction l0; crush.
-  inv H.
-  inv H. econstructor; eauto. eapply IHl0; eauto.
-  constructor; auto.
-Qed.
-
-Definition to_cf c :=
-  match c with | Iterm _ cf => Some cf | _ => None end.
-
 #[local] Notation "'mki'" := (mk_instr_state) (at level 1).
 
 Variant match_ps : positive -> predset -> predset -> Prop :=
@@ -145,18 +94,6 @@ Lemma eval_pred_eq_predset :
     ps' = ps.
 Proof. inversion 1; subst; crush. Qed.
 
-Lemma predicate_lt :
-  forall p p0,
-    In p0 (predicate_use p) -> p0 <= max_predicate p.
-Proof.
-  induction p; crush.
-  - destruct_match. inv H; try lia; contradiction.
-  - eapply Pos.max_le_iff.
-    eapply in_app_or in H. inv H; eauto.
-  - eapply Pos.max_le_iff.
-    eapply in_app_or in H. inv H; eauto.
-Qed.
-
 Lemma truthy_match_ps :
   forall v ps tps p,
     truthy ps p ->
@@ -179,11 +116,6 @@ Proof.
   inversion 1; crush; constructor; eapply match_ps_eval_pred; eauto.
   inv H2; auto.
 Qed.
-
-Ltac truthy_falsy :=
-  match goal with
-  | H1: truthy _ _, H2: instr_falsy _ _ |- _ => inv H1; inv H2; solve [crush]
-  end.
 
 Lemma elim_cond_s_spec :
   forall A B ge sp rs m rs' m' ps tps ps' p a p0 l v,
@@ -506,18 +438,6 @@ Section CORRECTNESS.
       repeat (econstructor; eauto).
   Qed.
 
-  Lemma step_cf_instr_det :
-    forall ge st cf t st1 st2,
-      step_cf_instr ge st cf t st1 ->
-      step_cf_instr ge st cf t st2 ->
-      st1 = st2.
-  Proof using TRANSL.
-    inversion 1; subst; simplify; clear H;
-      match goal with H: context[step_cf_instr] |- _ => inv H end; crush;
-    assert (vargs0 = vargs) by eauto using eval_builtin_args_determ; subst;
-    assert (vres = vres0 /\ m' = m'0) by eauto using external_call_deterministic; crush.
-  Qed.
-
   Lemma step_list2_ge :
     forall sp l i i',
       step_list2 (step_instr ge) sp i l i' ->
@@ -538,14 +458,6 @@ Section CORRECTNESS.
     - eauto using exec_RBcons, step_instr_ge.
     - eauto using exec_RBterm, step_instr_ge.
   Qed.
-
-  Lemma max_pred_function_use :
-    forall f pc bb i p,
-      f.(fn_code) ! pc = Some bb ->
-      In i bb ->
-      In p (pred_uses i) ->
-      p <= max_pred_function f.
-  Proof. Admitted.
 
   Lemma elim_cond_s_wf_predicate :
     forall a p p0 l v,

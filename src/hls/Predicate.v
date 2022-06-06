@@ -697,3 +697,15 @@ Definition combine_pred (p1 p2: option pred_op): option pred_op :=
   | Some p, _ | _, Some p => Some p
   | None, None => None
   end.
+
+Lemma predicate_lt :
+  forall p p0,
+    In p0 (predicate_use p) -> p0 <= max_predicate p.
+Proof.
+  induction p; crush.
+  - destruct_match. inv H; try lia; contradiction.
+  - eapply Pos.max_le_iff.
+    eapply in_app_or in H. inv H; eauto.
+  - eapply Pos.max_le_iff.
+    eapply in_app_or in H. inv H; eauto.
+Qed.

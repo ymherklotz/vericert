@@ -28,6 +28,7 @@ Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
+Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Gible.
 
 (*|
@@ -71,3 +72,61 @@ Fixpoint replace_section {A: Type} (f: A -> instr -> (A * SeqBB.t)) (s: A) (b: S
       (s'', i' ++ b'')
   | nil => (s, nil)
   end.
+
+Lemma forbidden_term_trans :
+  forall A B ge sp i c b i' c',
+    ~ @SeqBB.step A B ge sp (Iterm i c) b (Iterm i' c').
+Proof. induction b; unfold not; intros; inv H. Qed.
+
+Lemma step_instr_false :
+  forall A B ge sp i c a i0,
+    ~ @step_instr A B ge sp (Iterm i c) a (Iexec i0).
+Proof. destruct a; unfold not; intros; inv H. Qed.
+
+Lemma step_list2_false :
+  forall A B ge l0 sp i c i0',
+    ~ step_list2 (@step_instr A B ge) sp (Iterm i c) l0 (Iexec i0').
+Proof.
+  induction l0; unfold not; intros.
+  inv H. inv H. destruct i1. eapply step_instr_false in H4. auto.
+  eapply IHl0; eauto.
+Qed.
+
+Lemma append' :
+  forall A B l0 cf i0 i1 l1 sp ge i0',
+    step_list2 (@step_instr A B ge) sp (Iexec i0) l0 (Iexec i0') ->
+    @SeqBB.step A B ge sp (Iexec i0') l1 (Iterm i1 cf) ->
+    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
+Proof.
+  induction l0; crush. inv H. eauto. inv H. destruct i3.
+  econstructor; eauto. eapply IHl0; eauto.
+  eapply step_list2_false in H7. exfalso; auto.
+Qed.
+
+Lemma append :
+  forall A B cf i0 i1 l0 l1 sp ge,
+      (exists i0', step_list2 (@step_instr A B ge) sp (Iexec i0) l0 (Iexec i0') /\
+                    @SeqBB.step A B ge sp (Iexec i0') l1 (Iterm i1 cf)) ->
+    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
+Proof. intros. simplify. eapply append'; eauto. Qed.
+
+Lemma append2 :
+  forall A B l0 cf i0 i1 l1 sp ge,
+    @SeqBB.step A B ge sp (Iexec i0) l0 (Iterm i1 cf) ->
+    @SeqBB.step A B ge sp (Iexec i0) (l0 ++ l1) (Iterm i1 cf).
+Proof.
+  induction l0; crush.
+  inv H.
+  inv H. econstructor; eauto. eapply IHl0; eauto.
+  constructor; auto.
+Qed.
+
+#[local] Open Scope positive.
+
+Lemma max_pred_function_use :
+  forall f pc bb i p,
+    f.(fn_code) ! pc = Some bb ->
+    In i bb ->
+    In p (pred_uses i) ->
+    p <= max_pred_function f.
+Proof. Admitted.

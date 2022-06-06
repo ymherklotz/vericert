@@ -549,6 +549,18 @@ support if-conversion.
         step_cf_instr (State s f sp pc rs pr m)
                       (RBgoto pc') E0 (State s f sp pc' rs pr m).
 
+    Lemma step_cf_instr_det :
+      forall st cf t st1 st2,
+        step_cf_instr st cf t st1 ->
+        step_cf_instr st cf t st2 ->
+        st1 = st2.
+    Proof using.
+      inversion 1; subst; simplify; clear H;
+        match goal with H: context[step_cf_instr] |- _ => inv H end; crush;
+        assert (vargs0 = vargs) by eauto using eval_builtin_args_determ; subst;
+        assert (vres = vres0 /\ m' = m'0) by eauto using external_call_deterministic; crush.
+    Qed.
+
 (*|
 Top-level step
 --------------
