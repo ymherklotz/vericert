@@ -462,6 +462,7 @@ whole execution (in one big step) of the basic block.
       eassumption.
       eapply BB; [| eassumption ].
       econstructor. econstructor. eapply exec_RBterm. econstructor.
+      constructor.
       econstructor.
 
       econstructor; try eassumption. eauto.
@@ -552,6 +553,7 @@ whole execution (in one big step) of the basic block.
     eapply BB; [| eassumption ]. econstructor. econstructor.
     rewrite <- eval_op_eq; eassumption. constructor.
     eapply exec_RBterm. econstructor. econstructor.
+    constructor.
 
     econstructor; try eassumption. eauto.
     eapply star_refl.
@@ -615,6 +617,7 @@ whole execution (in one big step) of the basic block.
       eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
       rewrite <- eval_addressing_eq; eassumption. constructor.
       eapply exec_RBterm. econstructor. econstructor.
+      constructor.
 
       econstructor; try eassumption. eauto.
       eapply star_refl.
@@ -661,6 +664,7 @@ whole execution (in one big step) of the basic block.
       eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
       rewrite <- eval_addressing_eq; eassumption. constructor.
       eapply exec_RBterm. econstructor. econstructor.
+      constructor.
 
       econstructor; try eassumption. eauto.
       eapply star_refl.
@@ -723,7 +727,7 @@ whole execution (in one big step) of the basic block.
     eassumption.
 
     eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
-    constructor. econstructor; eauto. econstructor; eauto.
+    constructor. econstructor; eauto. constructor. econstructor; eauto.
     apply sig_transl_function; auto.
 
     econstructor; try eassumption.
@@ -755,7 +759,7 @@ whole execution (in one big step) of the basic block.
     eassumption.
 
     eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
-    constructor. econstructor; eauto. econstructor; eauto.
+    constructor. econstructor; eauto. constructor. econstructor; eauto.
     apply sig_transl_function; auto.
 
     assert (fn_stacksize tf = RTL.fn_stacksize f).
@@ -788,7 +792,7 @@ whole execution (in one big step) of the basic block.
     eassumption.
 
     eapply BB; [| eassumption ]. econstructor. econstructor; eauto.
-    constructor. econstructor; eauto. econstructor; eauto.
+    constructor. econstructor; eauto. constructor. econstructor; eauto.
     eauto using eval_builtin_args_preserved, symbols_preserved.
     eauto using external_call_symbols_preserved, senv_preserved.
 
@@ -904,7 +908,7 @@ whole execution (in one big step) of the basic block.
       econstructor; eauto.
 
       eapply BB. econstructor. econstructor.
-      eapply exec_RBterm. econstructor; eauto. assumption.
+      eapply exec_RBterm. econstructor; eauto. constructor. assumption.
       econstructor; eauto.
       constructor; eauto using star_refl.
       unfold sem_extrap; intros. setoid_rewrite H4 in H6. inv H6. auto.
@@ -912,7 +916,7 @@ whole execution (in one big step) of the basic block.
     { do 3 econstructor. apply plus_one.
       econstructor; eauto.
       eapply BB. econstructor. econstructor.
-      eapply exec_RBterm. econstructor; eauto. assumption.
+      eapply exec_RBterm. econstructor; eauto. constructor. assumption.
       econstructor; eauto.
       constructor; eauto using star_refl.
       unfold sem_extrap; intros. setoid_rewrite H0 in H6. inv H6. auto.
@@ -940,7 +944,7 @@ whole execution (in one big step) of the basic block.
     do 3 econstructor. apply plus_one.
     econstructor; eauto. eapply BB.
     econstructor. econstructor. eapply exec_RBterm.
-    econstructor. assumption.
+    econstructor. constructor. assumption.
     econstructor; eauto.
 
     constructor; eauto using star_refl.
@@ -969,7 +973,7 @@ whole execution (in one big step) of the basic block.
     do 3 econstructor. apply plus_one. econstructor; eauto.
     eapply BB.
     econstructor. econstructor. eapply exec_RBterm.
-    econstructor. eauto.
+    econstructor. constructor. eauto.
     econstructor; eauto.
     rewrite H4. eauto.
     constructor; eauto.

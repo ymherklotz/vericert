@@ -241,46 +241,77 @@ Step Instruction
 =============================
 |*)
 
+Definition truthyb (ps: predset) (p: option pred_op) :=
+  match p with
+  | None => true
+  | Some p' => eval_predf ps p'
+  end.
+
+Variant truthy (ps: predset): option pred_op -> Prop :=
+  | truthy_None: truthy ps None
+  | truthy_Some: forall p, eval_predf ps p = true -> truthy ps (Some p).
+
+Variant instr_falsy (ps: predset): instr -> Prop :=
+  | RBop_falsy :
+    forall p op args res,
+      eval_predf ps p = false ->
+      instr_falsy ps (RBop (Some p) op args res)
+  | RBload_falsy:
+    forall p chunk addr args dst,
+      eval_predf ps p = false ->
+      instr_falsy ps (RBload (Some p) chunk addr args dst)
+  | RBstore_falsy:
+    forall p chunk addr args src,
+      eval_predf ps p = false ->
+      instr_falsy ps (RBstore (Some p) chunk addr args src)
+  | RBsetpred_falsy:
+    forall p c args pred,
+      eval_predf ps p = false ->
+      instr_falsy ps (RBsetpred (Some p) c args pred)
+  | RBexit_falsy:
+    forall p cf,
+      eval_predf ps p = false ->
+      instr_falsy ps (RBexit (Some p) cf)
+  .
+
 Variant step_instr: val -> istate -> instr -> istate -> Prop :=
   | exec_RBnop:
     forall sp ist,
       step_instr sp (Iexec ist) RBnop (Iexec ist)
   | exec_RBop:
-    forall op v res args rs m sp p ist pr,
+    forall op v res args rs m sp p pr,
       eval_operation ge sp op rs##args m = Some v ->
-      eval_pred p (mk_instr_state rs pr m)
-                (mk_instr_state (rs#res <- v) pr m) ist ->
-      step_instr sp (Iexec (mk_instr_state rs pr m)) (RBop p op args res) (Iexec ist)
+      truthy pr p ->
+      step_instr sp (Iexec (mk_instr_state rs pr m)) (RBop p op args res)
+                 (Iexec (mk_instr_state (rs#res <- v) pr m))
   | exec_RBload:
-    forall addr rs args a chunk m v dst sp p pr ist,
+    forall addr rs args a chunk m v dst sp p pr,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.loadv chunk m a = Some v ->
-      eval_pred p (mk_instr_state rs pr m)
-                (mk_instr_state (rs#dst <- v) pr m) ist ->
+      truthy pr p ->
       step_instr sp (Iexec (mk_instr_state rs pr m))
-                 (RBload p chunk addr args dst) (Iexec ist)
+                 (RBload p chunk addr args dst) (Iexec (mk_instr_state (rs#dst <- v) pr m))
   | exec_RBstore:
-    forall addr rs args a chunk m src m' sp p pr ist,
+    forall addr rs args a chunk m src m' sp p pr,
       eval_addressing ge sp addr rs##args = Some a ->
       Mem.storev chunk m a rs#src = Some m' ->
-      eval_pred p (mk_instr_state rs pr m)
-                (mk_instr_state rs pr m') ist ->
+      truthy pr p ->
       step_instr sp (Iexec (mk_instr_state rs pr m))
-                 (RBstore p chunk addr args src) (Iexec ist)
+                 (RBstore p chunk addr args src) (Iexec (mk_instr_state rs pr m'))
   | exec_RBsetpred:
-    forall sp rs pr m p c b args p' ist,
+    forall sp rs pr m p c b args p',
       Op.eval_condition c rs##args m = Some b ->
-      eval_pred p' (mk_instr_state rs pr m)
-                (mk_instr_state rs (pr#p <- b) m) ist ->
+      truthy pr p' ->
       step_instr sp (Iexec (mk_instr_state rs pr m))
-                 (RBsetpred p' c args p) (Iexec ist)
-  | exec_RBexit_Some:
-    forall p c sp b i,
-      eval_predf (is_ps i) p = b ->
-      step_instr sp (Iexec i) (RBexit (Some p) c) (if b then Iterm i c else Iexec i)
-  | exec_RBexit_None:
-    forall c sp i,
-      step_instr sp (Iexec i) (RBexit None c) (Iterm i c)
+                 (RBsetpred p' c args p) (Iexec (mk_instr_state rs (pr#p <- b) m))
+  | exec_RBexit:
+    forall p c sp i,
+      truthy (is_ps i) p ->
+      step_instr sp (Iexec i) (RBexit p c) (Iterm i c)
+  | exec_RB_falsy :
+    forall sp st i,
+      instr_falsy (is_ps st) i ->
+      step_instr sp (Iexec st) i (Iexec st)
 .
 
 End RELABSTR.

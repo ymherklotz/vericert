@@ -101,10 +101,31 @@ Variant match_ps : positive -> predset -> predset -> Prop :=
     (forall x, x <= m -> ps !! x = ps' !! x) ->
     match_ps m ps ps'.
 
+Lemma match_ps_eval_pred :
+  forall p v ps tps b,
+    eval_predf ps p = b ->
+    match_ps v ps tps ->
+    Forall (fun p => p <= v) (predicate_use p) ->
+    eval_predf tps p = b.
+Proof.
+  induction p; crush.
+  - repeat destruct_match. inv H1.
+    unfold eval_predf; simpl.
+    inv H0. rewrite H. eauto. rewrite Pos2Nat.id; auto.
+  - apply Forall_app in H1; inv H1.
+    rewrite ! eval_predf_Pand.
+    erewrite IHp1; eauto.
+    erewrite IHp2; eauto.
+  - apply Forall_app in H1; inv H1.
+    rewrite ! eval_predf_Por.
+    erewrite IHp1; eauto.
+    erewrite IHp2; eauto.
+Qed.
+
 Lemma eval_pred_under_match:
   forall rs m rs' m' ps tps tps' ps' v p1 rs'' ps'' m'',
     eval_pred (Some p1) (mki rs ps m) (mki rs' ps' m') (mki rs'' ps'' m'') ->
-    (forall p, In p (predicate_use p1) -> p <= v) ->
+    Forall (fun p => p <= v) (predicate_use p1) ->
     match_ps v ps tps ->
     match_ps v ps' tps' ->
     exists tps'',
@@ -112,7 +133,11 @@ Lemma eval_pred_under_match:
       /\ match_ps v ps'' tps''.
 Proof.
   inversion 1; subst; simplify.
-    Admitted.
+  econstructor. econstructor. econstructor. simpl.
+  eapply match_ps_eval_pred; eauto. eauto.
+  econstructor. econstructor. econstructor. simpl.
+  eapply match_ps_eval_pred; eauto. eauto.
+Qed.
 
 Lemma eval_pred_eq_predset :
   forall p rs ps m rs' m' ps' rs'' m'',
@@ -132,38 +157,82 @@ Proof.
     eapply in_app_or in H. inv H; eauto.
 Qed.
 
+Lemma truthy_match_ps :
+  forall v ps tps p,
+    truthy ps p ->
+    (forall p', p = Some p' -> Forall (fun x => x <= v) (predicate_use p')) ->
+    match_ps v ps tps ->
+    truthy tps p.
+Proof.
+  inversion 1; crush.
+  constructor.
+  constructor. symmetry in H1. eapply match_ps_eval_pred; eauto.
+Qed.
+
+Lemma instr_falsy_match_ps :
+  forall v ps tps i,
+    instr_falsy ps i ->
+    Forall (fun x => x <= v) (pred_uses i) ->
+    match_ps v ps tps ->
+    instr_falsy tps i.
+Proof.
+  inversion 1; crush; constructor; eapply match_ps_eval_pred; eauto.
+  inv H2; auto.
+Qed.
+
+Ltac truthy_falsy :=
+  match goal with
+  | H1: truthy _ _, H2: instr_falsy _ _ |- _ => inv H1; inv H2; solve [crush]
+  end.
+
 Lemma elim_cond_s_spec :
   forall A B ge sp rs m rs' m' ps tps ps' p a p0 l v,
     step_instr ge sp (Iexec (mki rs ps m)) a (Iexec (mki rs' ps' m')) ->
-    (forall p, In p (pred_uses a) -> p <= v) ->
+    Forall (fun p => p <= v) (pred_uses a) ->
     match_ps v ps tps ->
     elim_cond_s p a = (p0, l) ->
     exists tps',
       step_list2 (@step_instr A B ge) sp (Iexec (mki rs tps m)) l (Iexec (mki rs' tps' m'))
       /\ match_ps v ps' tps'.
 Proof.
-  inversion 1; subst; simplify; inv H.
+  inversion 1; subst; simplify.
   - inv H2. econstructor. split; eauto; econstructor; econstructor.
-  - inv H2. destruct p1.
-    + exploit eval_pred_under_match; eauto; try lia; simplify.
-      econstructor. split. econstructor. econstructor; eauto. eauto. econstructor.
-      eauto.
-    + inv H15. econstructor. split. econstructor. econstructor. eauto. constructor; eauto.
-      constructor. auto.
-  - inv H2. destruct p1.
-    + exploit eval_pred_under_match; eauto; try lia; simplify.
-      econstructor. split. econstructor. econstructor; eauto.
-      constructor. eauto.
-    + inv H18. econstructor. split. econstructor. econstructor; eauto. constructor; eauto.
-      constructor. auto.
-  - inv H2. destruct p1.
-    + exploit eval_pred_under_match; eauto; try lia; simplify.
-      econstructor. split. econstructor. econstructor; eauto.
-      constructor. auto.
-    + inv H18. econstructor. split. econstructor. econstructor; eauto. constructor; eauto.
-      constructor. auto.
-  - inv H2. destruct p'.
-    exploit eval_pred_under_match; eauto. Admitted.
+  - inv H2. do 2 econstructor; eauto. econstructor; eauto.
+    econstructor; eauto. eapply truthy_match_ps; eauto.
+    intros. destruct p1; try discriminate; crush.
+    constructor.
+  - inv H2. do 2 econstructor; eauto. econstructor; eauto.
+    econstructor; eauto. eapply truthy_match_ps; eauto.
+    intros. destruct p1; try discriminate; crush.
+    constructor.
+  - inv H2. do 2 econstructor; eauto. econstructor; eauto.
+    econstructor; eauto. eapply truthy_match_ps; eauto.
+    intros. destruct p1; try discriminate; crush.
+    constructor.
+  - inv H2. do 2 econstructor; eauto. econstructor; eauto.
+    econstructor; eauto. eapply truthy_match_ps; eauto.
+    intros. destruct p'; try discriminate; crush. inv H0; auto.
+    constructor.
+    constructor; intros.
+    destruct (peq x p1); subst.
+    { rewrite ! PMap.gss; auto. }
+    { inv H1. rewrite ! PMap.gso; auto. }
+  - do 2 econstructor; eauto.
+    unfold elim_cond_s in H2.
+    destruct a; inv H2;
+      try (econstructor;
+           [eapply exec_RB_falsy; simplify; eapply instr_falsy_match_ps; eauto|constructor]).
+    destruct c; inv H5;
+      try (econstructor;
+           [eapply exec_RB_falsy; simplify; eapply instr_falsy_match_ps; eauto|constructor]).
+    inv H4.
+    econstructor. eapply exec_RB_falsy. econstructor. eapply match_ps_eval_pred; eauto.
+    econstructor. eapply exec_RB_falsy. econstructor. simplify.
+    rewrite eval_predf_Pand. apply andb_false_intro2. eapply match_ps_eval_pred; eauto.
+    econstructor. eapply exec_RB_falsy. econstructor. simplify.
+    rewrite eval_predf_Pand. apply andb_false_intro2. eapply match_ps_eval_pred; eauto.
+    constructor.
+Qed.
 
 Definition wf_predicate (v: predicate) (p: predicate) := v < p.
 
@@ -172,7 +241,19 @@ Lemma eval_predf_match_ps :
     match_ps v p p' ->
     Forall (fun x => x <= v) (predicate_use p0) ->
     eval_predf p p0 = eval_predf p' p0.
-  Admitted.
+Proof.
+  induction p0; crush.
+  - unfold eval_predf. simplify. destruct p0.
+    rewrite Pos2Nat.id. inv H. inv H0. rewrite H1; auto.
+  - eapply Forall_app in H0. inv H0.
+    rewrite ! eval_predf_Pand.
+    erewrite IHp0_1; eauto.
+    erewrite IHp0_2; eauto.
+  - eapply Forall_app in H0. inv H0.
+    rewrite ! eval_predf_Por.
+    erewrite IHp0_1; eauto.
+    erewrite IHp0_2; eauto.
+Qed.
 
 Lemma step_cf_instr_ps_const :
   forall ge stk f sp pc rs' ps' m' cf t pc' rs'' ps'' m'',
@@ -217,9 +298,7 @@ Lemma step_instr_inv_exit :
     @step_instr A B ge sp (Iexec i) (RBexit (Some p) cf) (Iterm i cf).
 Proof.
   intros.
-  replace (Iterm i cf) with (if (eval_predf (is_ps i) p) then Iterm i cf else Iexec i).
-  constructor; auto.
-  rewrite H; auto.
+  econstructor. constructor; eauto.
 Qed.
 
 Lemma step_instr_inv_exit2 :
@@ -228,29 +307,62 @@ Lemma step_instr_inv_exit2 :
     @step_instr A B ge sp (Iexec i) (RBexit (Some p) cf) (Iexec i).
 Proof.
   intros.
-  replace (Iexec i) with (if (eval_predf (is_ps i) p) then Iterm i cf else Iexec i) at 2.
-  constructor; auto.
-  rewrite H; auto.
+  eapply exec_RB_falsy; constructor; auto.
+Qed.
+
+Lemma eval_predf_set_gt:
+  forall p1 v ps b p tps,
+    eval_predf ps p1 = true ->
+    Forall (fun x : positive => x <= v) (predicate_use p1) ->
+    wf_predicate v p -> match_ps v ps tps -> eval_predf tps # p <- b p1 = true.
+Proof.
+  induction p1; crush.
+  - unfold eval_predf. simplify. destruct p. rewrite Pos2Nat.id.
+    assert (p <> p0).
+    { inv H0. unfold wf_predicate in H1. lia. }
+    rewrite ! PMap.gso by auto. inv H2.
+    inv H0. rewrite <- H4 by auto. unfold eval_predf in H.
+    simplify. rewrite Pos2Nat.id in H. auto.
+  - rewrite eval_predf_Pand. apply Forall_app in H0.
+    rewrite eval_predf_Pand in H. apply andb_true_iff in H.
+    apply andb_true_iff; simplify.
+    eauto.
+    eauto.
+  - rewrite eval_predf_Por. apply Forall_app in H0.
+    rewrite eval_predf_Por in H. apply orb_true_iff in H.
+    apply orb_true_iff; simplify. inv H; eauto.
 Qed.
 
 Lemma eval_predf_in_ps :
-  forall v ps ps' p1 b p tps,
+  forall v ps p1 b p tps,
     eval_predf ps p1 = true ->
     Forall (fun x => x <= v) (predicate_use p1) ->
     wf_predicate v p ->
-    match_ps v ps ps' ->
+    match_ps v ps tps ->
     eval_predf tps # p <- b (Pand (Plit (b, p)) p1) = true.
-Admitted.
+Proof.
+  intros.
+  rewrite eval_predf_Pand. apply andb_true_iff. split.
+  unfold eval_predf. simplify. rewrite Pos2Nat.id.
+  rewrite PMap.gss. destruct b; auto.
+  eapply eval_predf_set_gt; eauto.
+Qed.
 
 Lemma eval_predf_in_ps2 :
-  forall v ps ps' p1 b b' p tps,
+  forall v ps p1 b b' p tps,
     eval_predf ps p1 = true ->
     Forall (fun x => x <= v) (predicate_use p1) ->
     wf_predicate v p ->
-    match_ps v ps ps' ->
+    match_ps v ps tps ->
     b <> b' ->
     eval_predf tps # p <- b (Pand (Plit (b', p)) p1) = false.
-Admitted.
+Proof.
+  intros.
+  rewrite eval_predf_Pand. apply andb_false_iff.
+  unfold eval_predf. simplify. left.
+  rewrite Pos2Nat.id. rewrite PMap.gss.
+  now destruct b, b'.
+Qed.
 
 Lemma match_ps_set_gt :
   forall v ps tps p b,
@@ -474,54 +586,37 @@ Section CORRECTNESS.
         /\ match_states st st'.
   Proof using TRANSL.
     inversion 1; subst; simplify.
-    - destruct (eval_predf ps p1) eqn:?; [|discriminate]. inv H2.
-      destruct cf; inv H5;
-        try (exploit step_cf_instr_ge; eauto; econstructor; eauto; simplify;
-             do 3 econstructor; simplify;
-             [ constructor; apply step_instr_inv_exit; erewrite <- eval_predf_match_ps | | | ]);
-        eauto using step_cf_instr_ps_idem.
-      inv H0; destruct b.
-      + do 3 econstructor; simplify.
-        econstructor. econstructor; eauto. eapply eval_pred_true.
-        erewrite <- eval_predf_match_ps; eauto. simpl.
-        constructor. apply step_instr_inv_exit. simpl.
-        eapply eval_predf_in_ps; eauto.
-        apply match_ps_set_gt; auto.
-        constructor; auto.
-        constructor; auto.
-        apply match_ps_set_gt; auto.
-      + do 3 econstructor; simplify.
-        econstructor. econstructor; eauto. eapply eval_pred_true.
-        erewrite <- eval_predf_match_ps; eauto.
-        econstructor. apply step_instr_inv_exit2. simpl.
-        eapply eval_predf_in_ps2; eauto.
-        constructor. apply step_instr_inv_exit. simpl.
-        eapply eval_predf_in_ps; eauto.
-        apply match_ps_set_gt; auto.
-        constructor; auto.
-        constructor; auto.
-        apply match_ps_set_gt; auto.
-    - destruct cf; inv H4; exploit step_cf_instr_ge; eauto; try solve [econstructor; eauto]; simplify;
-        try (do 3 econstructor; simplify; eauto; eapply exec_RBterm; econstructor; eauto).
-      inv H0. destruct b.
-      + do 3 econstructor; simplify.
-        econstructor. econstructor; eauto. constructor.
-        constructor. apply step_instr_inv_exit. simplify.
-        unfold eval_predf. simplify. rewrite Pos2Nat.id. apply PMap.gss.
-        apply match_ps_set_gt; auto.
-        constructor; auto.
-        constructor; auto.
-        apply match_ps_set_gt; auto.
-      + do 3 econstructor; simplify.
-        econstructor. econstructor; eauto. constructor.
-        econstructor. apply step_instr_inv_exit2. simpl.
-        unfold eval_predf. simplify. rewrite Pos2Nat.id. apply PMap.gss.
-        constructor. apply step_instr_inv_exit. simpl.
-        unfold eval_predf. simplify. rewrite Pos2Nat.id. rewrite PMap.gss. auto.
-        apply match_ps_set_gt; auto.
-        constructor; auto.
-        constructor; auto.
-        apply match_ps_set_gt; auto.
+    destruct cf;
+      try (inv H5; exploit step_cf_instr_ge; eauto; [econstructor|]; eauto; simplify;
+           do 3 econstructor; simplify; eauto;
+           constructor; constructor; eapply truthy_match_ps; eauto;
+           intros; match goal with H: _ = Some _ |- _ => inv H end; auto).
+    inv H0; destruct b.
+    + inv H5; do 3 econstructor; simplify.
+      econstructor. econstructor; eauto.
+      eapply truthy_match_ps; eauto; intros; match goal with H: _ = Some _ |- _ => inv H end; auto.
+      constructor.
+      econstructor. simplify. destruct p1.
+      constructor. inv H4. eapply eval_predf_in_ps; eauto.
+      constructor. unfold eval_predf; simplify. rewrite Pos2Nat.id.
+      apply PMap.gss.
+      apply match_ps_set_gt; auto.
+      constructor; auto.
+      constructor; auto.
+      apply match_ps_set_gt; auto.
+    + inv H5; do 3 econstructor; simplify.
+      econstructor. econstructor; eauto.
+      eapply truthy_match_ps; eauto; intros; match goal with H: _ = Some _ |- _ => inv H end; auto.
+      econstructor. eapply exec_RB_falsy. simplify. destruct p1.
+      constructor. inv H4. eapply eval_predf_in_ps2; eauto.
+      constructor. unfold eval_predf; simplify. rewrite Pos2Nat.id. apply PMap.gss.
+      constructor. econstructor. inv H4. constructor. unfold eval_predf; simplify.
+      rewrite Pos2Nat.id. rewrite PMap.gss. auto.
+      constructor. eapply eval_predf_in_ps; eauto.
+      apply match_ps_set_gt; auto.
+      constructor; auto.
+      constructor; auto.
+      apply match_ps_set_gt; auto.
   Qed.
 
   Lemma replace_section_spec :
@@ -541,7 +636,7 @@ Section CORRECTNESS.
   Proof using TRANSL.
     induction bb; simplify; inv H.
     - destruct state'. repeat destruct_match. inv H4.
-      exploit elim_cond_s_spec; eauto. simplify.
+      exploit elim_cond_s_spec; eauto. apply Forall_forall. intros; eauto. simplify.
       exploit IHbb; eauto; simplify.
       do 3 econstructor. simplify.
       eapply append. econstructor; simplify.
@@ -566,24 +661,6 @@ Section CORRECTNESS.
     forall pc bb n,
       c ! pc = Some bb ->
       max_pred_block 1 n bb <= m.
-
-  (* Lemma max_pred_block_lt: *)
-  (*   forall v v0 n b k, *)
-  (*     v0 <= b -> *)
-  (*     max_pred_block v0 n v <= max_pred_block b k v. *)
-  (*   Proof. Admitted. *)
-
-  (* Lemma max_block_pred : *)
-  (*   forall f, lt_pred f.(fn_code) (max_pred_function f). *)
-  (* Proof. *)
-  (*   unfold max_pred_function; intros. *)
-  (*   eapply PTree_Properties.fold_ind; unfold lt_pred; intros. *)
-  (*   destruct (max_pred_block 1 n bb); crush. *)
-  (*   destruct (peq pc k); subst; simplify. *)
-  (*   - assert (v0 <= a \/ a < v0) by admit. *)
-  (*     inv H3. left. eapply max_pred_block_lt; eauto. *)
-  (*     right. *)
-  (*     Abort. *)
 
   Lemma elim_cond_s_lt :
     forall p a p0 l x,
