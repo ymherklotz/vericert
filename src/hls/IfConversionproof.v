@@ -49,24 +49,10 @@ Variant match_stackframe : stackframe -> stackframe -> Prop :=
            (TF: transf_function f = tf),
       match_stackframe (Stackframe res f sp pc rs p) (Stackframe res tf sp pc rs p).
 
-Variant match_states : state -> state -> Prop :=
-  | match_state :
-    forall stk stk' f tf sp pc rs p m
-           (TF: transf_function f = tf)
-           (STK: Forall2 match_stackframe stk stk'),
-      match_states (State stk f sp pc rs p m) (State stk' tf sp pc rs p m)
-  | match_callstate :
-    forall cs cs' f tf args m
-           (TF: transf_fundef f = tf)
-           (STK: Forall2 match_stackframe cs cs'),
-      match_states (Callstate cs f args m) (Callstate cs' tf args m)
-  | match_returnstate :
-    forall cs cs' v m
-           (STK: Forall2 match_stackframe cs cs'),
-      match_states (Returnstate cs v m) (Returnstate cs' v m).
+(* c ! pc = fc ! pc *)
+(* \/ (c ! pc = a ++ fc ! pc' ++ b /\ fc ! pc = a ++ if p goto pc' ++ b) *)
 
-Definition match_prog (p: program) (tp: program) :=
-  Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
+Definition bool_order (b: bool): nat := if b then 1 else 0.
 
 Section CORRECTNESS.
 
@@ -75,9 +61,36 @@ Section CORRECTNESS.
   Let ge : genv := Globalenvs.Genv.globalenv prog.
   Let tge : genv := Globalenvs.Genv.globalenv tprog.
 
+  Definition sem_extrap f pc sp in_s in_s' block :=
+    forall out_s block2,
+      SeqBB.step tge sp in_s block out_s ->
+      f.(fn_code) ! pc = Some block2 ->
+      SeqBB.step tge sp in_s' block2 out_s.
+
+  Variant match_states : option SeqBB.t -> state -> state -> Prop :=
+    | match_state_true :
+      forall stk stk' f tf sp pc rs p m b pc0 rs0 p0 m0
+             (TF: transf_function f = tf)
+             (STK: Forall2 match_stackframe stk stk')
+             (EXT: sem_extrap tf pc0 sp (Iexec (mki rs p m)) (Iexec (mki rs0 p0 m0)) b)
+             (STAR: star step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m)),
+        match_states (Some b) (State stk f sp pc rs p m) (State stk' tf sp pc0 rs0 p0 m0)
+    | match_callstate :
+      forall cs cs' f tf args m
+             (TF: transf_fundef f = tf)
+             (STK: Forall2 match_stackframe cs cs'),
+        match_states None (Callstate cs f args m) (Callstate cs' tf args m)
+    | match_returnstate :
+      forall cs cs' v m
+             (STK: Forall2 match_stackframe cs cs'),
+        match_states None (Returnstate cs v m) (Returnstate cs' v m).
+
+  Definition match_prog (p: program) (tp: program) :=
+    Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
+
   Context (TRANSL : match_prog prog tprog).
 
-    Lemma symbols_preserved:
+  Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
   Proof using TRANSL. intros. eapply (Genv.find_symbol_match TRANSL). Qed.
 

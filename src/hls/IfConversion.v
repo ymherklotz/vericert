@@ -59,13 +59,13 @@ Definition map_if_convert (p: option pred_op) (i: instr) :=
   | _ => i
   end.
 
-Definition if_convert_block (next: node) (b_next: SeqBB.t) (u: unit) (i: instr) :=
+Definition if_convert_block (next: node) (b_next: SeqBB.t) (_: unit) (i: instr) :=
   match i with
   | RBexit p (RBgoto next') =>
       if (next =? next')%positive
-      then (u, map (map_if_convert p) b_next)
-      else (u, i::nil)
-  | _ => (u, i::nil)
+      then (tt, map (map_if_convert p) b_next)
+      else (tt, i::nil)
+  | _ => (tt, i::nil)
   end.
 
 Definition predicated_store i :=
@@ -89,7 +89,7 @@ Definition if_convert (c: code) (main next: node) :=
   | _, _ => c
   end.
 
-Definition get_unconditional_exit (bb: SeqBB.t) := List.nth_error bb (length bb - 1).
+Definition get_unconditional_exit (bb: SeqBB.t) := nth_error bb (length bb - 1).
 
 (* Definition if_convert_block (c: code) (p: predicate) (bb: SeqBB.t) : SeqBB.t := *)
 (*   match get_unconditional_exit bb with *)
@@ -134,7 +134,7 @@ Definition find_backedge (nb: node * SeqBB.t) :=
   filter (fun x => Pos.ltb n x) succs.
 
 Definition find_all_backedges (c: code) : list node :=
-  List.concat (List.map find_backedge (PTree.elements c)).
+  concat (map find_backedge (PTree.elements c)).
 
 Definition has_backedge (entry: node) (be: list node) :=
   any (fun x => Pos.eqb entry x) be.
@@ -166,11 +166,11 @@ Definition is_flat (c: code) (succ: node) :=
 
 Definition find_blocks_with_cond ep (b: list node) (c: code) : list (node * SeqBB.t) :=
   let backedges := find_all_backedges c in
-  List.filter (fun x => is_cond_cfi (snd x) &&
-                        (negb (is_loop b (fst x)) || Pos.eqb (fst x) ep) &&
-                        all (fun x' => is_flat c x')
-                            (all_successors (snd x))
-              ) (PTree.elements c).
+  filter (fun x => is_cond_cfi (snd x) &&
+                     (negb (is_loop b (fst x)) || Pos.eqb (fst x) ep) &&
+                     all (fun x' => is_flat c x')
+                         (all_successors (snd x))
+         ) (PTree.elements c).
 
 Module TupOrder <: TotalLeBool.
   Definition t : Type := positive * positive.
@@ -200,12 +200,16 @@ Definition ifconv_list (headers: list node) (c: code) :=
 (*   let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in *)
 (*   (S (fst p), PTree.set (fst nb) nbb (snd p)). *)
 
+Definition transf_function' (f: function) (n: node * node) : function :=
+  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
+             (if_convert f.(fn_code) (fst n) (snd n))
+             f.(fn_entrypoint).
+
 Definition transf_function (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
   let iflist := ifconv_list b' f.(fn_code) in
-  let c := fold_left (fun c n => if_convert c (fst n) (snd n)) iflist f.(fn_code) in
-  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize) c f.(fn_entrypoint).
+  fold_left transf_function' iflist f.
 
 Definition transf_fundef (fd: fundef) : fundef :=
   transf_fundef transf_function fd.
