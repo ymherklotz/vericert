@@ -30,9 +30,9 @@ Require Import compcert.verilog.Op.
 Require Import vericert.hls.Gible.
 
 (*|
-========
-RTLBlock
-========
+=========
+Gible Seq
+=========
 |*)
 
 Module ParBB <: BlockType.
