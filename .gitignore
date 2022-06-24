@@ -79,7 +79,6 @@ obj_dir/
 /*.v
 
 .direnv/
-.envrc
 
 creduce_bug_*/
 
