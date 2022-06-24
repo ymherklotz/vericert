@@ -9,7 +9,7 @@ SOURCEDIR         = .
 BUILDDIR          = _build
 SOURCE_DATE_EPOCH = $(shell git log -1 --format=%ct)
 
-VS_DOCS := Compiler.v hls/RTLBlockInstr.v hls/RTLBlockgen.v hls/RTLBlockgenproof.v
+VS_DOCS := Compiler.v hls/Gible.v hls/GibleSeq.v hls/GiblePar.v hls/GibleSeqgen.v hls/GibleSeqgenproof.v
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -20,5 +20,6 @@ help:
 # Catch-all target: route all unknown targets to Sphinx using the new
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
 %: Makefile
+	mkdir -p src/hls
 	$(foreach d,$(VS_DOCS),cp ../src/$(d) src/$(d);)
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)

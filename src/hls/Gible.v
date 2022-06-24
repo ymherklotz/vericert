@@ -16,9 +16,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-=============
-RTLBlockInstr
-=============
+=====
+Gible
+=====
 
 These instructions are used for ``RTLBlock`` and ``RTLPar``, so that they have
 consistent instructions, which greatly simplifies the proofs, as they will by
