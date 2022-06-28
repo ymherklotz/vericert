@@ -58,6 +58,27 @@ Variant match_stackframe : stackframe -> stackframe -> Prop :=
 
 Definition bool_order (b: bool): nat := if b then 1 else 0.
 
+Inductive if_conv_block_spec (c: code): SeqBB.t -> SeqBB.t -> Prop :=
+| if_conv_block_intro :
+  if_conv_block_spec c nil nil
+| if_conv_block_eq :
+  forall a b tb,
+    if_conv_block_spec c b tb ->
+    if_conv_block_spec c (a::b) (a::tb)
+| if_conv_block_conv :
+  forall b tb ta p pc' b',
+    if_conv_block_spec c b tb ->
+    c ! pc' = Some b' ->
+    if_conv_block_spec c b' ta ->
+    if_conv_block_spec c (RBexit p (RBgoto pc')::b) (map (map_if_convert p) ta++tb).
+
+Lemma transf_spec_correct :
+  forall f pc b,
+    f.(fn_code) ! pc = Some b ->
+    exists b', (transf_function f).(fn_code) ! pc = Some b'
+          /\ if_conv_block_spec f.(fn_code) b b'.
+Proof. Admitted.
+
 Section CORRECTNESS.
 
   Context (prog tprog : program).
@@ -77,7 +98,9 @@ Section CORRECTNESS.
              (TF: transf_function f = tf)
              (STK: Forall2 match_stackframe stk stk')
              (EXT: sem_extrap tf pc0 sp (Iexec (mki rs p m)) (Iexec (mki rs0 p0 m0)) b)
-             (STAR: star step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m)),
+             (STAR: star step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m))
+             (IS_B: exists b, f.(fn_code)!pc0 = Some b)
+             (SPEC: forall b_o, f.(fn_code) ! pc = Some b_o -> if_conv_block_spec f.(fn_code) b_o b),
         match_states (Some b) (State stk f sp pc rs p m) (State stk' tf sp pc0 rs0 p0 m0)
     | match_callstate :
       forall cs cs' f tf args m
@@ -147,7 +170,7 @@ Section CORRECTNESS.
 (*)  Lemma transf_initial_states :
     forall s1,
       initial_state prog s1 ->
-      exists s2, initial_state tprog s2 /\ match_states s1 s2.
+      exists s2, initial_state tprog s2 /\ match_states None s1 s2.
   Proof using TRANSL.
     induction 1.
     exploit function_ptr_translated; eauto; intros.
@@ -159,8 +182,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma transf_final_states :
-    forall s1 s2 r,
-      match_states s1 s2 -> final_state s1 r -> final_state s2 r.
+    forall s1 s2 r b,
+      match_states b s1 s2 -> final_state s1 r -> final_state s2 r.
   Proof using.
     inversion 2; crush. subst. inv H. inv STK. econstructor.
   Qed.
@@ -193,22 +216,73 @@ Section CORRECTNESS.
   #[local] Hint Resolve find_function_translated : core.
   #[local] Hint Resolve sig_transf_function : core.
 
-  Lemma transf_step_correct:
-    forall (s1 : state) (t : trace) (s1' : state),
+  Definition measure (b: option SeqBB.t): nat :=
+    match b with
+    | None => 0
+    | Some b' => 1 + length b'
+    end.
+
+  Lemma temp:
+    forall c b b' sp rs pr m rs' pr' m' cf,
+      if_conv_block_spec c b b' ->
+      SeqBB.step ge sp (Iexec (mki rs pr m)) b (Iterm (mki rs' pr' m') cf) ->
+      SeqBB.step tge sp (Iexec (mki rs pr m)) b' (Iterm (mki rs' pr' m') cf)
+      \/ (exists pc' nb b'1 b'2 b'3 p,
+             c ! pc' = Some nb
+             /\ step_list2 (step_instr tge) sp (Iexec (mki rs pr m)) b'1 (Iexec (mki rs' pr' m'))
+             /\ b' = b'1 ++ map (map_if_convert p) b'2 ++ b'3
+             /\ cf = RBgoto pc'
+             /\ if_conv_block_spec c nb b'2).
+  Admitted.
+
+  Lemma step_cf_matches :
+    forall b s cf t s' ts,
+      step_cf_instr ge s cf t s' ->
+      match_states b s ts ->
+      exists b' ts', step_cf_instr tge ts cf t ts' /\ match_states b' s' ts'.
+  Proof. Admitted.
+
+  Lemma transf_correct:
+    forall s1 t s1',
       step ge s1 t s1' ->
-      forall s2 : state,
-        match_states s1 s2 ->
-        exists s2' : state, step tge s2 t s2' /\ match_states s1' s2'.
-  Proof using TRANSL. Admitted.
+      forall b s2, match_states b s1 s2 ->
+        exists b' s2',
+          (plus step tge s2 t s2' \/
+             (star step tge s2 t s2' /\ ltof _ measure b' b))
+          /\ match_states b' s1' s2'.
+  Proof using TRANSL.
+    inversion 1; subst; simplify;
+      match goal with H: context[match_states] |- _ => inv H end.
+    -
+      exploit temp; eauto; simplify. inv H3.
+      pose proof (transf_spec_correct _ _ _ H4); simplify.
+      exploit step_cf_matches; eauto.
+      econstructor; eauto. unfold sem_extrap; intros.
+      unfold sem_extrap in EXT.
+      rewrite H8 in H3; simplify.
+      do 2 econstructor. split. left. eapply plus_one. econstructor; eauto.
+      unfold sem_extrap in EXT. eapply EXT. eauto. admit.
+      instantiate (1 := State stack (transf_function f0) sp0 pc0 rs0 pr0 m0).
+      admit. constructor; eauto. admit. unfold sem_extrap. intros. admit.
+      eapply star_refl. intros. admit.
+    -
+      simplify. inv H2. do 2 econstructor. split. admit.
+      econstructor; eauto. admit. admit. intros.
+      rewrite H3 in H2. inv H2. eauto
 
   Theorem transf_program_correct:
     forward_simulation (semantics prog) (semantics tprog).
   Proof using TRANSL.
-    eapply forward_simulation_step.
-    + apply senv_preserved.
-    + apply transf_initial_states.
-    + apply transf_final_states.
-    + apply transf_step_correct.
+    eapply (Forward_simulation
+              (L1:=semantics prog)
+              (L2:=semantics tprog)
+              (ltof _ measure) match_states).
+    constructor.
+    - apply well_founded_ltof.
+    - eauto using transf_initial_states.
+    - intros; eapply transf_final_states; eauto.
+    - eapply transf_correct.
+    - apply senv_preserved.
   Qed.
 
 
