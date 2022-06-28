@@ -59,14 +59,16 @@ Definition map_if_convert (p: option pred_op) (i: instr) :=
   | _ => i
   end.
 
-Definition if_convert_block (next: node) (b_next: SeqBB.t) (_: unit) (i: instr) :=
+Definition if_convert_block (next: node) (b_next: SeqBB.t) (i: instr) :=
   match i with
   | RBexit p (RBgoto next') =>
       if (next =? next')%positive
-      then (tt, map (map_if_convert p) b_next)
-      else (tt, i::nil)
-  | _ => (tt, i::nil)
+      then map (map_if_convert p) b_next
+      else i::nil
+  | _ => i::nil
   end.
+
+Definition wrap_unit {A B} (f: A -> B) (_: unit) (a: A) := (tt, f a).
 
 Definition predicated_store i :=
   match i with
@@ -87,7 +89,7 @@ Definition if_convert (orig_c c: code) (main next: node) :=
   match orig_c ! main, orig_c ! next with
   | Some b_main, Some b_next =>
       if decide_if_convert b_next then
-        PTree.set main (snd (replace_section (if_convert_block next b_next) tt b_main)) c
+        PTree.set main (snd (replace_section (wrap_unit (if_convert_block next b_next)) tt b_main)) c
       else c
   | _, _ => c
   end.
@@ -203,12 +205,15 @@ Definition ifconv_list (headers: list node) (c: code) :=
 (*   let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in *)
 (*   (S (fst p), PTree.set (fst nb) nbb (snd p)). *)
 
+Definition if_convert_code (c: code) iflist :=
+  fold_left (fun s n => if_convert c s (fst n) (snd n)) iflist c.
+
 Definition transf_function (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
   let iflist := ifconv_list b' f.(fn_code) in
   mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
-             (fold_left (fun s n => if_convert s (fst n) (snd n)) iflist f.(fn_code))
+             (if_convert_code f.(fn_code) iflist)
              f.(fn_entrypoint).
 
 Definition transf_fundef (fd: fundef) : fundef :=

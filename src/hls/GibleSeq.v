@@ -30,6 +30,7 @@ Require Import compcert.verilog.Op.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Gible.
+Require Import vericert.hls.Predicate.
 
 (*|
 ========
@@ -121,6 +122,26 @@ Proof.
   constructor; auto.
 Qed.
 
+#[local] Notation "'mki'" := (mk_instr_state) (at level 1).
+
+Lemma exec_rbexit_truthy :
+  forall A B bb ge sp rs pr m rs' pr' m' pc',
+    @SeqBB.step A B ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') (RBgoto pc')) ->
+    exists p b1 b2,
+      truthy pr' p
+      /\ bb = b1 ++ (RBexit p (RBgoto pc')) :: b2
+      /\ step_list2 (Gible.step_instr ge) sp (Iexec (mki rs pr m)) b1 (Iexec (mki rs' pr' m')).
+Proof.
+  induction bb; crush.
+  inv H. inv H.
+  - destruct state'. exploit IHbb; eauto; simplify.
+    exists x. exists (a :: x0). exists x1. simplify; auto.
+    econstructor; eauto.
+  -  inv H3.
+     exists p. exists nil. exists bb. crush.
+     constructor.
+Qed.
+
 #[local] Open Scope positive.
 
 Lemma max_pred_function_use :
@@ -130,3 +151,45 @@ Lemma max_pred_function_use :
     In p (pred_uses i) ->
     p <= max_pred_function f.
 Proof. Admitted.
+
+Ltac truthy_falsy :=
+  match goal with
+  | H: instr_falsy ?ps (RBop ?p _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBload ?p _ _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBstore ?p _ _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBexit ?p _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBsetpred ?p _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  end.
+
+Lemma exec_determ :
+  forall A B ge sp s1 a s2 s2',
+    @step_instr A B ge sp s1 a s2 ->
+    step_instr ge sp s1 a s2' ->
+    s2 = s2'.
+Proof.
+  inversion 1; subst; crush.
+  - inv H0; auto.
+  - inv H2; crush; truthy_falsy.
+  - inv H3; crush. truthy_falsy.
+  - inv H3; crush. truthy_falsy.
+  - inv H2; crush. truthy_falsy.
+  - inv H1; crush. truthy_falsy.
+  - destruct st; simplify. inv H1; crush; truthy_falsy.
+Qed.
+
+Lemma append3 :
+  forall A B l0 l1 sp ge s1 s2 s3,
+    step_list2 (step_instr ge) sp s1 l0 s2 ->
+    @SeqBB.step A B ge sp s1 (l0 ++ l1) s3 ->
+    @SeqBB.step A B ge sp s2 l1 s3.
+Proof.
+  induction l0; crush. inv H. auto.
+  inv H0. inv H. assert (i1 = (Iexec state')) by (eapply exec_determ; eauto). subst. eauto.
+  inv H. assert (i1 = (Iterm state' cf)) by (eapply exec_determ; eauto). subst.
+  exfalso; eapply step_list2_false; eauto.
+Qed.
