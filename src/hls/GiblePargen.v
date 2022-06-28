@@ -40,9 +40,9 @@ Import NE.NonEmptyNotation.
 #[local] Open Scope pred_op.
 
 (*|
-=========
-RTLPargen
-=========
+====================
+Gible Par Generation
+====================
 
 Abstract Computations
 =====================

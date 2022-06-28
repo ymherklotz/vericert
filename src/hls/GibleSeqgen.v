@@ -16,10 +16,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-===========
-RTLBlockgen
-===========
-
 .. coq:: none
 |*)
 
@@ -35,6 +31,12 @@ Require Import vericert.hls.Gible.
 Require Import vericert.hls.GibleSeq.
 
 #[local] Open Scope positive.
+
+(*|
+====================
+Gible Seq Generation
+====================
+|*)
 
 Definition check_valid_node (tc: code) (e: node) :=
   match tc ! e with

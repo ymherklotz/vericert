@@ -33,9 +33,11 @@ have all been proven correct, providing a verified translation from C to Verilog
    :caption: Sources
 
    src/Compiler
-   src/hls/RTLBlockInstr
-   src/hls/RTLBlockgen
-   src/hls/RTLBlockgenproof
+   src/hls/Gible.v
+   src/hls/GibleSeq.v
+   src/hls/GiblePar.v
+   src/hls/GibleSeqgen.v
+   src/hls/GibleSeqgenproof.v
 
 Publications
 ------------
