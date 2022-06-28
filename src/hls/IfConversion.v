@@ -80,10 +80,13 @@ Definition no_predicated_store bb :=
   | _ => false
   end.
 
-Definition if_convert (c: code) (main next: node) :=
-  match c ! main, c ! next with
+Definition decide_if_convert b_next :=
+  (length b_next <=? 50)%nat && no_predicated_store b_next.
+
+Definition if_convert (orig_c c: code) (main next: node) :=
+  match orig_c ! main, orig_c ! next with
   | Some b_main, Some b_next =>
-      if (length b_next <=? 50)%nat && no_predicated_store b_next then
+      if decide_if_convert b_next then
         PTree.set main (snd (replace_section (if_convert_block next b_next) tt b_main)) c
       else c
   | _, _ => c

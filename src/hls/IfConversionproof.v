@@ -40,6 +40,10 @@ Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.IfConversion.
 Require Import vericert.hls.Predicate.
 
+#[local] Opaque decide_if_convert.
+#[local] Opaque get_loops.
+#[local] Opaque ifconv_list.
+
 #[local] Open Scope positive.
 #[local] Notation "'mki'" := (mk_instr_state) (at level 1).
 
