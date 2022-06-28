@@ -200,16 +200,13 @@ Definition ifconv_list (headers: list node) (c: code) :=
 (*   let nbb := if_convert_block (snd p) (Pos.of_nat (fst p)) (snd nb) in *)
 (*   (S (fst p), PTree.set (fst nb) nbb (snd p)). *)
 
-Definition transf_function' (f: function) (n: node * node) : function :=
-  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
-             (if_convert f.(fn_code) (fst n) (snd n))
-             f.(fn_entrypoint).
-
 Definition transf_function (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
   let iflist := ifconv_list b' f.(fn_code) in
-  fold_left transf_function' iflist f.
+  mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
+             (fold_left (fun s n => if_convert s (fst n) (snd n)) iflist f.(fn_code))
+             f.(fn_entrypoint).
 
 Definition transf_fundef (fd: fundef) : fundef :=
   transf_fundef transf_function fd.
