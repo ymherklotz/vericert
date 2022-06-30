@@ -94,10 +94,157 @@ Inductive if_conv_spec (c c': code) (pc: node): Prop :=
   c' ! pc = Some tb ->
   if_conv_spec c c' pc.
 
+Lemma transf_spec_correct_notin :
+  forall l pc c b d,
+  ~ In pc (map fst l) ->
+  b ! pc = d ! pc ->
+  (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) ! pc = d ! pc.
+Proof.
+  induction l; crush.
+  assert (fst a <> pc /\ ~ In pc (map fst l)).
+  split. destruct (peq (fst a) pc); auto.
+  unfold not; intros. apply H. tauto.
+  simplify. eapply IHl; eauto.
+  destruct a; simplify. unfold if_convert.
+  repeat (destruct_match; auto; []).
+  rewrite PTree.gso; auto.
+Qed.
+
+Lemma transf_spec_correct_None :
+  forall l pc c b,
+  c ! pc = None ->
+  b ! pc = None ->
+  (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) ! pc = None.
+Proof.
+  induction l; crush.
+  eapply IHl; eauto.
+  destruct (peq (fst a) pc); subst.
+  unfold if_convert. rewrite H. auto.
+  unfold if_convert. repeat (destruct_match; auto; []).
+  now rewrite PTree.gso by auto.
+Qed.
+
+Lemma if_convert_neq :
+  forall pc pc' pc'' c b,
+    pc'' <> pc ->
+    (if_convert c b pc'' pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  rewrite PTree.gso; auto.
+Qed.
+
+Lemma if_convert_ne_pc :
+  forall pc pc' c b,
+    c ! pc = None ->
+    (if_convert c b pc pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  discriminate.
+Qed.
+
+Lemma if_convert_ne_pc' :
+  forall pc pc' c b,
+    c ! pc' = None ->
+    (if_convert c b pc pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  discriminate.
+Qed.
+
+Lemma if_convert_decide_false :
+  forall pc pc' c b y,
+    c ! pc' = Some y ->
+    decide_if_convert y = false ->
+    (if_convert c b pc pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  setoid_rewrite Heqo0 in H; crush.
+Qed.
+
+Lemma if_convert_decide_true :
+  forall pc pc' c b y z,
+    c ! pc = Some z ->
+    c ! pc' = Some y ->
+    decide_if_convert y = true ->
+    (if_convert c b pc pc') ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
+Proof.
+  unfold if_convert; intros.
+  setoid_rewrite H.
+  setoid_rewrite H0.
+  rewrite H1. rewrite PTree.gss. auto.
+Qed.
+
+Lemma transf_spec_correct_in :
+  forall l pc c b c' z,
+    (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) = c' ->
+    b ! pc = Some z \/ (exists pc' y, c ! pc' = Some y /\ decide_if_convert y = true /\ b ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z))) ->
+    c ! pc = Some z ->
+    c' ! pc = Some z \/ exists pc' y, c ! pc' = Some y /\ decide_if_convert y = true /\ c' ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
+Proof.
+  induction l; crush. inv H0. tauto.
+  simplify. right. eauto.
+  exploit IHl; eauto. inv H0.
+  destruct a; simplify.
+
+  destruct (peq p pc); [|left; rewrite <- H2; eapply if_convert_neq; eauto]; subst; [].
+  destruct (c ! p0) eqn:?; [|left; rewrite <- H2; eapply if_convert_ne_pc'; eauto]; [].
+  destruct (decide_if_convert t) eqn:?; [|left; rewrite <- H2; eapply if_convert_decide_false; eauto]; [].
+  right. do 2 econstructor; simplify; eauto.
+  apply if_convert_decide_true; auto.
+
+  simplify. right. destruct a; simplify.
+  destruct (peq p pc);
+    [|do 2 econstructor; simplify; eauto;
+      rewrite <- H3; eapply if_convert_neq; auto]; []; subst.
+  destruct (c ! p0) eqn:?;
+           [|do 2 econstructor; simplify; eauto;
+             rewrite <- H3; eapply if_convert_ne_pc'; auto]; [].
+  destruct (decide_if_convert t) eqn:?;
+           [|do 2 econstructor; simplify; try eapply H; eauto;
+             rewrite <- H3; eapply if_convert_decide_false; eauto].
+  do 2 econstructor; simplify; eauto.
+  apply if_convert_decide_true; auto.
+Qed.
+
+Lemma replace_spec_true' :
+  forall f x,
+    replace_spec_unit f x (snd (replace_section (wrap_unit f) tt x)).
+Proof.
+  induction x; crush. constructor.
+  destruct_match; simplify. constructor. eauto.
+Qed.
+
+Lemma replace_spec_true :
+  forall x0 x1 x,
+    if_conv_replace x0 x1 x (snd (replace_section (wrap_unit (if_convert_block x0 x1)) tt x)).
+Proof.
+  unfold if_conv_replace; intros.
+  apply replace_spec_true'.
+Qed.
+
 Lemma transf_spec_correct :
   forall f pc,
     if_conv_spec f.(fn_code) (transf_function f).(fn_code) pc.
-Proof. Admitted.
+Proof.
+  intros; unfold transf_function; destruct_match; cbn.
+  unfold if_convert_code.
+  destruct (f.(fn_code) ! pc) eqn:?.
+  - simplify.
+    match goal with
+      |- context [fold_left ?a ?b ?c] =>
+        remember (fold_left a b c) as c'
+    end. symmetry in Heqc'.
+    eapply transf_spec_correct_in in Heqc'; eauto. inv Heqc'. constructor.
+    crush.
+    simplify. eapply if_conv_changed; eauto.
+    apply replace_spec_true.
+  - pose proof Heqo as X. eapply transf_spec_correct_None in Heqo; eauto.
+    constructor. rewrite Heqo. auto.
+Qed.
 
 Inductive wf_trans : option pred_op -> SeqBB.t -> Prop :=
 | wf_trans_None: forall b, wf_trans None b
