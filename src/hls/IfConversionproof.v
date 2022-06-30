@@ -53,9 +53,6 @@ Variant match_stackframe : stackframe -> stackframe -> Prop :=
            (TF: transf_function f = tf),
       match_stackframe (Stackframe res f sp pc rs p) (Stackframe res tf sp pc rs p).
 
-(* c ! pc = fc ! pc *)
-(* \/ (c ! pc = a ++ fc ! pc' ++ b /\ fc ! pc = a ++ if p goto pc' ++ b) *)
-
 Definition bool_order (b: bool): nat := if b then 1 else 0.
 
 Inductive if_conv_block_spec (c: code): SeqBB.t -> SeqBB.t -> Prop :=
@@ -299,12 +296,6 @@ Section CORRECTNESS.
       SeqBB.step tge sp in_s block out_s ->
       f.(fn_code) ! pc = Some block2 ->
       SeqBB.step tge sp in_s' block2 out_s.
-
-  (* (EXT: sem_extrap tf pc0 sp (Iexec (mki rs p m)) (Iexec (mki rs0 p0 m0)) b)
-     (STAR: star step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m))
-     (IS_B: exists b, f.(fn_code)!pc0 = Some b)
-     (SPEC: forall b_o, f.(fn_code) ! pc = Some b_o -> if_conv_block_spec f.(fn_code) b_o b),
-   *)
 
   Variant match_states : option SeqBB.t -> state -> state -> Prop :=
     | match_state_some :
