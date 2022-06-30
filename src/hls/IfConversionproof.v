@@ -32,6 +32,7 @@ Require Import compcert.common.Smallstep.
 Require Import compcert.common.Events.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Values.
+Require Import compcert.common.Linking.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.common.DecEq.
