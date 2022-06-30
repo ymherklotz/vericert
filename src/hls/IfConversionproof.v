@@ -133,6 +133,7 @@ Section CORRECTNESS.
              (* This can be improved with a recursive relation for a more general structure of the
                 if-conversion proof. *)
              (IS_B: f.(fn_code)!pc = Some b)
+             (IS_TB: forall b', f.(fn_code)!pc0 = Some b' -> tf.(fn_code)!pc0 = if_conv_replace)
              (EXTRAP: sem_extrap tf pc0 sp (Iexec (mki rs p m)) (Iexec (mki rs0 p0 m0)) b)
              (SIM: step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m)),
         match_states (Some b) (State stk f sp pc rs p m) (State stk' tf sp pc0 rs0 p0 m0)
@@ -282,21 +283,15 @@ Section CORRECTNESS.
   Proof. intros; simplify. do 3 econstructor; eauto. Qed.
 
   Lemma step_instr :
-    forall sp s s' a,
-      step_instr ge sp (Iexec s) a (Iexec s') ->
-      step_instr tge sp (Iexec s) a (Iexec s').
+    forall sp s1 s2 a,
+      step_instr ge sp s1 a s2 ->
+      step_instr tge sp s1 a s2.
   Proof.
     inversion 1; subst; econstructor; eauto.
     - now rewrite <- eval_op_eq.
     - now rewrite <- eval_addressing_eq.
     - now rewrite <- eval_addressing_eq.
   Qed.
-
-  Lemma step_instr_term :
-    forall sp s s' a cf,
-      Gible.step_instr ge sp (Iexec s) a (Iterm s' cf) ->
-      Gible.step_instr tge sp (Iexec s) a (Iterm s' cf).
-  Proof. inversion 1; subst; constructor; auto. Qed.
 
   Lemma seqbb_eq :
     forall bb sp rs pr m rs' pr' m' cf,
@@ -306,7 +301,17 @@ Section CORRECTNESS.
     induction bb; crush; inv H.
     - econstructor; eauto. apply step_instr; eassumption.
       destruct state'. eapply IHbb; eauto.
-    - constructor; apply step_instr_term; auto.
+    - constructor; apply step_instr; auto.
+  Qed.
+
+  Lemma step_list_2_eq :
+    forall bb sp a b,
+      step_list2 (Gible.step_instr ge) sp a bb b ->
+      step_list2 (Gible.step_instr tge) sp a bb b.
+  Proof.
+    induction bb; crush; inv H.
+    - econstructor; eauto.
+    - econstructor; eauto. now apply step_instr.
   Qed.
 
   Lemma fn_all_eq :
@@ -365,16 +370,36 @@ Section CORRECTNESS.
   Qed.
 
   Lemma exec_if_conv :
-    forall bb sp rs pr m rs' pr' m' pc' b' tb,
-      SeqBB.step ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') (RBgoto pc')) ->
-      if_conv_replace pc' b' bb tb ->
-      exists p b rb,
-        tb = b ++ (map (map_if_convert p) b') ++ rb
-        /\ SeqBB.step ge sp (Iexec (mki rs pr m)) b (Iexec (mki rs' pr' m')).
+    forall A B ge sp pc' b' tb i i' x0 x x1,
+      step_list2 (@Gible.step_instr A B ge) sp (Iexec i) x0 (Iexec i') ->
+      if_conv_replace pc' b' (x0 ++ RBexit x (RBgoto pc') :: x1) tb ->
+      exists b rb,
+        tb = b ++ (map (map_if_convert x) b') ++ rb
+        /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
   Proof.
     Admitted.
 
-  Lemma temp2:
+  Lemma exec_if_conv2 :
+    forall A B ge sp pc' b' tb i i' x0 x x1 cf,
+      step_list2 (@Gible.step_instr A B ge) sp (Iexec i) x0 (Iexec i') ->
+      cf <> RBgoto pc' ->
+      if_conv_replace pc' b' (x0 ++ RBexit x cf :: x1) tb ->
+      exists b rb,
+        tb = b ++ RBexit x cf :: rb
+        /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
+  Proof.
+  Admitted.
+
+  Lemma map_truthy_step:
+    forall sp rs' m' pr' x b' i c,
+      truthy pr' x ->
+      SeqBB.step tge sp (Iexec (mki rs' pr' m')) b' (Iterm i c) ->
+      SeqBB.step tge sp (Iexec (mki rs' pr' m')) (map (map_if_convert x) b') (Iterm i c).
+  Proof.
+    intros * H1 H2.
+    Admitted.
+
+  Lemma match_none_correct :
     forall t s1' stk f sp pc rs m pr rs' m' bb pr' cf stk',
       (fn_code f) ! pc = Some bb ->
       SeqBB.step ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf) ->
@@ -393,19 +418,53 @@ Section CORRECTNESS.
       do 3 econstructor. apply plus_one. econstructor; eauto.
       apply seqbb_eq; eauto. eauto.
     - simplify.
-      destruct (cf_dec cf pc'); subst. inv H1.
-      exploit exec_if_conv; eauto; simplify.
-      exploit exec_rbexit_truthy; eauto; simplify.
-      apply sim_star. exists (Some b'). exists (State stk' (transf_function f) sp pc rs pr m).
-      simplify; try (unfold ltof; auto). apply star_refl.
-      constructor; auto. unfold sem_extrap; simplify.
+      destruct (cf_dec cf pc'); subst.
+      + inv H1.
+        exploit exec_rbexit_truthy; eauto; simplify.
+        exploit exec_if_conv; eauto; simplify.
+        apply sim_star. exists (Some b'). exists (State stk' (transf_function f) sp pc rs pr m).
+        simplify; try (unfold ltof; auto). apply star_refl.
+        constructor; auto. unfold sem_extrap; simplify.
+        destruct out_s. exfalso; eapply step_list_false; eauto.
+        apply append. exists (mki rs' pr' m'). split.
+        eapply step_list_2_eq; eauto.
+        apply append2. eapply map_truthy_step; eauto.
+        econstructor; eauto. constructor; auto.
+      + exploit exec_rbexit_truthy; eauto; simplify.
+        exploit exec_if_conv2; eauto; simplify.
+        exploit step_cf_eq; eauto; simplify.
+        apply sim_plus. exists None. exists x4.
+        split. apply plus_one. econstructor; eauto.
+        apply append. exists (mki rs' pr' m'). split; auto.
+        apply step_list_2_eq; auto.
+        constructor. constructor; auto. auto.
+  Qed.
 
-  Lemma step_cf_matches :
-    forall b s cf t s' ts,
-      step_cf_instr ge s cf t s' ->
-      match_states b s ts ->
-      exists b' ts', step_cf_instr tge ts cf t ts' /\ match_states b' s' ts'.
-  Proof. Admitted.
+  Lemma match_some_correct:
+    forall t s1' s f sp pc rs m pr rs' m' bb pr' cf stk' b0 pc1 rs1 p0 m1,
+      step ge (State s f sp pc rs pr m) t s1' ->
+      (fn_code f) ! pc = Some bb ->
+      SeqBB.step ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf) ->
+      step_cf_instr ge (State s f sp pc rs' pr' m') cf t s1' ->
+      Forall2 match_stackframe s stk' ->
+      (fn_code f) ! pc = Some b0 ->
+      sem_extrap (transf_function f) pc1 sp (Iexec (mki rs pr m)) (Iexec (mki rs1 p0 m1)) b0 ->
+      step ge (State s f sp pc1 rs1 p0 m1) E0 (State s f sp pc rs pr m) ->
+      exists b' s2',
+        (plus step tge (State stk' (transf_function f) sp pc1 rs1 p0 m1) t s2' \/
+           star step tge (State stk' (transf_function f) sp pc1 rs1 p0 m1) t s2' /\
+             ltof (option SeqBB.t) measure b' (Some b0)) /\ match_states b' s1' s2'.
+  Proof.
+    intros * H H0 H1 H2 STK IS_B EXTRAP SIM.
+    rewrite IS_B in H0; simplify.
+    exploit step_cf_eq; eauto; simplify.
+    apply sim_plus.
+    exists None. exists x.
+    split; auto.
+    unfold sem_extrap in *.
+    inv SIM.
+    pose proof (transf_spec_correct f pc1) as X. inv X.
+    eapply plus_two. econstructor; eauto.
 
   Lemma transf_correct:
     forall s1 t s1',
@@ -418,8 +477,9 @@ Section CORRECTNESS.
   Proof using TRANSL.
     inversion 1; subst; simplify;
       match goal with H: context[match_states] |- _ => inv H end.
-    - admit.
-    - eauto using temp2. Admitted.
+    -
+    - eauto using match_none_correct.
+    - Admitted.
 
 
     (* - *)

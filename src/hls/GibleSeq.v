@@ -84,6 +84,11 @@ Lemma step_instr_false :
     ~ @step_instr A B ge sp (Iterm i c) a (Iexec i0).
 Proof. destruct a; unfold not; intros; inv H. Qed.
 
+Lemma step_list_false :
+  forall A B ge sp a i0 s,
+    ~ step_list (@step_instr A B ge) sp s a (Iexec i0).
+Proof. destruct a; unfold not; intros; inv H. Qed.
+
 Lemma step_list2_false :
   forall A B ge l0 sp i c i0',
     ~ step_list2 (@step_instr A B ge) sp (Iterm i c) l0 (Iexec i0').
@@ -125,11 +130,11 @@ Qed.
 #[local] Notation "'mki'" := (mk_instr_state) (at level 1).
 
 Lemma exec_rbexit_truthy :
-  forall A B bb ge sp rs pr m rs' pr' m' pc',
-    @SeqBB.step A B ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') (RBgoto pc')) ->
+  forall A B bb ge sp rs pr m rs' pr' m' cf,
+    @SeqBB.step A B ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf) ->
     exists p b1 b2,
       truthy pr' p
-      /\ bb = b1 ++ (RBexit p (RBgoto pc')) :: b2
+      /\ bb = b1 ++ (RBexit p cf) :: b2
       /\ step_list2 (Gible.step_instr ge) sp (Iexec (mki rs pr m)) b1 (Iexec (mki rs' pr' m')).
 Proof.
   induction bb; crush.
@@ -184,9 +189,9 @@ Qed.
 
 Lemma append3 :
   forall A B l0 l1 sp ge s1 s2 s3,
-    step_list2 (step_instr ge) sp s1 l0 s2 ->
+    step_list2 (step_instr ge) sp s1 l0 (Iexec s2) ->
     @SeqBB.step A B ge sp s1 (l0 ++ l1) s3 ->
-    @SeqBB.step A B ge sp s2 l1 s3.
+    @SeqBB.step A B ge sp (Iexec s2) l1 s3.
 Proof.
   induction l0; crush. inv H. auto.
   inv H0. inv H. assert (i1 = (Iexec state')) by (eapply exec_determ; eauto). subst. eauto.
