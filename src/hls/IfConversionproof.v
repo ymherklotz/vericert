@@ -32,6 +32,7 @@ Require Import compcert.common.Smallstep.
 Require Import compcert.common.Events.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Values.
+Require Import compcert.common.Linking.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.common.DecEq.
@@ -53,9 +54,6 @@ Variant match_stackframe : stackframe -> stackframe -> Prop :=
            (TF: transf_function f = tf),
       match_stackframe (Stackframe res f sp pc rs p) (Stackframe res tf sp pc rs p).
 
-(* c ! pc = fc ! pc *)
-(* \/ (c ! pc = a ++ fc ! pc' ++ b /\ fc ! pc = a ++ if p goto pc' ++ b) *)
-
 Definition bool_order (b: bool): nat := if b then 1 else 0.
 
 Inductive if_conv_block_spec (c: code): SeqBB.t -> SeqBB.t -> Prop :=
@@ -71,13 +69,6 @@ Inductive if_conv_block_spec (c: code): SeqBB.t -> SeqBB.t -> Prop :=
     c ! pc' = Some b' ->
     if_conv_block_spec c b' ta ->
     if_conv_block_spec c (RBexit p (RBgoto pc')::b) (map (map_if_convert p) ta++tb).
-
-Lemma transf_spec_correct' :
-  forall f pc b,
-    f.(fn_code) ! pc = Some b ->
-    exists b', (transf_function f).(fn_code) ! pc = Some b'
-          /\ if_conv_block_spec f.(fn_code) b b'.
-Proof. Admitted.
 
 Inductive replace_spec_unit (f: instr -> SeqBB.t)
   : SeqBB.t -> SeqBB.t -> Prop :=
@@ -101,10 +92,198 @@ Inductive if_conv_spec (c c': code) (pc: node): Prop :=
   c' ! pc = Some tb ->
   if_conv_spec c c' pc.
 
+Lemma transf_spec_correct_notin :
+  forall l pc c b d,
+  ~ In pc (map fst l) ->
+  b ! pc = d ! pc ->
+  (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) ! pc = d ! pc.
+Proof.
+  induction l; crush.
+  assert (fst a <> pc /\ ~ In pc (map fst l)).
+  split. destruct (peq (fst a) pc); auto.
+  unfold not; intros. apply H. tauto.
+  simplify. eapply IHl; eauto.
+  destruct a; simplify. unfold if_convert.
+  repeat (destruct_match; auto; []).
+  rewrite PTree.gso; auto.
+Qed.
+
+Lemma transf_spec_correct_None :
+  forall l pc c b,
+  c ! pc = None ->
+  b ! pc = None ->
+  (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) ! pc = None.
+Proof.
+  induction l; crush.
+  eapply IHl; eauto.
+  destruct (peq (fst a) pc); subst.
+  unfold if_convert. rewrite H. auto.
+  unfold if_convert. repeat (destruct_match; auto; []).
+  now rewrite PTree.gso by auto.
+Qed.
+
+Lemma if_convert_neq :
+  forall pc pc' pc'' c b,
+    pc'' <> pc ->
+    (if_convert c b pc'' pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  rewrite PTree.gso; auto.
+Qed.
+
+Lemma if_convert_ne_pc :
+  forall pc pc' c b,
+    c ! pc = None ->
+    (if_convert c b pc pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  discriminate.
+Qed.
+
+Lemma if_convert_ne_pc' :
+  forall pc pc' c b,
+    c ! pc' = None ->
+    (if_convert c b pc pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  discriminate.
+Qed.
+
+Lemma if_convert_decide_false :
+  forall pc pc' c b y,
+    c ! pc' = Some y ->
+    decide_if_convert y = false ->
+    (if_convert c b pc pc') ! pc = b ! pc.
+Proof.
+  unfold if_convert; intros.
+  repeat (destruct_match; auto; []).
+  setoid_rewrite Heqo0 in H; crush.
+Qed.
+
+Lemma if_convert_decide_true :
+  forall pc pc' c b y z,
+    c ! pc = Some z ->
+    c ! pc' = Some y ->
+    decide_if_convert y = true ->
+    (if_convert c b pc pc') ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
+Proof.
+  unfold if_convert; intros.
+  setoid_rewrite H.
+  setoid_rewrite H0.
+  rewrite H1. rewrite PTree.gss. auto.
+Qed.
+
+Lemma transf_spec_correct_in :
+  forall l pc c b c' z,
+    (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) = c' ->
+    b ! pc = Some z \/ (exists pc' y, c ! pc' = Some y /\ decide_if_convert y = true /\ b ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z))) ->
+    c ! pc = Some z ->
+    c' ! pc = Some z \/ exists pc' y, c ! pc' = Some y /\ decide_if_convert y = true /\ c' ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
+Proof.
+  induction l; crush. inv H0. tauto.
+  simplify. right. eauto.
+  exploit IHl; eauto. inv H0.
+  destruct a; simplify.
+
+  destruct (peq p pc); [|left; rewrite <- H2; eapply if_convert_neq; eauto]; subst; [].
+  destruct (c ! p0) eqn:?; [|left; rewrite <- H2; eapply if_convert_ne_pc'; eauto]; [].
+  destruct (decide_if_convert t) eqn:?; [|left; rewrite <- H2; eapply if_convert_decide_false; eauto]; [].
+  right. do 2 econstructor; simplify; eauto.
+  apply if_convert_decide_true; auto.
+
+  simplify. right. destruct a; simplify.
+  destruct (peq p pc);
+    [|do 2 econstructor; simplify; eauto;
+      rewrite <- H3; eapply if_convert_neq; auto]; []; subst.
+  destruct (c ! p0) eqn:?;
+           [|do 2 econstructor; simplify; eauto;
+             rewrite <- H3; eapply if_convert_ne_pc'; auto]; [].
+  destruct (decide_if_convert t) eqn:?;
+           [|do 2 econstructor; simplify; try eapply H; eauto;
+             rewrite <- H3; eapply if_convert_decide_false; eauto].
+  do 2 econstructor; simplify; eauto.
+  apply if_convert_decide_true; auto.
+Qed.
+
+Lemma replace_spec_true' :
+  forall f x,
+    replace_spec_unit f x (snd (replace_section (wrap_unit f) tt x)).
+Proof.
+  induction x; crush. constructor.
+  destruct_match; simplify. constructor. eauto.
+Qed.
+
+Lemma replace_spec_true :
+  forall x0 x1 x,
+    if_conv_replace x0 x1 x (snd (replace_section (wrap_unit (if_convert_block x0 x1)) tt x)).
+Proof.
+  unfold if_conv_replace; intros.
+  apply replace_spec_true'.
+Qed.
+
 Lemma transf_spec_correct :
   forall f pc,
     if_conv_spec f.(fn_code) (transf_function f).(fn_code) pc.
-Proof. Admitted.
+Proof.
+  intros; unfold transf_function; destruct_match; cbn.
+  unfold if_convert_code.
+  destruct (f.(fn_code) ! pc) eqn:?.
+  - simplify.
+    match goal with
+      |- context [fold_left ?a ?b ?c] =>
+        remember (fold_left a b c) as c'
+    end. symmetry in Heqc'.
+    eapply transf_spec_correct_in in Heqc'; eauto. inv Heqc'. constructor.
+    crush.
+    simplify. eapply if_conv_changed; eauto.
+    apply replace_spec_true.
+  - pose proof Heqo as X. eapply transf_spec_correct_None in Heqo; eauto.
+    constructor. rewrite Heqo. auto.
+Qed.
+
+Inductive wf_trans : option pred_op -> SeqBB.t -> Prop :=
+| wf_trans_None: forall b, wf_trans None b
+| wf_trans_Some: forall p b,
+    (forall op c args p',
+        In (RBsetpred op c args p') b ->
+        ~ In p' (predicate_use p)) ->
+    wf_trans (Some p) b.
+
+Lemma wf_transition_block_opt_prop :
+  forall b p,
+    wf_transition_block_opt p b = true <-> wf_trans p b.
+Proof.
+  destruct p.
+  2: {
+    split. unfold wf_transition_block_opt; intros.
+    constructor.
+    intros. unfold wf_transition_block_opt. simplify; auto.
+  }
+  generalize dependent p. induction b; split; crush.
+  - constructor; crush.
+  - unfold wf_transition_block_opt in H. simplify.
+    constructor; auto. intros. unfold wf_transition in H0.
+    unfold not; intros. inv H.
+    assert (existsb (Pos.eqb p') (predicate_use p) = true).
+    { apply existsb_exists; econstructor. split; eauto. apply Pos.eqb_refl. }
+    now rewrite H in H0.
+    unfold wf_transition_block in *. eapply forallb_forall in H1; eauto.
+    unfold wf_transition in *.
+    assert (existsb (Pos.eqb p') (predicate_use p) = true).
+    { apply existsb_exists; econstructor. split; eauto. apply Pos.eqb_refl. }
+    now rewrite H in H1.
+  - inv H. unfold wf_transition_block_opt. cbn [Option.default Option.map].
+    unfold wf_transition_block. apply forallb_forall. intros.
+    unfold wf_transition. destruct x; auto.
+    apply H1 in H.
+    rewrite <- negb_involutive. f_equal; cbn.
+    destruct (existsb (Pos.eqb p0) (predicate_use p)) eqn:?; auto.
+    exfalso; apply H. apply existsb_exists in Heqb0; simplify.
+    apply Pos.eqb_eq in H3. subst. auto.
+Qed.
 
 Section CORRECTNESS.
 
@@ -119,12 +298,6 @@ Section CORRECTNESS.
       f.(fn_code) ! pc = Some block2 ->
       SeqBB.step tge sp in_s' block2 out_s.
 
-  (* (EXT: sem_extrap tf pc0 sp (Iexec (mki rs p m)) (Iexec (mki rs0 p0 m0)) b)
-     (STAR: star step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m))
-     (IS_B: exists b, f.(fn_code)!pc0 = Some b)
-     (SPEC: forall b_o, f.(fn_code) ! pc = Some b_o -> if_conv_block_spec f.(fn_code) b_o b),
-   *)
-
   Variant match_states : option SeqBB.t -> state -> state -> Prop :=
     | match_state_some :
       forall stk stk' f tf sp pc rs p m b pc0 rs0 p0 m0
@@ -133,7 +306,9 @@ Section CORRECTNESS.
              (* This can be improved with a recursive relation for a more general structure of the
                 if-conversion proof. *)
              (IS_B: f.(fn_code)!pc = Some b)
-             (IS_TB: forall b', f.(fn_code)!pc0 = Some b' -> tf.(fn_code)!pc0 = if_conv_replace)
+             (IS_TB: forall b',
+                 f.(fn_code)!pc0 = Some b' ->
+                 exists tb, tf.(fn_code)!pc0 = Some tb /\ if_conv_replace pc b b' tb)
              (EXTRAP: sem_extrap tf pc0 sp (Iexec (mki rs p m)) (Iexec (mki rs0 p0 m0)) b)
              (SIM: step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m)),
         match_states (Some b) (State stk f sp pc rs p m) (State stk' tf sp pc0 rs0 p0 m0)
@@ -335,11 +510,11 @@ Section CORRECTNESS.
     end.
 
   Lemma step_cf_eq :
-    forall stk stk' f tf sp pc rs pr m cf s t,
+    forall stk stk' f tf sp pc rs pr m cf s t pc',
       step_cf_instr ge (State stk f sp pc rs pr m) cf t s ->
       Forall2 match_stackframe stk stk' ->
       transf_function f = tf ->
-      exists s', step_cf_instr tge (State stk' tf sp pc rs pr m) cf t s'
+      exists s', step_cf_instr tge (State stk' tf sp pc' rs pr m) cf t s'
                  /\ match_states None s s'.
   Proof.
     inversion 1; subst; simplify;
@@ -353,51 +528,236 @@ Section CORRECTNESS.
       eauto. econstructor; auto.
   Qed.
 
-  (*Lemma event0_trans :
-    forall stk f sp pc rs' pr' m' cf t f0 sp0 pc0 rs0 pr0 m0 stack,
-      step_cf_instr ge (State stk f sp pc rs' pr' m') cf t (State stack f0 sp0 pc0 rs0 pr0 m0) ->
-      t = E0 /\ f = f0 /\ sp = sp0 /\ stk = stack.
-  Proof.
-    inversion 1; subst; crush.*)
-
-  Lemma cf_dec :
+  Definition cf_dec :
     forall a pc, {a = RBgoto pc} + {a <> RBgoto pc}.
   Proof.
     destruct a; try solve [right; crush].
     intros. destruct (peq n pc); subst.
     left; auto.
     right. unfold not in *; intros. inv H. auto.
+  Defined.
+
+  Definition wf_trans_dec :
+    forall p b, {wf_trans p b} + {~ wf_trans p b}.
+  Proof.
+    intros; destruct (wf_transition_block_opt p b) eqn:?.
+    left. apply wf_transition_block_opt_prop; auto.
+    right. unfold not; intros. apply wf_transition_block_opt_prop in H.
+    rewrite H in Heqb0. discriminate.
+  Defined.
+
+  Definition cf_wf_dec :
+    forall p b a pc, {a = RBgoto pc /\ wf_trans p b} + {a <> RBgoto pc \/ ~ wf_trans p b}.
+  Proof.
+    intros; destruct (cf_dec a pc); destruct (wf_trans_dec p b); tauto.
   Qed.
 
-  Lemma exec_if_conv :
-    forall A B ge sp pc' b' tb i i' x0 x x1,
-      step_list2 (@Gible.step_instr A B ge) sp (Iexec i) x0 (Iexec i') ->
-      if_conv_replace pc' b' (x0 ++ RBexit x (RBgoto pc') :: x1) tb ->
-      exists b rb,
-        tb = b ++ (map (map_if_convert x) b') ++ rb
-        /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
+  Lemma wf_trans_comp_false :
+    forall n pc' x b',
+      RBgoto n <> RBgoto pc' \/ ~ wf_trans x b' ->
+      (pc' =? n) && wf_transition_block_opt x b' = false.
   Proof.
-    Admitted.
+    inversion 1; subst; simplify.
+    destruct (peq n pc'); subst; [exfalso; auto|]; [].
+    apply Pos.eqb_neq in n0. rewrite Pos.eqb_sym in n0.
+    rewrite n0. auto.
+    destruct (wf_transition_block_opt x b') eqn:?.
+    - exfalso; apply H0. apply wf_transition_block_opt_prop; auto.
+    - apply andb_false_r.
+  Qed.
+
+  Lemma step_list2_app :
+    forall A B (ge: Genv.t A B) sp a b i i' i'',
+      step_list2 (Gible.step_instr ge) sp i'' b i' ->
+      step_list2 (Gible.step_instr ge) sp i a i'' ->
+      step_list2 (Gible.step_instr ge) sp i (a ++ b) i'.
+  Proof.
+    induction a; crush.
+    - inv H0; auto.
+    - inv H0. econstructor.
+      eauto. eapply IHa; eauto.
+  Qed.
+
+  Lemma map_if_convert_None :
+    forall b',
+      map (map_if_convert None) b' = b'.
+  Proof.
+    induction b'; crush.
+    rewrite IHb'; f_equal. destruct a; crush; destruct o; auto.
+  Qed.
+
+    Lemma truthy_true :
+    forall pr x p,
+      truthy pr x ->
+      truthy pr p ->
+      truthy pr (combine_pred x p).
+  Proof.
+    intros.
+    inv H; inv H0; cbn [combine_pred] in *; constructor; auto;
+    rewrite eval_predf_Pand; apply andb_true_intro; auto.
+  Qed.
+  #[local] Hint Resolve truthy_true : core.
+
+  Lemma falsy_false :
+    forall i' a x,
+      instr_falsy (is_ps i') a ->
+      instr_falsy (is_ps i') (map_if_convert x a).
+  Proof.
+    inversion 1; subst; destruct x; crush; constructor; rewrite eval_predf_Pand;
+      auto using andb_false_intro2.
+  Qed.
+  #[local] Hint Resolve falsy_false : core.
+
+  Lemma map_truthy_instr :
+    forall A B (ge: Genv.t A B) sp i a x i',
+      truthy (is_ps i) x ->
+      Gible.step_instr ge sp (Iexec i) a i' ->
+      Gible.step_instr ge sp (Iexec i) (map_if_convert x a) i'.
+  Proof.
+    inversion 2; subst; crush;
+      try (solve [econstructor; eauto]).
+  Qed.
+
+  Lemma map_falsy_instr :
+    forall A B (ge: Genv.t A B) sp i a x,
+      eval_predf (is_ps i) x = false ->
+      Gible.step_instr ge sp (Iexec i) (map_if_convert (Some x) a) (Iexec i).
+  Proof.
+    intros; destruct a; constructor; cbn; destruct o; constructor; auto;
+      rewrite eval_predf_Pand; rewrite H; auto.
+  Qed.
+
+  Lemma map_falsy_list :
+    forall A B (ge: Genv.t A B) sp b' p i0,
+      eval_predf (is_ps i0) p = false ->
+      step_list2 (Gible.step_instr ge) sp (Iexec i0) (map (map_if_convert (Some p)) b') (Iexec i0).
+  Proof.
+    induction b'; crush; try constructor.
+    econstructor; eauto.
+    apply map_falsy_instr; auto.
+  Qed.
+
+  Lemma exec_if_conv3 :
+    forall A B (ge: Genv.t A B) sp a pc' b' i i0,
+      Gible.step_instr ge sp (Iexec i) a (Iexec i0) ->
+      step_list2 (Gible.step_instr ge) sp (Iexec i) (if_convert_block pc' b' a) (Iexec i0).
+  Proof with (simplify; try (solve [econstructor; eauto; constructor])).
+    inversion 1; subst... destruct a... destruct c...
+    destruct ((pc' =? n) && wf_transition_block_opt o b') eqn:?...
+    apply wf_transition_block_opt_prop in H1. inv H1. inv H4.
+    inv H4. apply map_falsy_list; auto.
+  Qed.
 
   Lemma exec_if_conv2 :
-    forall A B ge sp pc' b' tb i i' x0 x x1 cf,
+    forall A B x0 ge sp pc' b' tb i i' x x1 cf,
       step_list2 (@Gible.step_instr A B ge) sp (Iexec i) x0 (Iexec i') ->
-      cf <> RBgoto pc' ->
+      cf <> RBgoto pc' \/ ~ wf_trans x b' ->
       if_conv_replace pc' b' (x0 ++ RBexit x cf :: x1) tb ->
       exists b rb,
         tb = b ++ RBexit x cf :: rb
         /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
   Proof.
-  Admitted.
+    induction x0; simplify.
+    - inv H1. inv H. exists nil. exists b'0.
+      split; [|constructor]. rewrite app_nil_l.
+      replace (RBexit x cf :: b'0) with ((RBexit x cf :: nil) ++ b'0) by auto.
+      f_equal. simplify. destruct cf; auto.
+      rewrite wf_trans_comp_false; auto.
+    - inv H1. inv H.
+      destruct i1; [|exfalso; eapply step_list2_false; eauto].
+      exploit IHx0; eauto; simplify.
+      exists (if_convert_block pc' b' a ++ x2). exists x3.
+      split. rewrite app_assoc. auto.
+      eapply step_list2_app; eauto.
+      apply exec_if_conv3; auto.
+  Qed.
+
+  Lemma predicate_use_eval_predf :
+    forall p1 pr p0 b0 b1,
+      ~ In p0 (predicate_use p1) ->
+      eval_predf pr p1 = b1 ->
+      eval_predf pr # p0 <- b0 p1 = b1.
+  Proof.
+    induction p1; crush.
+    - destruct_match. inv Heqp1. simplify.
+      unfold not in *.
+      destruct (peq p1 p0); subst; try solve [exfalso; auto].
+      unfold eval_predf. simplify. rewrite ! Pos2Nat.id.
+      rewrite ! Regmap.gso; auto.
+    - rewrite eval_predf_Pand in *.
+      assert ((~ In p0 (predicate_use p1_1)) /\ (~ In p0 (predicate_use p1_2))).
+      { unfold not in *; split; intros; apply H; apply in_or_app; tauto. }
+      simplify.
+      erewrite IHp1_1; eauto.
+      erewrite IHp1_2; eauto.
+    - rewrite eval_predf_Por in *.
+      assert ((~ In p0 (predicate_use p1_1)) /\ (~ In p0 (predicate_use p1_2))).
+      { unfold not in *; split; intros; apply H; apply in_or_app; tauto. }
+      simplify.
+      erewrite IHp1_1; eauto.
+      erewrite IHp1_2; eauto.
+  Qed.
+
+  Lemma wf_trans_stays_truthy :
+    forall A B (ge: Genv.t A B) sp i a i' p b,
+      Gible.step_instr ge sp (Iexec i) a (Iexec i') ->
+      wf_trans p b ->
+      In a b ->
+      truthy (is_ps i) p ->
+      truthy (is_ps i') p.
+  Proof.
+    inversion 1; subst; auto; intros;
+    cbn [ is_ps ] in *.
+    inv H0; constructor; [].
+    apply H4 in H1. inv H2.
+    apply predicate_use_eval_predf; auto.
+  Qed.
+
+  Lemma wf_trans_cons :
+    forall x a b',
+      wf_trans x (a :: b') ->
+      wf_trans x b'.
+  Proof. inversion 1; subst; cbn in *; constructor; eauto. Qed.
 
   Lemma map_truthy_step:
-    forall sp rs' m' pr' x b' i c,
-      truthy pr' x ->
-      SeqBB.step tge sp (Iexec (mki rs' pr' m')) b' (Iterm i c) ->
-      SeqBB.step tge sp (Iexec (mki rs' pr' m')) (map (map_if_convert x) b') (Iterm i c).
+    forall A B (ge: Genv.t A B) b' sp i x i' c,
+      truthy (is_ps i) x ->
+      wf_trans x b' ->
+      SeqBB.step tge sp (Iexec i) b' (Iterm i' c) ->
+      SeqBB.step tge sp (Iexec i) (map (map_if_convert x) b') (Iterm i' c).
   Proof.
-    intros * H1 H2.
-    Admitted.
+    induction b'; crush.
+    inv H1.
+    - econstructor.
+      apply map_truthy_instr; eauto.
+      eapply IHb'; auto.
+      eapply wf_trans_stays_truthy; eauto. constructor; auto.
+      apply wf_trans_cons with (a:=a); auto.
+    - constructor; apply map_truthy_instr; auto.
+  Qed.
+
+  Lemma exec_if_conv :
+    forall A B ge sp x0 pc' b' tb i i' x x1,
+      step_list2 (@Gible.step_instr A B ge) sp (Iexec i) x0 (Iexec i') ->
+      wf_trans x b' ->
+      if_conv_replace pc' b' (x0 ++ RBexit x (RBgoto pc') :: x1) tb ->
+      exists b rb,
+        tb = b ++ (map (map_if_convert x) b') ++ rb
+        /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
+  Proof.
+    induction x0; simplify.
+    - inv H1. inv H. exists nil. exists b'0.
+      split; [|constructor]. rewrite app_nil_l.
+      f_equal. simplify. apply wf_transition_block_opt_prop in H0. rewrite H0.
+      rewrite Pos.eqb_refl. auto.
+    - inv H1. inv H.
+      destruct i1; [|exfalso; eapply step_list2_false; eauto].
+      exploit IHx0; eauto; simplify.
+      exists (if_convert_block pc' b' a ++ x2). exists x3.
+      split. rewrite app_assoc. auto.
+      eapply step_list2_app; eauto.
+      apply exec_if_conv3; auto.
+  Qed.
 
   Lemma match_none_correct :
     forall t s1' stk f sp pc rs m pr rs' m' bb pr' cf stk',
@@ -418,20 +778,21 @@ Section CORRECTNESS.
       do 3 econstructor. apply plus_one. econstructor; eauto.
       apply seqbb_eq; eauto. eauto.
     - simplify.
-      destruct (cf_dec cf pc'); subst.
+      exploit exec_rbexit_truthy; eauto; simplify.
+      destruct (cf_wf_dec x b' cf pc'); subst; simplify.
       + inv H1.
-        exploit exec_rbexit_truthy; eauto; simplify.
         exploit exec_if_conv; eauto; simplify.
         apply sim_star. exists (Some b'). exists (State stk' (transf_function f) sp pc rs pr m).
         simplify; try (unfold ltof; auto). apply star_refl.
-        constructor; auto. unfold sem_extrap; simplify.
+        constructor; auto.
+        simplify. econstructor; eauto.
+        unfold sem_extrap; simplify.
         destruct out_s. exfalso; eapply step_list_false; eauto.
         apply append. exists (mki rs' pr' m'). split.
         eapply step_list_2_eq; eauto.
         apply append2. eapply map_truthy_step; eauto.
         econstructor; eauto. constructor; auto.
-      + exploit exec_rbexit_truthy; eauto; simplify.
-        exploit exec_if_conv2; eauto; simplify.
+      + exploit exec_if_conv2; eauto; simplify.
         exploit step_cf_eq; eauto; simplify.
         apply sim_plus. exists None. exists x4.
         split. apply plus_one. econstructor; eauto.
@@ -449,13 +810,16 @@ Section CORRECTNESS.
       Forall2 match_stackframe s stk' ->
       (fn_code f) ! pc = Some b0 ->
       sem_extrap (transf_function f) pc1 sp (Iexec (mki rs pr m)) (Iexec (mki rs1 p0 m1)) b0 ->
+      (forall b',
+          f.(fn_code)!pc1 = Some b' ->
+          exists tb, (transf_function f).(fn_code)!pc1 = Some tb /\ if_conv_replace pc b0 b' tb) ->
       step ge (State s f sp pc1 rs1 p0 m1) E0 (State s f sp pc rs pr m) ->
       exists b' s2',
         (plus step tge (State stk' (transf_function f) sp pc1 rs1 p0 m1) t s2' \/
            star step tge (State stk' (transf_function f) sp pc1 rs1 p0 m1) t s2' /\
              ltof (option SeqBB.t) measure b' (Some b0)) /\ match_states b' s1' s2'.
   Proof.
-    intros * H H0 H1 H2 STK IS_B EXTRAP SIM.
+    intros * H H0 H1 H2 STK IS_B EXTRAP IS_TB SIM.
     rewrite IS_B in H0; simplify.
     exploit step_cf_eq; eauto; simplify.
     apply sim_plus.
@@ -463,8 +827,10 @@ Section CORRECTNESS.
     split; auto.
     unfold sem_extrap in *.
     inv SIM.
-    pose proof (transf_spec_correct f pc1) as X. inv X.
-    eapply plus_two. econstructor; eauto.
+    pose proof (IS_TB _ H13); simplify.
+    apply plus_one.
+    econstructor; eauto. eapply EXTRAP; auto. eapply seqbb_eq; eauto.
+  Qed.
 
   Lemma transf_correct:
     forall s1 t s1',
@@ -477,27 +843,19 @@ Section CORRECTNESS.
   Proof using TRANSL.
     inversion 1; subst; simplify;
       match goal with H: context[match_states] |- _ => inv H end.
-    -
+    - eauto using match_some_correct.
     - eauto using match_none_correct.
-    - Admitted.
-
-
-    (* - *)
-    (*   exploit temp; eauto; simplify. inv H3. *)
-    (*   pose proof (transf_spec_correct _ _ _ H4); simplify. *)
-    (*   exploit step_cf_matches; eauto. *)
-    (*   econstructor; eauto. unfold sem_extrap; intros. *)
-    (*   unfold sem_extrap in EXT. *)
-    (*   rewrite H8 in H3; simplify. *)
-    (*   do 2 econstructor. split. left. eapply plus_one. econstructor; eauto. *)
-    (*   unfold sem_extrap in EXT. eapply EXT. eauto. admit. *)
-    (*   instantiate (1 := State stack (transf_function f0) sp0 pc0 rs0 pr0 m0). *)
-    (*   admit. constructor; eauto. admit. unfold sem_extrap. intros. admit. *)
-    (*   eapply star_refl. intros. admit. *)
-    (* - *)
-    (*   simplify. inv H2. do 2 econstructor. split. admit. *)
-    (*   econstructor; eauto. admit. admit. intros. *)
-    (*   rewrite H3 in H2. inv H2. eauto *)
+    - apply sim_plus. remember (transf_function f) as tf. symmetry in Heqtf. func_info.
+      exists None. eexists. split.
+      apply plus_one. constructor; eauto. rewrite <- H1. eassumption.
+      rewrite <- H4. rewrite <- H2. constructor; auto.
+    - apply sim_plus. exists None. eexists. split.
+      apply plus_one. constructor; eauto.
+      constructor; auto.
+    - apply sim_plus. remember (transf_function f) as tf. symmetry in Heqtf. func_info.
+      exists None. inv STK. inv H7. eexists. split. apply plus_one. constructor.
+      constructor; auto.
+  Qed.
 
   Theorem transf_program_correct:
     forward_simulation (semantics prog) (semantics tprog).

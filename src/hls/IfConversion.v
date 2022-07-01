@@ -37,6 +37,8 @@ Require Import vericert.bourdoncle.Bourdoncle.
 
 Parameter build_bourdoncle : function -> (bourdoncle * PMap.t N).
 
+#[local] Open Scope positive.
+
 (*|
 =============
 If-Conversion
@@ -59,10 +61,22 @@ Definition map_if_convert (p: option pred_op) (i: instr) :=
   | _ => i
   end.
 
+Definition wf_transition (pl: list predicate) (i: instr) :=
+  match i with
+  | RBsetpred _ _ _ p => negb (existsb (Pos.eqb p) pl)
+  | _ => true
+  end.
+
+Definition wf_transition_block (p: pred_op) (b: SeqBB.t) :=
+  forallb (wf_transition (predicate_use p)) b.
+
+Definition wf_transition_block_opt (p: option pred_op) b :=
+  Option.default true (Option.map (fun p' => wf_transition_block p' b) p).
+
 Definition if_convert_block (next: node) (b_next: SeqBB.t) (i: instr) :=
   match i with
   | RBexit p (RBgoto next') =>
-      if (next =? next')%positive
+      if (next =? next') && wf_transition_block_opt p b_next
       then map (map_if_convert p) b_next
       else i::nil
   | _ => i::nil
@@ -179,7 +193,7 @@ Definition find_blocks_with_cond ep (b: list node) (c: code) : list (node * SeqB
 
 Module TupOrder <: TotalLeBool.
   Definition t : Type := positive * positive.
-  Definition leb (x y: t) := (fst x <=? fst y)%positive.
+  Definition leb (x y: t) := fst x <=? fst y.
   Infix "<=?" := leb (at level 70, no associativity).
   Theorem leb_total : forall a1 a2, (a1 <=? a2) = true \/ (a2 <=? a1) = true.
   Proof. unfold leb; intros; repeat rewrite Pos.leb_le; lia. Qed.
@@ -215,6 +229,25 @@ Definition transf_function (f: function) : function :=
   mkfunction f.(fn_sig) f.(fn_params) f.(fn_stacksize)
              (if_convert_code f.(fn_code) iflist)
              f.(fn_entrypoint).
+
+Section TRANSF_PROGRAM.
+
+Variable A B V: Type.
+Variable transf: ident -> A -> B.
+
+Definition transform_program_globdef (idg: ident * globdef A V) : ident * globdef B V :=
+  match idg with
+  | (id, Gfun f) => (id, Gfun (transf id f))
+  | (id, Gvar v) => (id, Gvar v)
+  end.
+
+Definition transform_program (p: AST.program A V) : AST.program B V :=
+  mkprogram
+    (List.map transform_program_globdef p.(prog_defs))
+    p.(prog_public)
+    p.(prog_main).
+
+End TRANSF_PROGRAM.
 
 Definition transf_fundef (fd: fundef) : fundef :=
   transf_fundef transf_function fd.
