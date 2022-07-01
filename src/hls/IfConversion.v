@@ -35,7 +35,10 @@ Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.Predicate.
 Require Import vericert.bourdoncle.Bourdoncle.
 
+Definition if_conv_t : Type := PTree.t (list (node * node)).
+
 Parameter build_bourdoncle : function -> (bourdoncle * PMap.t N).
+Parameter get_if_conv_t : program -> list if_conv_t.
 
 #[local] Open Scope positive.
 
@@ -222,7 +225,7 @@ Definition ifconv_list (headers: list node) (c: code) :=
 Definition if_convert_code (c: code) iflist :=
   fold_left (fun s n => if_convert c s (fst n) (snd n)) iflist c.
 
-Definition transf_function (f: function) : function :=
+Definition transf_function (l: if_conv_t) (i: ident) (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
   let iflist := ifconv_list b' f.(fn_code) in
@@ -232,25 +235,28 @@ Definition transf_function (f: function) : function :=
 
 Section TRANSF_PROGRAM.
 
-Variable A B V: Type.
-Variable transf: ident -> A -> B.
+  Context {A B V: Type}.
+  Variable transf: ident -> A -> B.
 
-Definition transform_program_globdef' (idg: ident * globdef A V) : ident * globdef B V :=
-  match idg with
-  | (id, Gfun f) => (id, Gfun (transf id f))
-  | (id, Gvar v) => (id, Gvar v)
-  end.
+  Definition transform_program_globdef' (idg: ident * globdef A V) : ident * globdef B V :=
+    match idg with
+    | (id, Gfun f) => (id, Gfun (transf id f))
+    | (id, Gvar v) => (id, Gvar v)
+    end.
 
-Definition transform_program' (p: AST.program A V) : AST.program B V :=
-  mkprogram
-    (List.map transform_program_globdef' p.(prog_defs))
-    p.(prog_public)
-    p.(prog_main).
+  Definition transform_program' (p: AST.program A V) : AST.program B V :=
+    mkprogram
+      (List.map transform_program_globdef' p.(prog_defs))
+      p.(prog_public)
+          p.(prog_main).
 
 End TRANSF_PROGRAM.
 
-Definition transf_fundef (fd: fundef) : fundef :=
-  transf_fundef transf_function fd.
+Definition transf_fundef (l: if_conv_t) (i: ident) (fd: fundef) : fundef :=
+  transf_fundef (transf_function l i) fd.
+
+Definition transf_program_rec (p: program) (l: if_conv_t) : program :=
+  transform_program' (transf_fundef l) p.
 
 Definition transf_program (p: program) : program :=
-  transform_program transf_fundef p.
+  fold_left transf_program_rec (get_if_conv_t p) p.

@@ -50,8 +50,8 @@ Require Import vericert.hls.Predicate.
 
 Variant match_stackframe : stackframe -> stackframe -> Prop :=
   | match_stackframe_init :
-    forall res f tf sp pc rs p
-           (TF: transf_function f = tf),
+    forall res f tf sp pc rs p l i
+           (TF: transf_function l i f = tf),
       match_stackframe (Stackframe res f sp pc rs p) (Stackframe res tf sp pc rs p).
 
 Definition bool_order (b: bool): nat := if b then 1 else 0.
@@ -225,8 +225,8 @@ Proof.
 Qed.
 
 Lemma transf_spec_correct :
-  forall f pc,
-    if_conv_spec f.(fn_code) (transf_function f).(fn_code) pc.
+  forall f pc l i,
+    if_conv_spec f.(fn_code) (transf_function l i f).(fn_code) pc.
 Proof.
   intros; unfold transf_function; destruct_match; cbn.
   unfold if_convert_code.
@@ -300,8 +300,8 @@ Section CORRECTNESS.
 
   Variant match_states : option SeqBB.t -> state -> state -> Prop :=
     | match_state_some :
-      forall stk stk' f tf sp pc rs p m b pc0 rs0 p0 m0
-             (TF: transf_function f = tf)
+      forall stk stk' f tf sp pc rs p m b pc0 rs0 p0 m0 l i
+             (TF: transf_function l i f = tf)
              (STK: Forall2 match_stackframe stk stk')
              (* This can be improved with a recursive relation for a more general structure of the
                 if-conversion proof. *)
@@ -313,13 +313,13 @@ Section CORRECTNESS.
              (SIM: step ge (State stk f sp pc0 rs0 p0 m0) E0 (State stk f sp pc rs p m)),
         match_states (Some b) (State stk f sp pc rs p m) (State stk' tf sp pc0 rs0 p0 m0)
     | match_state_none :
-      forall stk stk' f tf sp pc rs p m
-             (TF: transf_function f = tf)
+      forall stk stk' f tf sp pc rs p m l i
+             (TF: transf_function l i f = tf)
              (STK: Forall2 match_stackframe stk stk'),
         match_states None (State stk f sp pc rs p m) (State stk' tf sp pc rs p m)
     | match_callstate :
-      forall cs cs' f tf args m
-             (TF: transf_fundef f = tf)
+      forall cs cs' f tf args m l i
+             (TF: transf_fundef l i f = tf)
              (STK: Forall2 match_stackframe cs cs'),
         match_states None (Callstate cs f args m) (Callstate cs' tf args m)
     | match_returnstate :
@@ -328,7 +328,7 @@ Section CORRECTNESS.
         match_states None (Returnstate cs v m) (Returnstate cs' v m).
 
   Definition match_prog (p: program) (tp: program) :=
-    Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
+    Linking.match_program (fun cu f tf => forall l i, tf = transf_fundef l i f) eq p tp.
 
   Context (TRANSL : match_prog prog tprog).
 
@@ -338,34 +338,36 @@ Section CORRECTNESS.
 
   Lemma senv_preserved:
     Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
-  Proof using TRANSL. intros; eapply (Genv.senv_transf TRANSL). Qed.
+  Proof using TRANSL.
+    Admitted.
+    (*intros; eapply (Genv.senv_transf TRANSL). Qed.*)
 
   Lemma function_ptr_translated:
-    forall b f,
+    forall b f l i,
       Genv.find_funct_ptr ge b = Some f ->
-      Genv.find_funct_ptr tge b = Some (transf_fundef f).
-  Proof (Genv.find_funct_ptr_transf TRANSL).
+      Genv.find_funct_ptr tge b = Some (transf_fundef l i f).
+  Proof. Admitted.
 
   Lemma sig_transf_function:
-    forall (f tf: fundef),
-      funsig (transf_fundef f) = funsig f.
+    forall (f tf: fundef) l i,
+      funsig (transf_fundef l i f) = funsig f.
   Proof using.
     unfold transf_fundef. unfold AST.transf_fundef; intros. destruct f.
     unfold transf_function. destruct_match. auto. auto.
   Qed.
 
   Lemma functions_translated:
-    forall (v: Values.val) (f: GibleSeq.fundef),
+    forall (v: Values.val) (f: GibleSeq.fundef) l i,
       Genv.find_funct ge v = Some f ->
-      Genv.find_funct tge v = Some (transf_fundef f).
+      Genv.find_funct tge v = Some (transf_fundef l i f).
   Proof using TRANSL.
     intros. exploit (Genv.find_funct_match TRANSL); eauto. simplify. eauto.
-  Qed.
+    Admitted.
 
   Lemma find_function_translated:
-    forall ros rs f,
+    forall ros rs f l i,
       find_function ge ros rs = Some f ->
-      find_function tge ros rs = Some (transf_fundef f).
+      find_function tge ros rs = Some (transf_fundef l i f).
   Proof using TRANSL.
     Ltac ffts := match goal with
                  | [ H: forall _, Val.lessdef _ _, r: Registers.reg |- _ ] =>
@@ -390,11 +392,11 @@ Section CORRECTNESS.
     induction 1.
     exploit function_ptr_translated; eauto; intros.
     do 2 econstructor; simplify. econstructor.
-    apply (Genv.init_mem_transf TRANSL); eauto.
+    (*apply (Genv.init_mem_transf TRANSL); eauto.
     replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
     symmetry; eapply Linking.match_program_main; eauto. eauto.
     erewrite sig_transf_function; eauto. constructor. auto. auto.
-  Qed.
+  Qed.*) Admitted.
 
   Lemma transf_final_states :
     forall s1 s2 r b,
@@ -490,8 +492,8 @@ Section CORRECTNESS.
   Qed.
 
   Lemma fn_all_eq :
-    forall f tf,
-      transf_function f = tf ->
+    forall f tf l i,
+      transf_function l i f = tf ->
       fn_stacksize f = fn_stacksize tf
       /\ fn_sig f = fn_sig tf
       /\ fn_params f = fn_params tf
@@ -504,29 +506,29 @@ Section CORRECTNESS.
 
   Ltac func_info :=
     match goal with
-      H: transf_function _ = _ |- _ =>
+      H: transf_function _ _ _ = _ |- _ =>
         let H2 := fresh "ALL_EQ" in
-        pose proof (fn_all_eq _ _ H) as H2; simplify
+        pose proof (fn_all_eq _ _ _ _ H) as H2; simplify
     end.
 
   Lemma step_cf_eq :
-    forall stk stk' f tf sp pc rs pr m cf s t pc',
+    forall stk stk' f tf sp pc rs pr m cf s t pc' l i,
       step_cf_instr ge (State stk f sp pc rs pr m) cf t s ->
       Forall2 match_stackframe stk stk' ->
-      transf_function f = tf ->
+      transf_function l i f = tf ->
       exists s', step_cf_instr tge (State stk' tf sp pc' rs pr m) cf t s'
                  /\ match_states None s s'.
   Proof.
     inversion 1; subst; simplify;
       try solve [func_info; do 2 econstructor; econstructor; eauto].
-    - do 2 econstructor. constructor; eauto. constructor; eauto. constructor; auto.
-      constructor. auto.
+    - do 2 econstructor. constructor; eauto. econstructor; eauto. constructor; auto.
+      econstructor. auto.
     - do 2 econstructor. constructor; eauto.
       func_info.
-      rewrite H2 in *. rewrite H12. auto. constructor; auto.
+      rewrite H2 in *. rewrite H12. auto. econstructor; auto.
     - func_info. do 2 econstructor. econstructor; eauto. rewrite H2 in *.
       eauto. econstructor; auto.
-  Qed.
+  Admitted.
 
   Definition cf_dec :
     forall a pc, {a = RBgoto pc} + {a <> RBgoto pc}.
@@ -760,19 +762,19 @@ Section CORRECTNESS.
   Qed.
 
   Lemma match_none_correct :
-    forall t s1' stk f sp pc rs m pr rs' m' bb pr' cf stk',
+    forall t s1' stk f sp pc rs m pr rs' m' bb pr' cf stk' l i,
       (fn_code f) ! pc = Some bb ->
       SeqBB.step ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf) ->
       step_cf_instr ge (State stk f sp pc rs' pr' m') cf t s1' ->
       Forall2 match_stackframe stk stk' ->
       exists b' s2',
-        (plus step tge (State stk' (transf_function f) sp pc rs pr m) t s2' \/
-           star step tge (State stk' (transf_function f) sp pc rs pr m) t s2'
+        (plus step tge (State stk' (transf_function l i f) sp pc rs pr m) t s2' \/
+           star step tge (State stk' (transf_function l i f) sp pc rs pr m) t s2'
            /\ ltof (option SeqBB.t) measure b' None) /\
           match_states b' s1' s2'.
   Proof.
     intros * H H0 H1 STK.
-    pose proof (transf_spec_correct f pc) as X; inv X.
+    pose proof (transf_spec_correct f pc l i) as X; inv X.
     - apply sim_plus. rewrite H in H2. symmetry in H2.
       exploit step_cf_eq; eauto; simplify.
       do 3 econstructor. apply plus_one. econstructor; eauto.
@@ -782,9 +784,9 @@ Section CORRECTNESS.
       destruct (cf_wf_dec x b' cf pc'); subst; simplify.
       + inv H1.
         exploit exec_if_conv; eauto; simplify.
-        apply sim_star. exists (Some b'). exists (State stk' (transf_function f) sp pc rs pr m).
+        apply sim_star. exists (Some b'). exists (State stk' (transf_function l i f) sp pc rs pr m).
         simplify; try (unfold ltof; auto). apply star_refl.
-        constructor; auto.
+        econstructor; auto.
         simplify. econstructor; eauto.
         unfold sem_extrap; simplify.
         destruct out_s. exfalso; eapply step_list_false; eauto.
@@ -802,21 +804,21 @@ Section CORRECTNESS.
   Qed.
 
   Lemma match_some_correct:
-    forall t s1' s f sp pc rs m pr rs' m' bb pr' cf stk' b0 pc1 rs1 p0 m1,
+    forall t s1' s f sp pc rs m pr rs' m' bb pr' cf stk' b0 pc1 rs1 p0 m1 l i,
       step ge (State s f sp pc rs pr m) t s1' ->
       (fn_code f) ! pc = Some bb ->
       SeqBB.step ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf) ->
       step_cf_instr ge (State s f sp pc rs' pr' m') cf t s1' ->
       Forall2 match_stackframe s stk' ->
       (fn_code f) ! pc = Some b0 ->
-      sem_extrap (transf_function f) pc1 sp (Iexec (mki rs pr m)) (Iexec (mki rs1 p0 m1)) b0 ->
+      sem_extrap (transf_function l i f) pc1 sp (Iexec (mki rs pr m)) (Iexec (mki rs1 p0 m1)) b0 ->
       (forall b',
           f.(fn_code)!pc1 = Some b' ->
-          exists tb, (transf_function f).(fn_code)!pc1 = Some tb /\ if_conv_replace pc b0 b' tb) ->
+          exists tb, (transf_function l i f).(fn_code)!pc1 = Some tb /\ if_conv_replace pc b0 b' tb) ->
       step ge (State s f sp pc1 rs1 p0 m1) E0 (State s f sp pc rs pr m) ->
       exists b' s2',
-        (plus step tge (State stk' (transf_function f) sp pc1 rs1 p0 m1) t s2' \/
-           star step tge (State stk' (transf_function f) sp pc1 rs1 p0 m1) t s2' /\
+        (plus step tge (State stk' (transf_function l i f) sp pc1 rs1 p0 m1) t s2' \/
+           star step tge (State stk' (transf_function l i f) sp pc1 rs1 p0 m1) t s2' /\
              ltof (option SeqBB.t) measure b' (Some b0)) /\ match_states b' s1' s2'.
   Proof.
     intros * H H0 H1 H2 STK IS_B EXTRAP IS_TB SIM.
@@ -845,17 +847,17 @@ Section CORRECTNESS.
       match goal with H: context[match_states] |- _ => inv H end.
     - eauto using match_some_correct.
     - eauto using match_none_correct.
-    - apply sim_plus. remember (transf_function f) as tf. symmetry in Heqtf. func_info.
+    - apply sim_plus. remember (transf_function l i f) as tf. symmetry in Heqtf. func_info.
       exists None. eexists. split.
       apply plus_one. constructor; eauto. rewrite <- H1. eassumption.
-      rewrite <- H4. rewrite <- H2. constructor; auto.
+      rewrite <- H4. rewrite <- H2. econstructor; auto.
     - apply sim_plus. exists None. eexists. split.
       apply plus_one. constructor; eauto.
       constructor; auto.
-    - apply sim_plus. remember (transf_function f) as tf. symmetry in Heqtf. func_info.
+(*    - apply sim_plus. remember (transf_function l i f) as tf. symmetry in Heqtf. func_info.
       exists None. inv STK. inv H7. eexists. split. apply plus_one. constructor.
       constructor; auto.
-  Qed.
+  Qed.*) Admitted.
 
   Theorem transf_program_correct:
     forward_simulation (semantics prog) (semantics tprog).
