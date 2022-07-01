@@ -198,3 +198,52 @@ Proof.
   inv H. assert (i1 = (Iterm state' cf)) by (eapply exec_determ; eauto). subst.
   exfalso; eapply step_list2_false; eauto.
 Qed.
+
+Lemma step_cf_in :
+  forall A B (ge: Genv.t A B) sp bb i1 i2 cf,
+    SeqBB.step ge sp (Iexec i1) bb (Iterm i2 cf) ->
+    exists p, In (RBexit p cf) bb.
+Proof.
+  induction bb; crush; inv H; eauto.
+  exploit IHbb; eauto; simplify; eauto.
+  inv H3; eauto.
+Qed.
+
+Lemma SeqBB_foldl_In :
+  forall bb l pc,
+    In pc l ->
+    In pc (fold_left (fun (ns : list node) (i : instr) => match i with
+                                                       | RBexit _ cf0 => successors_instr cf0 ++ ns
+                                                       | _ => ns
+                                                       end) bb l).
+Proof.
+  induction bb; crush. eapply IHbb; eauto.
+  destruct a; auto.
+  apply in_or_app; auto.
+Qed.
+
+Lemma in_cf_all_successors' :
+  forall bb pc cf p l,
+    In pc (successors_instr cf) ->
+    In (RBexit p cf) bb ->
+    In pc (fold_left (fun (ns : list node) (i : instr) => match i with
+                                                       | RBexit _ cf0 => successors_instr cf0 ++ ns
+                                                       | _ => ns
+                                                       end) bb l).
+Proof.
+  induction bb; crush.
+  inv H0. simplify.
+  eapply SeqBB_foldl_In.
+  apply in_or_app; auto.
+  eapply IHbb; eauto.
+Qed.
+
+Lemma in_cf_all_successors :
+  forall bb pc cf p,
+    In pc (successors_instr cf) ->
+    In (RBexit p cf) bb ->
+    In pc (all_successors bb).
+Proof.
+  unfold all_successors, SeqBB.foldl; intros.
+  eapply in_cf_all_successors'; eauto.
+Qed.

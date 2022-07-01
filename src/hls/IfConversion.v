@@ -235,15 +235,15 @@ Section TRANSF_PROGRAM.
 Variable A B V: Type.
 Variable transf: ident -> A -> B.
 
-Definition transform_program_globdef (idg: ident * globdef A V) : ident * globdef B V :=
+Definition transform_program_globdef' (idg: ident * globdef A V) : ident * globdef B V :=
   match idg with
   | (id, Gfun f) => (id, Gfun (transf id f))
   | (id, Gvar v) => (id, Gvar v)
   end.
 
-Definition transform_program (p: AST.program A V) : AST.program B V :=
+Definition transform_program' (p: AST.program A V) : AST.program B V :=
   mkprogram
-    (List.map transform_program_globdef p.(prog_defs))
+    (List.map transform_program_globdef' p.(prog_defs))
     p.(prog_public)
     p.(prog_main).
 

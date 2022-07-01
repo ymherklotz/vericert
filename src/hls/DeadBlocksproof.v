@@ -26,6 +26,7 @@ Require Import Events.
 Require Import Gible.
 Require Import GibleSeq.
 Require Import Relation_Operators.
+Require Import Vericertlib.
 
 Unset Allow StrictProp.
 
@@ -878,9 +879,124 @@ Hint Resolve sig_fundef_translated : valagree.
 Hint Resolve senv_preserved : valagree.
 Hint Resolve stacksize_preserved: valagree.
 
+Lemma step_instr :
+  forall sp s1 s2 a,
+    step_instr ge sp s1 a s2 ->
+    step_instr tge sp s1 a s2.
+Proof.
+  inversion 1; subst; econstructor; eauto with valagree.
+  - erewrite eval_operation_preserved; eauto with valagree.
+  - erewrite eval_addressing_preserved; eauto with valagree.
+  - erewrite eval_addressing_preserved; eauto with valagree.
+Qed.
+
+Lemma seqbb_eq :
+  forall bb sp i1 i2 cf,
+    SeqBB.step ge sp (Iexec i1) bb (Iterm i2 cf) ->
+    SeqBB.step tge sp (Iexec i1) bb (Iterm i2 cf).
+Proof.
+  induction bb; crush; inv H.
+  - econstructor; eauto. apply step_instr; eassumption.
+    destruct state'. eapply IHbb; eauto.
+  - constructor; apply step_instr; auto.
+Qed.
+
 Ltac try_succ f pc pc' :=
   try (eapply Rstar_trans ; eauto) ; constructor ;
     (eapply (CFG (fn_code f) pc pc'); eauto;  simpl; auto).
+
+Lemma step_cf_eq :
+  forall stk stk' f tf sp pc rs pr m cf s t bb p,
+    step_cf_instr ge (State stk f sp pc rs pr m) cf t s ->
+    match_stackframes stk stk' ->
+    transf_function f = OK tf ->
+    (cfg (fn_code f) ** ) (fn_entrypoint f) pc ->
+    (fn_code f)!pc = Some bb ->
+    In (RBexit p cf) bb ->
+    exists s', step_cf_instr tge (State stk' tf sp pc rs pr m) cf t s'
+               /\ match_states s s'.
+Proof.
+  inversion 1; subst; simplify.
+
+  (*icall*)
+  destruct ros.
+  exploit spec_ros_r_find_function ; eauto.
+  intros. destruct H5 as [tf' [Hfind OKtf']].
+
+  eexists ; split ; eauto. constructor; eauto with valagree.
+  constructor; eauto. constructor; eauto. try_succ f pc pc'; eauto.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+
+  exploit spec_ros_id_find_function ; eauto.
+  intros. destruct H5 as [tf' [Hfind OKtf']].
+
+  eexists ; split ; eauto. constructor; eauto with valagree.
+  constructor; eauto. constructor; eauto. try_succ f pc pc'; eauto.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+
+  (*itailcall*)
+  destruct ros.
+  exploit spec_ros_r_find_function ; eauto.
+  intros. destruct H5 as [tf' [Hfind OKtf']].
+
+  exploit find_function_preserved_same ; eauto.
+  intros.
+  exists (Callstate stk' tf' rs##args m');  split ; eauto.
+  constructor; eauto with valagree.
+  replace (fn_stacksize tf) with (fn_stacksize f); eauto with valagree.
+
+  exploit spec_ros_id_find_function ; eauto.
+  intros. destruct H5 as [tf' [Hfind OKtf']].
+
+  exists (Callstate stk' tf' rs##args m');  split ; eauto.
+  constructor ; eauto with valagree.
+  replace (fn_stacksize tf) with (fn_stacksize f); eauto with valagree.
+
+  (* ibuiltin *)
+  exploit instr_at; eauto; intros.
+  exists (State stk' tf sp pc' (regmap_setres res vres rs) pr m') ; split ; eauto.
+  econstructor ; eauto.
+  eapply eval_builtin_args_preserved with (2:= H10); eauto with valagree.
+  eapply external_call_symbols_preserved; eauto with valagree.
+
+  constructor; auto. try_succ f pc pc'.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+
+  (* ifso *)
+  destruct b.
+  exists (State stk' tf sp ifso rs pr m); split ; eauto.
+  eapply exec_RBcond ; eauto.
+  constructor; auto.
+  try_succ f pc ifso.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+
+  (*ifnot*)
+  exists (State stk' tf sp ifnot rs pr m); split ; eauto.
+  eapply exec_RBcond ; eauto.
+  constructor; auto.
+  try_succ f pc ifnot.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+
+  (* ijump *)
+  exists (State stk' tf sp pc' rs pr m); split ; eauto.
+  eapply exec_RBjumptable ; eauto.
+  constructor; auto.
+  try_succ f pc pc'.
+  eapply in_cf_all_successors; eauto. eapply list_nth_z_in; eauto.
+
+  (* ireturn *)
+  exists (Returnstate stk' (regmap_optget or Vundef rs) m'); split ; eauto.
+  eapply exec_RBreturn ; eauto.
+  rewrite <- H10 ; eauto with valagree.
+  rewrite stacksize_preserved with f tf ; eauto.
+
+  (*igoto*)
+  exists (State stk' tf sp pc' rs pr m); split; eauto.
+  eapply exec_RBgoto; eauto.
+  constructor; auto.
+  try_succ f pc pc'.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+Qed.
 
 Lemma transl_step_correct:
   forall s1 t s2,
@@ -890,137 +1006,29 @@ Lemma transl_step_correct:
 Proof.
   induction 1; intros; inv MS; auto.
 
-  (* inop *)
   exploit instr_at; eauto; intros.
-  destruct state0.
-  exists (State stack f0 sp0 pc0 rs0 pr0 m0); split ; eauto.
-  econstructor; auto. eauto. admit. admit.
-  constructor; auto. admit.
-  try_succ f pc pc'.
-
-  (* iop *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.State ts tf sp pc' (rs#res<- v) m); split ; eauto.
-  eapply RTLdfs.exec_Iop ; eauto.
-  rewrite <- H0 ; eauto with valagree.
-  constructor; auto.
-  try_succ f pc pc'.
-
-  (* iload *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.State ts tf sp pc' (rs#dst <- v) m); split ; eauto.
-  eapply RTLdfs.exec_Iload ; eauto.
-  try solve [rewrite <- H0 ; eauto with valagree].
-  econstructor ; eauto.
-  try_succ f pc pc'.
-
-  (* istore *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.State ts tf sp pc' rs m'); split ; eauto.
-  eapply RTLdfs.exec_Istore ; eauto.
-  try solve [rewrite <- H0 ; eauto with valagree].
-  constructor ; eauto.
-  try_succ f pc pc'.
-
-  (* icall *)
-  destruct ros.
-  exploit spec_ros_r_find_function ; eauto.
-  intros. destruct H1 as [tf' [Hfind OKtf']].
-
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.Callstate (RTLdfs.Stackframe res tf sp pc' rs :: ts) tf' rs ## args m) ; split ; eauto.
-  eapply RTLdfs.exec_Icall ; eauto.
-  eauto with valagree.
-  constructor; auto.
-  constructor; auto.
-  try_succ f pc pc'.
-
-  exploit spec_ros_id_find_function ; eauto.
-  intros. destruct H1 as [tf' [Hfind OKtf']].
-
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.Callstate (RTLdfs.Stackframe res tf sp pc' rs :: ts) tf' rs ## args m) ; split ; eauto.
-  eapply RTLdfs.exec_Icall ; eauto.
-  eauto with valagree.
-  constructor; auto.
-  constructor ; eauto.
-  try_succ f pc pc'.
-
-  (* itailcall *)
-  destruct ros.
-  exploit spec_ros_r_find_function ; eauto.
-  intros. destruct H1 as [tf' [Hfind OKtf']].
-
-  exploit instr_at; eauto; intros.
-  exploit find_function_preserved_same ; eauto.
-  intros.
-  exists (RTLdfs.Callstate ts tf' rs##args m');  split ; eauto.
-  eapply RTLdfs.exec_Itailcall ; eauto with valagree.
-  replace (RTLdfs.fn_stacksize tf) with (fn_stacksize f); eauto with valagree.
-
-  exploit spec_ros_id_find_function ; eauto.
-  intros. destruct H1 as [tf' [Hfind OKtf']].
-
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.Callstate ts tf' rs##args m');  split ; eauto.
-  eapply RTLdfs.exec_Itailcall ; eauto with valagree.
-  replace (RTLdfs.fn_stacksize tf) with (fn_stacksize f); eauto with valagree.
-
-  (* ibuiltin *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.State ts tf sp pc' (regmap_setres res vres rs) m') ; split ; eauto.
-  eapply RTLdfs.exec_Ibuiltin with (vargs:= vargs) ; eauto.
-  eapply eval_builtin_args_preserved with (2:= H0); eauto with valagree.
-  eapply external_call_symbols_preserved; eauto with valagree.
-
-  constructor; auto. try_succ f pc pc'.
-
-  (* ifso *)
-
-  exploit instr_at; eauto; intros.
-  destruct b.
-  exists (RTLdfs.State ts tf sp ifso rs m); split ; eauto.
-  eapply RTLdfs.exec_Icond ; eauto.
-  constructor; auto.
-  try_succ f pc ifso.
-
-  (* ifnot *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.State ts tf sp ifnot rs m); split ; eauto.
-  eapply RTLdfs.exec_Icond ; eauto.
-  constructor; auto.
-  try_succ f pc ifnot.
-
-  (* ijump *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.State ts tf sp pc' rs m); split ; eauto.
-  eapply RTLdfs.exec_Ijumptable ; eauto.
-  constructor; auto.
-  try_succ f pc pc'.
-  eapply list_nth_z_in; eauto.
-
-  (* ireturn *)
-  exploit instr_at; eauto; intros.
-  exists (RTLdfs.Returnstate ts (regmap_optget or Vundef rs) m'); split ; eauto.
-  eapply RTLdfs.exec_Ireturn ; eauto.
-  rewrite <- H0 ; eauto with valagree.
-  rewrite stacksize_preserved with f tf ; eauto.
+  exploit step_cf_in; eauto; simplify.
+  exploit step_cf_eq; eauto; simplify.
+  exists x0.
+  split. econstructor; eauto.
+  apply seqbb_eq; auto. auto.
 
   (* internal *)
   simpl in SPEC. monadInv SPEC. simpl in STACK.
-  exists (RTLdfs.State ts x
-    (Vptr stk Ptrofs.zero)
-    x.(RTLdfs.fn_entrypoint)
-    (init_regs args x.(RTLdfs.fn_params))
-    m').
+  exists (State ts x
+                (Vptr stk Ptrofs.zero)
+                x.(fn_entrypoint)
+                    (init_regs args x.(fn_params))
+                    (PMap.init false)
+                    m').
   split.
-  eapply RTLdfs.exec_function_internal; eauto.
+  eapply exec_function_internal; eauto.
   rewrite stacksize_preserved with f x in H ; auto.
-  replace (RTL.fn_entrypoint f) with (RTLdfs.fn_entrypoint x).
-  replace (RTL.fn_params f) with (RTLdfs.fn_params x).
+  replace (fn_entrypoint f) with (fn_entrypoint x).
+  replace (fn_params f) with (fn_params x).
 
   econstructor ; eauto.
-  replace (RTLdfs.fn_entrypoint x) with (fn_entrypoint f).
+  replace (fn_entrypoint x) with (fn_entrypoint f).
   eapply Rstar_refl ; eauto.
   monadInv EQ. auto.
   monadInv EQ. auto.
@@ -1028,19 +1036,19 @@ Proof.
 
   (* external *)
   inv SPEC.
-  exists (RTLdfs.Returnstate ts res m'). split.
-  eapply RTLdfs.exec_function_external; eauto.
+  exists (Returnstate ts res m'). split.
+  eapply exec_function_external; eauto.
   eapply external_call_symbols_preserved; eauto with valagree.
   econstructor ; eauto.
 
   (* return state *)
   inv STACK.
-  exists (RTLdfs.State ts0 tf sp pc (rs# res <- vres) m);
+  exists (State ts0 tf sp pc (rs# res <- vres) pr m);
     split; ( try constructor ; eauto).
 Qed.
 
 Theorem transf_program_correct:
-  forward_simulation (RTL.semantics prog) (RTLdfs.semantics tprog).
+  forward_simulation (semantics prog) (semantics tprog).
 Proof.
   eapply forward_simulation_step.
   eapply senv_preserved.
