@@ -53,7 +53,8 @@ Definition reg := positive.
 Inductive resource : Set :=
 | Reg : reg -> resource
 | Pred : reg -> resource
-| Mem : resource.
+| Mem : resource
+| Exit : resource.
 
 (*|
 The following defines quite a few equality comparisons automatically, however,
@@ -79,7 +80,8 @@ Module R_indexed.
     match rs with
     | Reg r => xO (xO r)
     | Pred r => xI (xI r)
-    | Mem => 1%positive
+    | Mem => 1
+    | Exit => 2
     end.
 
   Lemma index_inj:  forall (x y: t), index x = index y -> x = y.
@@ -110,6 +112,7 @@ Inductive expression : Type :=
 | Eload : AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Estore : expression -> AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Esetpred : Op.condition -> expression_list -> expression
+| Eexit : cf_instr -> expression
 with expression_list : Type :=
 | Enil : expression_list
 | Econs : expression -> expression_list -> expression_list
@@ -303,6 +306,13 @@ with sem_mem : ctx -> expression -> Memory.mem -> Prop :=
 | Sbase_mem :
     forall ctx,
     sem_mem ctx (Ebase Mem) (ctx_mem ctx)
+with sem_exit : ctx -> expression -> option cf_instr -> Prop :=
+| Sexit :
+  forall ctx cf,
+    sem_exit ctx (Eexit cf) (Some cf)
+| Sbase_exit :
+  forall ctx,
+    sem_exit ctx (Ebase Exit) None
 with sem_val_list : ctx -> expression_list -> list val -> Prop :=
 | Snil :
     forall ctx,
@@ -351,13 +361,14 @@ Inductive sem_regset : ctx -> forest -> regset -> Prop :=
     (forall x, sem_pred_expr sem_value ctx (f # (Reg x)) (rs' !! x)) ->
     sem_regset ctx f rs'.
 
-Inductive sem : ctx -> forest -> instr_state -> Prop :=
+Inductive sem : ctx -> forest -> instr_state * cf_instr -> Prop :=
 | Sem:
-    forall ctx rs' m' f pr',
+    forall ctx rs' m' f pr' cf,
     sem_regset ctx f rs' ->
     sem_predset ctx f pr' ->
     sem_pred_expr sem_mem ctx (f # Mem) m' ->
-    sem ctx f (mk_instr_state rs' pr' m').
+    sem_pred_expr sem_exit ctx (f # Exit) (Some cf) ->
+    sem ctx f (mk_instr_state rs' pr' m', cf).
 
 End SEMANTICS.
 
@@ -381,6 +392,7 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
   | Esetpred c1 el1, Esetpred c2 el2 =>
     if condition_eq c1 c2
     then beq_expression_list el1 el2 else false
+  | Eexit cf1, Eexit cf2 => if cf_instr_eq cf1 cf2 then true else false
   | _, _ => false
   end
 with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
@@ -438,6 +450,7 @@ Proof.
     inv H. rewrite beq_expression_list_refl in Heqb; crush.
   - simplify. repeat (destruct_match; crush); subst.
     unfold not in *; intros. inv H0. rewrite beq_expression_list_refl in H; crush.
+  - simplify. repeat (destruct_match; crush); subst.
   - simplify. repeat (destruct_match; crush); subst.
   - simplify. repeat (destruct_match; crush); subst.
     apply andb_false_iff in H. inv H. unfold not in *; intros.
@@ -900,6 +913,8 @@ Section CORRECT.
       unfold ctx_rs, ctx_ps, ctx_mem in *; cbn in *. inv H; crush.
     - inv H0.
     - inv H0.
+    - inv H0.
+    - inv H0.
     - inv H0. econstructor.
     - inv H0. eapply IHe in H6; auto. eapply IHe0 in H8.
       econstructor; eassumption.
@@ -1185,7 +1200,7 @@ Section CORRECT.
       check fa fb = true ->
       sem ictx fa i ->
       sem octx fb i' ->
-      match_states i i'.
+      match_states (fst i) (fst i') /\ snd i = snd i'.
   Proof using HSIM.
     intros.
     unfold check, get_forest in *; intros;
@@ -1200,18 +1215,14 @@ Section CORRECT.
              | H: forall _ : Rtree.elt, _ |- _ => specialize (H (Reg x))
              end.
       repeat (destruct_match; try contradiction).
-      unfold "#" in *. rewrite Heqo in H0.
-      rewrite Heqo0 in H1. admit.
-      unfold "#" in H1. rewrite Heqo0 in H1.
-      unfold "#" in H0. rewrite Heqo in H0. admit.
-    }
+      unfold "#" in *.
 Admitted.
 
   Lemma check_correct2:
     forall (fa fb : forest) i,
       check fa fb = true ->
       sem ictx fa i ->
-      exists i', sem octx fb i' /\ match_states i i'.
+      exists i', sem octx fb i' /\ match_states (fst i) (fst i') /\ snd i = snd i'.
   Proof. Admitted.
 
 End CORRECT.
@@ -1311,22 +1322,22 @@ End BOOLEAN_EQUALITY.
 
 Lemma map1:
   forall w dst dst',
-  dst <> dst' ->
-  (empty # dst <- w) # dst' = NE.singleton (T, Ebase dst').
+    dst <> dst' ->
+    (empty # dst <- w) # dst' = NE.singleton (T, Ebase dst').
 Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply get_empty. Qed.
 
 Lemma genmap1:
   forall (f : forest) w dst dst',
-  dst <> dst' ->
-  (f # dst <- w) # dst' = f # dst'.
+    dst <> dst' ->
+    (f # dst <- w) # dst' = f # dst'.
 Proof. intros; unfold get_forest; rewrite Rtree.gso; auto. Qed.
 
 Lemma map2:
   forall (v : pred_expr) x rs,
-  (rs # x <- v) # x = v.
+    (rs # x <- v) # x = v.
 Proof. intros; unfold get_forest; rewrite Rtree.gss; trivial. Qed.
 
 Lemma tri1:
   forall x y,
-  Reg x <> Reg y -> x <> y.
+    Reg x <> Reg y -> x <> y.
 Proof. crush. Qed.

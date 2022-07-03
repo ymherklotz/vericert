@@ -48,21 +48,16 @@ RTLBlock to abstract translation
 Correctness of translation from RTLBlock to the abstract interpretation language.
 |*)
 
-(*Definition is_regs i := match i with mk_instr_state rs _ => rs end.
-Definition is_mem i := match i with mk_instr_state _ m => m end.
+Definition is_regs i := match i with mk_instr_state rs _ _ => rs end.
+Definition is_mem i := match i with mk_instr_state _ _ m => m end.
+Definition is_ps i := match i with mk_instr_state _ p _ => p end.
 
 Inductive state_lessdef : instr_state -> instr_state -> Prop :=
   state_lessdef_intro :
-    forall rs1 rs2 m1,
-    (forall x, rs1 !! x = rs2 !! x) ->
-    state_lessdef (mk_instr_state rs1 m1) (mk_instr_state rs2 m1).
-
-Ltac inv_simp :=
-  repeat match goal with
-  | H: exists _, _ |- _ => inv H
-  end; simplify.
-
-*)
+    forall rs1 rs2 ps1 ps2 m1,
+      (forall x, rs1 !! x = rs2 !! x) ->
+      (forall x, ps1 !! x = ps2 !! x) ->
+      state_lessdef (mk_instr_state rs1 ps1 m1) (mk_instr_state rs2 ps2 m1).
 
 Definition check_dest i r' :=
   match i with
@@ -89,12 +84,13 @@ Proof. induction l; crush. Qed.
 Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
 Proof. destruct (check_dest_l i r); tauto. Qed.
 
-(*Lemma check_dest_update :
+Lemma check_dest_update :
   forall f i r,
   check_dest i r = false ->
-  (update f i) # (Reg r) = f # (Reg r).
+  (snd (update f i)) # (Reg r) = (snd f) # (Reg r).
 Proof.
-  destruct i; crush; try apply Pos.eqb_neq in H; apply genmap1; crush.
+  destruct i; crush; try apply Pos.eqb_neq in H; unfold update; destruct_match; crush.
+  inv Heqp.
 Qed.
 
 Lemma check_dest_l_forall2 :

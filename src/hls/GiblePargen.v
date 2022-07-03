@@ -167,8 +167,6 @@ This is done by multiplying the predicates together, and assigning the negation
 of the expression to the other predicates.
 |*)
 
-Definition forest_state : Type := forest * list (cf_instr * option pred_op * forest).
-
 Definition upd_pred_forest (p: option pred_op) (f: forest) :=
   match p with
   | Some p' =>
@@ -180,39 +178,42 @@ Definition upd_pred_forest (p: option pred_op) (f: forest) :=
   | None => f
   end.
 
-Definition update (flist : forest_state) (i : instr): forest_state :=
-  let (f, fl) := flist in
+Definition update (fop : option pred_op * forest) (i : instr): (option pred_op * forest) :=
+  let (pred, f) := fop in
   match i with
-  | RBnop => flist
+  | RBnop => fop
   | RBop p op rl r =>
-    (f # (Reg r) <-
-    (app_predicated p
-       (f # (Reg r))
-       (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f)))), fl)
+      (pred, f # (Reg r) <-
+             (app_predicated (combine_pred p pred)
+                             (f # (Reg r))
+                             (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f)))))
   | RBload p chunk addr rl r =>
-    (f # (Reg r) <-
-      (app_predicated p
+    (pred, f # (Reg r) <-
+      (app_predicated (combine_pred p pred)
          (f # (Reg r))
          (map_predicated
             (map_predicated (pred_ret (Eload chunk addr))
                             (merge (list_translation rl f)))
-            (f # Mem))), fl)
+            (f # Mem))))
   | RBstore p chunk addr rl r =>
-    (f # Mem <-
-      (app_predicated p
+    (pred, f # Mem <-
+      (app_predicated (combine_pred p pred)
          (f # Mem)
          (map_predicated
             (map_predicated
                (predicated_apply2 (map_predicated (pred_ret Estore)
                                                   (f # (Reg r))) chunk addr)
-               (merge (list_translation rl f))) (f # Mem))), fl)
+               (merge (list_translation rl f))) (f # Mem))))
   | RBsetpred p' c args p =>
-    (f # (Pred p) <-
-    (app_predicated p'
+    (pred, f # (Pred p) <-
+    (app_predicated (combine_pred p' pred)
        (f # (Pred p))
        (map_predicated (pred_ret (Esetpred c))
-                       (merge (list_translation args f)))), fl)
-  | RBexit p c => ((upd_pred_forest (option_map negate p) f), (c, p, upd_pred_forest p f) :: fl)
+                       (merge (list_translation args f)))))
+  | RBexit p c =>
+      (combine_pred (Option.map negate p) pred,
+        f # Exit <-
+          (app_predicated (combine_pred p pred) (f # Exit) (pred_ret (Eexit c))))
   end.
 
 (*|
@@ -223,7 +224,7 @@ code than in the RTLBlock code.
 Get a sequence from the basic block.
 |*)
 
-Fixpoint abstract_sequence (f : forest_state) (b : list instr) : forest_state :=
+Fixpoint abstract_sequence (f : option pred_op * forest) (b : list instr) : option pred_op * forest :=
   match b with
   | nil => f
   | i :: l => abstract_sequence (update f i) l
@@ -254,9 +255,8 @@ Definition empty_trees (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   end.
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
-  forallb (fun x => match x with ((_, _, f1), (_, _, f2)) => check f1 f2 end)
-          (combine (snd (abstract_sequence (empty, nil) bb))
-                   (snd (abstract_sequence (empty, nil) (concat (concat bbt))))) &&
+  (check (snd (abstract_sequence (None, empty) bb))
+         (snd (abstract_sequence (None, empty) (concat (concat bbt))))) &&
   empty_trees bb bbt.
 
 Definition check_scheduled_trees := beq2 schedule_oracle.
