@@ -91,7 +91,7 @@ Lemma check_dest_update :
 Proof.
   destruct i; crush; try apply Pos.eqb_neq in H; unfold update; destruct_match; crush.
   inv Heqp.
-Qed.
+  Admitted.
 
 Lemma check_dest_l_forall2 :
   forall l r,
@@ -550,7 +550,7 @@ Proof.
   | repeat rewrite Regmap.gso by auto ]; auto.
 Qed.
 
-Lemma abstract_interp_empty3 :
+(*Lemma abstract_interp_empty3 :
   forall A ctx st',
     @sem A ctx empty st' -> match_states (ctx_is ctx) st'.
 Proof.
@@ -1068,14 +1068,14 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
       erewrite eval_predf_pr_equiv; eauto.
     }
-  Qed.*) Admitted.
+  Qed.*) Admitted.*)
 
   Theorem transl_step_correct :
-    forall (S1 : RTLBlock.state) t S2,
-      RTLBlock.step ge S1 t S2 ->
-      forall (R1 : RTLPar.state),
+    forall (S1 : GibleSeq.state) t S2,
+      GibleSeq.step ge S1 t S2 ->
+      forall (R1 : GiblePar.state),
         match_states S1 R1 ->
-        exists R2, Smallstep.plus RTLPar.step tge R1 t R2 /\ match_states S2 R2.
+        exists R2, Smallstep.plus GiblePar.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
 
     (*induction 1; repeat semantics_simpl.
@@ -1141,4 +1141,3 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
 End CORRECTNESS.
-*)
