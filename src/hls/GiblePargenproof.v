@@ -787,49 +787,49 @@ Proof.
   repeat match goal with | H: match_states _ _ |- _ => inv H end.
   do 2 econstructor; eauto.
   econstructor; congruence.
-Qed.*)Admitted.
+Qed.*)Admitted.*)
 
-Definition match_prog (prog : RTLBlock.program) (tprog : RTLPar.program) :=
+Definition match_prog (prog : GibleSeq.program) (tprog : GiblePar.program) :=
   match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq prog tprog.
 
 (* TODO: Fix the `bb` and add matches for them. *)
-Inductive match_stackframes: RTLBlock.stackframe -> RTLPar.stackframe -> Prop :=
+Inductive match_stackframes: GibleSeq.stackframe -> GiblePar.stackframe -> Prop :=
 | match_stackframe:
     forall f tf res sp pc rs rs' ps ps',
       transl_function f = OK tf ->
       (forall x, rs !! x = rs' !! x) ->
       (forall x, ps !! x = ps' !! x) ->
-      match_stackframes (Stackframe res f sp pc rs ps)
+      match_stackframes (GibleSeq.Stackframe res f sp pc rs ps)
                         (Stackframe res tf sp pc rs' ps').
 
-Inductive match_states: RTLBlock.state -> RTLPar.state -> Prop :=
+Inductive match_states: GibleSeq.state -> GiblePar.state -> Prop :=
 | match_state:
     forall sf f sp pc rs rs' m sf' tf ps ps'
       (TRANSL: transl_function f = OK tf)
       (STACKS: list_forall2 match_stackframes sf sf')
       (REG: forall x, rs !! x = rs' !! x)
       (REG: forall x, ps !! x = ps' !! x),
-      match_states (State sf f sp pc rs ps m)
+      match_states (GibleSeq.State sf f sp pc rs ps m)
                    (State sf' tf sp pc rs' ps' m)
 | match_returnstate:
     forall stack stack' v m
       (STACKS: list_forall2 match_stackframes stack stack'),
-      match_states (Returnstate stack v m)
+      match_states (GibleSeq.Returnstate stack v m)
                    (Returnstate stack' v m)
 | match_callstate:
     forall stack stack' f tf args m
       (TRANSL: transl_fundef f = OK tf)
       (STACKS: list_forall2 match_stackframes stack stack'),
-      match_states (Callstate stack f args m)
+      match_states (GibleSeq.Callstate stack f args m)
                    (Callstate stack' tf args m).
 
 Section CORRECTNESS.
 
-  Context (prog: RTLBlock.program) (tprog : RTLPar.program).
+  Context (prog: GibleSeq.program) (tprog : GiblePar.program).
   Context (TRANSL: match_prog prog tprog).
 
-  Let ge : RTLBlock.genv := Globalenvs.Genv.globalenv prog.
-  Let tge : RTLPar.genv := Globalenvs.Genv.globalenv tprog.
+  Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
+  Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
 
   Lemma symbols_preserved:
     forall (s: AST.ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
@@ -837,7 +837,7 @@ Section CORRECTNESS.
   Hint Resolve symbols_preserved : rtlgp.
 
   Lemma function_ptr_translated:
-    forall (b: Values.block) (f: RTLBlock.fundef),
+    forall (b: Values.block) (f: GibleSeq.fundef),
       Genv.find_funct_ptr ge b = Some f ->
       exists tf,
         Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
@@ -847,7 +847,7 @@ Section CORRECTNESS.
   Qed.
 
   Lemma functions_translated:
-    forall (v: Values.val) (f: RTLBlock.fundef),
+    forall (v: Values.val) (f: GibleSeq.fundef),
       Genv.find_funct ge v = Some f ->
       exists tf,
         Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
@@ -862,9 +862,9 @@ Section CORRECTNESS.
   Hint Resolve senv_preserved : rtlgp.
 
   Lemma sig_transl_function:
-    forall (f: RTLBlock.fundef) (tf: RTLPar.fundef),
+    forall (f: GibleSeq.fundef) (tf: GiblePar.fundef),
       transl_fundef f = OK tf ->
-      funsig tf = funsig f.
+      funsig tf = GibleSeq.funsig f.
   Proof using .
     unfold transl_fundef, transf_partial_fundef, transl_function; intros;
     repeat destruct_match; crush;
@@ -878,7 +878,7 @@ Section CORRECTNESS.
   Lemma find_function_translated:
     forall ros rs rs' f,
       (forall x, rs !! x = rs' !! x) ->
-      find_function ge ros rs = Some f ->
+      GibleSeq.find_function ge ros rs = Some f ->
       exists tf, find_function tge ros rs' = Some tf
                  /\ transl_fundef f = OK tf.
   Proof using TRANSL.
@@ -898,18 +898,16 @@ Section CORRECTNESS.
   Qed.
 
   Lemma schedule_oracle_nil:
-    forall bb cfi,
-      schedule_oracle {| bb_body := nil; bb_exit := cfi |} bb = true ->
-      bb_body bb = nil /\ bb_exit bb = cfi.
+    forall bb,
+      schedule_oracle nil bb = true ->
+      bb = nil.
   Proof using .
     unfold schedule_oracle, check_control_flow_instr.
     simplify; repeat destruct_match; crush.
   Qed.
 
   Lemma schedule_oracle_nil2:
-    forall cfi,
-      schedule_oracle {| bb_body := nil; bb_exit := cfi |}
-                      {| bb_body := nil; bb_exit := cfi |} = true.
+      schedule_oracle nil nil = true.
   Proof using .
     unfold schedule_oracle, check_control_flow_instr.
     simplify; repeat destruct_match; crush.
@@ -982,14 +980,14 @@ Section CORRECTNESS.
       learn H as H2;
       unfold transl_function in H2;
       destruct (check_scheduled_trees
-                  (@fn_code RTLBlock.bb f)
-                  (@fn_code RTLPar.bb (schedule f))) eqn:?;
+                  (GibleSeq.fn_code f)
+                  (fn_code (schedule f))) eqn:?;
                [| discriminate ]; inv H2
     | [ H: context[check_scheduled_trees] |- _ ] =>
       let H2 := fresh "CHECK" in
       learn H as H2;
       eapply check_scheduled_trees_correct in H2; [| solve [eauto] ]
-    | [ H: schedule_oracle {| bb_body := nil; bb_exit := _ |} ?bb = true |- _ ] =>
+    | [ H: schedule_oracle nil ?bb = true |- _ ] =>
       let H2 := fresh "SCHED" in
       learn H as H2;
       apply schedule_oracle_nil in H2
@@ -1041,7 +1039,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   (* TODO: Fix these proofs, now the cf_instr is in the State. *)
   Lemma step_cf_instr_correct:
     forall t s s' cf,
-      step_cf_instr ge s cf t s' ->
+      GibleSeq.step_cf_instr ge s cf t s' ->
       forall r,
         match_states s r ->
         exists r', step_cf_instr tge r cf t r' /\ match_states s' r'.
@@ -1068,7 +1066,112 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
       erewrite eval_predf_pr_equiv; eauto.
     }
-  Qed.*) Admitted.*)
+  Qed.*) Admitted.
+
+  #[local] Hint Resolve Events.external_call_symbols_preserved : core.
+  #[local] Hint Resolve eval_builtin_args_eq : core.
+  #[local] Hint Resolve symbols_preserved : core.
+  #[local] Hint Resolve senv_preserved : core.
+  #[local] Hint Resolve eval_op_eq : core.
+  #[local] Hint Resolve eval_addressing_eq : core.
+
+  Lemma step_instr_ge :
+    forall sp a i i',
+      step_instr ge sp i a i' ->
+      step_instr tge sp i a i'.
+  Proof.
+    inversion 1; subst; simplify; try solve [econstructor; eauto].
+    - constructor; auto; rewrite <- eval_op_eq; eauto.
+    - econstructor; eauto; rewrite <- eval_addressing_eq; eauto.
+    - econstructor; eauto; rewrite <- eval_addressing_eq; eauto.
+  Qed.
+  #[local] Hint Resolve step_instr_ge : core.
+
+  Lemma seqbb_step_step_instr_list :
+    forall sp a i i',
+      SeqBB.step ge sp i a i' ->
+      ParBB.step_instr_list tge sp i a i'.
+  Proof.
+    induction a; simplify; inv H.
+    econstructor; eauto. eapply IHa; eauto.
+    econstructor; eauto. constructor.
+  Qed.
+  #[local] Hint Resolve seqbb_step_step_instr_list : core.
+
+  Lemma step_list2_step_instr_list :
+    forall sp a i i',
+      step_list2 (step_instr ge) sp i a i' ->
+      ParBB.step_instr_list tge sp i a i'.
+  Proof.
+    induction a; simplify; inv H.
+    econstructor; eauto.
+    destruct i; try solve [inv H4].
+    econstructor; eauto. apply IHa; auto.
+  Qed.
+  #[local] Hint Resolve step_list2_step_instr_list : core.
+
+  Lemma seqbb_step_step_instr_seq :
+    forall sp x i i' cf,
+      SeqBB.step ge sp (Iexec i) (concat x) (Iterm i' cf) ->
+      ParBB.step_instr_seq tge sp (Iexec i) x (Iterm i' cf).
+  Proof.
+    induction x; crush. inv H. eapply step_options in H.
+    inv H. econstructor. eauto. constructor.
+    simplify. econstructor; eauto.
+    eapply IHx; eauto.
+  Qed.
+
+  Lemma step_list2_step_instr_seq :
+    forall sp x i i',
+      step_list2 (step_instr ge) sp (Iexec i) (concat x) (Iexec i') ->
+      ParBB.step_instr_seq tge sp (Iexec i) x (Iexec i').
+  Proof.
+    induction x; crush. inv H. constructor.
+    eapply step_options2 in H. simplify.
+    econstructor; eauto.
+    eapply IHx; eauto.
+  Qed.
+
+  Lemma seqbb_step_parbb_step :
+    forall sp x i i' cf,
+      SeqBB.step ge sp (Iexec i) (concat (concat x)) (Iterm i' cf) ->
+      ParBB.step tge sp (Iexec i) x (Iterm i' cf).
+  Proof.
+    induction x; crush. inv H.
+    rewrite concat_app in H.
+    eapply step_options in H. inv H.
+    constructor. eapply seqbb_step_step_instr_seq; eauto.
+    simplify. econstructor.
+    eapply step_list2_step_instr_seq; eauto.
+    eapply IHx; eauto.
+  Qed.
+
+  Lemma schedule_oracle_correct :
+    forall x y sp i i' ti cf,
+      schedule_oracle x y = true ->
+      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      state_lessdef i ti ->
+      exists ti', ParBB.step tge sp (Iexec ti) y (Iterm ti' cf)
+             /\ state_lessdef i' ti'.
+  Proof. Admitted.
+
+  Lemma step_cf_correct :
+    forall cf ts s s' t,
+      GibleSeq.step_cf_instr ge s cf t s' ->
+      match_states s ts ->
+      exists ts', step_cf_instr tge ts cf t ts'
+             /\ match_states s' ts'.
+  Proof. Admitted.
+
+  Lemma match_states_stepBB :
+    forall s f sp pc rs pr m sf' f' trs tps tm rs' pr' m' trs' tpr' tm',
+      match_states (GibleSeq.State s f sp pc rs pr m) (State sf' f' sp pc trs tps tm) ->
+      state_lessdef (mk_instr_state rs' pr' m') (mk_instr_state trs' tpr' tm') ->
+      match_states (GibleSeq.State s f sp pc rs' pr' m') (State sf' f' sp pc trs' tpr' tm').
+  Proof.
+    inversion 1; subst; simplify.
+    inv H0. econstructor; eauto.
+  Qed.
 
   Theorem transl_step_correct :
     forall (S1 : GibleSeq.state) t S2,
@@ -1077,40 +1180,31 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         match_states S1 R1 ->
         exists R2, Smallstep.plus GiblePar.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-
-    (*induction 1; repeat semantics_simpl.
-
-    { destruct bb; destruct x.
-      assert (bb_exit = bb_exit0).
-      { unfold schedule_oracle in *. simplify.
-      n  unfold check_control_flow_instr in *.
-        destruct_match; crush.
-      }
-      subst.
-
-      exploit abstract_execution_correct; try eassumption. eapply ge_preserved_lem.
-      econstructor; eauto.
-      simplify. destruct x. inv H7.
-
-      exploit step_cf_instr_correct; try eassumption. econstructor; eauto.
-      simplify.
-
-      econstructor. econstructor. eapply Smallstep.plus_one. econstructor.
-      eauto. eauto. simplify. eauto. eauto. }
+    induction 1; repeat semantics_simpl.
+    {
+      exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
+      destruct x0.
+      pose proof H2 as X. eapply match_states_stepBB in X; eauto.
+      exploit step_cf_correct; eauto. simplify.
+      eexists; split. apply Smallstep.plus_one.
+      econstructor; eauto. auto.
+    }
     { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
       inv H2. unfold transl_function in Heqr. destruct_match; crush.
       inv Heqr.
       repeat econstructor; eauto.
       unfold bind in *. destruct_match; crush. }
-    { inv TRANSL0. repeat econstructor; eauto using Events.external_call_symbols_preserved, symbols_preserved, senv_preserved, Events.E0_right. }
+    { inv TRANSL0.
+      repeat econstructor;
+        eauto using Events.E0_right. }
     { inv STACKS. inv H2. repeat econstructor; eauto.
       intros. apply PTree_matches; eauto. }
-  Qed.*) Admitted.
+    Qed.
 
   Lemma transl_initial_states:
     forall S,
-      RTLBlock.initial_state prog S ->
-      exists R, RTLPar.initial_state tprog R /\ match_states S R.
+      GibleSeq.initial_state prog S ->
+      exists R, GiblePar.initial_state tprog R /\ match_states S R.
   Proof.
     induction 1.
     exploit function_ptr_translated; eauto. intros [tf [A B]].
@@ -1125,13 +1219,13 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
   Lemma transl_final_states:
     forall S R r,
-      match_states S R -> RTLBlock.final_state S r -> RTLPar.final_state R r.
+      match_states S R -> GibleSeq.final_state S r -> GiblePar.final_state R r.
   Proof.
     intros. inv H0. inv H. inv STACKS. constructor.
   Qed.
 
   Theorem transf_program_correct:
-    Smallstep.forward_simulation (RTLBlock.semantics prog) (RTLPar.semantics tprog).
+    Smallstep.forward_simulation (GibleSeq.semantics prog) (GiblePar.semantics tprog).
   Proof.
     eapply Smallstep.forward_simulation_plus.
     apply senv_preserved.

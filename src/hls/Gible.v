@@ -344,6 +344,19 @@ Inductive step_list2 {A} (step_i: val -> istate -> A -> istate -> Prop):
 | exec_RBnil2 :
   forall sp i, step_list2 step_i sp i nil i.
 
+Inductive step_list_inter {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> istate -> list A -> istate -> Prop :=
+| exec_term_RBcons :
+  forall i0 i1 i2 i instrs sp,
+    step_i sp (Iexec i0) i i1 ->
+    step_list_inter step_i sp i1 instrs i2 ->
+    step_list_inter step_i sp (Iexec i0) (i :: instrs) i2
+| exec_term_RBnil :
+  forall sp i, step_list_inter step_i sp i nil i
+| exec_term_RBcons_term :
+  forall i cf l sp,
+    step_list_inter step_i sp (Iterm i cf) l (Iterm i cf).
+
 (*|
 Top-Level Type Definitions
 ==========================

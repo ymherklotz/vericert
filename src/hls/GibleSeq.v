@@ -247,3 +247,65 @@ Proof.
   unfold all_successors, SeqBB.foldl; intros.
   eapply in_cf_all_successors'; eauto.
 Qed.
+
+Lemma eq_stepBB :
+  forall A B (ge: Genv.t A B) sp l i1 i2 i2',
+    SeqBB.step ge sp i1 l i2 ->
+    SeqBB.step ge sp i1 l i2' ->
+    i2 = i2'.
+Proof.
+  induction l; crush.  inv H.
+  inv H; inv H0.
+  assert (Iexec state' = Iexec state'0).
+  { eapply exec_determ; eauto. }
+  inv H. eauto.
+  assert (Iexec state' = Iterm state'0 cf0).
+  { eapply exec_determ; eauto. }
+  discriminate.
+  assert (Iterm state' cf = Iexec state'0).
+  { eapply exec_determ; eauto. }
+  discriminate.
+  eapply exec_determ; eauto.
+Qed.
+
+Lemma step_options :
+  forall A B (ge: Genv.t A B) a b i1 i2 cf sp,
+    SeqBB.step ge sp (Iexec i1) (a ++ b) (Iterm i2 cf) ->
+    (SeqBB.step ge sp (Iexec i1) a (Iterm i2 cf) \/
+       exists i1', step_list2 (step_instr ge) sp (Iexec i1) a (Iexec i1')
+              /\ SeqBB.step ge sp (Iexec i1') b (Iterm i2 cf)).
+Proof.
+  induction a; crush. right; eexists; split; [constructor|auto].
+  inv H. exploit IHa; eauto; intros. inv H.
+  left; econstructor; eauto.
+  simplify.
+  right. eexists; split; eauto. econstructor; eauto.
+  left. constructor; eauto.
+Qed.
+
+Lemma step_options2' :
+  forall A B (ge: Genv.t A B) a b i1 i2 sp,
+    step_list2 (step_instr ge) sp (Iexec i1) (a ++ b) (Iexec i2) ->
+    (step_list2 (step_instr ge) sp (Iexec i1) a (Iexec i2) \/
+       exists i1', step_list2 (step_instr ge) sp (Iexec i1) a (Iexec i1')
+              /\ step_list2 (step_instr ge) sp (Iexec i1') b (Iexec i2)).
+Proof.
+  induction a; crush. right; eexists; split; [constructor|auto].
+  inv H. destruct i3; [|exfalso; eapply step_list2_false; eauto]. exploit IHa; eauto; intros. inv H.
+  left; econstructor; eauto.
+  simplify.
+  right. eexists; split; eauto. econstructor; eauto.
+Qed.
+
+Lemma step_options2 :
+  forall A B (ge: Genv.t A B) a b i1 i2 sp,
+    step_list2 (step_instr ge) sp (Iexec i1) (a ++ b) (Iexec i2) ->
+    exists i', step_list2 (step_instr ge) sp (Iexec i1) a (Iexec i')
+          /\ step_list2 (step_instr ge) sp (Iexec i') b (Iexec i2).
+Proof.
+  induction a; crush. eexists; split; eauto.
+  constructor.
+  inv H. destruct i3; [|exfalso; eapply step_list2_false; eauto].
+  exploit IHa; eauto; simplify.
+  eexists; split; eauto. econstructor; eauto.
+Qed.
