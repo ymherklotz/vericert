@@ -187,7 +187,7 @@ Extract Constant GiblePargen.schedule => "Schedule.schedule_fn".
 
 (* Loop normalization *)
 Extract Constant IfConversion.build_bourdoncle => "BourdoncleAux.build_bourdoncle".
-Extract Constant IfConversion.get_if_conv_t => "(fun _ -> [Maps.PTree.empty])".
+Extract Constant IfConversion.get_if_conv_t => "(fun _ -> [Maps.PTree.empty; Maps.PTree.empty; Maps.PTree.empty])".
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.

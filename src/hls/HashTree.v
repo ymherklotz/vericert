@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2021 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2021-2022 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *)
+
+Require Import Coq.Structures.Equalities.
 
 Require Import compcert.lib.Maps.
 
@@ -136,12 +138,7 @@ Proof.
   eapply IHl. eauto.
 Qed.
 
-Module Type Hashable.
-
-  Parameter t: Type.
-  Parameter eq_dec: forall (t1 t2: t), {t1 = t2} + {t1 <> t2}.
-
-End Hashable.
+Module Type Hashable := UsualDecidableType.
 
 Module HashTree(H: Hashable).
 

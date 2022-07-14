@@ -59,6 +59,28 @@ Inductive state_lessdef : instr_state -> instr_state -> Prop :=
       (forall x, ps1 !! x = ps2 !! x) ->
       state_lessdef (mk_instr_state rs1 ps1 m1) (mk_instr_state rs2 ps2 m1).
 
+Lemma state_lessdef_refl x : state_lessdef x x.
+Proof. destruct x; constructor; auto. Qed.
+
+Lemma state_lessdef_symm x y : state_lessdef x y -> state_lessdef y x.
+Proof. destruct x; destruct y; inversion 1; subst; simplify; constructor; auto. Qed.
+
+Lemma state_lessdef_trans :
+  forall a b c,
+    state_lessdef a b ->
+    state_lessdef b c ->
+    state_lessdef a c.
+Proof.
+  inversion 1; inversion 1; subst; simplify.
+  constructor; eauto; intros. rewrite H0. auto.
+Qed.
+
+#[global] Instance Equivalence_state_lessdef : Equivalence state_lessdef :=
+  { Equivalence_Reflexive := state_lessdef_refl;
+    Equivalence_Symmetric := state_lessdef_symm;
+    Equivalence_Transitive := state_lessdef_trans;
+  }.
+
 Definition check_dest i r' :=
   match i with
   | RBop p op rl r => (r =? r')%positive
@@ -160,8 +182,8 @@ Qed.
 
 Lemma abstr_comp :
   forall l i f x x0,
-  abstract_sequence f (l ++ i :: nil) = x ->
-  abstract_sequence f l = x0 ->
+  fold_left update (l ++ i :: nil) f = x ->
+  fold_left update l f = x0 ->
   x = update x0 i.
 Proof. induction l; intros; crush; eapply IHl; eauto. Qed.
 
@@ -1036,38 +1058,6 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       constructor; eauto.
   Qed.
 
-  (* TODO: Fix these proofs, now the cf_instr is in the State. *)
-  Lemma step_cf_instr_correct:
-    forall t s s' cf,
-      GibleSeq.step_cf_instr ge s cf t s' ->
-      forall r,
-        match_states s r ->
-        exists r', step_cf_instr tge r cf t r' /\ match_states s' r'.
-  Proof using TRANSL.
-
-    (*induction 1; repeat semantics_simpl;
-    try solve [repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp)].
-    { do 3 (try erewrite match_states_list by eauto; econstructor; eauto with rtlgp).
-      eapply eval_builtin_args_eq. eapply REG.
-      eapply Events.eval_builtin_args_preserved. eapply symbols_preserved.
-      eauto.
-      intros.
-      unfold regmap_setres. destruct res.
-      destruct (Pos.eq_dec x0 x); subst.
-      repeat rewrite Regmap.gss; auto.
-      repeat rewrite Regmap.gso; auto.
-      eapply REG. eapply REG.
-    }
-    { repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
-      unfold regmap_optget. destruct or. rewrite REG. constructor; eauto.
-      constructor; eauto.
-    }
-    { exploit IHstep_cf_instr; eauto. simplify.
-      repeat (try erewrite match_states_list; eauto; econstructor; eauto with rtlgp).
-      erewrite eval_predf_pr_equiv; eauto.
-    }
-  Qed.*) Admitted.
-
   #[local] Hint Resolve Events.external_call_symbols_preserved : core.
   #[local] Hint Resolve eval_builtin_args_eq : core.
   #[local] Hint Resolve symbols_preserved : core.
@@ -1146,6 +1136,195 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     eapply IHx; eauto.
   Qed.
 
+  Lemma eval_predf_negate :
+    forall ps p,
+      eval_predf ps (negate p) = negb (eval_predf ps p).
+  Proof.
+    unfold eval_predf; intros. rewrite negate_correct. auto.
+  Qed.
+
+  Lemma is_truthy_negate :
+    forall ps p pred,
+      truthy ps p ->
+      falsy ps (combine_pred (Some (negate (Option.default T p))) pred).
+  Proof.
+    inversion 1; subst; simplify.
+    - destruct pred; constructor; auto.
+    - destruct pred; constructor.
+      rewrite eval_predf_Pand. rewrite eval_predf_negate. rewrite H0. auto.
+      rewrite eval_predf_negate. rewrite H0. auto.
+  Qed.
+
+  Lemma sem_update_instr :
+    forall f i' i'' a sp p i,
+      sem (mk_ctx i sp ge) f (i', None) ->
+      step_instr ge sp (Iexec i') a (Iexec i'') ->
+      sem (mk_ctx i sp ge) (snd (update (p, f) a)) (i'', None).
+  Proof. Admitted.
+
+  Lemma sem_update_instr_term :
+    forall f i' i'' a sp i cf p p',
+      sem (mk_ctx i sp ge) f (i', None) ->
+      step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) ->
+      sem (mk_ctx i sp ge) (snd (update (p', f) a)) (i'', Some cf)
+           /\ falsy (is_ps i'') (fst (update (p', f) a)).
+  Proof. Admitted.
+
+  Lemma step_instr_lessdef :
+    forall sp a i i' ti,
+      step_instr ge sp (Iexec i) a (Iexec i') ->
+      state_lessdef i ti ->
+      exists ti', step_instr ge sp (Iexec ti) a (Iexec ti') /\ state_lessdef i' ti'.
+  Proof. Admitted.
+
+  Lemma step_instr_lessdef_term :
+    forall sp a i i' ti cf,
+      step_instr ge sp (Iexec i) a (Iterm i' cf) ->
+      state_lessdef i ti ->
+      exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
+  Proof. Admitted.
+
+  Lemma app_predicated_semregset :
+    forall A ctx o f res r y,
+      @sem_regset A ctx f res ->
+      falsy (ctx_ps ctx) o ->
+      @sem_regset A ctx f # r <- (app_predicated o f#r y) res.
+  Proof.
+    inversion 1; subst; crush.
+    constructor; intros.
+    destruct (resource_eq r (Reg x)); subst.
+    + rewrite map2; eauto. unfold app_predicated. inv H1. admit.
+    + rewrite genmap1; auto.
+  Admitted.
+
+  Lemma app_predicated_sempredset :
+    forall A ctx o f rs r y ps,
+      @sem_predset A ctx f rs ->
+      falsy ps o ->
+      @sem_predset A ctx f # r <- (app_predicated o f#r y) rs.
+  Proof. Admitted.
+
+  Lemma app_predicated_sem :
+    forall A ctx o f i cf r y,
+      @sem A ctx f (i, cf) ->
+      falsy (is_ps i) o ->
+      @sem A ctx f # r <- (app_predicated o f#r y) (i, cf).
+  Proof.
+    inversion 1; subst; crush.
+    constructor.
+  Admitted.
+
+  Lemma combined_falsy :
+    forall i o1 o,
+      falsy i o1 ->
+      falsy i (combine_pred o o1).
+  Proof.
+    inversion 1; subst; crush. destruct o; simplify.
+    constructor. rewrite eval_predf_Pand. rewrite H0. crush.
+    constructor. auto.
+  Qed.
+
+  Lemma falsy_update :
+    forall f a ps,
+      falsy ps (fst f) ->
+      falsy ps (fst (update f a)).
+  Proof.
+    destruct f; destruct a; inversion 1; subst; crush.
+    rewrite <- H1. constructor. unfold Option.default. destruct o0.
+    rewrite eval_predf_Pand. rewrite H0. crush. crush.
+  Qed.
+
+  Lemma abstr_fold_falsy :
+    forall x i0 sp cf i f,
+    sem (mk_ctx i0 sp ge) (snd f) (i, cf) ->
+    falsy (is_ps i) (fst f) ->
+    sem (mk_ctx i0 sp ge) (snd (fold_left update x f)) (i, cf).
+  Proof.
+    induction x; crush.
+    eapply IHx.
+    destruct a; destruct f; crush;
+      try solve [eapply app_predicated_sem; eauto; apply combined_falsy; auto].
+    now apply falsy_update.
+  Qed.
+
+  Lemma state_lessdef_sem :
+    forall i sp f i' ti cf,
+      sem (mk_ctx i sp ge) f (i', cf) ->
+      state_lessdef i ti ->
+      exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
+  Proof. Admitted.
+
+  Lemma abstr_fold_correct :
+    forall sp x i i' i'' cf f,
+      SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) ->
+      sem (mk_ctx i sp ge) (snd f) (i', None) ->
+      forall ti,
+        state_lessdef i ti ->
+        exists ti', sem (mk_ctx ti sp ge) (snd (fold_left update x f)) (ti', Some cf)
+               /\ state_lessdef i'' ti'.
+  Proof.
+    induction x; simplify; inv H.
+    - destruct f; exploit IHx; eauto; eapply sem_update_instr; eauto.
+    - destruct f. inversion H5; subst.
+      exploit state_lessdef_sem; eauto; intros. inv H. inv H2.
+      exploit step_instr_lessdef_term; eauto; intros. inv H2. inv H4.
+      exploit sem_update_instr_term; eauto; intros. inv H4.
+      eexists; split. eapply abstr_fold_falsy; eauto.
+      auto.
+  Qed.
+
+  Lemma sem_regset_empty :
+    forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
+  Proof.
+    intros; constructor; intros.
+    constructor; auto. constructor.
+  Qed.
+
+  Lemma sem_predset_empty :
+    forall A ctx, @sem_predset A ctx empty (ctx_ps ctx).
+  Proof.
+    intros; constructor; intros.
+    constructor; auto. constructor.
+  Qed.
+
+  Lemma sem_empty :
+    forall A ctx, @sem A ctx empty (ctx_is ctx, None).
+  Proof.
+    intros. destruct ctx. destruct ctx_is.
+    constructor; try solve [constructor; constructor; crush].
+    eapply sem_regset_empty.
+    eapply sem_predset_empty.
+  Qed.
+
+  Lemma abstr_sequence_correct :
+    forall sp x i i'' cf,
+      SeqBB.step ge sp (Iexec i) x (Iterm i'' cf) ->
+      forall ti,
+        state_lessdef i ti ->
+        exists ti', sem (mk_ctx ti sp ge) (abstract_sequence x) (ti', Some cf)
+               /\ state_lessdef i'' ti'.
+  Proof.
+    unfold abstract_sequence. intros; eapply abstr_fold_correct; eauto.
+    simplify. eapply sem_empty.
+  Qed.
+
+  Lemma abstr_check_correct :
+    forall sp i i' a b cf ti,
+      check a b = true ->
+      sem (mk_ctx i sp ge) a (i', cf) ->
+      state_lessdef i ti ->
+      exists ti', sem (mk_ctx ti sp ge) b (ti', cf)
+             /\ state_lessdef i' ti'.
+  Proof. Admitted.
+
+  Lemma abstr_seq_reverse_correct :
+    forall sp x i i' ti cf,
+    sem (mk_ctx i sp ge) (abstract_sequence x) (i', (Some cf)) ->
+    state_lessdef i ti ->
+    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
+           /\ state_lessdef i' ti'.
+  Proof. Admitted.
+
   Lemma schedule_oracle_correct :
     forall x y sp i i' ti cf,
       schedule_oracle x y = true ->
@@ -1153,7 +1332,16 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       state_lessdef i ti ->
       exists ti', ParBB.step tge sp (Iexec ti) y (Iterm ti' cf)
              /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  Proof.
+    unfold schedule_oracle; intros. simplify.
+    exploit abstr_sequence_correct; eauto; simplify.
+    exploit abstr_check_correct; eauto. apply state_lessdef_refl. simplify.
+    exploit abstr_seq_reverse_correct; eauto. apply state_lessdef_refl. simplify.
+    exploit seqbb_step_parbb_step; eauto; intros.
+    econstructor; split; eauto.
+    etransitivity; eauto.
+    etransitivity; eauto.
+  Qed.
 
   Lemma step_cf_correct :
     forall cf ts s s' t,

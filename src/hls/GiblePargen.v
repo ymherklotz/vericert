@@ -211,7 +211,7 @@ Definition update (fop : option pred_op * forest) (i : instr): (option pred_op *
        (map_predicated (pred_ret (Esetpred c))
                        (merge (list_translation args f)))))
   | RBexit p c =>
-      (combine_pred (Option.map negate p) pred,
+      (combine_pred (Some (negate (Option.default T p))) pred,
         f # Exit <-
           (app_predicated (combine_pred p pred) (f # Exit) (pred_ret (Eexit c))))
   end.
@@ -224,11 +224,8 @@ code than in the RTLBlock code.
 Get a sequence from the basic block.
 |*)
 
-Fixpoint abstract_sequence (f : option pred_op * forest) (b : list instr) : option pred_op * forest :=
-  match b with
-  | nil => f
-  | i :: l => abstract_sequence (update f i) l
-  end.
+Definition abstract_sequence (b : list instr) : forest :=
+  snd (fold_left update b (None, empty)).
 
 (*|
 Check equivalence of control flow instructions.  As none of the basic blocks
@@ -255,9 +252,8 @@ Definition empty_trees (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   end.
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
-  (check (snd (abstract_sequence (None, empty) bb))
-         (snd (abstract_sequence (None, empty) (concat (concat bbt))))) &&
-  empty_trees bb bbt.
+  (check (abstract_sequence bb) (abstract_sequence (concat (concat bbt))))
+  && empty_trees bb bbt.
 
 Definition check_scheduled_trees := beq2 schedule_oracle.
 

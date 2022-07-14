@@ -251,6 +251,9 @@ Variant truthy (ps: predset): option pred_op -> Prop :=
   | truthy_None: truthy ps None
   | truthy_Some: forall p, eval_predf ps p = true -> truthy ps (Some p).
 
+Variant falsy (ps: predset): option pred_op -> Prop :=
+  | falsy_Some: forall p, eval_predf ps p = false -> falsy ps (Some p).
+
 Variant instr_falsy (ps: predset): instr -> Prop :=
   | RBop_falsy :
     forall p op args res,
