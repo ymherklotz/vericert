@@ -31,6 +31,7 @@ Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Show.
+Require Export vericert.common.Optionmonad.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)
@@ -197,45 +198,6 @@ Ltac crush := simplify; try discriminate; try congruence; try lia; liapp;
 (* Definition const (A B : Type) (a : A) (b : B) : A := a.
 
 Definition compose (A B C : Type) (f : B -> C) (g : A -> B) (x : A) : C := f (g x). *)
-
-Module Option.
-
-Definition default {T : Type} (x : T) (u : option T) : T :=
-  match u with
-  | Some y => y
-  | _ => x
-  end.
-
-Definition map {S : Type} {T : Type} (f : S -> T) (u : option S) : option T :=
-  match u with
-  | Some y => Some (f y)
-  | _ => None
-  end.
-
-Definition liftA2 {T : Type} (f : T -> T -> T) (a : option T) (b : option T) : option T :=
-  match a with
-  | Some x => map (f x) b
-  | _ => None
-  end.
-
-Definition bind {A B : Type} (f : option A) (g : A -> option B) : option B :=
-  match f with
-  | Some a => g a
-  | _ => None
-  end.
-
-Definition join {A : Type} (a : option (option A)) : option A :=
-  match a with
-  | None => None
-  | Some a' => a'
-  end.
-
-Module Notation.
-Notation "'do' X <- A ; B" := (bind A (fun X => B))
-   (at level 200, X name, A at level 100, B at level 200).
-End Notation.
-
-End Option.
 
 Parameter debug_print : string -> unit.
 

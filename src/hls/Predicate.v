@@ -7,22 +7,142 @@ Require Import Coq.Logic.Decidable.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Sat.
-
-Definition predicate : Type := positive.
-
-Inductive pred_op : Type :=
-| Plit: (bool * predicate) -> pred_op
-| Ptrue: pred_op
-| Pfalse: pred_op
-| Pand: pred_op -> pred_op -> pred_op
-| Por: pred_op -> pred_op -> pred_op.
+Require Import HashTree.
 
 Declare Scope pred_op.
+
+Section PRED_DEFINITION.
+
+  Context {A: Type}.
+
+  Definition predicate := A.
+
+  Inductive pred_op : Type :=
+  | Plit: (bool * predicate) -> pred_op
+  | Ptrue: pred_op
+  | Pfalse: pred_op
+  | Pand: pred_op -> pred_op -> pred_op
+  | Por: pred_op -> pred_op -> pred_op.
+
+  Fixpoint negate (p: pred_op) :=
+    match p with
+    | Plit (b, pr) => Plit (negb b, pr)
+    | Ptrue => Pfalse
+    | Pfalse => Ptrue
+    | Pand A B => Por (negate A) (negate B)
+    | Por A B => Pand (negate A) (negate B)
+    end.
+
+  Definition Pimplies (p: pred_op) p' := Por (negate p) p'.
+
+  Fixpoint predicate_use (p: pred_op) : list predicate :=
+    match p with
+    | Plit (b, p) => p :: nil
+    | Ptrue => nil
+    | Pfalse => nil
+    | Pand a b => predicate_use a ++ predicate_use b
+    | Por a b => predicate_use a ++ predicate_use b
+    end.
+
+  Definition combine_pred (p1 p2: option pred_op): option pred_op :=
+    match p1, p2 with
+    | Some p1, Some p2 => Some (Pand p1 p2)
+    | Some p, _ | _, Some p => Some p
+    | None, None => None
+    end.
+
+  Definition simplify' (p: pred_op) :=
+    match p with
+    (* | (Plit (b1, a)) ∧ (Plit (b2, b)) as p' => *)
+    (*     if Pos.eqb a b then *)
+    (*       if negb (xorb b1 b2) then Plit (b1, a) else ⟂ *)
+    (*     else p' *)
+    (* | (Plit (b1, a)) ∨ (Plit (b2, b)) as p' => *)
+    (*     if Pos.eqb a b then *)
+    (*       if negb (xorb b1 b2) then Plit (b1, a) else T *)
+    (*     else p' *)
+    | Pand A Ptrue => A
+    | Pand Ptrue A => A
+    | Pand _ Pfalse => Pfalse
+    | Pand Pfalse _ => Pfalse
+    | Por _ Ptrue => Ptrue
+    | Por Ptrue _ => Ptrue
+    | Por A Pfalse => A
+    | Por Pfalse A => A
+    | A => A
+    end.
+
+  Fixpoint simplify (p: pred_op) :=
+    match p with
+    | Pand A B =>
+        let A' := simplify A in
+        let B' := simplify B in
+        simplify' (Pand A' B')
+    | Por A B =>
+        let A' := simplify A in
+        let B' := simplify B in
+        simplify' (Por A' B')
+    | Ptrue => Ptrue
+    | Pfalse => Pfalse
+    | Plit a => Plit a
+    end.
+
+  Section DEEP_SIMPLIFY.
+
+    Context (eqd: forall a b: A, {a = b} + {a <> b}).
+
+    Definition deep_simplify' (p: pred_op) :=
+      match p with
+      | Pand A Ptrue => A
+      | Pand Ptrue A => A
+      | Pand _ Pfalse => Pfalse
+      | Pand Pfalse _ => Pfalse
+      | Por _ Ptrue => Ptrue
+      | Por Ptrue _ => Ptrue
+      | Por A Pfalse => A
+      | Por Pfalse A => A
+
+      | Pand (Plit (b1, a)) (Plit (b2, b)) =>
+          if eqd a b then
+            if bool_eqdec b1 b2 then
+              Plit (b1, a)
+            else Pfalse
+          else Pand (Plit (b1, a)) (Plit (b2, b))
+      | Por (Plit (b1, a)) (Plit (b2, b)) =>
+          if eqd a b then
+            if bool_eqdec b1 b2 then
+              Plit (b1, a)
+            else Ptrue
+          else Por (Plit (b1, a)) (Plit (b2, b))
+
+      | A => A
+      end.
+
+    Fixpoint deep_simplify (p: pred_op) :=
+      match p with
+      | Pand A B =>
+          let A' := deep_simplify A in
+          let B' := deep_simplify B in
+          deep_simplify' (Pand A' B')
+      | Por A B =>
+          let A' := deep_simplify A in
+          let B' := deep_simplify B in
+          deep_simplify' (Por A' B')
+      | Ptrue => Ptrue
+      | Pfalse => Pfalse
+      | Plit a => Plit a
+      end.
+
+  End DEEP_SIMPLIFY.
+
+End PRED_DEFINITION.
 
 Notation "A ∧ B" := (Pand A B) (at level 20) : pred_op.
 Notation "A ∨ B" := (Por A B) (at level 25) : pred_op.
 Notation "⟂" := (Pfalse) : pred_op.
 Notation "'T'" := (Ptrue) : pred_op.
+Notation "¬ A" := (negate A) (at level 15) : pred_op.
+Notation "A → B" := (Pimplies A B) (at level 30) : pred_op.
 
 #[local] Open Scope pred_op.
 
@@ -47,18 +167,18 @@ Lemma equiv_refl : forall a, sat_equiv a a.
 Proof. crush. Qed.
 
 #[global]
-Instance Equivalence_SAT : Equivalence sat_equiv :=
+ Instance Equivalence_SAT : Equivalence sat_equiv :=
   { Equivalence_Reflexive := equiv_refl ;
     Equivalence_Symmetric := equiv_symm ;
     Equivalence_Transitive := equiv_trans ;
   }.
 
 #[global]
-Instance SATSetoid : Setoid pred_op :=
+ Instance SATSetoid : Setoid pred_op :=
   { equiv := sat_equiv; }.
 
 #[global]
-Instance PandProper : Proper (equiv ==> equiv ==> equiv) Pand.
+ Instance PandProper : Proper (equiv ==> equiv ==> equiv) Pand.
 Proof.
   unfold Proper. simplify. unfold "==>".
   intros.
@@ -68,7 +188,7 @@ Proof.
 Qed.
 
 #[global]
-Instance PorProper : Proper (equiv ==> equiv ==> equiv) Por.
+ Instance PorProper : Proper (equiv ==> equiv ==> equiv) Por.
 Proof.
   unfold Proper, "==>". simplify.
   intros.
@@ -78,7 +198,7 @@ Proof.
 Qed.
 
 #[global]
-Instance sat_predicate_Proper : Proper (equiv ==> eq ==> eq) sat_predicate.
+ Instance sat_predicate_Proper : Proper (equiv ==> eq ==> eq) sat_predicate.
 Proof.
   unfold Proper, "==>". simplify.
   intros.
@@ -86,19 +206,8 @@ Proof.
   apply H.
 Qed.
 
-Fixpoint negate (p: pred_op) :=
-  match p with
-  | Plit (b, pr) => Plit (negb b, pr)
-  | T => ⟂
-  | ⟂ => T
-  | A ∧ B => negate A ∨ negate B
-  | A ∨ B => negate A ∧ negate B
-  end.
-
-Notation "¬ A" := (negate A) (at level 15) : pred_op.
-
 Lemma negate_correct :
-  forall h a, sat_predicate (negate h) a = negb (sat_predicate h a).
+  forall (h: @pred_op positive) a, sat_predicate (negate h) a = negb (sat_predicate h a).
 Proof.
   induction h; crush.
   - repeat destruct_match; subst; crush; symmetry; apply negb_involutive.
@@ -150,8 +259,8 @@ Proof.
   intros. specialize (H c); simplify.
   rewrite negate_correct in *.
   destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
+    destruct (sat_predicate a c) eqn:X2;
+    crush.
 Qed.
 
 Lemma sat_predicate_and :
@@ -183,8 +292,8 @@ Proof.
   specialize (H c); simplify.
   rewrite negate_correct in *.
   destruct (sat_predicate b c) eqn:X;
-  destruct (sat_predicate a c) eqn:X2;
-  crush.
+    destruct (sat_predicate a c) eqn:X2;
+    crush.
 Qed.
 
 Lemma sat_equiv4 :
@@ -197,52 +306,16 @@ Proof.
   rewrite andb_negb_r. auto.
 Qed.
 
-Definition simplify' (p: pred_op) :=
-  match p with
-  | (Plit (b1, a)) ∧ (Plit (b2, b)) as p' =>
-      if Pos.eqb a b then
-        if negb (xorb b1 b2) then Plit (b1, a) else ⟂
-      else p'
-  | (Plit (b1, a)) ∨ (Plit (b2, b)) as p' =>
-      if Pos.eqb a b then
-        if negb (xorb b1 b2) then Plit (b1, a) else T
-      else p'
-  | A ∧ T => A
-  | T ∧ A => A
-  | _ ∧ ⟂ => ⟂
-  | ⟂ ∧ _ => ⟂
-  | _ ∨ T => T
-  | T ∨ _ => T
-  | A ∨ ⟂ => A
-  | ⟂ ∨ A => A
-  | A => A
-  end.
-
 Lemma pred_op_dec :
-  forall p1 p2: pred_op,
-  { p1 = p2 } + { p1 <> p2 }.
+  forall p1 p2: @pred_op positive,
+    { p1 = p2 } + { p1 <> p2 }.
 Proof. pose proof Pos.eq_dec. repeat decide equality. Qed.
-
-Fixpoint simplify (p: pred_op) :=
-  match p with
-  | A ∧ B =>
-    let A' := simplify A in
-    let B' := simplify B in
-    simplify' (A' ∧ B')
-  | A ∨ B =>
-    let A' := simplify A in
-    let B' := simplify B in
-    simplify' (A' ∨ B')
-  | T => T
-  | ⟂ => ⟂
-  | Plit a => Plit a
-  end.
 
 Lemma simplify'_correct :
   forall h a,
     sat_predicate (simplify' h) a = sat_predicate h a.
 Proof.
-  (*destruct h; crush; repeat destruct_match; crush;
+(*destruct h; crush; repeat destruct_match; crush;
   solve [rewrite andb_true_r; auto | rewrite orb_false_r; auto].
 Qed.*) Admitted.
 
@@ -271,15 +344,15 @@ Fixpoint mult {A: Type} (a b: list (list A)) : list (list A) :=
 
 Lemma satFormula_concat:
   forall a b agn,
-  satFormula a agn ->
-  satFormula b agn ->
-  satFormula (a ++ b) agn.
+    satFormula a agn ->
+    satFormula b agn ->
+    satFormula (a ++ b) agn.
 Proof. induction a; crush. Qed.
 
 Lemma satFormula_concat2:
   forall a b agn,
-  satFormula (a ++ b) agn ->
-  satFormula a agn /\ satFormula b agn.
+    satFormula (a ++ b) agn ->
+    satFormula a agn /\ satFormula b agn.
 Proof.
   induction a; simplify;
     try apply IHa in H1; crush.
@@ -287,14 +360,14 @@ Qed.
 
 Lemma satClause_concat:
   forall a a1 a0,
-  satClause a a1 ->
-  satClause (a0 ++ a) a1.
+    satClause a a1 ->
+    satClause (a0 ++ a) a1.
 Proof. induction a0; crush. Qed.
 
 Lemma satClause_concat2:
   forall a a1 a0,
-  satClause a0 a1 ->
-  satClause (a0 ++ a) a1.
+    satClause a0 a1 ->
+    satClause (a0 ++ a) a1.
 Proof.
   induction a0; crush.
   inv H; crush.
@@ -302,8 +375,8 @@ Qed.
 
 Lemma satClause_concat3:
   forall a b c,
-  satClause (a ++ b) c ->
-  satClause a c \/ satClause b c.
+    satClause (a ++ b) c ->
+    satClause a c \/ satClause b c.
 Proof.
   induction a; crush.
   inv H; crush.
@@ -313,8 +386,8 @@ Qed.
 
 Lemma satFormula_mult':
   forall p2 a a0,
-  satFormula p2 a0 \/ satClause a a0 ->
-  satFormula (map (fun x : list lit => a ++ x) p2) a0.
+    satFormula p2 a0 \/ satClause a a0 ->
+    satFormula (map (fun x : list lit => a ++ x) p2) a0.
 Proof.
   induction p2; crush.
   - inv H. inv H0. apply satClause_concat. auto.
@@ -325,8 +398,8 @@ Qed.
 
 Lemma satFormula_mult2':
   forall p2 a a0,
-  satFormula (map (fun x : list lit => a ++ x) p2) a0 ->
-  satClause a a0 \/ satFormula p2 a0.
+    satFormula (map (fun x : list lit => a ++ x) p2) a0 ->
+    satClause a a0 \/ satFormula p2 a0.
 Proof.
   induction p2; crush.
   apply IHp2 in H1. inv H1; crush.
@@ -336,8 +409,8 @@ Qed.
 
 Lemma satFormula_mult:
   forall p1 p2 a,
-  satFormula p1 a \/ satFormula p2 a ->
-  satFormula (mult p1 p2) a.
+    satFormula p1 a \/ satFormula p2 a ->
+    satFormula (mult p1 p2) a.
 Proof.
   induction p1; crush.
   apply satFormula_concat; crush.
@@ -345,13 +418,13 @@ Proof.
   apply IHp1. auto.
   apply IHp1. auto.
   apply satFormula_mult';
-  inv H; crush.
+    inv H; crush.
 Qed.
 
 Lemma satFormula_mult2:
   forall p1 p2 a,
-  satFormula (mult p1 p2) a ->
-  satFormula p1 a \/ satFormula p2 a.
+    satFormula (mult p1 p2) a ->
+    satFormula p1 a \/ satFormula p2 a.
 Proof.
   induction p1; crush.
   apply satFormula_concat2 in H; crush.
@@ -364,19 +437,19 @@ Fixpoint trans_pred (p: pred_op) :
   {fm: formula | forall a,
       sat_predicate p a = true <-> satFormula fm a}.
   refine
-  (match p with
+    (match p with
      | Plit (b, p') => exist _ (((b, Pos.to_nat p') :: nil) :: nil) _
      | Ptrue => exist _ nil _
      | Pfalse => exist _ (nil::nil) _
      | Pand p1 p2 =>
-      match trans_pred p1, trans_pred p2 with
-      | exist _ p1' _, exist _ p2' _ => exist _ (p1' ++ p2') _
-      end
+         match trans_pred p1, trans_pred p2 with
+         | exist _ p1' _, exist _ p2' _ => exist _ (p1' ++ p2') _
+         end
      | Por p1 p2 =>
-      match trans_pred p1, trans_pred p2 with
-      | exist _ p1' _, exist _ p2' _ => exist _ (mult p1' p2') _
-      end
-   end); split; intros; simpl in *; auto; try solve [crush].
+         match trans_pred p1, trans_pred p2 with
+         | exist _ p1' _, exist _ p2' _ => exist _ (mult p1' p2') _
+         end
+     end); split; intros; simpl in *; auto; try solve [crush].
   - destruct b; auto. apply negb_true_iff in H. auto.
   - destruct b. inv H. inv H0; auto. apply negb_true_iff. inv H. inv H0; eauto. contradiction.
   - apply satFormula_concat.
@@ -492,8 +565,8 @@ Proof.
     assert
       (satFormula
          (((true, n1) :: bar l0 :: bar l1 :: nil)
-             :: (bar (true, n1) :: l0 :: nil)
-             :: (bar (true, n1) :: l1 :: nil) :: nil) c).
+            :: (bar (true, n1) :: l0 :: nil)
+            :: (bar (true, n1) :: l1 :: nil) :: nil) c).
     eapply stseytin_and_correct. unfold stseytin_and. eauto.
     unfold satLit. simpl. admit.
     inv H; try contradiction. inv H1; try contradiction. eauto.
@@ -508,15 +581,6 @@ Fixpoint max_predicate (p: pred_op) : positive :=
   | Por a b => Pos.max (max_predicate a) (max_predicate b)
   end.
 
-Fixpoint predicate_use (p: pred_op) : list positive :=
-  match p with
-  | Plit (b, p) => p :: nil
-  | Ptrue => nil
-  | Pfalse => nil
-  | Pand a b => predicate_use a ++ predicate_use b
-  | Por a b => predicate_use a ++ predicate_use b
-  end.
-
 Definition tseytin (p: pred_op) :
   {fm: formula | forall a,
       sat_predicate p a = true <-> satFormula fm a}.
@@ -529,21 +593,21 @@ Definition tseytin (p: pred_op) :
   intros. eapply xtseytin_correct; eauto. Defined.
 
 Definition tseytin_simple (p: pred_op) : formula :=
-    let m := Pos.to_nat (max_predicate p + 1) in
-    let '(m, n, fm) := xtseytin m p in
-    (n::nil) :: fm.
+  let m := Pos.to_nat (max_predicate p + 1) in
+  let '(m, n, fm) := xtseytin m p in
+  (n::nil) :: fm.
 
 Definition sat_pred_tseytin (p: pred_op) :
   ({al : alist | sat_predicate p (interp_alist al) = true}
    + {forall a : asgn, sat_predicate p a = false}).
   refine
-  ( match tseytin p with
-    | exist _ fm _ =>
-      match satSolve fm with
-      | inleft (exist _ a _) => inleft (exist _ a _)
-      | inright _ => inright _
-      end
-    end ).
+    ( match tseytin p with
+      | exist _ fm _ =>
+          match satSolve fm with
+          | inleft (exist _ a _) => inleft (exist _ a _)
+          | inright _ => inright _
+          end
+      end ).
   - apply i in s0. auto.
   - intros. specialize (n a). specialize (i a).
     destruct (sat_predicate p a). exfalso.
@@ -560,13 +624,13 @@ Definition sat_pred (p: pred_op) :
   ({al : alist | sat_predicate p (interp_alist al) = true}
    + {forall a : asgn, sat_predicate p a = false}).
   refine
-  ( match trans_pred p with
-    | exist _ fm _ =>
-      match satSolve fm with
-      | inleft (exist _ a _) => inleft (exist _ a _)
-      | inright _ => inright _
-      end
-    end ).
+    ( match trans_pred p with
+      | exist _ fm _ =>
+          match satSolve fm with
+          | inleft (exist _ a _) => inleft (exist _ a _)
+          | inright _ => inright _
+          end
+      end ).
   - apply i in s0. auto.
   - intros. specialize (n a). specialize (i a).
     destruct (sat_predicate p a). exfalso.
@@ -651,15 +715,11 @@ Proof.
 Qed.
 
 #[global]
-Instance DecidableSATSetoid : DecidableSetoid SATSetoid :=
+ Instance DecidableSATSetoid : DecidableSetoid SATSetoid :=
   { setoid_decidable := equiv_check_decidable }.
 
 #[global]
-Instance SATSetoidEqDec : EqDec SATSetoid := equiv_check_decidable2.
-
-Definition Pimplies p p' := ¬ p ∨ p'.
-
-Notation "A → B" := (Pimplies A B) (at level 30) : pred_op.
+ Instance SATSetoidEqDec : EqDec SATSetoid := equiv_check_decidable2.
 
 Definition implies p p' :=
   forall c, sat_predicate p c = true -> sat_predicate p' c = true.
@@ -674,7 +734,7 @@ Proof.
 Qed.
 
 #[global]
-Instance PimpliesProper : Proper (equiv ==> equiv ==> equiv) Pimplies.
+ Instance PimpliesProper : Proper (equiv ==> equiv ==> equiv) Pimplies.
 Proof.
   unfold Proper, "==>". simplify. unfold "→".
   intros.
@@ -684,19 +744,12 @@ Proof.
 Qed.
 
 #[global]
-Instance simplifyProper : Proper (equiv ==> equiv) simplify.
+ Instance simplifyProper : Proper (equiv ==> equiv) simplify.
 Proof.
   unfold Proper, "==>". simplify. unfold "→".
   intros. unfold sat_equiv; intros.
   rewrite ! simplify_correct; auto.
 Qed.
-
-Definition combine_pred (p1 p2: option pred_op): option pred_op :=
-  match p1, p2 with
-  | Some p1, Some p2 => Some (Pand p1 p2)
-  | Some p, _ | _, Some p => Some p
-  | None, None => None
-  end.
 
 Lemma predicate_lt :
   forall p p0,

@@ -18,6 +18,8 @@
 
 From Coq Require Import Lists.List.
 
+Declare Scope monad_scope.
+
 Module Type Monad.
 
   Parameter mon : Type -> Type.
@@ -36,17 +38,18 @@ End Monad.
 Module MonadExtra(M : Monad).
   Import M.
 
-  Module MonadNotation.
+  Module Import MonadNotation.
 
     Notation "'do' X <- A ; B" :=
       (bind A (fun X => B))
-        (at level 200, X name, A at level 100, B at level 200).
+        (at level 200, X name, A at level 100, B at level 200) : monad_scope.
     Notation "'do' ( X , Y ) <- A ; B" :=
       (bind2 A (fun X Y => B))
-        (at level 200, X name, Y name, A at level 100, B at level 200).
+        (at level 200, X name, Y name, A at level 100, B at level 200) : monad_scope.
 
   End MonadNotation.
-  Import MonadNotation.
+
+  #[local] Open Scope monad_scope.
 
   Fixpoint traverselist {A B: Type} (f: A -> mon B) (l: list A) {struct l}: mon (list B) :=
     match l with

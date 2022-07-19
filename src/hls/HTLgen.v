@@ -99,6 +99,7 @@ Export HTLMonad.
 Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
 Export MonadNotation.
+#[local] Open Scope monad_scope.
 
 Definition state_goto (st : reg) (n : node) : stmnt :=
   Vnonblock (Vvar st) (Vlit (posToValue n)).

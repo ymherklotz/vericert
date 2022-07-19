@@ -21,6 +21,8 @@ Require Import Coq.Structures.Equalities.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
+Require Import vericert.common.Monad.
+Require Import vericert.common.Statemonad.
 
 #[local] Open Scope positive.
 
@@ -431,5 +433,29 @@ Module HashTree(H: Hashable).
     - inv H. assert (h ! (Pos.max m (max_key h) + 1) = None)
         by (apply max_not_present; lia). crush.
   Qed.
+
+  Module HashState <: State.
+    Definition st := hash_tree.
+    Definition st_prop (h1 h2: hash_tree): Prop :=
+      forall x y, h1 ! x = Some y -> h2 ! x = Some y.
+
+    Lemma st_refl :
+      forall s, st_prop s s.
+    Proof. unfold st_prop; auto. Qed.
+
+    Lemma st_trans :
+      forall s1 s2 s3,
+        st_prop s1 s2 -> st_prop s2 s3 -> st_prop s1 s3.
+    Proof.
+      unfold st_prop; intros; eauto.
+    Qed.
+
+    #[export] Instance HashStatePreorder : PreOrder st_prop :=
+      { PreOrder_Reflexive := st_refl;
+        PreOrder_Transitive := st_trans;
+      }.
+  End HashState.
+
+  Module HashMonad := Statemonad(HashState).
 
 End HashTree.

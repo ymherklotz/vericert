@@ -102,6 +102,7 @@ Export HTLMonad.
 Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
 Export MonadNotation.
+#[local] Open Scope monad_scope.
 
 Fixpoint pred_expr (preg: reg) (p: pred_op) :=
   match p with

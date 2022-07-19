@@ -31,8 +31,10 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Gible.
 Require Import vericert.hls.GiblePar.
 Require Import vericert.hls.FunctionalUnits.
+Require Import vericert.common.Monad.
 
-Import Option.Notation.
+Module OptionExtra := MonadExtra(Option).
+Import OptionExtra.MonadNotation.
 
 Local Open Scope positive.
 

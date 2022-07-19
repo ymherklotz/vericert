@@ -33,6 +33,8 @@ Require Import Predicate.
 Require Import Vericertlib.
 
 Definition node := positive.
+Definition predicate := positive.
+Definition pred_op := @pred_op predicate.
 
 Inductive instr : Type :=
 | FUnop : instr

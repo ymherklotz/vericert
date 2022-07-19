@@ -106,7 +106,7 @@ Proof. induction l; crush. Qed.
 Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
 Proof. destruct (check_dest_l i r); tauto. Qed.
 
-Lemma check_dest_update :
+(*Lemma check_dest_update :
   forall f i r,
   check_dest i r = false ->
   (snd (update f i)) # (Reg r) = (snd f) # (Reg r).
@@ -1162,13 +1162,13 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       sem (mk_ctx i sp ge) (snd (update (p, f) a)) (i'', None).
   Proof. Admitted.
 
-  Lemma sem_update_instr_term :
+(*  Lemma sem_update_instr_term :
     forall f i' i'' a sp i cf p p',
       sem (mk_ctx i sp ge) f (i', None) ->
       step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) ->
       sem (mk_ctx i sp ge) (snd (update (p', f) a)) (i'', Some cf)
            /\ falsy (is_ps i'') (fst (update (p', f) a)).
-  Proof. Admitted.
+  Proof. Admitted.*)
 
   Lemma step_instr_lessdef :
     forall sp a i i' ti,
@@ -1184,7 +1184,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
   Proof. Admitted.
 
-  Lemma app_predicated_semregset :
+(*  Lemma app_predicated_semregset :
     forall A ctx o f res r y,
       @sem_regset A ctx f res ->
       falsy (ctx_ps ctx) o ->
@@ -1212,7 +1212,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof.
     inversion 1; subst; crush.
     constructor.
-  Admitted.
+  Admitted.*)
 
   Lemma combined_falsy :
     forall i o1 o,
@@ -1224,7 +1224,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     constructor. auto.
   Qed.
 
-  Lemma falsy_update :
+  (*Lemma falsy_update :
     forall f a ps,
       falsy ps (fst f) ->
       falsy ps (fst (update f a)).
@@ -1306,7 +1306,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof.
     unfold abstract_sequence. intros; eapply abstr_fold_correct; eauto.
     simplify. eapply sem_empty.
-  Qed.
+  Qed.*)
 
   Lemma abstr_check_correct :
     forall sp i i' a b cf ti,
@@ -1333,7 +1333,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       exists ti', ParBB.step tge sp (Iexec ti) y (Iterm ti' cf)
              /\ state_lessdef i' ti'.
   Proof.
-    unfold schedule_oracle; intros. simplify.
+    (*unfold schedule_oracle; intros. simplify.
     exploit abstr_sequence_correct; eauto; simplify.
     exploit abstr_check_correct; eauto. apply state_lessdef_refl. simplify.
     exploit abstr_seq_reverse_correct; eauto. apply state_lessdef_refl. simplify.
@@ -1341,7 +1341,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     econstructor; split; eauto.
     etransitivity; eauto.
     etransitivity; eauto.
-  Qed.
+  Qed.*) Admitted.
 
   Lemma step_cf_correct :
     forall cf ts s s' t,
@@ -1422,4 +1422,4 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     exact transl_step_correct.
   Qed.
 
-End CORRECTNESS.
+End CORRECTNESS.*)

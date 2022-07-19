@@ -1,5 +1,5 @@
 VERICERT ?= vericert
-VERICERT_OPTS ?= -DSYNTHESIS -fschedule -fif-conv
+VERICERT_OPTS ?= -DSYNTHESIS -fschedule -fif-conv -dgblseq -dgblpar
 
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
@@ -9,17 +9,17 @@ VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe $(
 
 TARGETS ?=
 
-%.v: %.c
+%.sv: %.c
 	@echo -e "\033[0;35mMAKE\033[0m" $<
 	$(VERICERT) $(VERICERT_OPTS) $< -o $@
 
-%.iver: %.v
+%.iver: %.sv
 	$(IVERILOG) -o $@ $(IVERILOG_OPTS) $<
 
 %.gcc: %.c
 	$(CC) $(CFLAGS) $< -o $@
 
-%.verilator: %.v
+%.verilator: %.sv
 	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $@ --cc $<
 	@echo -e $(MAKE) -C $@ -f Vmain.mk
 	@$(MAKE) -C $@ -f Vmain.mk &>/dev/null

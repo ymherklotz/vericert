@@ -1,18 +1,20 @@
-(**open Camlcoq
+open Camlcoq
 open Datatypes
 open Maps
 open AST
 open Abstr
 open PrintAST
 open Printf
+open Abstr
 
 let rec expr_to_list = function
   | Enil -> []
   | Econs (e, el) -> e :: expr_to_list el
 
 let res pp = function
-  | Reg r -> fprintf pp "r%d" (P.to_int r)
+  | Reg r -> fprintf pp "x%d" (P.to_int r)
   | Pred r -> fprintf pp "p%d" (P.to_int r)
+  | Exit -> fprintf pp "EXIT"
   | Mem -> fprintf pp "M"
 
 let rec print_expression pp = function
@@ -29,11 +31,29 @@ let rec print_expression pp = function
       print_expression e
   | Esetpred (c, el) ->
     fprintf pp "(%a)" (PrintOp.print_condition print_expression) (c, expr_to_list el)
+  | Eexit cf ->
+    fprintf pp "[%a]" PrintGible.print_bblock_exit cf
+
+let rec rev_index = function
+  | BinNums.Coq_xH -> Mem
+  | BinNums.Coq_xO BinNums.Coq_xH -> Exit
+  | BinNums.Coq_xI (BinNums.Coq_xI r) -> Pred r
+  | BinNums.Coq_xO (BinNums.Coq_xO r) -> Reg r
+
+let print_pred_expr = PrintGible.print_pred_op_gen print_expression
 
 let rec print_predicated pp = function
   | NE.Coq_singleton (p, e) ->
-    fprintf pp "%a %a" PrintRTLBlockInstr.print_pred_option p print_expression e
+    fprintf pp "%a %a" print_pred_expr p print_expression e
   | NE.Coq_cons ((p, e), pr) ->
-    fprintf pp "%a %a\n%a" PrintRTLBlockInstr.print_pred_option p print_expression e
+    fprintf pp "%a %a\n%a" print_pred_expr p print_expression e
       print_predicated pr
-*)
+
+let print_forest pp f =
+  fprintf pp "########################################\n";
+  List.iter
+    (function (i, y) -> fprintf pp "-- %a --\n%a\n"
+                          res (rev_index i)
+                          print_predicated y)
+    (PTree.elements f);
+  flush stdout

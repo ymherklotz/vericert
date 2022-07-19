@@ -22,46 +22,48 @@ let ros pp = function
   | Coq_inl r -> reg pp r
   | Coq_inr s -> fprintf pp "\"%s\"" (extern_atom s)
 
-let rec print_pred_op pp = function
-  | Plit p -> if fst p then pred pp (snd p) else fprintf pp "~%a" pred (snd p)
-  | Pand (p1, p2) -> fprintf pp "(%a ∧ %a)" print_pred_op p1 print_pred_op p2
-  | Por (p1, p2) -> fprintf pp "(%a ∨ %a)" print_pred_op p1 print_pred_op p2
+let rec print_pred_op_gen f pp = function
+  | Plit p -> if fst p then f pp (snd p) else fprintf pp "~%a" f (snd p)
+  | Pand (p1, p2) -> fprintf pp "(%a ∧ %a)" (print_pred_op_gen f) p1 (print_pred_op_gen f) p2
+  | Por (p1, p2) -> fprintf pp "(%a ∨ %a)" (print_pred_op_gen f) p1 (print_pred_op_gen f) p2
   | Ptrue -> fprintf pp "T"
   | Pfalse -> fprintf pp "⟂"
 
-let print_pred_option pp = function
-  | Some x -> fprintf pp "(%a)" print_pred_op x
+let print_pred_option_gen f pp = function
+  | Some x -> fprintf pp "(%a)" (print_pred_op_gen f) x
   | None -> ()
+
+let print_pred_option = print_pred_option_gen pred
 
 let print_bblock_exit pp i =
   match i with
   | RBcall(_, fn, args, res, _) ->
-      fprintf pp "%a = %a(%a)\n"
+      fprintf pp "%a = %a(%a)"
         reg res ros fn regs args;
   | RBtailcall(_, fn, args) ->
-      fprintf pp "tailcall %a(%a)\n"
+      fprintf pp "tailcall %a(%a)"
         ros fn regs args
   | RBbuiltin(ef, args, res, _) ->
-      fprintf pp "%a = %s(%a)\n"
+      fprintf pp "%a = %s(%a)"
         (print_builtin_res reg) res
         (name_of_external ef)
         (print_builtin_args reg) args
   | RBcond(cond, args, s1, s2) ->
-      fprintf pp "if (%a) goto %d else goto %d\n"
+      fprintf pp "if (%a) goto %d else goto %d"
         (PrintOp.print_condition reg) (cond, args)
         (P.to_int s1) (P.to_int s2)
   | RBjumptable(arg, tbl) ->
       let tbl = Array.of_list tbl in
-      fprintf pp "jumptable (%a)\n" reg arg;
+      fprintf pp "jumptable (%a)" reg arg;
       for i = 0 to Array.length tbl - 1 do
-        fprintf pp "\tcase %d: goto %d\n" i (P.to_int tbl.(i))
+        fprintf pp "\tcase %d: goto %d" i (P.to_int tbl.(i))
       done
   | RBreturn None ->
-      fprintf pp "return\n"
+      fprintf pp "return"
   | RBreturn (Some arg) ->
-      fprintf pp "return %a\n" reg arg
+      fprintf pp "return %a" reg arg
   | RBgoto n ->
-     fprintf pp "goto %d\n" (P.to_int n)
+     fprintf pp "goto %d" (P.to_int n)
 
 let print_bblock_body pp i =
   fprintf pp "\t\t";
@@ -86,4 +88,4 @@ let print_bblock_body pp i =
       pred p
       (PrintOp.print_condition reg) (c, args)
   | RBexit (p, cf) ->
-    fprintf pp "%a %a" print_pred_option p print_bblock_exit cf
+    fprintf pp "%a %a\n" print_pred_option p print_bblock_exit cf
