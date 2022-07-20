@@ -106,10 +106,11 @@ Proof. induction l; crush. Qed.
 Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
 Proof. destruct (check_dest_l i r); tauto. Qed.
 
-(*Lemma check_dest_update :
-  forall f i r,
+Lemma check_dest_update :
+  forall f f' i r,
   check_dest i r = false ->
-  (snd (update f i)) # (Reg r) = (snd f) # (Reg r).
+  update (Some f) i = Some f' ->
+  (snd f') # (Reg r) = (snd f) # (Reg r).
 Proof.
   destruct i; crush; try apply Pos.eqb_neq in H; unfold update; destruct_match; crush.
   inv Heqp.
@@ -1155,14 +1156,14 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite eval_predf_negate. rewrite H0. auto.
   Qed.
 
-  Lemma sem_update_instr :
+(*  Lemma sem_update_instr :
     forall f i' i'' a sp p i,
       sem (mk_ctx i sp ge) f (i', None) ->
       step_instr ge sp (Iexec i') a (Iexec i'') ->
       sem (mk_ctx i sp ge) (snd (update (p, f) a)) (i'', None).
   Proof. Admitted.
 
-(*  Lemma sem_update_instr_term :
+  Lemma sem_update_instr_term :
     forall f i' i'' a sp i cf p p',
       sem (mk_ctx i sp ge) f (i', None) ->
       step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) ->
@@ -1224,7 +1225,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     constructor. auto.
   Qed.
 
-  (*Lemma falsy_update :
+(*  Lemma falsy_update :
     forall f a ps,
       falsy ps (fst f) ->
       falsy ps (fst (update f a)).
@@ -1245,7 +1246,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     destruct a; destruct f; crush;
       try solve [eapply app_predicated_sem; eauto; apply combined_falsy; auto].
     now apply falsy_update.
-  Qed.
+  Qed.*)
 
   Lemma state_lessdef_sem :
     forall i sp f i' ti cf,
@@ -1255,29 +1256,31 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof. Admitted.
 
   Lemma abstr_fold_correct :
-    forall sp x i i' i'' cf f,
+    forall sp x i i' i'' cf f f',
       SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) ->
       sem (mk_ctx i sp ge) (snd f) (i', None) ->
+      fold_left update x (Some f) = Some f' ->
       forall ti,
         state_lessdef i ti ->
-        exists ti', sem (mk_ctx ti sp ge) (snd (fold_left update x f)) (ti', Some cf)
+        exists ti', sem (mk_ctx ti sp ge) (snd f') (ti', Some cf)
                /\ state_lessdef i'' ti'.
   Proof.
     induction x; simplify; inv H.
-    - destruct f; exploit IHx; eauto; eapply sem_update_instr; eauto.
+    (*- destruct f; exploit IHx; eauto; eapply sem_update_instr; eauto.
     - destruct f. inversion H5; subst.
       exploit state_lessdef_sem; eauto; intros. inv H. inv H2.
       exploit step_instr_lessdef_term; eauto; intros. inv H2. inv H4.
       exploit sem_update_instr_term; eauto; intros. inv H4.
       eexists; split. eapply abstr_fold_falsy; eauto.
       auto.
-  Qed.
+  Qed.*) Admitted.
 
   Lemma sem_regset_empty :
     forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
   Proof.
     intros; constructor; intros.
     constructor; auto. constructor.
+    constructor.
   Qed.
 
   Lemma sem_predset_empty :
@@ -1285,6 +1288,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof.
     intros; constructor; intros.
     constructor; auto. constructor.
+    constructor.
   Qed.
 
   Lemma sem_empty :
@@ -1297,16 +1301,17 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma abstr_sequence_correct :
-    forall sp x i i'' cf,
+    forall sp x i i'' cf x',
       SeqBB.step ge sp (Iexec i) x (Iterm i'' cf) ->
+      abstract_sequence x = Some x' ->
       forall ti,
         state_lessdef i ti ->
-        exists ti', sem (mk_ctx ti sp ge) (abstract_sequence x) (ti', Some cf)
+        exists ti', sem (mk_ctx ti sp ge) x' (ti', Some cf)
                /\ state_lessdef i'' ti'.
   Proof.
-    unfold abstract_sequence. intros; eapply abstr_fold_correct; eauto.
+    (*unfold abstract_sequence. intros; eapply abstr_fold_correct; eauto.
     simplify. eapply sem_empty.
-  Qed.*)
+  Qed.*) Admitted.
 
   Lemma abstr_check_correct :
     forall sp i i' a b cf ti,
@@ -1318,11 +1323,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof. Admitted.
 
   Lemma abstr_seq_reverse_correct :
-    forall sp x i i' ti cf,
-    sem (mk_ctx i sp ge) (abstract_sequence x) (i', (Some cf)) ->
-    state_lessdef i ti ->
-    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
-           /\ state_lessdef i' ti'.
+    forall sp x i i' ti cf x',
+      abstract_sequence x = Some x' ->
+      sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
+      state_lessdef i ti ->
+      exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
+             /\ state_lessdef i' ti'.
   Proof. Admitted.
 
   Lemma schedule_oracle_correct :
@@ -1422,4 +1428,4 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     exact transl_step_correct.
   Qed.
 
-End CORRECTNESS.*)
+End CORRECTNESS.
