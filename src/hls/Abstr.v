@@ -51,11 +51,22 @@ each basic block separately, as the rest of the functions should be equivalent.
 
 Definition reg := positive.
 
-Inductive resource : Set :=
-| Reg : reg -> resource
-| Pred : reg -> resource
-| Mem : resource
-| Exit : resource.
+(*|
+Resource
+--------
+
+A resource is either a register ``Reg`` or memory ``Mem``.  There used to be two
+more, which were predicates ``Pred`` and exits ``Exit``, however, these are not
+actively used inside of other expressions, so it was better to factor them out.
+They are kept track of in a different forest, because they will be pointing to
+different types of operations.  Exits will point to predicated syntactic
+control-flow instructions.  Predicates will point to (maybe predicated)
+set-predicate operations.
+|*)
+
+Variant resource : Set :=
+  | Reg : reg -> resource
+  | Mem : resource.
 
 (*|
 The following defines quite a few equality comparisons automatically, however,
@@ -79,10 +90,8 @@ Module R_indexed.
   Definition t := resource.
   Definition index (rs: resource) : positive :=
     match rs with
-    | Reg r => xO (xO r)
-    | Pred r => xI (xI r)
+    | Reg r => (xO r)
     | Mem => 1
-    | Exit => 2
     end.
 
   Lemma index_inj:  forall (x y: t), index x = index y -> x = y.
@@ -90,8 +99,6 @@ Module R_indexed.
 
   Definition eq := resource_eq.
 End R_indexed.
-
-Compute xO xH.
 
 (*|
 We can then create expressions that mimic the expressions defined in RTLBlock
@@ -107,6 +114,10 @@ general expressions that will be present in those registers.
 Then, to make recursion over expressions easier, expression_list is also defined
 in the datatype, as that enables mutual recursive definitions over the
 datatypes.
+
+They used to contain ``Esetpred`` and ``Eexit``, however, it is just simpler to
+factor these out because they are not used by other expressions inside of the
+tree.
 |*)
 
 Inductive expression : Type :=
@@ -114,14 +125,18 @@ Inductive expression : Type :=
 | Eop : Op.operation -> expression_list -> expression
 | Eload : AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
 | Estore : expression -> AST.memory_chunk -> Op.addressing -> expression_list -> expression -> expression
-| Esetpred : Op.condition -> expression_list -> expression
-| Eexit : cf_instr -> expression
 with expression_list : Type :=
 | Enil : expression_list
 | Econs : expression -> expression_list -> expression_list.
 
-Definition apred : Type := expression.
-Definition apred_op := @Predicate.pred_op apred.
+Variant pred_expression : Type :=
+  | PEbase : positive -> pred_expression
+  | PEsetpred : Op.condition -> expression_list -> pred_expression.
+
+Variant exit_expression : Type :=
+  | EEbase : exit_expression
+  | Eexit : cf_instr -> exit_expression.
+
 Definition pred_op := @Predicate.pred_op positive.
 Definition predicate := positive.
 
