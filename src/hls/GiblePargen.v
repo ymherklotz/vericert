@@ -184,7 +184,7 @@ Fixpoint apredicated_to_apred_op (b: bool) (a: apredicated expression): apred_op
   match a with
   | NE.singleton (p, e) => Pimplies p (Plit (b, e))
   | (p, e) ::| r =>
-      Pand (Pimplies p (Plit (true, e))) (apredicated_to_apred_op b r)
+      Pand (Pimplies p (Plit (b, e))) (apredicated_to_apred_op b r)
   end.
 
 (* Fixpoint get_pred' (f: forest) (ap: pred_op): option apred_op := *)
