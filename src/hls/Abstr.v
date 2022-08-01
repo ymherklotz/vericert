@@ -144,11 +144,11 @@ Variant exit_expression : Type :=
 Definition pred_op := @Predicate.pred_op positive.
 Definition predicate := positive.
 
-Definition apredicated A := NE.non_empty (apred_op * A).
 Definition predicated A := NE.non_empty (pred_op * A).
 
-Definition apred_expr := apredicated expression.
 Definition pred_expr := predicated expression.
+Definition pred_pexpr := predicated pred_expression.
+Definition pred_eexpr := predicated exit_expression.
 
 (*|
 Using ``IMap`` we can create a map from resources to any other type, as
@@ -157,7 +157,12 @@ resources can be uniquely identified as positive numbers.
 
 Module Rtree := ITree(R_indexed).
 
-Definition forest : Type := Rtree.t apred_expr.
+Record forest : Type :=
+  mk_forest {
+    forest_regs : Rtree.t pred_expr;
+    forest_preds : PTree.t pred_pexpr;
+    forest_exit : pred_eexpr
+  }.
 
 Definition get_forest v (f: forest) :=
   match Rtree.get v f with
