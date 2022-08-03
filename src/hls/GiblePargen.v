@@ -59,10 +59,10 @@ to correctly translate the predicates.
 |*)
 
 Fixpoint list_translation (l : list reg) (f : forest) {struct l}
-  : list apred_expr :=
+  : list pred_expr :=
   match l with
   | nil => nil
-  | i :: l => (f # (Reg i)) :: (list_translation l f)
+  | i :: l => (f #r (Reg i)) :: (list_translation l f)
   end.
 
 Fixpoint replicate {A} (n: nat) (l: A) :=
@@ -89,40 +89,40 @@ Definition map_pred_op {A B P: Type} (pf: option (@Predicate.pred_op P) * (A -> 
   | (p, a), (p', f) => (merge''' p p', f a)
   end.
 
-Definition predicated_prod {A B: Type} (p1: apredicated A) (p2: apredicated B) :=
+Definition predicated_prod {A B: Type} (p1: predicated A) (p2: predicated B) :=
   NE.map (fun x => match x with ((a, b), (c, d)) => (Pand a c, (b, d)) end)
          (NE.non_empty_prod p1 p2).
 
-Definition predicated_map {A B: Type} (f: A -> B) (p: apredicated A)
-  : apredicated B := NE.map (fun x => (fst x, f (snd x))) p.
+Definition predicated_map {A B: Type} (f: A -> B) (p: predicated A)
+  : predicated B := NE.map (fun x => (fst x, f (snd x))) p.
 
 (*map (fun x => (fst x, Econs (snd x) Enil)) pel*)
-Definition merge' (pel: apred_expr) (tpel: apredicated expression_list) :=
+Definition merge' (pel: pred_expr) (tpel: predicated expression_list) :=
   predicated_map (uncurry Econs) (predicated_prod pel tpel).
 
-Fixpoint merge (pel: list apred_expr): apredicated expression_list :=
+Fixpoint merge (pel: list pred_expr): predicated expression_list :=
   match pel with
   | nil => NE.singleton (T, Enil)
   | a :: b => merge' a (merge b)
   end.
 
-Definition map_predicated {A B} (pf: apredicated (A -> B)) (pa: apredicated A)
-  : apredicated B :=
+Definition map_predicated {A B} (pf: predicated (A -> B)) (pa: predicated A)
+  : predicated B :=
   predicated_map (fun x => (fst x) (snd x)) (predicated_prod pf pa).
 
-Definition predicated_apply1 {A B} (pf: apredicated (A -> B)) (pa: A)
-  : apredicated B :=
+Definition predicated_apply1 {A B} (pf: predicated (A -> B)) (pa: A)
+  : predicated B :=
   NE.map (fun x => (fst x, (snd x) pa)) pf.
 
-Definition predicated_apply2 {A B C} (pf: apredicated (A -> B -> C)) (pa: A)
-           (pb: B): apredicated C :=
+Definition predicated_apply2 {A B C} (pf: predicated (A -> B -> C)) (pa: A)
+           (pb: B): predicated C :=
   NE.map (fun x => (fst x, (snd x) pa pb)) pf.
 
-Definition predicated_apply3 {A B C D} (pf: apredicated (A -> B -> C -> D))
-           (pa: A) (pb: B) (pc: C): apredicated D :=
+Definition predicated_apply3 {A B C D} (pf: predicated (A -> B -> C -> D))
+           (pa: A) (pb: B) (pc: C): predicated D :=
   NE.map (fun x => (fst x, (snd x) pa pb pc)) pf.
 
-Definition predicated_from_opt {A: Type} (p: option apred_op) (a: A) :=
+Definition predicated_from_opt {A: Type} (p: option pred_op) (a: A) :=
   match p with
   | Some p' => NE.singleton (p', a)
   | None => NE.singleton (T, a)
@@ -143,19 +143,19 @@ Fixpoint NEapp {A} (l m: NE.non_empty A) :=
   | a ::| b => a ::| NEapp b m
   end.
 
-Definition app_predicated' {A: Type} (a b: apredicated A) :=
+Definition app_predicated' {A: Type} (a b: predicated A) :=
   let negation := ¬ (NEfold_left (fun a b => a ∨ (fst b)) b ⟂) in
   NEapp (NE.map (fun x => (negation ∧ fst x, snd x)) a) b.
 
-Definition app_predicated {A: Type} (p': apred_op) (a b: apredicated A) :=
+Definition app_predicated {A: Type} (p': pred_op) (a b: predicated A) :=
   NEapp (NE.map (fun x => (¬ p' ∧ fst x, snd x)) a)
         (NE.map (fun x => (p' ∧ fst x, snd x)) b).
 
-Definition prune_predicated {A: Type} (a: apredicated A) :=
-  NE.filter (fun x => match deep_simplify expression_dec (fst x) with ⟂ => false | _ => true end)
-            (NE.map (fun x => (deep_simplify expression_dec (fst x), snd x)) a).
+Definition prune_predicated {A: Type} (a: predicated A) :=
+  NE.filter (fun x => match deep_simplify peq (fst x) with ⟂ => false | _ => true end)
+            (NE.map (fun x => (deep_simplify peq (fst x), snd x)) a).
 
-Definition pred_ret {A: Type} (a: A) : apredicated A :=
+Definition pred_ret {A: Type} (a: A) : predicated A :=
   NE.singleton (T, a).
 
 (*|
@@ -174,13 +174,15 @@ This is done by multiplying the predicates together, and assigning the negation
 of the expression to the other predicates.
 |*)
 
-Definition upd_pred_forest (p: apred_op) (f: forest) :=
-  PTree.map (fun i e =>
-               NE.map (fun (x: apred_op * expression) =>
+Definition upd_pred_forest (p: pred_op) (f: forest): forest :=
+  mk_forest (PTree.map (fun i e =>
+               NE.map (fun (x: pred_op * expression) =>
                          let (pred, expr) := x in
-                         (Pand p pred, expr)) e) f.
+                         (Pand p pred, expr)) e) f.(forest_regs))
+            f.(forest_preds)
+            f.(forest_exit).
 
-Fixpoint apredicated_to_apred_op (b: bool) (a: apredicated expression): apred_op :=
+Fixpoint apredicated_to_apred_op (b: bool) (a: predicated pred_expression): pred_pexpr :=
   match a with
   | NE.singleton (p, e) => Pimplies p (Plit (b, e))
   | (p, e) ::| r =>
@@ -209,70 +211,72 @@ Fixpoint apredicated_to_apred_op (b: bool) (a: apredicated expression): apred_op
 (* Definition get_pred (f: forest) (ap: option pred_op): option apred_op := *)
 (*   get_pred' f (Option.default T ap). *)
 
-Fixpoint get_pred' (f: forest) (ap: pred_op): apred_op :=
-  match ap with
-  | Ptrue => Ptrue
-  | Pfalse => Pfalse
-  | Plit (a, b) =>
-      apredicated_to_apred_op a (f # (Pred b))
-  | Pand a b => Pand (get_pred' f a) (get_pred' f b)
-  | Por a b => Por (get_pred' f a) (get_pred' f b)
-  end.
+(* Fixpoint get_pred' (f: forest) (ap: pred_op): apred_op := *)
+(*   match ap with *)
+(*   | Ptrue => Ptrue *)
+(*   | Pfalse => Pfalse *)
+(*   | Plit (a, b) => *)
+(*       apredicated_to_apred_op a (f # (Pred b)) *)
+(*   | Pand a b => Pand (get_pred' f a) (get_pred' f b) *)
+(*   | Por a b => Por (get_pred' f a) (get_pred' f b) *)
+(*   end. *)
 
-Definition get_pred (f: forest) (ap: option pred_op): apred_op :=
-  get_pred' f (Option.default Ptrue ap).
+(* Definition get_pred (f: forest) (ap: option pred_op): apred_op := *)
+(*   get_pred' f (Option.default Ptrue ap). *)
 
 #[local] Open Scope monad_scope.
 
 Definition simpl_combine {A: Type} (a b: option (@Predicate.pred_op A)) :=
   Option.map simplify (combine_pred a b).
 
-Definition update (fop : option (apred_op * forest)) (i : instr): option (apred_op * forest) :=
+Definition dfltp {A} (p: option (@Predicate.pred_op A)) := Option.default T p.
+
+Definition update (fop : option (pred_op * forest)) (i : instr): option (pred_op * forest) :=
   do (pred, f) <- fop;
   match i with
   | RBnop => fop
   | RBop p op rl r =>
       do pruned <-
            prune_predicated
-             (app_predicated (get_pred f p ∧ pred)
-                             (f # (Reg r))
+             (app_predicated (dfltp p ∧ pred)
+                             (f #r (Reg r))
                              (map_predicated (pred_ret (Eop op)) (merge (list_translation rl f))));
-      Some (pred, f # (Reg r) <- pruned)
+      Some (pred, f #r (Reg r) <- pruned)
   | RBload p chunk addr rl r =>
       do pruned <-
            prune_predicated
-             (app_predicated (get_pred f p ∧ pred)
-                             (f # (Reg r))
+             (app_predicated (dfltp p ∧ pred)
+                             (f #r (Reg r))
                              (map_predicated
                                 (map_predicated (pred_ret (Eload chunk addr))
                                                 (merge (list_translation rl f)))
-                                (f # Mem)));
-      Some (pred, f # (Reg r) <- pruned)
+                                (f #r Mem)));
+      Some (pred, f #r (Reg r) <- pruned)
   | RBstore p chunk addr rl r =>
       do pruned <-
            prune_predicated
-             (app_predicated (get_pred f p ∧ pred)
-                             (f # Mem)
+             (app_predicated (dfltp p ∧ pred)
+                             (f #r Mem)
                              (map_predicated
                                 (map_predicated
                                    (predicated_apply2 (map_predicated (pred_ret Estore)
-                                                                      (f # (Reg r))) chunk addr)
-                                   (merge (list_translation rl f))) (f # Mem)));
-      Some (pred, f # Mem <- pruned)
+                                                                      (f #r (Reg r))) chunk addr)
+                                   (merge (list_translation rl f))) (f #r Mem)));
+      Some (pred, f #r Mem <- pruned)
   | RBsetpred p' c args p =>
-      do pruned <-
-           prune_predicated
-             (app_predicated (get_pred f p' ∧ pred)
-                                    (f # (Pred p))
-                                    (map_predicated (pred_ret (Esetpred c))
-                                                    (merge (list_translation args f))));
-      Some (pred, f # (Pred p) <- pruned)
+      let new_pred :=
+        (f #p p) ∧
+          ((dfltp p' ∧ pred)
+           → map_predicated (pred_ret (PEsetpred c))
+                            (merge (list_translation args f)))
+      in
+      Some (pred, f #p p <- new_pred)
   | RBexit p c =>
-      let new_p := simplify (get_pred' f (negate (Option.default T p)) ∧ pred) in
+      let new_p := simplify (negate (dfltp p) ∧ pred) in
       do pruned <-
            prune_predicated
-             (app_predicated (get_pred f p ∧ pred) (f # Exit) (pred_ret (Eexit c)));
-      Some (new_p, f # Exit <- pruned)
+             (app_predicated (dfltp p ∧ pred) (f.(forest_exit)) (pred_ret (EEexit c)));
+      Some (new_p, f <-e pruned)
   end.
 
 (*|

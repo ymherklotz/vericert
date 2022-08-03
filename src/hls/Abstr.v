@@ -133,21 +133,21 @@ with expression_list : Type :=
 | Enil : expression_list
 | Econs : expression -> expression_list -> expression_list.
 
-Variant pred_expression : Type :=
-  | PEbase : positive -> pred_expression
-  | PEsetpred : Op.condition -> expression_list -> pred_expression.
-
 Variant exit_expression : Type :=
   | EEbase : exit_expression
-  | Eexit : cf_instr -> exit_expression.
+  | EEexit : cf_instr -> exit_expression.
 
 Definition pred_op := @Predicate.pred_op positive.
 Definition predicate := positive.
 
 Definition predicated A := NE.non_empty (pred_op * A).
 
+Variant pred_expression : Type :=
+  | PEbase : positive -> pred_expression
+  | PEsetpred : Op.condition -> expression_list -> pred_expression.
+
 Definition pred_expr := predicated expression.
-Definition pred_pexpr := predicated pred_expression.
+Definition pred_pexpr := @Predicate.pred_op pred_expression.
 Definition pred_eexpr := predicated exit_expression.
 
 (*|
@@ -155,25 +155,46 @@ Using ``IMap`` we can create a map from resources to any other type, as
 resources can be uniquely identified as positive numbers.
 |*)
 
-Module Rtree := ITree(R_indexed).
+Module RTree := ITree(R_indexed).
 
 Record forest : Type :=
   mk_forest {
-    forest_regs : Rtree.t pred_expr;
+    forest_regs : RTree.t pred_expr;
     forest_preds : PTree.t pred_pexpr;
     forest_exit : pred_eexpr
   }.
 
+Definition empty : forest :=
+  mk_forest (RTree.empty _) (PTree.empty _) (NE.singleton (Ptrue, EEbase)).
+
 Definition get_forest v (f: forest) :=
-  match Rtree.get v f with
+  match RTree.get v f.(forest_regs) with
   | None => NE.singleton (Ptrue, (Ebase v))
   | Some v' => v'
   end.
 
+Definition set_forest r v (f: forest) :=
+  mk_forest (RTree.set r v f.(forest_regs)) f.(forest_preds) f.(forest_exit).
+
+Definition get_forest_p p (f: forest) :=
+  match PTree.get p f.(forest_preds) with
+  | None => Plit (true, PEbase p)
+  | Some v' => v'
+  end.
+
+Definition set_forest_p p v (f: forest) :=
+  mk_forest f.(forest_regs) (PTree.set p v f.(forest_preds)) f.(forest_exit).
+
+Definition set_forest_e e (f: forest) :=
+  mk_forest f.(forest_regs) f.(forest_preds) e.
+
 Declare Scope forest.
 
-Notation "a # b" := (get_forest b a) (at level 1) : forest.
-Notation "a # b <- c" := (Rtree.set b c a) (at level 1, b at next level) : forest.
+Notation "a '#r' b" := (get_forest b a) (at level 1) : forest.
+Notation "a '#r' b <- c" := (set_forest b c a) (at level 1, b at next level) : forest.
+Notation "a '#p' b" := (get_forest_p b a) (at level 1) : forest.
+Notation "a '#p' b <- c" := (get_forest_p b c a) (at level 1, b at next level) : forest.
+Notation "a '<-e' e" := (set_forest_e e a) (at level 1) : forest.
 
 #[local] Open Scope forest.
 
@@ -226,15 +247,6 @@ Inductive sem_value : ctx -> expression -> val -> Prop :=
     Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr lv = Some a ->
     Memory.Mem.loadv chunk m' a = Some v ->
     sem_value ctx (Eload chunk addr args mexp) v
-with sem_pred : ctx -> expression -> bool -> Prop :=
-| Spred:
-    forall ctx args c lv v,
-    sem_val_list ctx args lv ->
-    Op.eval_condition c lv (ctx_mem ctx) = Some v ->
-    sem_pred ctx (Esetpred c args) v
-| Sbase_pred:
-    forall ctx p,
-    sem_pred ctx (Ebase (Pred p)) ((ctx_ps ctx) !! p)
 with sem_mem : ctx -> expression -> Memory.mem -> Prop :=
 | Sstore :
     forall ctx mexp vexp chunk addr args lv v a m' m'',
@@ -247,13 +259,6 @@ with sem_mem : ctx -> expression -> Memory.mem -> Prop :=
 | Sbase_mem :
     forall ctx,
     sem_mem ctx (Ebase Mem) (ctx_mem ctx)
-with sem_exit : ctx -> expression -> option cf_instr -> Prop :=
-| Sexit :
-  forall ctx cf,
-    sem_exit ctx (Eexit cf) (Some cf)
-| Sbase_exit :
-  forall ctx,
-    sem_exit ctx (Ebase Exit) None
 with sem_val_list : ctx -> expression_list -> list val -> Prop :=
 | Snil :
     forall ctx,
@@ -265,41 +270,73 @@ with sem_val_list : ctx -> expression_list -> list val -> Prop :=
     sem_val_list ctx (Econs e l) (v :: lv)
 .
 
-Inductive eval_apred (c: ctx): apred_op -> bool -> Prop :=
-| eval_APtrue : eval_apred c Ptrue true
-| eval_APfalse : eval_apred c Pfalse false
-| eval_APlit : forall p (b: bool) bres,
-    sem_pred c p (if b then bres else negb bres) ->
-    eval_apred c (Plit (b, p)) bres
-| eval_APand : forall p1 p2 b1 b2,
-  eval_apred c p1 b1 ->
-  eval_apred c p2 b2 ->
-  eval_apred c (Pand p1 p2) (b1 && b2)
-| eval_APor1 : forall p1 p2 b1 b2,
-  eval_apred c p1 b1 ->
-  eval_apred c p2 b2 ->
-  eval_apred c (Por p1 p2) (b1 || b2).
+Variant sem_exit : ctx -> exit_expression -> option cf_instr -> Prop :=
+| Sexit :
+  forall ctx cf,
+    sem_exit ctx (EEexit cf) (Some cf)
+| Sbase_exit :
+  forall ctx,
+    sem_exit ctx EEbase None.
 
-Inductive sem_pred_expr {B: Type} (sem: ctx -> expression -> B -> Prop):
-  ctx -> apred_expr -> B -> Prop :=
+Variant sem_pred : ctx -> pred_expression -> bool -> Prop :=
+| Spred:
+    forall ctx args c lv v,
+    sem_val_list ctx args lv ->
+    Op.eval_condition c lv (ctx_mem ctx) = Some v ->
+    sem_pred ctx (PEsetpred c args) v
+| Sbase_pred:
+    forall ctx p,
+      sem_pred ctx (PEbase p) ((ctx_ps ctx) !! p).
+
+(*|
+I was trying to avoid such rich semantics for pred_pexpr (by not having the type
+in the first place), but I think it is needed to model predicates properly.
+|*)
+
+Inductive sem_pexpr (c: ctx) : pred_pexpr -> bool -> Prop :=
+| sem_pexpr_Ptrue : sem_pexpr c Ptrue true
+| sem_pexpr_Pfalse : sem_pexpr c Pfalse false
+| sem_pexpr_Plit : forall p (b: bool) bres,
+    sem_pred c p (if b then bres else negb bres) ->
+    sem_pexpr c (Plit (b, p)) bres
+| sem_pexpr_Pand : forall p1 p2 b1 b2,
+  sem_pexpr c p1 b1 ->
+  sem_pexpr c p2 b2 ->
+  sem_pexpr c (Pand p1 p2) (b1 && b2)
+| sem_pexpr_Por : forall p1 p2 b1 b2,
+  sem_pexpr c p1 b1 ->
+  sem_pexpr c p2 b2 ->
+  sem_pexpr c (Por p1 p2) (b1 || b2).
+
+Fixpoint from_pred_op (f: forest) (p: pred_op): pred_pexpr :=
+  match p with
+  | Ptrue => Ptrue
+  | Pfalse => Pfalse
+  | Plit (b, p') => if b then f #p p' else negate (f #p p')
+  | Pand a b => Pand (from_pred_op f a) (from_pred_op f b)
+  | Por a b => Por (from_pred_op f a) (from_pred_op f b)
+  end.
+
+Inductive sem_pred_expr {A B: Type} (f: forest) (sem: ctx -> A -> B -> Prop):
+  ctx -> predicated A -> B -> Prop :=
 | sem_pred_expr_cons_true :
   forall ctx e pr p' v,
-    eval_apred ctx pr true ->
+    sem_pexpr ctx (from_pred_op f pr) true ->
     sem ctx e v ->
-    sem_pred_expr sem ctx ((pr, e) ::| p') v
+    sem_pred_expr f sem ctx ((pr, e) ::| p') v
 | sem_pred_expr_cons_false :
   forall ctx e pr p' v,
-    eval_apred ctx pr false ->
-    sem_pred_expr sem ctx p' v ->
-    sem_pred_expr sem ctx ((pr, e) ::| p') v
+    sem_pexpr ctx (from_pred_op f pr) false ->
+    sem_pred_expr f sem ctx p' v ->
+    sem_pred_expr f sem ctx ((pr, e) ::| p') v
 | sem_pred_expr_single :
   forall ctx e pr v,
-    eval_apred ctx pr true ->
+    sem_pexpr ctx (from_pred_op f pr) true ->
     sem ctx e v ->
-    sem_pred_expr sem ctx (NE.singleton (pr, e)) v
+    sem_pred_expr f sem ctx (NE.singleton (pr, e)) v
 .
 
-Definition collapse_pe (p: apred_expr) : option expression :=
+Definition collapse_pe (p: pred_expr) : option expression :=
   match p with
   | NE.singleton (APtrue, p) => Some p
   | _ => None
@@ -307,14 +344,14 @@ Definition collapse_pe (p: apred_expr) : option expression :=
 
 Inductive sem_predset : ctx -> forest -> predset -> Prop :=
 | Spredset:
-    forall ctx f rs',
-    (forall x, sem_pred_expr sem_pred ctx (f # (Pred x)) (rs' !! x)) ->
+  forall ctx f rs',
+    (forall x, sem_pexpr ctx (f #p x) (rs' !! x)) ->
     sem_predset ctx f rs'.
 
 Inductive sem_regset : ctx -> forest -> regset -> Prop :=
 | Sregset:
-    forall ctx f rs',
-    (forall x, sem_pred_expr sem_value ctx (f # (Reg x)) (rs' !! x)) ->
+  forall ctx f rs',
+    (forall x, sem_pred_expr f sem_value ctx (f #r (Reg x)) (rs' !! x)) ->
     sem_regset ctx f rs'.
 
 Inductive sem : ctx -> forest -> instr_state * option cf_instr -> Prop :=
@@ -322,8 +359,8 @@ Inductive sem : ctx -> forest -> instr_state * option cf_instr -> Prop :=
     forall ctx rs' m' f pr' cf,
     sem_regset ctx f rs' ->
     sem_predset ctx f pr' ->
-    sem_pred_expr sem_mem ctx (f # Mem) m' ->
-    sem_pred_expr sem_exit ctx (f # Exit) cf ->
+    sem_pred_expr f sem_mem ctx (f #r Mem) m' ->
+    sem_pred_expr f sem_exit ctx f.(forest_exit) cf ->
     sem ctx f (mk_instr_state rs' pr' m', cf).
 
 End SEMANTICS.
@@ -345,10 +382,6 @@ Fixpoint beq_expression (e1 e2: expression) {struct e1}: bool :=
          then if beq_expression_list el1 el2
               then if beq_expression m1 m2
                    then beq_expression e1 e2 else false else false else false else false
-  | Esetpred c1 el1, Esetpred c2 el2 =>
-    if condition_eq c1 c2
-    then beq_expression_list el1 el2 else false
-  | Eexit cf1, Eexit cf2 => if cf_instr_eq cf1 cf2 then true else false
   | _, _ => false
   end
 with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
@@ -358,6 +391,22 @@ with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
   | _, _ => false
   end
 .
+
+Definition beq_pred_expression (e1 e2: pred_expression) : bool :=
+  match e1, e2 with
+  | PEbase p1, PEbase p2 => if peq p1 p2 then true else false
+  | PEsetpred c1 el1, PEsetpred c2 el2 =>
+    if condition_eq c1 c2
+    then beq_expression_list el1 el2 else false
+  | _, _ => false
+  end.
+
+Definition beq_exit_expression (e1 e2: exit_expression) : bool :=
+  match e1, e2 with
+  | EEbase, EEbase => true
+  | EEexit cf1, EEexit cf2 => if cf_instr_eq cf1 cf2 then true else false
+  | _, _ => false
+  end.
 
 Scheme expression_ind2 := Induction for expression Sort Prop
   with expression_list_ind2 := Induction for expression_list Sort Prop.
@@ -404,9 +453,8 @@ Proof.
     inv H0. rewrite beq_expression_refl in H; crush.
     inv H. rewrite beq_expression_refl in Heqb0; crush.
     inv H. rewrite beq_expression_list_refl in Heqb; crush.
-  - simplify. repeat (destruct_match; crush); subst.
-    unfold not in *; intros. inv H0. rewrite beq_expression_list_refl in H; crush.
-  - simplify. repeat (destruct_match; crush); subst.
+  (* - simplify. repeat (destruct_match; crush); subst. *)
+  (*   unfold not in *; intros. inv H0. rewrite beq_expression_list_refl in H; crush. *)
   - simplify. repeat (destruct_match; crush); subst.
   - simplify. repeat (destruct_match; crush); subst.
     apply andb_false_iff in H. inv H. unfold not in *; intros.
@@ -420,6 +468,62 @@ Proof.
   destruct (beq_expression e1 e2) eqn:?. apply beq_expression_correct in Heqb. auto.
   apply beq_expression_correct2 in Heqb. auto.
 Defined.
+
+Lemma beq_expression_list_correct:
+  forall e1 e2, beq_expression_list e1 e2 = true -> e1 = e2.
+Proof.
+  induction e1; crush.
+  - destruct_match; crush.
+  - destruct_match; crush.
+    apply IHe1 in H1; subst.
+    apply beq_expression_correct in H0; subst.
+    trivial.
+Qed.
+
+Lemma beq_expression_list_correct2:
+  forall e1 e2, beq_expression_list e1 e2 = false -> e1 <> e2.
+Proof.
+  induction e1; crush.
+  - destruct_match; crush.
+  - destruct_match; crush.
+    apply andb_false_iff in H. inv H. apply beq_expression_correct2 in H0.
+    unfold not in *; intros. apply H0. inv H. auto.
+    apply IHe1 in H0. unfold not in *; intros. apply H0. inv H.
+    auto.
+Qed.
+
+Lemma beq_pred_expression_correct:
+  forall e1 e2, beq_pred_expression e1 e2 = true -> e1 = e2.
+Proof.
+  destruct e1, e2; crush.
+  - destruct_match; crush.
+  - destruct_match; subst; crush.
+    apply beq_expression_list_correct in H; subst.
+    trivial.
+Qed.
+
+Lemma beq_pred_expression_refl:
+  forall e, beq_pred_expression e e = true.
+Proof.
+  destruct e; crush; destruct_match; crush.
+  apply beq_expression_list_refl.
+Qed.
+
+Lemma beq_pred_expression_correct2:
+  forall e1 e2, beq_pred_expression e1 e2 = false -> e1 <> e2.
+Proof.
+  destruct e1, e2; unfold not; crush.
+  + destruct_match; crush.
+  + destruct_match; crush. inv H0.
+    now rewrite beq_expression_list_refl in H.
+Qed.
+
+Lemma beq_exit_expression_correct:
+  forall e1 e2, beq_exit_expression e1 e2 = true <-> e1 = e2.
+Proof.
+  destruct e1, e2; split; crush;
+  destruct_match; subst; crush.
+Qed.
 
 Definition pred_expr_item_eq (pe1 pe2: pred_op * expression) : bool :=
   @equiv_dec _ SATSetoid _ (fst pe1) (fst pe2) && beq_expression (snd pe1) (snd pe2).
@@ -436,6 +540,29 @@ Proof.
   intros; destruct (pred_expr_item_eq pe1 pe2) eqn:?; unfold not; [tauto | now right].
 Qed.
 
+Lemma pred_expression_dec:
+  forall e1 e2: pred_expression, {e1 = e2} + {e1 <> e2}.
+Proof.
+  intros. destruct (beq_pred_expression e1 e2) eqn:?.
+  eauto using beq_pred_expression_correct.
+  eauto using beq_pred_expression_correct2.
+Qed.
+
+Lemma exit_expression_refl:
+  forall e, beq_exit_expression e e = true.
+Proof. destruct e; crush; destruct_match; crush. Qed.
+
+Lemma exit_expression_dec:
+  forall e1 e2: exit_expression, {e1 = e2} + {e1 <> e2}.
+Proof.
+  intros. destruct (beq_exit_expression e1 e2) eqn:?.
+  - left. eapply beq_exit_expression_correct; eauto.
+  - right. unfold not; intros.
+    assert (X: ~ (beq_exit_expression e1 e2 = true))
+      by eauto with bool.
+    subst. apply X. apply exit_expression_refl.
+Qed.
+
 Module HashExpr' <: MiniDecidableType.
   Definition t := expression.
   Definition eq_dec := expression_dec.
@@ -445,13 +572,29 @@ Module HashExpr := Make_UDT(HashExpr').
 Module HT := HashTree(HashExpr).
 Import HT.
 
-Fixpoint hash_predicate (max: predicate) (ap: apred_op) (h: hash_tree)
-  : pred_op * hash_tree :=
+Module PHashExpr' <: MiniDecidableType.
+  Definition t := pred_expression.
+  Definition eq_dec := pred_expression_dec.
+End PHashExpr'.
+
+Module PHashExpr := Make_UDT(PHashExpr').
+Module PHT := HashTree(PHashExpr).
+
+Module EHashExpr' <: MiniDecidableType.
+  Definition t := exit_expression.
+  Definition eq_dec := exit_expression_dec.
+End EHashExpr'.
+
+Module EHashExpr := Make_UDT(EHashExpr').
+Module EHT := HashTree(EHashExpr).
+
+Fixpoint hash_predicate (max: predicate) (ap: pred_pexpr) (h: PHT.hash_tree)
+  : pred_op * PHT.hash_tree :=
   match ap with
   | Ptrue => (Ptrue, h)
   | Pfalse => (Pfalse, h)
   | Plit (b, ap') =>
-      let (p', h') := hash_value max ap' h in
+      let (p', h') := PHT.hash_value max ap' h in
       (Plit (b, p'), h')
   | Pand p1 p2 =>
       let (p1', h') := hash_predicate max p1 h in
@@ -463,55 +606,40 @@ Fixpoint hash_predicate (max: predicate) (ap: apred_op) (h: hash_tree)
       (Por p1' p2', h'')
   end.
 
-Fixpoint anorm_expression (max: predicate) (pe: apred_expr) (h: hash_tree)
-  : (PTree.t pred_op) * hash_tree :=
-  match pe with
-  | NE.singleton (p, e) =>
-    let (hashed_e, h') := hash_value max e h in
-    let (hashed_p, h'') := hash_predicate max p h' in
-    (PTree.set hashed_e hashed_p (PTree.empty _), h'')
-  | (p, e) ::| pr =>
-    let (hashed_e, h') := hash_value max e h in
-    let (norm_pr, h'') := anorm_expression max pr h' in
-    let (hashed_p, h''') := hash_predicate max p h'' in
-    match norm_pr ! hashed_e with
-    | Some pr_op =>
-      (PTree.set hashed_e (pr_op ∨ hashed_p) norm_pr, h''')
-    | None =>
-      (PTree.set hashed_e hashed_p norm_pr, h''')
-    end
-  end.
+Module HashExprNorm(H: Hashable).
+  Module H := HashTree(H).
 
-Fixpoint norm_expression (max: predicate) (pe: pred_expr) (h: hash_tree)
-  : (PTree.t pred_op) * hash_tree :=
-  match pe with
-  | NE.singleton (p, e) =>
-    let (hashed_e, h') := hash_value max e h in
-    (PTree.set hashed_e p (PTree.empty _), h')
-  | (p, e) ::| pr =>
-    let (hashed_e, h') := hash_value max e h in
-    let (norm_pr, h'') := norm_expression max pr h' in
-    match norm_pr ! hashed_e with
-    | Some pr_op =>
-      (PTree.set hashed_e (pr_op ∨ p) norm_pr, h'')
-    | None =>
-      (PTree.set hashed_e p norm_pr, h'')
-    end
-  end.
+  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: H.hash_tree)
+    : (PTree.t pred_op) * H.hash_tree :=
+    match pe with
+    | NE.singleton (p, e) =>
+        let (hashed_e, h') := H.hash_value max e h in
+        (PTree.set hashed_e p (PTree.empty _), h')
+    | (p, e) ::| pr =>
+        let (hashed_e, h') := H.hash_value max e h in
+        let (norm_pr, h'') := norm_expression max pr h' in
+        match norm_pr ! hashed_e with
+        | Some pr_op =>
+            (PTree.set hashed_e (pr_op ∨ p) norm_pr, h'')
+        | None =>
+            (PTree.set hashed_e p norm_pr, h'')
+        end
+    end.
 
-Definition mk_pred_stmnt' (e: predicate) p_e := ¬ p_e ∨ Plit (true, e).
+  Definition mk_pred_stmnt' (e: predicate) p_e := ¬ p_e ∨ Plit (true, e).
 
-Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
+  Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
 
-Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) := fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
+  Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) :=
+    fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
 
-Definition encode_expression max pe h :=
-  let (tree, h) := norm_expression max pe h in
-  (mk_pred_stmnt tree, h).
+  Definition encode_expression max pe h :=
+    let (tree, h) := norm_expression max pe h in
+    (mk_pred_stmnt tree, h).
+End HashExprNorm.
 
-Definition aencode_expression max pe h :=
-  let (tree, h) := anorm_expression max pe h in
-  (mk_pred_stmnt tree, h).
+Module HN := HashExprNorm(HashExpr).
+Module EHN := HashExprNorm(EHashExpr).
 
 (*Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
   : (PTree.t pred_op) * hash_tree :=
@@ -530,8 +658,6 @@ Fixpoint max_pred_expr (pe: pred_expr) : positive :=
   | NE.singleton (p, e) => max_predicate p
   | (p, e) ::| pe' => Pos.max (max_predicate p) (max_pred_expr pe')
   end.
-
-Definition empty : forest := Rtree.empty _.
 
 Definition ge_preserved {A B C D: Type} (ge: Genv.t A B) (tge: Genv.t C D) : Prop :=
   (forall sp op vl m, Op.eval_operation ge sp op vl m =
@@ -575,9 +701,14 @@ Inductive similar {A B} : @ctx A -> @ctx B -> Prop :=
     match_states ist ist' ->
     similar (mk_ctx ist sp ge) (mk_ctx ist' sp tge).
 
-Definition beq_pred_expr_once (pe1 pe2: apred_expr) : bool :=
-  let (p1, h) := aencode_expression 1%positive pe1 (PTree.empty _) in
-  let (p2, h') := aencode_expression 1%positive pe2 h in
+Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
+  let (p1, h) := HN.encode_expression 1%positive pe1 (PTree.empty _) in
+  let (p2, h') := HN.encode_expression 1%positive pe2 h in
+  equiv_check p1 p2.
+
+Definition beq_pred_eexpr (pe1 pe2: pred_eexpr) : bool :=
+  let (p1, h) := EHN.encode_expression 1%positive pe1 (PTree.empty _) in
+  let (p2, h') := EHN.encode_expression 1%positive pe2 h in
   equiv_check p1 p2.
 
 Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
@@ -620,7 +751,7 @@ Qed.
 
 Lemma norm_expr_constant :
   forall x m h t h' e p,
-    norm_expression m x h = (t, h') ->
+    HN.norm_expression m x h = (t, h') ->
     h ! e = Some p ->
     h' ! e = Some p.
 Proof. Admitted.
@@ -633,19 +764,6 @@ Proof.
   unfold predicated_mutexcl; intros.
   apply H; auto; constructor; tauto.
 Qed.
-
-Module Type AbstrPredSet.
-
-  Parameter apred_list : list apred_op.
-
-  Parameter h : hash_tree.
-
-  Axiom h_valid :
-    forall a,
-      In a apred_list ->
-      exists p, hash_predicate 1 a h = (p, h).
-
-End AbstrPredSet.
 
 Definition sat_aequiv ap1 ap2 :=
   exists h p1 p2,
@@ -683,7 +801,7 @@ Abort.
 
 Lemma norm_expr_mutexcl :
   forall m pe h t h' e e' p p',
-    norm_expression m pe h = (t, h') ->
+    HN.norm_expression m pe h = (t, h') ->
     predicated_mutexcl pe ->
     t ! e = Some p ->
     t ! e' = Some p' ->
@@ -747,19 +865,21 @@ Lemma norm_expression_sem_pred2 :
       sem_pred_expr sem ctx pe v.
 Proof. Admitted.*)
 
-Definition beq_pred_expr (pe1 pe2: apred_expr) : bool :=
-  let (np1, h) := anorm_expression 1 pe1 (PTree.empty _) in
-  let (np2, h') := anorm_expression 1 pe2 h in
+Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
+  let (np1, h) := HN.norm_expression 1 pe1 (PTree.empty _) in
+  let (np2, h') := HN.norm_expression 1 pe2 h in
   forall_ptree (tree_equiv_check_el np2) np1
   && forall_ptree (tree_equiv_check_None_el np1) np2.
 
-Definition check := Rtree.beq beq_pred_expr.
+Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
+  let (np1, h) := hash_predicate 1 pe1 (PTree.empty _) in
+  let (np2, h') := hash_predicate 1 pe2 h in
+  equiv_check np1 np2.
 
-(* Compute (check (empty # (Reg 2) <- *)
-(*                 ((((Pand (Plit (true, 4)) (¬ (Plit (true, 4))))), (Ebase (Reg 9))) ::| *)
-(*                                                                       (NE.singleton (((Plit (true, 2))), (Ebase (Reg 3)))))) *)
-(*                (empty # (Reg 2) <- (NE.singleton (((Por (Plit (true, 2)) (Pand (Plit (true, 3)) (¬ (Plit (true, 3)))))), *)
-(*                                                   (Ebase (Reg 3)))))). *)
+Definition check f1 f2 :=
+  RTree.beq beq_pred_expr f1.(forest_regs) f2.(forest_regs)
+  && PTree.beq beq_pred_pexpr f1.(forest_preds) f2.(forest_preds)
+  && beq_pred_eexpr f1.(forest_exit) f2.(forest_exit).
 
 Lemma inj_asgn_eg : forall a b, (a =? b)%nat = (a =? a)%nat -> a = b.
 Proof.
@@ -925,10 +1045,6 @@ Section CORRECT.
     - inv H0. eapply IHe1 in H11; auto. eapply IHe2 in H12; auto. eapply IHe3 in H9; auto.
       econstructor; try eassumption.
       unfold ctx_rs, ctx_ps, ctx_mem in *; cbn in *. inv H; crush.
-    - inv H0.
-    - inv H0.
-    - inv H0.
-    - inv H0.
     - inv H0. econstructor.
     - inv H0. eapply IHe in H6; auto. eapply IHe0 in H8.
       econstructor; eassumption.
@@ -1007,7 +1123,7 @@ Section CORRECT.
   Lemma exists_norm_expr :
     forall x pe expr m t h h',
       NE.In (pe, expr) x ->
-      norm_expression m x h = (t, h') ->
+      HN.norm_expression m x h = (t, h') ->
       exists e pe', t ! e = Some pe' /\ pe ⇒ pe' /\ h' ! e = Some expr.
   Proof. Admitted.
 
@@ -1216,21 +1332,7 @@ Section CORRECT.
       sem octx fb i' ->
       match_states (fst i) (fst i') /\ snd i = snd i'.
   Proof using HSIM.
-    intros.
-    unfold check, get_forest in *; intros;
-      pose proof beq_expression_correct.
-    pose proof (Rtree.beq_sound beq_pred_expr fa fb H).
-    inv H0; inv H1.
-    constructor; simplify.
-    { admit. }
-    { inv H0; inv H4.
-      repeat match goal with
-             | H: forall _ : reg, _ |- _ => specialize (H x)
-             | H: forall _ : Rtree.elt, _ |- _ => specialize (H (Reg x))
-             end.
-      repeat (destruct_match; try contradiction).
-      unfold "#" in *.
-Admitted.
+    Admitted.
 
   Lemma check_correct2:
     forall (fa fb : forest) i,
@@ -1242,14 +1344,8 @@ Admitted.
 End CORRECT.
 
 Lemma get_empty:
-  forall r, empty#r = NE.singleton (Ptrue, Ebase r).
-Proof.
-  intros; unfold get_forest;
-  destruct_match; auto; [ ];
-  match goal with
-    [ H : context[Rtree.get _ empty] |- _ ] => rewrite Rtree.gempty in H
-  end; discriminate.
-Qed.
+  forall r, empty#r r = NE.singleton (Ptrue, Ebase r).
+Proof. unfold "#r"; intros. rewrite RTree.gempty. trivial. Qed.
 
 Section BOOLEAN_EQUALITY.
 
@@ -1334,24 +1430,40 @@ Section BOOLEAN_EQUALITY.
 
 End BOOLEAN_EQUALITY.
 
-Lemma map1:
-  forall w dst dst',
-    dst <> dst' ->
-    (empty # dst <- w) # dst' = NE.singleton (Ptrue, Ebase dst').
-Proof. intros; unfold get_forest; rewrite Rtree.gso; auto; apply get_empty. Qed.
-
-Lemma genmap1:
+Lemma forest_reg_gso:
   forall (f : forest) w dst dst',
     dst <> dst' ->
-    (f # dst <- w) # dst' = f # dst'.
-Proof. intros; unfold get_forest; rewrite Rtree.gso; auto. Qed.
+    (f #r dst <- w) #r dst' = f #r dst'.
+Proof.
+  unfold "#r"; intros.
+  unfold forest_regs. unfold set_forest.
+  rewrite RTree.gso; auto.
+Qed.
 
-Lemma map2:
-  forall (v : apred_expr) x rs,
-    (rs # x <- v) # x = v.
-Proof. intros; unfold get_forest; rewrite Rtree.gss; trivial. Qed.
+Lemma forest_reg_gss:
+  forall (f : forest) w dst,
+    (f #r dst <- w) #r dst = w.
+Proof.
+  unfold "#r"; intros.
+  unfold forest_regs. unfold set_forest.
+  rewrite RTree.gss; auto.
+Qed.
 
-Lemma tri1:
-  forall x y,
-    Reg x <> Reg y -> x <> y.
-Proof. crush. Qed.
+Lemma forest_pred_gso:
+  forall (f : forest) w dst dst',
+    dst <> dst' ->
+    (set_forest_p dst w f) #p dst' = f #p dst'.
+Proof.
+  unfold "#p"; intros.
+  unfold forest_preds. unfold set_forest_p.
+  rewrite PTree.gso; auto.
+Qed.
+
+Lemma forest_pred_gss:
+  forall (f : forest) w dst,
+    (set_forest_p dst w f) #p dst = w.
+Proof.
+  unfold "#p"; intros.
+  unfold forest_preds. unfold set_forest_p.
+  rewrite PTree.gss; auto.
+Qed.

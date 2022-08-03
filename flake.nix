@@ -15,7 +15,7 @@
       devShell.x86_64-linux = pkgs.mkShell {
         buildInputs = with pkgs;
           [ ncoq
-            dune_2
+            dune_3
             gcc
             ncoq.ocaml
             ncoq.ocamlPackages.findlib
@@ -35,7 +35,7 @@
       devShell.x86_64-darwin = dpkgs.mkShell {
         buildInputs = with dpkgs;
           [ dncoq
-            dune_2
+            dune_3
             gcc
             dncoq.ocaml
             dncoq.ocamlPackages.findlib
