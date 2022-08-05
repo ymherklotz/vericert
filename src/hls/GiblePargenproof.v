@@ -106,87 +106,87 @@ Proof. induction l; crush. Qed.
 Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
 Proof. destruct (check_dest_l i r); tauto. Qed.
 
-Lemma check_dest_update :
-  forall f f' i r,
-  check_dest i r = false ->
-  update (Some f) i = Some f' ->
-  (snd f') # (Reg r) = (snd f) # (Reg r).
-Proof.
-  destruct i; crush; try apply Pos.eqb_neq in H; unfold update; destruct_match; crush.
-  inv Heqp.
-  Admitted.
+(* Lemma check_dest_update : *)
+(*   forall f f' i r, *)
+(*   check_dest i r = false -> *)
+(*   update (Some f) i = Some f' -> *)
+(*   (snd f') # (Reg r) = (snd f) # (Reg r). *)
+(* Proof. *)
+(*   destruct i; crush; try apply Pos.eqb_neq in H; unfold update; destruct_match; crush. *)
+(*   inv Heqp. *)
+(*   Admitted. *)
 
-Lemma check_dest_l_forall2 :
-  forall l r,
-  Forall (fun x => check_dest x r = false) l ->
-  check_dest_l l r = false.
-Proof.
-  induction l; crush.
-  inv H. apply orb_false_intro; crush.
-Qed.
+(* Lemma check_dest_l_forall2 : *)
+(*   forall l r, *)
+(*   Forall (fun x => check_dest x r = false) l -> *)
+(*   check_dest_l l r = false. *)
+(* Proof. *)
+(*   induction l; crush. *)
+(*   inv H. apply orb_false_intro; crush. *)
+(* Qed. *)
 
-Lemma check_dest_l_ex2 :
-  forall l r,
-  (exists a, In a l /\ check_dest a r = true) ->
-  check_dest_l l r = true.
-Proof.
-  induction l; crush.
-  specialize (IHl r). inv H.
-  apply orb_true_intro; crush.
-  apply orb_true_intro; crush.
-  right. apply IHl. exists x. auto.
-Qed.
+(* Lemma check_dest_l_ex2 : *)
+(*   forall l r, *)
+(*   (exists a, In a l /\ check_dest a r = true) -> *)
+(*   check_dest_l l r = true. *)
+(* Proof. *)
+(*   induction l; crush. *)
+(*   specialize (IHl r). inv H. *)
+(*   apply orb_true_intro; crush. *)
+(*   apply orb_true_intro; crush. *)
+(*   right. apply IHl. exists x. auto. *)
+(* Qed. *)
 
-Lemma check_list_l_false :
-  forall l x r,
-  check_dest_l (l ++ x :: nil) r = false ->
-  check_dest_l l r = false /\ check_dest x r = false.
-Proof.
-  simplify.
-  apply check_dest_l_forall in H. apply Forall_app in H.
-  simplify. apply check_dest_l_forall2; auto.
-  apply check_dest_l_forall in H. apply Forall_app in H.
-  simplify. inv H1. auto.
-Qed.
+(* Lemma check_list_l_false : *)
+(*   forall l x r, *)
+(*   check_dest_l (l ++ x :: nil) r = false -> *)
+(*   check_dest_l l r = false /\ check_dest x r = false. *)
+(* Proof. *)
+(*   simplify. *)
+(*   apply check_dest_l_forall in H. apply Forall_app in H. *)
+(*   simplify. apply check_dest_l_forall2; auto. *)
+(*   apply check_dest_l_forall in H. apply Forall_app in H. *)
+(*   simplify. inv H1. auto. *)
+(* Qed. *)
 
-Lemma check_dest_l_ex :
-  forall l r,
-  check_dest_l l r = true ->
-  exists a, In a l /\ check_dest a r = true.
-Proof.
-  induction l; crush.
-  destruct (check_dest a r) eqn:?; try solve [econstructor; crush].
-  simplify.
-  exploit IHl. apply H. simplify. econstructor. simplify. right. eassumption.
-  auto.
-Qed.
+(* Lemma check_dest_l_ex : *)
+(*   forall l r, *)
+(*   check_dest_l l r = true -> *)
+(*   exists a, In a l /\ check_dest a r = true. *)
+(* Proof. *)
+(*   induction l; crush. *)
+(*   destruct (check_dest a r) eqn:?; try solve [econstructor; crush]. *)
+(*   simplify. *)
+(*   exploit IHl. apply H. simplify. econstructor. simplify. right. eassumption. *)
+(*   auto. *)
+(* Qed. *)
 
-Lemma check_list_l_true :
-  forall l x r,
-  check_dest_l (l ++ x :: nil) r = true ->
-  check_dest_l l r = true \/ check_dest x r = true.
-Proof.
-  simplify.
-  apply check_dest_l_ex in H; simplify.
-  apply in_app_or in H. inv H. left.
-  apply check_dest_l_ex2. exists x0. auto.
-  inv H0; auto.
-Qed.
+(* Lemma check_list_l_true : *)
+(*   forall l x r, *)
+(*   check_dest_l (l ++ x :: nil) r = true -> *)
+(*   check_dest_l l r = true \/ check_dest x r = true. *)
+(* Proof. *)
+(*   simplify. *)
+(*   apply check_dest_l_ex in H; simplify. *)
+(*   apply in_app_or in H. inv H. left. *)
+(*   apply check_dest_l_ex2. exists x0. auto. *)
+(*   inv H0; auto. *)
+(* Qed. *)
 
-Lemma check_dest_l_dec2 l r :
-  {Forall (fun x => check_dest x r = false) l}
-  + {exists a, In a l /\ check_dest a r = true}.
-Proof.
-  destruct (check_dest_l_dec l r); [right | left];
-  auto using check_dest_l_ex, check_dest_l_forall.
-Qed.
+(* Lemma check_dest_l_dec2 l r : *)
+(*   {Forall (fun x => check_dest x r = false) l} *)
+(*   + {exists a, In a l /\ check_dest a r = true}. *)
+(* Proof. *)
+(*   destruct (check_dest_l_dec l r); [right | left]; *)
+(*   auto using check_dest_l_ex, check_dest_l_forall. *)
+(* Qed. *)
 
-Lemma abstr_comp :
-  forall l i f x x0,
-  fold_left update (l ++ i :: nil) f = x ->
-  fold_left update l f = x0 ->
-  x = update x0 i.
-Proof. induction l; intros; crush; eapply IHl; eauto. Qed.
+(* Lemma abstr_comp : *)
+(*   forall l i f x x0, *)
+(*   fold_left update (l ++ i :: nil) f = x -> *)
+(*   fold_left update l f = x0 -> *)
+(*   x = update x0 i. *)
+(* Proof. induction l; intros; crush; eapply IHl; eauto. Qed. *)
 
 (*
 
@@ -934,7 +934,7 @@ Section CORRECTNESS.
   Proof using .
     unfold schedule_oracle, check_control_flow_instr.
     simplify; repeat destruct_match; crush.
-  Qed.
+  Admitted.
 
   Lemma eval_op_eq:
     forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
@@ -1164,28 +1164,28 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       sem (mk_ctx i sp ge) f' (i'', None).
   Proof. Admitted.
 
-  Lemma sem_update_instr_term :
-    forall f i' i'' a sp i cf p p' p'' f',
-      sem (mk_ctx i sp ge) f (i', None) ->
-      step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) ->
-      update (Some (p', f)) a = Some (p'', f') ->
-      sem (mk_ctx i sp ge) f' (i'', Some cf)
-           /\ eval_apred (mk_ctx i sp ge) p'' false.
-  Proof. Admitted.
+  (* Lemma sem_update_instr_term : *)
+  (*   forall f i' i'' a sp i cf p p' p'' f', *)
+  (*     sem (mk_ctx i sp ge) f (i', None) -> *)
+  (*     step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) -> *)
+  (*     update (Some (p', f)) a = Some (p'', f') -> *)
+  (*     sem (mk_ctx i sp ge) f' (i'', Some cf) *)
+  (*          /\ eval_apred (mk_ctx i sp ge) p'' false. *)
+  (* Proof. Admitted. *)
 
-  Lemma step_instr_lessdef :
-    forall sp a i i' ti,
-      step_instr ge sp (Iexec i) a (Iexec i') ->
-      state_lessdef i ti ->
-      exists ti', step_instr ge sp (Iexec ti) a (Iexec ti') /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  (* Lemma step_instr_lessdef : *)
+  (*   forall sp a i i' ti, *)
+  (*     step_instr ge sp (Iexec i) a (Iexec i') -> *)
+  (*     state_lessdef i ti -> *)
+  (*     exists ti', step_instr ge sp (Iexec ti) a (Iexec ti') /\ state_lessdef i' ti'. *)
+  (* Proof. Admitted. *)
 
-  Lemma step_instr_lessdef_term :
-    forall sp a i i' ti cf,
-      step_instr ge sp (Iexec i) a (Iterm i' cf) ->
-      state_lessdef i ti ->
-      exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  (* Lemma step_instr_lessdef_term : *)
+  (*   forall sp a i i' ti cf, *)
+  (*     step_instr ge sp (Iexec i) a (Iterm i' cf) -> *)
+  (*     state_lessdef i ti -> *)
+  (*     exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'. *)
+  (* Proof. Admitted. *)
 
 (*  Lemma app_predicated_semregset :
     forall A ctx o f res r y,
@@ -1244,151 +1244,151 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   (* | apred_wf_Por: forall a b, *)
   (*   apred_wf a -> apred_wf b -> apred_wf (a ∨ b). *)
 
-  Lemma apred_and_false1 :
-    forall A ctx a b c,
-      @eval_apred A ctx a false ->
-      @eval_apred A ctx b c ->
-      eval_apred ctx (a ∧ b) false.
-  Proof.
-    intros.
-    replace false with (false && c) by auto.
-    constructor; auto.
-  Qed.
+  (* Lemma apred_and_false1 : *)
+  (*   forall A ctx a b c, *)
+  (*     @eval_apred A ctx a false -> *)
+  (*     @eval_apred A ctx b c -> *)
+  (*     eval_apred ctx (a ∧ b) false. *)
+  (* Proof. *)
+  (*   intros. *)
+  (*   replace false with (false && c) by auto. *)
+  (*   constructor; auto. *)
+  (* Qed. *)
 
-  Lemma apred_and_false2 :
-    forall A ctx a b c,
-      @eval_apred A ctx a c ->
-      eval_apred ctx b false ->
-      eval_apred ctx (a ∧ b) false.
-  Proof.
-    intros.
-    replace false with (c && false) by eauto with bool.
-    constructor; auto.
-  Qed.
+  (* Lemma apred_and_false2 : *)
+  (*   forall A ctx a b c, *)
+  (*     @eval_apred A ctx a c -> *)
+  (*     eval_apred ctx b false -> *)
+  (*     eval_apred ctx (a ∧ b) false. *)
+  (* Proof. *)
+  (*   intros. *)
+  (*   replace false with (c && false) by eauto with bool. *)
+  (*   constructor; auto. *)
+  (* Qed. *)
 
-  #[local] Opaque simplify.
+  (* #[local] Opaque simplify. *)
 
-  Lemma apred_simplify:
-    forall A ctx a b,
-      @eval_apred A ctx a b ->
-      @eval_apred A ctx (simplify a) b.
-  Proof. Admitted.
+  (* Lemma apred_simplify: *)
+  (*   forall A ctx a b, *)
+  (*     @eval_apred A ctx a b -> *)
+  (*     @eval_apred A ctx (simplify a) b. *)
+  (* Proof. Admitted. *)
 
-  Lemma exists_get_pred_eval :
-    forall A ctx f p,
-    exists c, @eval_apred A ctx (get_pred' f p) c.
-  Proof.
-    induction p; crush; try solve [econstructor; constructor; eauto].
-    destruct_match. inv Heqp0. econstructor.
-    unfold apredicated_to_apred_op.
-    Admitted. (*probably not provable.*)
+  (* Lemma exists_get_pred_eval : *)
+  (*   forall A ctx f p, *)
+  (*   exists c, @eval_apred A ctx (get_pred' f p) c. *)
+  (* Proof. *)
+  (*   induction p; crush; try solve [econstructor; constructor; eauto]. *)
+  (*   destruct_match. inv Heqp0. econstructor. *)
+  (*   unfold apredicated_to_apred_op. *)
+  (*   Admitted. (*probably not provable.*) *)
 
-  Lemma falsy_update :
-    forall A f a ctx p f',
-      @eval_apred A ctx (fst f) false ->
-      update (Some f) a = Some (p, f') ->
-      eval_apred ctx p false.
-  Proof.
-    destruct f; destruct a; inversion 1; subst; crush;
-    destruct_match; simplify; auto;
-    unfold Option.bind, Option.bind2 in *;
-    repeat (destruct_match; try discriminate; []); simplify; auto.
-    apply apred_simplify. eapply apred_and_false2; eauto. admit.
-    apply apred_simplify. eapply apred_and_false2; eauto. admit.
-    constructor; auto.
-    constructor; auto.
-    constructor; auto.
-    constructor; auto.
-    constructor; auto.
-    rewrite H2.
-    apply apred_simplify. eapply apred_and_false2; eauto. admit.
-    apply apred_simplify. eapply apred_and_false2; eauto. admit.
-    Unshelve. all: exact true.
-  Admitted.
+  (* Lemma falsy_update : *)
+  (*   forall A f a ctx p f', *)
+  (*     @eval_apred A ctx (fst f) false -> *)
+  (*     update (Some f) a = Some (p, f') -> *)
+  (*     eval_apred ctx p false. *)
+  (* Proof. *)
+  (*   destruct f; destruct a; inversion 1; subst; crush; *)
+  (*   destruct_match; simplify; auto; *)
+  (*   unfold Option.bind, Option.bind2 in *; *)
+  (*   repeat (destruct_match; try discriminate; []); simplify; auto. *)
+  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
+  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
+  (*   constructor; auto. *)
+  (*   constructor; auto. *)
+  (*   constructor; auto. *)
+  (*   constructor; auto. *)
+  (*   constructor; auto. *)
+  (*   rewrite H2. *)
+  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
+  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
+  (*   Unshelve. all: exact true. *)
+  (* Admitted. *)
 
-  Lemma abstr_fold_falsy :
-    forall x i0 sp cf i f p p' f',
-    sem (mk_ctx i0 sp ge) f (i, cf) ->
-    eval_apred (mk_ctx i0 sp ge) p false ->
-    fold_left update x (Some (p, f)) =  Some (p', f') ->
-    sem (mk_ctx i0 sp ge) f' (i, cf).
-  Proof.
-    induction x; crush.
-    eapply IHx.
-    destruct a; destruct f; crush;
-      try solve [eapply app_predicated_sem; eauto; apply combined_falsy; auto].
-    (* now apply falsy_update. *)
-  (* Qed. *) Admitted.
+  (* Lemma abstr_fold_falsy : *)
+  (*   forall x i0 sp cf i f p p' f', *)
+  (*   sem (mk_ctx i0 sp ge) f (i, cf) -> *)
+  (*   eval_apred (mk_ctx i0 sp ge) p false -> *)
+  (*   fold_left update x (Some (p, f)) =  Some (p', f') -> *)
+  (*   sem (mk_ctx i0 sp ge) f' (i, cf). *)
+  (* Proof. *)
+  (*   induction x; crush. *)
+  (*   eapply IHx. *)
+  (*   destruct a; destruct f; crush; *)
+  (*     try solve [eapply app_predicated_sem; eauto; apply combined_falsy; auto]. *)
+  (*   (* now apply falsy_update. *) *)
+  (* (* Qed. *) Admitted. *)
 
-  Lemma state_lessdef_sem :
-    forall i sp f i' ti cf,
-      sem (mk_ctx i sp ge) f (i', cf) ->
-      state_lessdef i ti ->
-      exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  (* Lemma state_lessdef_sem : *)
+  (*   forall i sp f i' ti cf, *)
+  (*     sem (mk_ctx i sp ge) f (i', cf) -> *)
+  (*     state_lessdef i ti -> *)
+  (*     exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'. *)
+  (* Proof. Admitted. *)
 
-  Lemma update_Some :
-    forall x n y,
-      fold_left update x n = Some y ->
-      exists n', n = Some n'.
-  Proof.
-    induction x; crush.
-    econstructor; eauto.
-    exploit IHx; eauto; simplify.
-    unfold update, Option.bind2, Option.bind in H1.
-    repeat (destruct_match; try discriminate); econstructor; eauto.
-  Qed.
+  (* Lemma update_Some : *)
+  (*   forall x n y, *)
+  (*     fold_left update x n = Some y -> *)
+  (*     exists n', n = Some n'. *)
+  (* Proof. *)
+  (*   induction x; crush. *)
+  (*   econstructor; eauto. *)
+  (*   exploit IHx; eauto; simplify. *)
+  (*   unfold update, Option.bind2, Option.bind in H1. *)
+  (*   repeat (destruct_match; try discriminate); econstructor; eauto. *)
+  (* Qed. *)
 
-  #[local] Opaque update.
+  (* #[local] Opaque update. *)
 
-  Lemma abstr_fold_correct :
-    forall sp x i i' i'' cf f p f',
-      SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) ->
-      sem (mk_ctx i sp ge) (snd f) (i', None) ->
-      fold_left update x (Some f) = Some (p, f') ->
-      forall ti,
-        state_lessdef i ti ->
-        exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf)
-               /\ state_lessdef i'' ti'.
-  Proof.
-    induction x; simplify; inv H.
-    - destruct f. exploit update_Some; eauto; intros. simplify.
-      rewrite H3 in H1. destruct x0.
-      exploit IHx; eauto. eapply sem_update_instr; eauto.
-    - destruct f.
-      exploit state_lessdef_sem; eauto; intros. simplify.
-      exploit step_instr_lessdef_term; eauto; intros. simplify.
-      inv H6. exploit update_Some; eauto; simplify. destruct x2.
-      exploit sem_update_instr_term; eauto; simplify.
-      eexists; split.
-      eapply abstr_fold_falsy; eauto.
-      rewrite H6 in H1. eauto. auto.
-  Qed.
+  (* Lemma abstr_fold_correct : *)
+  (*   forall sp x i i' i'' cf f p f', *)
+  (*     SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) -> *)
+  (*     sem (mk_ctx i sp ge) (snd f) (i', None) -> *)
+  (*     fold_left update x (Some f) = Some (p, f') -> *)
+  (*     forall ti, *)
+  (*       state_lessdef i ti -> *)
+  (*       exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf) *)
+  (*              /\ state_lessdef i'' ti'. *)
+  (* Proof. *)
+  (*   induction x; simplify; inv H. *)
+  (*   - destruct f. exploit update_Some; eauto; intros. simplify. *)
+  (*     rewrite H3 in H1. destruct x0. *)
+  (*     exploit IHx; eauto. eapply sem_update_instr; eauto. *)
+  (*   - destruct f. *)
+  (*     exploit state_lessdef_sem; eauto; intros. simplify. *)
+  (*     exploit step_instr_lessdef_term; eauto; intros. simplify. *)
+  (*     inv H6. exploit update_Some; eauto; simplify. destruct x2. *)
+  (*     exploit sem_update_instr_term; eauto; simplify. *)
+  (*     eexists; split. *)
+  (*     eapply abstr_fold_falsy; eauto. *)
+  (*     rewrite H6 in H1. eauto. auto. *)
+  (* Qed. *)
 
-  Lemma sem_regset_empty :
-    forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
-  Proof.
-    intros; constructor; intros.
-    constructor; auto. constructor.
-    constructor.
-  Qed.
+  (* Lemma sem_regset_empty : *)
+  (*   forall A ctx, @sem_regset A ctx empty (ctx_rs ctx). *)
+  (* Proof. *)
+  (*   intros; constructor; intros. *)
+  (*   constructor; auto. constructor. *)
+  (*   constructor. *)
+  (* Qed. *)
 
-  Lemma sem_predset_empty :
-    forall A ctx, @sem_predset A ctx empty (ctx_ps ctx).
-  Proof.
-    intros; constructor; intros.
-    constructor; auto. constructor.
-    constructor.
-  Qed.
+  (* Lemma sem_predset_empty : *)
+  (*   forall A ctx, @sem_predset A ctx empty (ctx_ps ctx). *)
+  (* Proof. *)
+  (*   intros; constructor; intros. *)
+  (*   constructor; auto. constructor. *)
+  (*   constructor. *)
+  (* Qed. *)
 
-  Lemma sem_empty :
-    forall A ctx, @sem A ctx empty (ctx_is ctx, None).
-  Proof.
-    intros. destruct ctx. destruct ctx_is.
-    constructor; try solve [constructor; constructor; crush].
-    eapply sem_regset_empty.
-    eapply sem_predset_empty.
-  Qed.
+  (* Lemma sem_empty : *)
+  (*   forall A ctx, @sem A ctx empty (ctx_is ctx, None). *)
+  (* Proof. *)
+  (*   intros. destruct ctx. destruct ctx_is. *)
+  (*   constructor; try solve [constructor; constructor; crush]. *)
+  (*   eapply sem_regset_empty. *)
+  (*   eapply sem_predset_empty. *)
+  (* Qed. *)
 
   Lemma abstr_sequence_correct :
     forall sp x i i'' cf x',
@@ -1402,9 +1402,10 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     unfold abstract_sequence. intros. unfold Option.map in H0.
     destruct_match; try easy.
     destruct p; simplify.
-    eapply abstr_fold_correct; eauto.
-    simplify. eapply sem_empty.
-  Qed.
+    (* eapply abstr_fold_correct; eauto. *)
+  (*   simplify. eapply sem_empty. *)
+  (* Qed. *)
+    Admitted.
 
   Lemma abstr_check_correct :
     forall sp i i' a b cf ti,

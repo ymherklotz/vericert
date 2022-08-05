@@ -193,7 +193,7 @@ Declare Scope forest.
 Notation "a '#r' b" := (get_forest b a) (at level 1) : forest.
 Notation "a '#r' b <- c" := (set_forest b c a) (at level 1, b at next level) : forest.
 Notation "a '#p' b" := (get_forest_p b a) (at level 1) : forest.
-Notation "a '#p' b <- c" := (get_forest_p b c a) (at level 1, b at next level) : forest.
+Notation "a '#p' b <- c" := (set_forest_p b c a) (at level 1, b at next level) : forest.
 Notation "a '<-e' e" := (set_forest_e e a) (at level 1) : forest.
 
 #[local] Open Scope forest.
@@ -1452,7 +1452,7 @@ Qed.
 Lemma forest_pred_gso:
   forall (f : forest) w dst dst',
     dst <> dst' ->
-    (set_forest_p dst w f) #p dst' = f #p dst'.
+    (f #p dst <- w) #p dst' = f #p dst'.
 Proof.
   unfold "#p"; intros.
   unfold forest_preds. unfold set_forest_p.
@@ -1461,7 +1461,7 @@ Qed.
 
 Lemma forest_pred_gss:
   forall (f : forest) w dst,
-    (set_forest_p dst w f) #p dst = w.
+    (f #p dst <- w) #p dst = w.
 Proof.
   unfold "#p"; intros.
   unfold forest_preds. unfold set_forest_p.

@@ -202,7 +202,7 @@ let toolchain_help =
 
 let usage_string =
   version_string tool_name ^
-  {|Usage: ccomp [options] <source files>
+  {|Usage: vericert [options] <source files>
 Recognized source files:
   .c             C source file
   .i or .p       C source file that should not be preprocessed

@@ -182,11 +182,12 @@ Definition upd_pred_forest (p: pred_op) (f: forest): forest :=
             f.(forest_preds)
             f.(forest_exit).
 
-Fixpoint apredicated_to_apred_op (b: bool) (a: predicated pred_expression): pred_pexpr :=
+Fixpoint from_predicated (b: bool) (f: forest) (a: predicated pred_expression): pred_pexpr :=
   match a with
-  | NE.singleton (p, e) => Pimplies p (Plit (b, e))
+  | NE.singleton (p, e) => Pimplies (from_pred_op f p) (Plit (b, e))
   | (p, e) ::| r =>
-      Pand (Pimplies p (Plit (b, e))) (apredicated_to_apred_op b r)
+      Pand (Pimplies (from_pred_op f p) (Plit (b, e)))
+           (from_predicated b f r)
   end.
 
 (* Fixpoint get_pred' (f: forest) (ap: pred_op): option apred_op := *)
@@ -231,6 +232,15 @@ Definition simpl_combine {A: Type} (a b: option (@Predicate.pred_op A)) :=
 
 Definition dfltp {A} (p: option (@Predicate.pred_op A)) := Option.default T p.
 
+Definition assert_ (b: bool): option unit :=
+  if b then Some tt else None.
+
+Definition is_initial_pred (f: forest) (p: positive) :=
+  match f #p p with
+  | Plit (true, PEbase p') => if peq p p' then Some tt else None
+  | _ => None
+  end.
+
 Definition update (fop : option (pred_op * forest)) (i : instr): option (pred_op * forest) :=
   do (pred, f) <- fop;
   match i with
@@ -265,11 +275,11 @@ Definition update (fop : option (pred_op * forest)) (i : instr): option (pred_op
       Some (pred, f #r Mem <- pruned)
   | RBsetpred p' c args p =>
       let new_pred :=
-        (f #p p) ∧
-          ((dfltp p' ∧ pred)
-           → map_predicated (pred_ret (PEsetpred c))
-                            (merge (list_translation args f)))
+        (from_pred_op f (dfltp p' ∧ pred)
+         → from_predicated true f (map_predicated (pred_ret (PEsetpred c))
+                                                  (merge (list_translation args f))))
       in
+      do _ <- is_initial_pred f p;
       Some (pred, f #p p <- new_pred)
   | RBexit p c =>
       let new_p := simplify (negate (dfltp p) ∧ pred) in
