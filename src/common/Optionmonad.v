@@ -63,4 +63,14 @@ Module Option <: Monad.
 
 End Option.
 
-Module OptionExtra := MonadExtra(Option).
+Module OptionExtra.
+  Module OE := MonadExtra(Option).
+  Export OE.
+
+  Lemma mfold_left_Some :
+    forall A B f x n y,
+      @mfold_left A B f x n = Some y ->
+      exists n', n = Some n'.
+  Proof. induction x; intros; destruct n; eauto. Qed.
+
+End OptionExtra.

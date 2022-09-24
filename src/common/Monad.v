@@ -66,4 +66,7 @@ Module MonadExtra(M : Monad).
     | x::xs => do _ <- f x; collectlist f xs
     end.
 
+  Definition mfold_left {A B} (f: A -> B -> mon A) (l: list B) (s: mon A): mon A :=
+    fold_left (fun a b => do a' <- a; f a' b) l s.
+
 End MonadExtra.
