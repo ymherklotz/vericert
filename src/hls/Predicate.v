@@ -178,7 +178,7 @@ Proof. crush. Qed.
   { equiv := sat_equiv; }.
 
 #[global]
- Instance PandProper : Proper (equiv ==> equiv ==> equiv) Pand.
+ Instance PandProper : Proper (SetoidClass.equiv ==> SetoidClass.equiv ==> SetoidClass.equiv) Pand.
 Proof.
   unfold Proper. simplify. unfold "==>".
   intros.

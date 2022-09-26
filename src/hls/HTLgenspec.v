@@ -39,7 +39,7 @@ Require Import vericert.hls.FunctionalUnits.
 Remark bind_inversion:
   forall (A B: Type) (f: mon A) (g: A -> mon B)
          (y: B) (s1 s3: st) (i: st_incr s1 s3),
-    bind f g s1 = OK y s3 i ->
+    bind g f s1 = OK y s3 i ->
     exists x, exists s2, exists i1, exists i2,
             f s1 = OK x s2 i1 /\ g x s2 = OK y s3 i2.
 Proof.
@@ -53,7 +53,7 @@ Qed.
 Remark bind2_inversion:
   forall (A B C: Type) (f: mon (A*B)) (g: A -> B -> mon C)
          (z: C) (s1 s3: st) (i: st_incr s1 s3),
-    bind2 f g s1 = OK z s3 i ->
+    bind2 g f s1 = OK z s3 i ->
     exists x, exists y, exists s2, exists i1, exists i2,
               f s1 = OK (x, y) s2 i1 /\ g x y s2 = OK z s3 i2.
 Proof.
@@ -71,9 +71,11 @@ Ltac monadInv1 H :=
     discriminate
   | (ret _ _ = OK _ _ _) =>
     inversion H; clear H; try subst
+  | (mret _ _ = OK _ _ _) =>
+    inversion H; clear H; try subst
   | (error _ _ = OK _ _ _) =>
     discriminate
-  | (bind ?F ?G ?S = OK ?X ?S' ?I) =>
+  | (bind ?G ?F ?S = OK ?X ?S' ?I) =>
     let x := fresh "x" in (
       let s := fresh "s" in (
         let i1 := fresh "INCR" in (
@@ -83,7 +85,7 @@ Ltac monadInv1 H :=
                 destruct (bind_inversion _ _ F G X S S' I H) as [x [s [i1 [i2 [EQ1 EQ2]]]]];
                 clear H;
                 try (monadInv1 EQ2)))))))
-  | (bind2 ?F ?G ?S = OK ?X ?S' ?I) =>
+  | (bind2 ?G ?F ?S = OK ?X ?S' ?I) =>
     let x1 := fresh "x" in (
       let x2 := fresh "x" in (
         let s := fresh "s" in (
@@ -99,6 +101,7 @@ Ltac monadInv1 H :=
 Ltac monadInv H :=
   match type of H with
   | (ret _ _ = OK _ _ _) => monadInv1 H
+  | (mret _ _ = OK _ _ _) => monadInv1 H
   | (error _ _ = OK _ _ _) => monadInv1 H
   | (bind ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
   | (bind2 ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H

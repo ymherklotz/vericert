@@ -26,13 +26,13 @@ Module ErrorMonad <: Monad.
     | Error m => Error m
     end.
 
-  Definition bind {A B : Type} (f : mon A) (g : A -> mon B) : mon B :=
+  Definition bind {A B : Type} (g : A -> mon B) (f : mon A) : mon B :=
     match f with
     | OK a => g a
     | Error m => Error m
     end.
 
-  Definition bind2 {A B C : Type} (f : mon (A * B)) (g : A -> B -> mon C) : mon C :=
+  Definition bind2 {A B C : Type} (g : A -> B -> mon C) (f : mon (A * B)) : mon C :=
     match f with
     | OK (a, b) => g a b
     | Error m => Error m
@@ -43,6 +43,11 @@ Module ErrorMonad <: Monad.
     | Error m => Error m
     | OK a' => a'
     end.
+
+  #[global] Instance error_ret : MRet res := @ret.
+  #[global] Instance error_bind : MBind res := @bind.
+  #[global] Instance error_join : MJoin res := @join.
+  #[global] Instance error_map : FMap res := @map.
 
 End ErrorMonad.
 

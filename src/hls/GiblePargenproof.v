@@ -32,6 +32,10 @@ Require Import vericert.hls.Gible.
 Require Import vericert.hls.GiblePargen.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
+Require Import vericert.common.Monad.
+
+Module OptionExtra := MonadExtra(Option).
+Import OptionExtra.
 
 #[local] Open Scope positive.
 #[local] Open Scope forest.
@@ -1160,18 +1164,20 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     forall f i' i'' a sp p i p' f',
       sem (mk_ctx i sp ge) f (i', None) ->
       step_instr ge sp (Iexec i') a (Iexec i'') ->
-      update (Some (p, f)) a = Some (p', f') ->
+      update (p, f) a = Some (p', f') ->
       sem (mk_ctx i sp ge) f' (i'', None).
   Proof. Admitted.
 
-  (* Lemma sem_update_instr_term : *)
-  (*   forall f i' i'' a sp i cf p p' p'' f', *)
-  (*     sem (mk_ctx i sp ge) f (i', None) -> *)
-  (*     step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) -> *)
-  (*     update (Some (p', f)) a = Some (p'', f') -> *)
-  (*     sem (mk_ctx i sp ge) f' (i'', Some cf) *)
-  (*          /\ eval_apred (mk_ctx i sp ge) p'' false. *)
-  (* Proof. Admitted. *)
+
+  Lemma sem_update_instr_term :
+    forall f i' i'' a sp i cf p p' p'' f',
+      sem (mk_ctx i sp ge) f (i', None) ->
+      step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) ->
+      update (p', f) a = Some (p'', f') ->
+      sem (mk_ctx i sp ge) f' (i'', Some cf)
+           /\ eval_predf (is_ps i) p'' = false.
+  Proof.
+    Admitted.
 
   (* Lemma step_instr_lessdef : *)
   (*   forall sp a i i' ti, *)
@@ -1180,12 +1186,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   (*     exists ti', step_instr ge sp (Iexec ti) a (Iexec ti') /\ state_lessdef i' ti'. *)
   (* Proof. Admitted. *)
 
-  (* Lemma step_instr_lessdef_term : *)
-  (*   forall sp a i i' ti cf, *)
-  (*     step_instr ge sp (Iexec i) a (Iterm i' cf) -> *)
-  (*     state_lessdef i ti -> *)
-  (*     exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'. *)
-  (* Proof. Admitted. *)
+  Lemma step_instr_lessdef_term :
+    forall sp a i i' ti cf,
+      step_instr ge sp (Iexec i) a (Iterm i' cf) ->
+      state_lessdef i ti ->
+      exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
+  Proof. Admitted.
 
 (*  Lemma app_predicated_semregset :
     forall A ctx o f res r y,
@@ -1320,75 +1326,62 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   (*   (* now apply falsy_update. *) *)
   (* (* Qed. *) Admitted. *)
 
-  (* Lemma state_lessdef_sem : *)
-  (*   forall i sp f i' ti cf, *)
-  (*     sem (mk_ctx i sp ge) f (i', cf) -> *)
-  (*     state_lessdef i ti -> *)
-  (*     exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'. *)
-  (* Proof. Admitted. *)
-
-  (* Lemma update_Some : *)
-  (*   forall x n y, *)
-  (*     fold_left update x n = Some y -> *)
-  (*     exists n', n = Some n'. *)
-  (* Proof. *)
-  (*   induction x; crush. *)
-  (*   econstructor; eauto. *)
-  (*   exploit IHx; eauto; simplify. *)
-  (*   unfold update, Option.bind2, Option.bind in H1. *)
-  (*   repeat (destruct_match; try discriminate); econstructor; eauto. *)
-  (* Qed. *)
+  Lemma state_lessdef_sem :
+    forall i sp f i' ti cf,
+      sem (mk_ctx i sp ge) f (i', cf) ->
+      state_lessdef i ti ->
+      exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
+  Proof. Admitted.
 
   (* #[local] Opaque update. *)
 
-  (* Lemma abstr_fold_correct : *)
-  (*   forall sp x i i' i'' cf f p f', *)
-  (*     SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) -> *)
-  (*     sem (mk_ctx i sp ge) (snd f) (i', None) -> *)
-  (*     fold_left update x (Some f) = Some (p, f') -> *)
-  (*     forall ti, *)
-  (*       state_lessdef i ti -> *)
-  (*       exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf) *)
-  (*              /\ state_lessdef i'' ti'. *)
-  (* Proof. *)
-  (*   induction x; simplify; inv H. *)
-  (*   - destruct f. exploit update_Some; eauto; intros. simplify. *)
-  (*     rewrite H3 in H1. destruct x0. *)
-  (*     exploit IHx; eauto. eapply sem_update_instr; eauto. *)
-  (*   - destruct f. *)
-  (*     exploit state_lessdef_sem; eauto; intros. simplify. *)
-  (*     exploit step_instr_lessdef_term; eauto; intros. simplify. *)
-  (*     inv H6. exploit update_Some; eauto; simplify. destruct x2. *)
-  (*     exploit sem_update_instr_term; eauto; simplify. *)
-  (*     eexists; split. *)
-  (*     eapply abstr_fold_falsy; eauto. *)
-  (*     rewrite H6 in H1. eauto. auto. *)
-  (* Qed. *)
+  Lemma abstr_fold_correct :
+    forall sp x i i' i'' cf f p f',
+      SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) ->
+      sem (mk_ctx i sp ge) (snd f) (i', None) ->
+      mfold_left update x (Some f) = Some (p, f') ->
+      forall ti,
+        state_lessdef i ti ->
+        exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf)
+               /\ state_lessdef i'' ti'.
+  Proof.
+    induction x; simplify; inv H.
+    - destruct f. (*  exploit update_Some; eauto; intros. simplify. *)
+    (*   rewrite H3 in H1. destruct x0. *)
+    (*   exploit IHx; eauto. eapply sem_update_instr; eauto. *)
+    (* - destruct f. *)
+    (*   exploit state_lessdef_sem; eauto; intros. simplify. *)
+    (*   exploit step_instr_lessdef_term; eauto; intros. simplify. *)
+    (*   inv H6. exploit update_Some; eauto; simplify. destruct x2. *)
+      (* exploit sem_update_instr_term; eauto; simplify. *)
+      (* eexists; split. *)
+      (* eapply abstr_fold_falsy; eauto. *)
+      (* rewrite H6 in H1. eauto. auto. *)
+  (* Qed. *) Admitted.
 
-  (* Lemma sem_regset_empty : *)
-  (*   forall A ctx, @sem_regset A ctx empty (ctx_rs ctx). *)
-  (* Proof. *)
-  (*   intros; constructor; intros. *)
-  (*   constructor; auto. constructor. *)
-  (*   constructor. *)
-  (* Qed. *)
+  Lemma sem_regset_empty :
+    forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
+  Proof using.
+    intros; constructor; intros.
+    constructor; auto. constructor.
+    constructor.
+  Qed.
 
-  (* Lemma sem_predset_empty : *)
-  (*   forall A ctx, @sem_predset A ctx empty (ctx_ps ctx). *)
-  (* Proof. *)
-  (*   intros; constructor; intros. *)
-  (*   constructor; auto. constructor. *)
-  (*   constructor. *)
-  (* Qed. *)
+  Lemma sem_predset_empty :
+    forall A ctx, @sem_predset A ctx empty (ctx_ps ctx).
+  Proof using.
+    intros; constructor; intros.
+    constructor; auto. constructor.
+  Qed.
 
-  (* Lemma sem_empty : *)
-  (*   forall A ctx, @sem A ctx empty (ctx_is ctx, None). *)
-  (* Proof. *)
-  (*   intros. destruct ctx. destruct ctx_is. *)
-  (*   constructor; try solve [constructor; constructor; crush]. *)
-  (*   eapply sem_regset_empty. *)
-  (*   eapply sem_predset_empty. *)
-  (* Qed. *)
+  Lemma sem_empty :
+    forall A ctx, @sem A ctx empty (ctx_is ctx, None).
+  Proof using.
+    intros. destruct ctx. destruct ctx_is.
+    constructor; try solve [constructor; constructor; crush].
+    eapply sem_regset_empty.
+    eapply sem_predset_empty.
+  Qed.
 
   Lemma abstr_sequence_correct :
     forall sp x i i'' cf x',
@@ -1402,10 +1395,9 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     unfold abstract_sequence. intros. unfold Option.map in H0.
     destruct_match; try easy.
     destruct p; simplify.
-    (* eapply abstr_fold_correct; eauto. *)
-  (*   simplify. eapply sem_empty. *)
-  (* Qed. *)
-    Admitted.
+    eapply abstr_fold_correct; eauto.
+    simplify. eapply sem_empty.
+  Qed.
 
   Lemma abstr_check_correct :
     forall sp i i' a b cf ti,

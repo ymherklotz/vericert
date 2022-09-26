@@ -42,7 +42,7 @@ Module Statemonad(S : State) <: Monad.
   Definition ret {A: Type} (x: A) : mon A :=
     fun (s : S.st) => OK x s (S.st_refl s).
 
-  Definition bind {A B: Type} (f: mon A) (g: A -> mon B) : mon B :=
+  Definition bind {A B: Type} (g: A -> mon B) (f: mon A) : mon B :=
     fun (s : S.st) =>
       match f s with
       | Error msg => Error msg
@@ -53,8 +53,8 @@ Module Statemonad(S : State) <: Monad.
         end
       end.
 
-  Definition bind2 {A B C: Type} (f: mon (A * B)) (g: A -> B -> mon C) : mon C :=
-    bind f (fun xy => g (fst xy) (snd xy)).
+  Definition bind2 {A B C: Type} (g: A -> B -> mon C) (f: mon (A * B)) : mon C :=
+    bind (fun xy => g (fst xy) (snd xy)) (f: mon (A * B)).
 
   Definition handle_error {A: Type} (f g: mon A) : mon A :=
     fun (s : S.st) =>
@@ -75,5 +75,8 @@ Module Statemonad(S : State) <: Monad.
     | OK a s' i => Errors.OK a
     | Error err => Errors.Error err
     end.
+
+  #[global] Instance statemonad_ret : MRet mon := @ret.
+  #[global] Instance statemonad_bind : MBind mon := @bind.
 
 End Statemonad.

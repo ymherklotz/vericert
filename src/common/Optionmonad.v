@@ -43,13 +43,13 @@ Module Option <: Monad.
     | _ => None
     end.
 
-  Definition bind {A B : Type} (f : option A) (g : A -> option B) : option B :=
+  Definition bind {A B : Type} (g : A -> option B) (f : option A) : option B :=
     match f with
     | Some a => g a
     | _ => None
     end.
 
-  Definition bind2 {A B C : Type} (f : mon (A * B)) (g : A -> B -> option C) : option C :=
+  Definition bind2 {A B C : Type} (g : A -> B -> option C) (f : mon (A * B)) : option C :=
     match f with
     | Some (a, b) => g a b
     | _ => None
@@ -60,6 +60,12 @@ Module Option <: Monad.
     | None => None
     | Some a' => a'
     end.
+
+  #[global] Instance option_ret : MRet option := @ret.
+  #[global] Instance option_bind : MBind option := @bind.
+  #[global] Instance option_join : MJoin option := @join.
+  #[global] Instance option_map : FMap option := @map.
+  #[global] Instance option_omap : OMap option := @bind.
 
 End Option.
 

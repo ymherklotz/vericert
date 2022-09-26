@@ -31,7 +31,10 @@ Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Show.
+Require Export vericert.common.Monad.
 Require Export vericert.common.Optionmonad.
+
+#[global] Open Scope vericert_scope.
 
 (* Depend on CompCert for the basic library, as they declare and prove some
    useful theorems. *)

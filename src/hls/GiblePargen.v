@@ -241,10 +241,10 @@ Definition is_initial_pred (f: forest) (p: positive) :=
   | _ => None
   end.
 
-Definition update (fop : option (pred_op * forest)) (i : instr): option (pred_op * forest) :=
-  do (pred, f) <- fop;
+Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest) :=
+  let (pred, f) := fop in
   match i with
-  | RBnop => fop
+  | RBnop => Some fop
   | RBop p op rl r =>
       do pruned <-
            prune_predicated
@@ -298,7 +298,7 @@ Get a sequence from the basic block.
 |*)
 
 Definition abstract_sequence (b : list instr) : option forest :=
-  Option.map snd (fold_left update b (Some (Ptrue, empty))).
+  Option.map snd (mfold_left update b (Some (Ptrue, empty))).
 
 (*|
 Check equivalence of control flow instructions.  As none of the basic blocks

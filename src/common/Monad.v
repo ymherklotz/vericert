@@ -18,6 +18,9 @@
 
 From Coq Require Import Lists.List.
 
+Declare Scope vericert_scope.
+#[local] Open Scope vericert_scope.
+
 Declare Scope monad_scope.
 
 Module Type Monad.
@@ -27,10 +30,10 @@ Module Type Monad.
   Parameter ret : forall (A : Type) (x : A), mon A.
   Arguments ret [A].
 
-  Parameter bind : forall (A B : Type) (f : mon A) (g : A -> mon B), mon B.
+  Parameter bind : forall (A B : Type) (g : A -> mon B) (f : mon A), mon B.
   Arguments bind [A B].
 
-  Parameter bind2 : forall (A B C: Type) (f: mon (A * B)) (g: A -> B -> mon C), mon C.
+  Parameter bind2 : forall (A B C: Type) (g: A -> B -> mon C) (f: mon (A * B)), mon C.
   Arguments bind2 [A B C].
 
 End Monad.
@@ -41,10 +44,10 @@ Module MonadExtra(M : Monad).
   Module Import MonadNotation.
 
     Notation "'do' X <- A ; B" :=
-      (bind A (fun X => B))
+      (bind (fun X => B) A)
         (at level 200, X name, A at level 100, B at level 200) : monad_scope.
     Notation "'do' ( X , Y ) <- A ; B" :=
-      (bind2 A (fun X Y => B))
+      (bind2 (fun X Y => B) A)
         (at level 200, X name, Y name, A at level 100, B at level 200) : monad_scope.
 
   End MonadNotation.
@@ -70,3 +73,53 @@ Module MonadExtra(M : Monad).
     fold_left (fun a b => do a' <- a; f a' b) l s.
 
 End MonadExtra.
+
+(** A [Params f n] instance forces the setoid rewriting mechanism not to
+rewrite in the first [n] arguments of the function [f]. We will declare such
+instances for all operational type classes in this development. *)
+From Coq Require Export Morphisms RelationClasses.
+
+From Coq Require Setoid.
+
+Global Instance: Params (@Relation_Definitions.equiv) 2 := {}.
+
+Class MRet (M : Type -> Type) := mret: forall {A}, A -> M A.
+Global Arguments mret {_ _ _} _ : assert.
+Global Instance: Params (@mret) 3 := {}.
+Global Hint Mode MRet ! : typeclass_instances.
+
+Class MBind (M : Type -> Type) := mbind : forall {A B}, (A -> M B) -> M A -> M B.
+Global Arguments mbind {_ _ _ _} _ !_ / : assert.
+Global Instance: Params (@mbind) 4 := {}.
+Global Hint Mode MBind ! : typeclass_instances.
+
+Class MJoin (M : Type -> Type) := mjoin: forall {A}, M (M A) -> M A.
+Global Arguments mjoin {_ _ _} !_ / : assert.
+Global Instance: Params (@mjoin) 3 := {}.
+Global Hint Mode MJoin ! : typeclass_instances.
+
+Class FMap (M : Type -> Type) := fmap : forall {A B}, (A -> B) -> M A -> M B.
+Global Arguments fmap {_ _ _ _} _ !_ / : assert.
+Global Instance: Params (@fmap) 4 := {}.
+Global Hint Mode FMap ! : typeclass_instances.
+
+Class OMap (M : Type -> Type) := omap: forall {A B}, (A -> option B) -> M A -> M B.
+Global Arguments omap {_ _ _ _} _ !_ / : assert.
+Global Instance: Params (@omap) 4 := {}.
+Global Hint Mode OMap ! : typeclass_instances.
+
+Notation "m ≫= f" := (mbind f m) (at level 60, right associativity) : vericert_scope.
+Notation "( m ≫=.)" := (fun f => mbind f m) (only parsing) : vericert_scope.
+Notation "(.≫= f )" := (mbind f) (only parsing) : vericert_scope.
+Notation "(≫=)" := (fun m f => mbind f m) (only parsing) : vericert_scope.
+
+Notation "x ← y ; z" := (y ≫= (fun x : _ => z))
+  (at level 20, y at level 100, z at level 200, only parsing) : vericert_scope.
+
+Notation "' x ← y ; z" := (y ≫= (fun x : _ => z))
+  (at level 20, x pattern, y at level 100, z at level 200, only parsing) : vericert_scope.
+
+Infix "<$>" := fmap (at level 61, left associativity) : vericert_scope.
+
+Notation "x ;; z" := (x ≫= fun _ => z)
+  (at level 100, z at level 200, only parsing, right associativity): vericert_scope.

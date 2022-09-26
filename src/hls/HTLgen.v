@@ -385,7 +385,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>
     do tc <- translate_condition c rl;
-    ret (Vternary tc (Vvar r1) (Vvar r2))
+    mret (Vternary tc (Vvar r1) (Vvar r2))
   | Op.Olea a, _ => translate_eff_addressing a args
   | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
