@@ -179,9 +179,15 @@ Qed.
 Lemma transf_spec_correct_in :
   forall l pc c b c' z,
     (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) = c' ->
-    b ! pc = Some z \/ (exists pc' y, c ! pc' = Some y /\ decide_if_convert y = true /\ b ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z))) ->
+    b ! pc = Some z \/ (exists pc' y,
+                          c ! pc' = Some y
+                          /\ decide_if_convert y = true
+                          /\ b ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z))) ->
     c ! pc = Some z ->
-    c' ! pc = Some z \/ exists pc' y, c ! pc' = Some y /\ decide_if_convert y = true /\ c' ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
+    c' ! pc = Some z \/ exists pc' y,
+                          c ! pc' = Some y
+                          /\ decide_if_convert y = true
+                          /\ c' ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
 Proof.
   induction l; crush. inv H0. tauto.
   simplify. right. eauto.
@@ -448,7 +454,7 @@ Section CORRECTNESS.
         (plus step tge s1 t s2 \/
            star step tge s1 t s2 /\ ltof _ measure b' b) /\
           match_states b' s s2.
-  Proof. intros; simplify. do 3 econstructor; eauto. Qed.
+  Proof using. intros; simplify. do 3 econstructor; eauto. Qed.
 
   Lemma sim_plus :
     forall s1 b t s,
@@ -457,13 +463,13 @@ Section CORRECTNESS.
         (plus step tge s1 t s2 \/
            star step tge s1 t s2 /\ ltof _ measure b' b) /\
           match_states b' s s2.
-  Proof. intros; simplify. do 3 econstructor; eauto. Qed.
+  Proof using. intros; simplify. do 3 econstructor; eauto. Qed.
 
   Lemma step_instr :
     forall sp s1 s2 a,
       step_instr ge sp s1 a s2 ->
       step_instr tge sp s1 a s2.
-  Proof.
+  Proof using TRANSL.
     inversion 1; subst; econstructor; eauto.
     - now rewrite <- eval_op_eq.
     - now rewrite <- eval_addressing_eq.
@@ -474,7 +480,7 @@ Section CORRECTNESS.
     forall bb sp rs pr m rs' pr' m' cf,
       SeqBB.step ge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf) ->
       SeqBB.step tge sp (Iexec (mki rs pr m)) bb (Iterm (mki rs' pr' m') cf).
-  Proof.
+  Proof using TRANSL.
     induction bb; crush; inv H.
     - econstructor; eauto. apply step_instr; eassumption.
       destruct state'. eapply IHbb; eauto.
@@ -541,7 +547,7 @@ Section CORRECTNESS.
 
   Definition wf_trans_dec :
     forall p b, {wf_trans p b} + {~ wf_trans p b}.
-  Proof.
+  Proof using.
     intros; destruct (wf_transition_block_opt p b) eqn:?.
     left. apply wf_transition_block_opt_prop; auto.
     right. unfold not; intros. apply wf_transition_block_opt_prop in H.
@@ -550,7 +556,7 @@ Section CORRECTNESS.
 
   Definition cf_wf_dec :
     forall p b a pc, {a = RBgoto pc /\ wf_trans p b} + {a <> RBgoto pc \/ ~ wf_trans p b}.
-  Proof.
+  Proof using.
     intros; destruct (cf_dec a pc); destruct (wf_trans_dec p b); tauto.
   Qed.
 
@@ -558,7 +564,7 @@ Section CORRECTNESS.
     forall n pc' x b',
       RBgoto n <> RBgoto pc' \/ ~ wf_trans x b' ->
       (pc' =? n) && wf_transition_block_opt x b' = false.
-  Proof.
+  Proof using.
     inversion 1; subst; simplify.
     destruct (peq n pc'); subst; [exfalso; auto|]; [].
     apply Pos.eqb_neq in n0. rewrite Pos.eqb_sym in n0.
@@ -573,7 +579,7 @@ Section CORRECTNESS.
       step_list2 (Gible.step_instr ge) sp i'' b i' ->
       step_list2 (Gible.step_instr ge) sp i a i'' ->
       step_list2 (Gible.step_instr ge) sp i (a ++ b) i'.
-  Proof.
+  Proof using.
     induction a; crush.
     - inv H0; auto.
     - inv H0. econstructor.
@@ -583,7 +589,7 @@ Section CORRECTNESS.
   Lemma map_if_convert_None :
     forall b',
       map (map_if_convert None) b' = b'.
-  Proof.
+  Proof using.
     induction b'; crush.
     rewrite IHb'; f_equal. destruct a; crush; destruct o; auto.
   Qed.
@@ -593,7 +599,7 @@ Section CORRECTNESS.
       truthy pr x ->
       truthy pr p ->
       truthy pr (combine_pred x p).
-  Proof.
+  Proof using.
     intros.
     inv H; inv H0; cbn [combine_pred] in *; constructor; auto;
     rewrite eval_predf_Pand; apply andb_true_intro; auto.
@@ -604,7 +610,7 @@ Section CORRECTNESS.
     forall i' a x,
       instr_falsy (is_ps i') a ->
       instr_falsy (is_ps i') (map_if_convert x a).
-  Proof.
+  Proof using.
     inversion 1; subst; destruct x; crush; constructor; rewrite eval_predf_Pand;
       auto using andb_false_intro2.
   Qed.
@@ -615,7 +621,7 @@ Section CORRECTNESS.
       truthy (is_ps i) x ->
       Gible.step_instr ge sp (Iexec i) a i' ->
       Gible.step_instr ge sp (Iexec i) (map_if_convert x a) i'.
-  Proof.
+  Proof using.
     inversion 2; subst; crush;
       try (solve [econstructor; eauto]).
   Qed.
@@ -624,7 +630,7 @@ Section CORRECTNESS.
     forall A B (ge: Genv.t A B) sp i a x,
       eval_predf (is_ps i) x = false ->
       Gible.step_instr ge sp (Iexec i) (map_if_convert (Some x) a) (Iexec i).
-  Proof.
+  Proof using.
     intros; destruct a; constructor; cbn; destruct o; constructor; auto;
       rewrite eval_predf_Pand; rewrite H; auto.
   Qed.
@@ -633,7 +639,7 @@ Section CORRECTNESS.
     forall A B (ge: Genv.t A B) sp b' p i0,
       eval_predf (is_ps i0) p = false ->
       step_list2 (Gible.step_instr ge) sp (Iexec i0) (map (map_if_convert (Some p)) b') (Iexec i0).
-  Proof.
+  Proof using.
     induction b'; crush; try constructor.
     econstructor; eauto.
     apply map_falsy_instr; auto.
@@ -643,7 +649,7 @@ Section CORRECTNESS.
     forall A B (ge: Genv.t A B) sp a pc' b' i i0,
       Gible.step_instr ge sp (Iexec i) a (Iexec i0) ->
       step_list2 (Gible.step_instr ge) sp (Iexec i) (if_convert_block pc' b' a) (Iexec i0).
-  Proof with (simplify; try (solve [econstructor; eauto; constructor])).
+  Proof with (simplify; try (solve [econstructor; eauto; constructor])) using.
     inversion 1; subst... destruct a... destruct c...
     destruct ((pc' =? n) && wf_transition_block_opt o b') eqn:?...
     apply wf_transition_block_opt_prop in H1. inv H1. inv H4.
@@ -658,7 +664,7 @@ Section CORRECTNESS.
       exists b rb,
         tb = b ++ RBexit x cf :: rb
         /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
-  Proof.
+  Proof using.
     induction x0; simplify.
     - inv H1. inv H. exists nil. exists b'0.
       split; [|constructor]. rewrite app_nil_l.
@@ -679,7 +685,7 @@ Section CORRECTNESS.
       ~ In p0 (predicate_use p1) ->
       eval_predf pr p1 = b1 ->
       eval_predf pr # p0 <- b0 p1 = b1.
-  Proof.
+  Proof using.
     induction p1; crush.
     - destruct_match. inv Heqp1. simplify.
       unfold not in *.
@@ -707,7 +713,7 @@ Section CORRECTNESS.
       In a b ->
       truthy (is_ps i) p ->
       truthy (is_ps i') p.
-  Proof.
+  Proof using.
     inversion 1; subst; auto; intros;
     cbn [ is_ps ] in *.
     inv H0; constructor; [].
@@ -719,7 +725,7 @@ Section CORRECTNESS.
     forall x a b',
       wf_trans x (a :: b') ->
       wf_trans x b'.
-  Proof. inversion 1; subst; cbn in *; constructor; eauto. Qed.
+  Proof using. inversion 1; subst; cbn in *; constructor; eauto. Qed.
 
   Lemma map_truthy_step:
     forall A B (ge: Genv.t A B) b' sp i x i' c,
@@ -727,7 +733,7 @@ Section CORRECTNESS.
       wf_trans x b' ->
       SeqBB.step tge sp (Iexec i) b' (Iterm i' c) ->
       SeqBB.step tge sp (Iexec i) (map (map_if_convert x) b') (Iterm i' c).
-  Proof.
+  Proof using.
     induction b'; crush.
     inv H1.
     - econstructor.
@@ -746,7 +752,7 @@ Section CORRECTNESS.
       exists b rb,
         tb = b ++ (map (map_if_convert x) b') ++ rb
         /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
-  Proof.
+  Proof using.
     induction x0; simplify.
     - inv H1. inv H. exists nil. exists b'0.
       split; [|constructor]. rewrite app_nil_l.
