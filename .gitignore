@@ -41,7 +41,6 @@ bin/vericert
 
 # Ocaml
 _build
-dune-project
 .merlin
 
 /docs/html
