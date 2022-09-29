@@ -544,7 +544,7 @@ Proof.
   elim H.
 
   intros.
-  elim not_seen_sons_prop6 with (1:=TT) (i0:=i); auto with datatypes.
+  elim not_seen_sons_prop6 with (1:=TT) (i:=i); auto with datatypes.
   rewrite PTree.gsspec; destruct peq; subst; intros; auto with datatypes.
   rewrite PTree.gempty in H0; congruence.
 

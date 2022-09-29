@@ -607,16 +607,16 @@ Fixpoint hash_predicate (max: predicate) (ap: pred_pexpr) (h: PHT.hash_tree)
   end.
 
 Module HashExprNorm(H: Hashable).
-  Module H := HashTree(H).
+  Module HT := HashTree(H).
 
-  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: H.hash_tree)
-    : (PTree.t pred_op) * H.hash_tree :=
+  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: HT.hash_tree)
+    : (PTree.t pred_op) * HT.hash_tree :=
     match pe with
     | NE.singleton (p, e) =>
-        let (hashed_e, h') := H.hash_value max e h in
+        let (hashed_e, h') := HT.hash_value max e h in
         (PTree.set hashed_e p (PTree.empty _), h')
     | (p, e) ::| pr =>
-        let (hashed_e, h') := H.hash_value max e h in
+        let (hashed_e, h') := HT.hash_value max e h in
         let (norm_pr, h'') := norm_expression max pr h' in
         match norm_pr ! hashed_e with
         | Some pr_op =>
