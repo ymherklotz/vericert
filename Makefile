@@ -5,6 +5,9 @@ endif
 ifeq ($(UNAME_S),Darwin)
 	ARCH := verilog-macosx
 endif
+ifeq ($(UNAME_S),FreeBSD)
+	ARCH := verilog-bsd
+endif
 
 COMPCERTRECDIRS := lib common verilog backend cfrontend driver cparser
 
