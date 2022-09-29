@@ -139,6 +139,21 @@ Definition match_if {A: Type} (flag: unit -> bool) (R: A -> A -> Prop)
   : A -> A -> Prop :=
   if flag tt then R else eq.
 
+Definition match_rep {A: Type} (R: A -> A -> Prop): A -> A -> Prop :=
+  Relation_Operators.clos_refl_trans A R.
+
+Global Instance TransfIfLink {A: Type} {LA: Linker A}
+                      (transf: A -> A -> Prop) (TL: TransfLink transf)
+                      : TransfLink (match_rep transf).
+Admitted.
+
+Lemma total_rep_match:
+  forall (A B: Type) (n: list B) (f: A -> B -> A)
+         (rel: A -> A -> Prop) (prog: A),
+    (forall b p, rel p (f p b)) ->
+  match_rep rel prog (fold_left f n prog).
+Proof. Admitted.
+
 Lemma total_if_match:
   forall (A: Type) (flag: unit -> bool) (f: A -> A)
          (rel: A -> A -> Prop) (prog: A),
@@ -264,7 +279,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GibleSeq 0)
    @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
    @@ print (print_GibleSeq 1)
-   @@ total_if HLSOpts.optim_if_conversion IfConversion.transf_program
+   @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (Maps.PTree.empty _ :: Maps.PTree.empty _ :: nil))
    @@ print (print_GibleSeq 2)
   @@@ DeadBlocks.transf_program
    @@ print (print_GibleSeq 3)
