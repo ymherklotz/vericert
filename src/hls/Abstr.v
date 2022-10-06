@@ -176,11 +176,13 @@ Definition get_forest v (f: forest) :=
 Definition set_forest r v (f: forest) :=
   mk_forest (RTree.set r v f.(forest_regs)) f.(forest_preds) f.(forest_exit).
 
-Definition get_forest_p p (f: forest) :=
-  match PTree.get p f.(forest_preds) with
+Definition get_forest_p' p (f: PTree.t pred_pexpr) :=
+  match PTree.get p f with
   | None => Plit (true, PEbase p)
   | Some v' => v'
   end.
+
+Definition get_forest_p p (f: forest) := get_forest_p' p f.(forest_preds).
 
 Definition set_forest_p p v (f: forest) :=
   mk_forest f.(forest_regs) (PTree.set p v f.(forest_preds)) f.(forest_exit).
@@ -278,6 +280,12 @@ Variant sem_exit : ctx -> exit_expression -> option cf_instr -> Prop :=
   forall ctx,
     sem_exit ctx EEbase None.
 
+(*|
+``sem_pred`` is the semantics for evaluating a single predicate expression to a
+boolean value, which will later be used to evaluate predicate expressions to
+booleans.
+|*)
+
 Variant sem_pred : ctx -> pred_expression -> bool -> Prop :=
 | Spred:
     forall ctx args c lv v,
@@ -290,7 +298,11 @@ Variant sem_pred : ctx -> pred_expression -> bool -> Prop :=
 
 (*|
 I was trying to avoid such rich semantics for pred_pexpr (by not having the type
-in the first place), but I think it is needed to model predicates properly.
+in the first place), but I think it is needed to model predicates properly.  The
+main problem is that these semantics are quite strict, and they state that one
+must be able to execute the left and right hand sides of an ``Pand``, for
+example, to be able to show that the ``Pand`` itself has a value.  Otherwise it
+is not possible to evaluate the ``Pand``.
 |*)
 
 Inductive sem_pexpr (c: ctx) : pred_pexpr -> bool -> Prop :=
@@ -308,16 +320,23 @@ Inductive sem_pexpr (c: ctx) : pred_pexpr -> bool -> Prop :=
   sem_pexpr c p2 b2 ->
   sem_pexpr c (Por p1 p2) (b1 || b2).
 
-Fixpoint from_pred_op (f: forest) (p: pred_op): pred_pexpr :=
+(*|
+``from_pred_op`` translates a ``pred_op`` into a ``pred_pexpr``.  The main
+difference between the two is that ``pred_op`` contains register that predicate
+registers that speak about the current state of predicates, whereas
+``pred_pexpr`` have been expanded into expressions.
+|*)
+
+Fixpoint from_pred_op (f: PTree.t pred_pexpr) (p: pred_op): pred_pexpr :=
   match p with
   | Ptrue => Ptrue
   | Pfalse => Pfalse
-  | Plit (b, p') => if b then f #p p' else negate (f #p p')
+  | Plit (b, p') => if b then get_forest_p' p' f else negate (get_forest_p' p' f)
   | Pand a b => Pand (from_pred_op f a) (from_pred_op f b)
   | Por a b => Por (from_pred_op f a) (from_pred_op f b)
   end.
 
-Inductive sem_pred_expr {A B: Type} (f: forest) (sem: ctx -> A -> B -> Prop):
+Inductive sem_pred_expr {A B: Type} (f: PTree.t pred_pexpr) (sem: ctx -> A -> B -> Prop):
   ctx -> predicated A -> B -> Prop :=
 | sem_pred_expr_cons_true :
   forall ctx e pr p' v,
@@ -336,7 +355,7 @@ Inductive sem_pred_expr {A B: Type} (f: forest) (sem: ctx -> A -> B -> Prop):
     sem_pred_expr f sem ctx (NE.singleton (pr, e)) v
 .
 
-Definition collapse_pe (p: pred_expr) : option expression :=
+Definition collapse_pe (p: pred_expr) : option expression := (* unused *)
   match p with
   | NE.singleton (APtrue, p) => Some p
   | _ => None
@@ -351,16 +370,22 @@ Inductive sem_predset : ctx -> forest -> predset -> Prop :=
 Inductive sem_regset : ctx -> forest -> regset -> Prop :=
 | Sregset:
   forall ctx f rs',
-    (forall x, sem_pred_expr f sem_value ctx (f #r (Reg x)) (rs' !! x)) ->
+    (forall x, sem_pred_expr f.(forest_preds) sem_value ctx (f #r (Reg x)) (rs' !! x)) ->
     sem_regset ctx f rs'.
+
+(*|
+Talking about the actual generation of the forest, to make this work one has to
+be able to make the assumption that ``forall i, eval (f #p i) = eval (f' #p
+i)``, which should then allow for the equivalences of registers and expressions.
+|*)
 
 Inductive sem : ctx -> forest -> instr_state * option cf_instr -> Prop :=
 | Sem:
     forall ctx rs' m' f pr' cf,
     sem_regset ctx f rs' ->
     sem_predset ctx f pr' ->
-    sem_pred_expr f sem_mem ctx (f #r Mem) m' ->
-    sem_pred_expr f sem_exit ctx f.(forest_exit) cf ->
+    sem_pred_expr f.(forest_preds) sem_mem ctx (f #r Mem) m' ->
+    sem_pred_expr f.(forest_preds) sem_exit ctx f.(forest_exit) cf ->
     sem ctx f (mk_instr_state rs' pr' m', cf).
 
 End SEMANTICS.
@@ -392,6 +417,9 @@ with beq_expression_list (el1 el2: expression_list) {struct el1} : bool :=
   end
 .
 
+Scheme expression_ind2 := Induction for expression Sort Prop
+  with expression_list_ind2 := Induction for expression_list Sort Prop.
+
 Definition beq_pred_expression (e1 e2: pred_expression) : bool :=
   match e1, e2 with
   | PEbase p1, PEbase p2 => if peq p1 p2 then true else false
@@ -407,9 +435,6 @@ Definition beq_exit_expression (e1 e2: exit_expression) : bool :=
   | EEexit cf1, EEexit cf2 => if cf_instr_eq cf1 cf2 then true else false
   | _, _ => false
   end.
-
-Scheme expression_ind2 := Induction for expression Sort Prop
-  with expression_list_ind2 := Induction for expression_list Sort Prop.
 
 Lemma beq_expression_correct:
   forall e1 e2, beq_expression e1 e2 = true -> e1 = e2.
@@ -569,8 +594,7 @@ Module HashExpr' <: MiniDecidableType.
 End HashExpr'.
 
 Module HashExpr := Make_UDT(HashExpr').
-Module HT := HashTree(HashExpr).
-Import HT.
+Module Import HT := HashTree(HashExpr).
 
 Module PHashExpr' <: MiniDecidableType.
   Definition t := pred_expression.
@@ -688,8 +712,7 @@ Lemma match_states_trans x y z :
   match_states x y -> match_states y z -> match_states x z.
 Proof. repeat inversion 1; constructor; crush. Qed.
 
-#[global]
-Instance match_states_Equivalence : Equivalence match_states :=
+#[global] Instance match_states_Equivalence : Equivalence match_states :=
   { Equivalence_Reflexive := match_states_refl ;
     Equivalence_Symmetric := match_states_commut ;
     Equivalence_Transitive := match_states_trans ; }.
@@ -1455,7 +1478,7 @@ Lemma forest_pred_gso:
     (f #p dst <- w) #p dst' = f #p dst'.
 Proof.
   unfold "#p"; intros.
-  unfold forest_preds. unfold set_forest_p.
+  unfold forest_preds, set_forest_p, get_forest_p'.
   rewrite PTree.gso; auto.
 Qed.
 
@@ -1464,6 +1487,6 @@ Lemma forest_pred_gss:
     (f #p dst <- w) #p dst = w.
 Proof.
   unfold "#p"; intros.
-  unfold forest_preds. unfold set_forest_p.
+  unfold forest_preds, set_forest_p, get_forest_p'.
   rewrite PTree.gss; auto.
 Qed.

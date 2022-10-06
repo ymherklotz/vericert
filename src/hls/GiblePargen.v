@@ -182,48 +182,13 @@ Definition upd_pred_forest (p: pred_op) (f: forest): forest :=
             f.(forest_preds)
             f.(forest_exit).
 
-Fixpoint from_predicated (b: bool) (f: forest) (a: predicated pred_expression): pred_pexpr :=
+Fixpoint from_predicated (b: bool) (f: PTree.t pred_pexpr) (a: predicated pred_expression): pred_pexpr :=
   match a with
   | NE.singleton (p, e) => Pimplies (from_pred_op f p) (Plit (b, e))
   | (p, e) ::| r =>
       Pand (Pimplies (from_pred_op f p) (Plit (b, e)))
            (from_predicated b f r)
   end.
-
-(* Fixpoint get_pred' (f: forest) (ap: pred_op): option apred_op := *)
-(*   match ap with *)
-(*   | Ptrue => Some Ptrue *)
-(*   | Pfalse => Some Pfalse *)
-(*   | Plit (a, b) => *)
-(*       match f # (Pred b) with *)
-(*       | NE.singleton (Ptrue, p) => Some (Plit (a, p)) *)
-(*       | _ => None *)
-(*       end *)
-(*   | Pand a b => match (get_pred' f a), (get_pred' f b) with *)
-(*                | Some a', Some b' => Some (Pand a' b') *)
-(*                | _, _ => None *)
-(*                end *)
-(*   | Por a b => match (get_pred' f a), (get_pred' f b) with *)
-(*               | Some a', Some b' => Some (Por a' b') *)
-(*               | _, _ => None *)
-(*               end *)
-(*   end. *)
-
-(* Definition get_pred (f: forest) (ap: option pred_op): option apred_op := *)
-(*   get_pred' f (Option.default T ap). *)
-
-(* Fixpoint get_pred' (f: forest) (ap: pred_op): apred_op := *)
-(*   match ap with *)
-(*   | Ptrue => Ptrue *)
-(*   | Pfalse => Pfalse *)
-(*   | Plit (a, b) => *)
-(*       apredicated_to_apred_op a (f # (Pred b)) *)
-(*   | Pand a b => Pand (get_pred' f a) (get_pred' f b) *)
-(*   | Por a b => Por (get_pred' f a) (get_pred' f b) *)
-(*   end. *)
-
-(* Definition get_pred (f: forest) (ap: option pred_op): apred_op := *)
-(*   get_pred' f (Option.default Ptrue ap). *)
 
 #[local] Open Scope monad_scope.
 
@@ -275,8 +240,8 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
       Some (pred, f #r Mem <- pruned)
   | RBsetpred p' c args p =>
       let new_pred :=
-        (from_pred_op f (dfltp p' ∧ pred)
-         → from_predicated true f (map_predicated (pred_ret (PEsetpred c))
+        (from_pred_op f.(forest_preds) (dfltp p' ∧ pred)
+         → from_predicated true f.(forest_preds) (map_predicated (pred_ret (PEsetpred c))
                                                   (merge (list_translation args f))))
       in
       do _ <- is_initial_pred f p;

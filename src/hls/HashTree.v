@@ -459,3 +459,23 @@ Module HashTree(H: Hashable).
   Module HashMonad := Statemonad(HashState).
 
 End HashTree.
+
+Definition gt_1 {A} h :=
+  forall x (y: A), h ! x = Some y -> 1 < x.
+
+Module HashTreeProperties (Import H: Hashable).
+
+  Module Import HT := HashTree(H).
+
+  Lemma hash_value_gt :
+    forall max v h,
+      gt_1 h ->
+      gt_1 (snd (hash_value max v h)).
+  Proof.
+    unfold gt_1, hash_value; intros.
+    destruct_match; eauto.
+    destruct (peq (Pos.max max (max_key h) + 1) x); [subst;lia|].
+    cbn [snd] in *. rewrite PTree.gso in H0; eauto.
+  Qed.
+
+End HashTreeProperties.

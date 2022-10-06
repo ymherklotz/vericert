@@ -70,8 +70,7 @@ Module Option <: Monad.
 End Option.
 
 Module OptionExtra.
-  Module OE := MonadExtra(Option).
-  Export OE.
+  Module Export OE := MonadExtra(Option).
 
   Lemma mfold_left_Some :
     forall A B f x n y,
