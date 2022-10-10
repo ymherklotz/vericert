@@ -69,6 +69,7 @@ Require vericert.hls.IfConversion.
 Require vericert.hls.CondElim.
 Require vericert.hls.DeadBlocks.
 (*Require vericert.hls.PipelineOp.*)
+Require vericert.hls.MacIntro.
 Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
 
@@ -270,6 +271,8 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GibleSeq 3)
   @@@ GiblePargen.transl_program
    @@ print (print_GiblePar 0)
+   @@ MacIntro.transf_program
+   @@ print (print_GiblePar 1)
   @@@ HTLPargen.transl_program
    @@ print (print_HTL 0)
    @@ Veriloggen.transl_program.

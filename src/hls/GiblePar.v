@@ -31,7 +31,7 @@ Require Import vericert.hls.Gible.
 
 (*|
 =========
-Gible Seq
+Gible Par
 =========
 |*)
 
@@ -74,3 +74,15 @@ End ParBB.
 
 Module GiblePar := Gible(ParBB).
 Export GiblePar.
+
+Lemma step_list_inter_false {A step_i sp s cf i} {l : list A} :
+  ~ step_list_inter step_i sp (Iterm s cf) l (Iexec i).
+Proof. now intro H; inv H. Qed.
+
+Lemma step_list_inter_exec {A step_i sp i s'} {l : list A} :
+  step_list_inter step_i sp i l (Iexec s') -> exists s, i = Iexec s.
+Proof. now intro H; inv H; eexists. Qed.
+
+Lemma step_list_inter_term {A step_i sp s cf i} {l : list A} :
+  step_list_inter step_i sp (Iterm s cf) l i -> i = Iterm s cf.
+Proof. now intro H; inv H. Qed.
