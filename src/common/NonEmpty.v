@@ -70,6 +70,12 @@ Fixpoint of_list {A} (l: list A): option (non_empty A) :=
   | nil => None
   end.
 
+Fixpoint of_list_def {A} (d: A) (l: list A): non_empty A :=
+  match l with
+  | a::b => a ::| of_list_def d b
+  | nil => singleton d
+  end.
+
 Fixpoint replace {A} (f: A -> A -> bool) (a b: A) (l: non_empty A) :=
   match l with
   | a' ::| l' => if f a a' then b ::| replace f a b l' else a' ::| replace f a b l'
@@ -107,4 +113,16 @@ Fixpoint filter {A: Type} (f: A -> bool) (l: non_empty A) : option (non_empty A)
       if f a then
         match filter f b with Some x => Some (a ::| x) | None => Some (singleton a) end
       else filter f b
+  end.
+
+Fixpoint fold_left {A B} (f: A -> B -> A) (l: non_empty B) (a: A) {struct l} : A :=
+  match l with
+  | singleton a' => f a a'
+  | b ::| t => fold_left f t (f a b)
+  end.
+
+Fixpoint fold_right {A B} (f: B -> A -> A) (a: A) (l: non_empty B) {struct l} : A :=
+  match l with
+  | singleton a' => f a' a
+  | b ::| t => fold_right f (f b a) t
   end.
