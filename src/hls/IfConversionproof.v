@@ -673,7 +673,7 @@ Section CORRECTNESS.
         /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
   Proof using.
     induction x0; simplify.
-    - inv H1. inv H. exists nil. exists b'0.
+    - inv H1. inv H. exists (@nil instr). exists b'0.
       split; [|constructor]. rewrite app_nil_l.
       replace (RBexit x cf :: b'0) with ((RBexit x cf :: nil) ++ b'0) by auto.
       f_equal. simplify. destruct cf; auto.
@@ -761,7 +761,7 @@ Section CORRECTNESS.
         /\ step_list2 (Gible.step_instr ge) sp (Iexec i) b (Iexec i').
   Proof using.
     induction x0; simplify.
-    - inv H1. inv H. exists nil. exists b'0.
+    - inv H1. inv H. exists (@nil instr). exists b'0.
       split; [|constructor]. rewrite app_nil_l.
       f_equal. simplify. apply wf_transition_block_opt_prop in H0. rewrite H0.
       rewrite Pos.eqb_refl. auto.
@@ -809,7 +809,7 @@ Section CORRECTNESS.
         econstructor; eauto. constructor; auto.
       + exploit exec_if_conv2; eauto; simplify.
         exploit step_cf_eq; eauto; simplify.
-        apply sim_plus. exists None. exists x4.
+        apply sim_plus. exists (@None (list instr)). exists x4.
         split. apply plus_one. econstructor; eauto.
         apply append. exists (mki rs' pr' m'). split; auto.
         apply step_list_2_eq; auto.
@@ -838,7 +838,7 @@ Section CORRECTNESS.
     rewrite IS_B in H0; simplify.
     exploit step_cf_eq; eauto; simplify.
     apply sim_plus.
-    exists None. exists x.
+    exists (@None (list instr)). exists x.
     split; auto.
     unfold sem_extrap in *.
     inv SIM.
@@ -861,14 +861,14 @@ Section CORRECTNESS.
     - eauto using match_some_correct.
     - eauto using match_none_correct.
     - apply sim_plus. remember (transf_function l f) as tf. symmetry in Heqtf. func_info.
-      exists None. eexists. split.
+      exists (@None (list instr)). eexists. split.
       apply plus_one. constructor; eauto. rewrite <- H1. eassumption.
       rewrite <- H4. rewrite <- H2. econstructor; auto.
-    - apply sim_plus. exists None. eexists. split.
+    - apply sim_plus. exists (@None (list instr)). eexists. split.
       apply plus_one. constructor; eauto.
       constructor; auto.
    - apply sim_plus. remember (transf_function None f) as tf. symmetry in Heqtf. func_info.
-      exists None. inv STK. inv H7. eexists. split. apply plus_one. constructor.
+      exists (@None (list instr)). inv STK. inv H7. eexists. split. apply plus_one. constructor.
       econstructor; auto.
   Qed.
 

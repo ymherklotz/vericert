@@ -143,7 +143,7 @@ Proof.
     exists x. exists (a :: x0). exists x1. simplify; auto.
     econstructor; eauto.
   -  inv H3.
-     exists p. exists nil. exists bb. crush.
+     exists p. exists (@nil instr). exists bb. crush.
      constructor.
 Qed.
 

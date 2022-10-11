@@ -691,14 +691,14 @@ Proof.
   induction e; intros;
 
   repeat (try match goal with
-              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vrange _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vrange _ _ _) _ |- _ ] => inv H
 
               | [ H1 : forall asr asa v, expr_runp _ asr asa ?e v -> _,
                   H2 : expr_runp _ _ _ ?e _ |- _ ] =>
@@ -720,7 +720,7 @@ Proof.
   induction 1; intros;
 
   repeat (try match goal with
-              | [ H : location_is _ _ _ _ _ |- _ ] => invert H
+              | [ H : location_is _ _ _ _ _ |- _ ] => inv H
               | [ H1 : expr_runp _ ?asr ?asa ?e _,
                   H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
                 learn (expr_runp_determinate H1 H2)
@@ -736,13 +736,13 @@ Lemma stmnt_runp_determinate :
   induction 1; intros;
 
   repeat (try match goal with
-             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ Stmntnil  _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vcase _ Stmntnil  _) _ _ |- _ ] => inv H
 
              | [ H1 : expr_runp _ ?asr ?asa ?e _,
                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
@@ -766,7 +766,7 @@ Lemma mi_stepp_determinate :
   mi_stepp f asr0 asa0 m asr1' asa1' ->
   asr1' = asr1 /\ asa1' = asa1.
 Proof.
-  intros. destruct m; invert H; invert H0;
+  intros. destruct m; inv H; inv H0;
 
   repeat (try match goal with
               | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
@@ -782,7 +782,7 @@ Lemma mi_stepp_negedge_determinate :
   mi_stepp_negedge f asr0 asa0 m asr1' asa1' ->
   asr1' = asr1 /\ asa1' = asa1.
 Proof.
-  intros. destruct m; invert H; invert H0;
+  intros. destruct m; inv H; inv H0;
 
   repeat (try match goal with
               | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
@@ -801,8 +801,8 @@ Proof.
   induction 1; intros;
 
   repeat (try match goal with
-              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] => invert H
-              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] => inv H
+              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] => inv H
 
               | [ H1 : mi_stepp _ ?asr0 ?asa0 ?s _ _,
                   H2 : mi_stepp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
@@ -824,8 +824,8 @@ Proof.
   induction 1; intros;
 
   repeat (try match goal with
-              | [ H : mis_stepp_negedge _ _ _ [] _ _ |- _ ] => invert H
-              | [ H : mis_stepp_negedge _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+              | [ H : mis_stepp_negedge _ _ _ [] _ _ |- _ ] => inv H
+              | [ H : mis_stepp_negedge _ _ _ ( _ :: _ ) _ _ |- _ ] => inv H
 
               | [ H1 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _,
                   H2 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
@@ -841,15 +841,15 @@ Lemma semantics_determinate :
   forall (p: program), Smallstep.determinate (semantics p).
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
-  - invert H; invert H0; constructor. (* Traces are always empty *)
-  - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
+  - inv H; inv H0; constructor. (* Traces are always empty *)
+  - inv H; inv H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
     pose proof (mis_stepp_determinate H5 H15). simplify. inv H0. inv H4.
     pose proof (mis_stepp_negedge_determinate H6 H17).
     crush.
-  - constructor. invert H; crush.
-  - invert H; invert H0; unfold ge0, ge1 in *; crush.
-  - red; simplify; intro; invert H0; invert H; crush.
-  - invert H; invert H0; crush.
+  - constructor. inv H; crush.
+  - inv H; inv H0; unfold ge0, ge1 in *; crush.
+  - red; simplify; intro; inv H0; inv H; crush.
+  - inv H; inv H0; crush.
 Qed.
 
 Local Open Scope positive.

@@ -44,6 +44,8 @@ Import OptionExtra.
 #[local] Opaque simplify.
 #[local] Opaque deep_simplify.
 
+Ltac destr := destruct_match; try discriminate; [].
+
 (*|
 ==============
 RTLPargenproof
@@ -475,11 +477,25 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
   Lemma sem_update_instr :
     forall f i' i'' a sp p i p' f',
-      sem (mk_ctx i sp ge) f (i', None) ->
       step_instr ge sp (Iexec i') a (Iexec i'') ->
+      sem (mk_ctx i sp ge) f (i', None) ->
       update (p, f) a = Some (p', f') ->
+      eval_predf (is_ps i') p = true ->
       sem (mk_ctx i sp ge) f' (i'', None).
-  Proof. Admitted.
+  Proof.
+    inversion 1; subst; clear H; intros SEM UPD EVAL_PRED.
+    - inv UPD; auto.
+    - inversion UPD as [PRUNE]. unfold Option.bind in PRUNE.
+      destr. inversion_clear PRUNE.
+      rename H3 into EVAL_OP. rename H5 into TRUTHY.
+      rename Heqo into PRUNE.
+      inversion_clear SEM as [? ? ? ? ? ? REG PRED MEM EXIT].
+      cbn [is_ps] in *. constructor.
+      + admit.
+      + constructor; intros. inv PRED. rewrite forest_reg_pred. auto.
+      + rewrite forest_reg_gso; auto; discriminate.
+      + auto.
+    -
 
   Lemma truthy_dflt :
     forall ps p,
@@ -493,6 +509,16 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof.
     intros.
     rewrite eval_predf_Pand. now rewrite H.
+  Qed.
+
+  Lemma Pand_true_right :
+    forall ps a b,
+      eval_predf ps b = false ->
+      eval_predf ps (a ∧ b) = false.
+  Proof.
+    intros.
+    rewrite eval_predf_Pand. rewrite H.
+    eauto with bool.
   Qed.
 
   Lemma eval_predf_simplify :
@@ -516,8 +542,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     { rewrite eval_predf_negate. now rewrite negb_false_iff. }
     apply Pand_true_left with (b := p') in H0.
     rewrite <- eval_predf_simplify in H0. split; auto.
-    unfold "<-e".
-    destruct i''.
+    unfold "<-e". destruct i''.
     inv H. constructor; auto. admit. admit. simplify.
   Admitted.
 
@@ -566,8 +591,6 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eval_predf (is_ps i') p = false ->
       sem (mk_ctx i sp ge) f' (i', cf).
   Proof. Admitted.
-
-  Ltac destr := destruct_match; try discriminate; [].
 
   Lemma eval_predf_update_true :
     forall i i' curr_p next_p f f_next instr sp,
@@ -732,8 +755,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         exists R2, Smallstep.plus GiblePar.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1; repeat semantics_simpl.
-    {
-      exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
+    { exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
       destruct x0.
       pose proof H2 as X. eapply match_states_stepBB in X; eauto.
       exploit step_cf_correct; eauto. simplify.
@@ -771,9 +793,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Lemma transl_final_states:
     forall S R r,
       match_states S R -> GibleSeq.final_state S r -> GiblePar.final_state R r.
-  Proof.
-    intros. inv H0. inv H. inv STACKS. constructor.
-  Qed.
+  Proof. intros. inv H0. inv H. inv STACKS. constructor. Qed.
 
   Theorem transf_program_correct:
     Smallstep.forward_simulation (GibleSeq.semantics prog) (GiblePar.semantics tprog).

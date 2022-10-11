@@ -248,9 +248,9 @@ Proof.
   discriminate.
 
   destruct l2 eqn:EQl2. crush.
-  simpl in H. invert H.
+  simpl in H. inv H.
   destruct n; simpl in *.
-  invert H0. simpl. reflexivity.
+  inv H0. simpl. reflexivity.
   eauto.
 Qed.
 
@@ -277,9 +277,9 @@ Proof.
   induction l1; intros; crush; auto.
 
   destruct l2 eqn:EQl2. crush.
-  simpl in H. invert H.
+  simpl in H. inv H.
   destruct n; simpl in *.
-  invert H0. simpl. reflexivity.
+  inv H0. simpl. reflexivity.
   eauto.
 Qed.
 
@@ -1068,7 +1068,7 @@ rs assoc``.
       destruct (Pos.eq_dec s d) as [EQ|EQ];
       [> rewrite EQ | rewrite Registers.Regmap.gso; auto]
 
-    | [ H : opt_val_value_lessdef _ _ |- _ ] => invert H
+    | [ H : opt_val_value_lessdef _ _ |- _ ] => inv H
     | [ H : context[Z.of_nat (Z.to_nat _)] |- _ ] => rewrite Z2Nat.id in H; [> solve crush |]
     | [ H : _ ! _ = Some _ |- _] => setoid_rewrite H
     end.
@@ -1102,7 +1102,7 @@ rs assoc``.
     econstructor.
     econstructor.
 
-    all: invert MARR; big_tac. Abort.
+    all: inv MARR; big_tac. Abort.
 
 (*    inv CONST; constructor; simplify; rewrite AssocMap.gso; auto; lia.
 
@@ -1172,7 +1172,7 @@ rs assoc``.
            | [ _ : context[if ?x then _ else _] |- _ ] =>
              let EQ := fresh "EQ" in
              destruct x eqn:EQ; simpl in *
-           | [ H : ret _ _ = _  |- _ ] => invert H
+           | [ H : ret _ _ = _  |- _ ] => inv H
            | [ _ : context[match ?x with | _ => _ end] |- _ ] => destruct x
            end.
 
@@ -1270,7 +1270,7 @@ rs assoc``.
     inv_state. inv_arr_access.
 
     + (** Preamble *)
-      invert MARR. inv CONST. crush.
+      inv MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -1284,14 +1284,14 @@ rs assoc``.
       subst.
 
       pose proof MASSOC as MASSOC'.
-      invert MASSOC'.
+      inv MASSOC'.
       pose proof (H0 r0).
       assert (HPler0 : Ple r0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; crush; eauto).
       apply H0 in HPler0.
-      invert HPler0; try congruence.
+      inv HPler0; try congruence.
       rewrite EQr0 in H11.
-      invert H11.
+      inv H11.
 
       unfold check_address_parameter_signed in *;
       unfold check_address_parameter_unsigned in *; crush.
@@ -1393,7 +1393,7 @@ rs assoc``.
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
       unfold Ple in HPle. lia.
     + (** Preamble *)
-      invert MARR. inv CONST. crush.
+      inv MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -1410,7 +1410,7 @@ rs assoc``.
       clear RSBPr1.
 
       pose proof MASSOC as MASSOC'.
-      invert MASSOC'.
+      inv MASSOC'.
       pose proof (H0 r0).
       pose proof (H0 r1).
       assert (HPler0 : Ple r0 (RTL.max_reg_function f))
@@ -1419,10 +1419,10 @@ rs assoc``.
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
       apply H8 in HPler0.
       apply H11 in HPler1.
-      invert HPler0; invert HPler1; try congruence.
+      inv HPler0; inv HPler1; try congruence.
       rewrite EQr0 in H13.
       rewrite EQr1 in H14.
-      invert H13. invert H14.
+      inv H13. inv H14.
       clear H0. clear H8. clear H11.
 
       unfold check_address_parameter_signed in *;
@@ -1524,7 +1524,7 @@ rs assoc``.
         by (eapply RTL.max_reg_function_def; eauto; simpl; auto).
       unfold Ple in HPle. lia.
 
-    + invert MARR. inv CONST. crush.
+    + inv MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -1652,7 +1652,7 @@ rs assoc``.
     inv_state. inv_arr_access.
 
     + (** Preamble *)
-      invert MARR. inv CONST. crush.
+      inv MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -1666,14 +1666,14 @@ rs assoc``.
       subst.
 
       pose proof MASSOC as MASSOC'.
-      invert MASSOC'.
+      inv MASSOC'.
       pose proof (H0 r0).
       assert (HPler0 : Ple r0 (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; crush; eauto).
       apply H8 in HPler0.
-      invert HPler0; try congruence.
+      inv HPler0; try congruence.
       rewrite EQr0 in H11.
-      invert H11.
+      inv H11.
       clear H0. clear H8.
 
       unfold check_address_parameter_unsigned in *;
@@ -1799,7 +1799,7 @@ rs assoc``.
       assert (HPle : Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
       apply H11 in HPle.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert HPle; eauto.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; inv HPle; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
@@ -1897,7 +1897,7 @@ rs assoc``.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           invert H11.
+           inv H11.
            apply Zmult_lt_compat_r with (p := 4) in H14; try lia.
            rewrite ZLib.div_mul_undo in H14; try lia.
            split; try lia.
@@ -1919,7 +1919,7 @@ rs assoc``.
       crush.
       exploit (BOUNDS ptr); try lia. intros. crush.
       exploit (BOUNDS ptr v); try lia. intros.
-      invert H11.
+      inv H11.
       match goal with | |- ?x = _ => destruct x eqn:EQ end; try reflexivity.
       assert (Mem.valid_access m AST.Mint32 sp'
                                (Integers.Ptrofs.unsigned
@@ -1931,7 +1931,7 @@ rs assoc``.
                                          (Integers.Ptrofs.unsigned
                                             (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                                  (Integers.Ptrofs.repr ptr))) v).
-      apply X in H11. invert H11. congruence.
+      apply X in H11. inv H11. congruence.
 
       constructor; simplify. unfold Verilog.merge_regs. unfold_merge.
       rewrite AssocMap.gso.
@@ -1941,7 +1941,7 @@ rs assoc``.
       assumption. lia.
 
     + (** Preamble *)
-      invert MARR. inv CONST. crush.
+      inv MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -1958,7 +1958,7 @@ rs assoc``.
       clear RSBPr1.
 
       pose proof MASSOC as MASSOC'.
-      invert MASSOC'.
+      inv MASSOC'.
       pose proof (H0 r0).
       pose proof (H0 r1).
       assert (HPler0 : Ple r0 (RTL.max_reg_function f))
@@ -1967,10 +1967,10 @@ rs assoc``.
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto).
       apply H8 in HPler0.
       apply H11 in HPler1.
-      invert HPler0; invert HPler1; try congruence.
+      inv HPler0; inv HPler1; try congruence.
       rewrite EQr0 in H13.
       rewrite EQr1 in H14.
-      invert H13. invert H14.
+      inv H13. inv H14.
       clear H0. clear H8. clear H11.
 
       unfold check_address_parameter_signed in *;
@@ -2100,7 +2100,7 @@ rs assoc``.
       assert (Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
       apply H14 in H15.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H15; eauto.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; inv H15; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
@@ -2198,7 +2198,7 @@ rs assoc``.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           invert H14.
+           inv H14.
            apply Zmult_lt_compat_r with (p := 4) in H16; try lia.
            rewrite ZLib.div_mul_undo in H16; try lia.
            split; try lia.
@@ -2232,14 +2232,14 @@ rs assoc``.
                                          (Integers.Ptrofs.unsigned
                                             (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                                  (Integers.Ptrofs.repr ptr))) v).
-      apply X in H14. invert H14. congruence.
+      apply X in H14. inv H14. congruence.
 
       constructor; simplify. unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
       unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
 
-    + invert MARR. inv CONST. crush.
+    + inv MARR. inv CONST. crush.
 
       unfold Op.eval_addressing in H0.
       destruct (Archi.ptr64) eqn:ARCHI; crush.
@@ -2366,7 +2366,7 @@ rs assoc``.
       assert (Ple src (RTL.max_reg_function f))
         by (eapply RTL.max_reg_function_use; eauto; simpl; auto);
       apply H0 in H8.
-      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; invert H8; eauto.
+      destruct (Registers.Regmap.get src rs) eqn:EQ_SRC; constructor; inv H8; eauto.
 
       rewrite <- array_set_len.
       unfold arr_repeat. crush.
@@ -2455,7 +2455,7 @@ rs assoc``.
            right.
            apply ZExtra.mod_0_bounds; try lia.
            apply ZLib.Z_mod_mult'.
-           invert H0.
+           inv H0.
            apply Zmult_lt_compat_r with (p := 4) in H11; try lia.
            rewrite ZLib.div_mul_undo in H11; try lia.
            split; try lia.
@@ -2476,7 +2476,7 @@ rs assoc``.
       crush.
       exploit (BOUNDS ptr); try lia. intros. crush.
       exploit (BOUNDS ptr v); try lia. intros.
-      invert H0.
+      inv H0.
       match goal with | |- ?x = _ => destruct x eqn:?EQ end; try reflexivity.
       assert (Mem.valid_access m AST.Mint32 sp'
                                (Integers.Ptrofs.unsigned
@@ -2488,7 +2488,7 @@ rs assoc``.
                                          (Integers.Ptrofs.unsigned
                                             (Integers.Ptrofs.add (Integers.Ptrofs.repr 0)
                                                                  (Integers.Ptrofs.repr ptr))) v).
-      apply X in H0. invert H0. congruence.
+      apply X in H0. inv H0. congruence.
 
       constructor; simplify. unfold Verilog.merge_regs. unfold_merge. rewrite AssocMap.gso.
       assumption. lia.
@@ -2733,12 +2733,12 @@ rs assoc``.
     split.
 
     unfold Mem.alloc in H.
-    invert H.
+    inv H.
     crush.
     unfold Mem.load.
     intros.
     match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence.
-    invert v0. unfold Mem.range_perm in H4.
+    inv v0. unfold Mem.range_perm in H4.
     unfold Mem.perm in H4. crush.
     unfold Mem.perm_order' in H4.
     small_tac.
@@ -2749,12 +2749,12 @@ rs assoc``.
     apply proj_sumbool_true in H10. lia.
 
     unfold Mem.alloc in H.
-    invert H.
+    inv H.
     crush.
     unfold Mem.store.
     intros.
     match goal with | |- context[if ?x then _ else _] => destruct x end; try congruence.
-    invert v0. unfold Mem.range_perm in H4.
+    inv v0. unfold Mem.range_perm in H4.
     unfold Mem.perm in H4. crush.
     unfold Mem.perm_order' in H4.
     small_tac.
@@ -2853,7 +2853,7 @@ rs assoc``.
       Smallstep.final_state (RTL.semantics prog) s1 r ->
       Smallstep.final_state (HTL.semantics tprog) s2 r.
   Proof.
-    intros. inv H0. inv H. inv H4. invert MF. constructor. reflexivity.
+    intros. inv H0. inv H. inv H4. inv MF. constructor. reflexivity.
   Qed.
   #[local] Hint Resolve transl_final_states : htlproof.
 

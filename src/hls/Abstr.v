@@ -1463,6 +1463,11 @@ Proof.
   rewrite RTree.gso; auto.
 Qed.
 
+Lemma forest_reg_pred:
+  forall (f : forest) w dst dst',
+    (f #r dst <- w) #p dst' = f #p dst'.
+Proof. auto. Qed.
+
 Lemma forest_reg_gss:
   forall (f : forest) w dst,
     (f #r dst <- w) #r dst = w.
@@ -1481,6 +1486,11 @@ Proof.
   unfold forest_preds, set_forest_p, get_forest_p'.
   rewrite PTree.gso; auto.
 Qed.
+
+Lemma forest_pred_reg:
+  forall (f : forest) w dst dst',
+    (f #p dst <- w) #r dst' = f #r dst'.
+Proof. auto. Qed.
 
 Lemma forest_pred_gss:
   forall (f : forest) w dst,

@@ -74,8 +74,6 @@ Ltac solve_by_inverts n :=
 
 Ltac solve_by_invert := solve_by_inverts 1.
 
-Ltac invert x := inversion x; subst; clear x.
-
 Ltac destruct_match :=
   match goal with
   | [ |- context[match ?x with | _ => _ end ] ] => destruct x eqn:?
@@ -86,10 +84,10 @@ Ltac auto_destruct x := destruct x eqn:?; simpl in *; try discriminate; try cong
 
 Ltac nicify_hypotheses :=
   repeat match goal with
-         | [ H : ex _ |- _ ] => invert H
-         | [ H : Some _ = Some _ |- _ ] => invert H
+         | [ H : ex _ |- _ ] => inv H
+         | [ H : Some _ = Some _ |- _ ] => inv H
          | [ H : ?x = ?x |- _ ] => clear H
-         | [ H : _ /\ _ |- _ ] => invert H
+         | [ H : _ /\ _ |- _ ] => inv H
          end.
 
 Ltac nicify_goals :=
@@ -169,7 +167,7 @@ Ltac substpp :=
   repeat match goal with
          | [ H1 : ?x = Some _, H2 : ?x = Some _ |- _ ] =>
            let EQ := fresh "EQ" in
-           learn H1 as EQ; rewrite H2 in EQ; invert EQ
+           learn H1 as EQ; rewrite H2 in EQ; inv EQ
          | _ => idtac
          end.
 
@@ -251,3 +249,24 @@ Lemma forall_ptree_true:
 Proof.
   apply ptree_forall.
 Qed.
+
+Ltac decomp_logicals h :=
+  idtac;match type of h with
+  | @ex _ (fun x => _) => let x' := fresh x in let h1 := fresh in destruct h as [x' h1]; decomp_logicals h1
+  | @sig _ (fun x => _) => let x' := fresh x in let h1 := fresh in destruct h as [x' h1]; decomp_logicals h1
+  | @sig2 _ (fun x => _) (fun _ => _) => let x' := fresh x in
+                                         let h1 := fresh in
+                                         let h2 := fresh in
+                                         destruct h as [x' h1 h2];
+                                         decomp_logicals h1;
+                                         decomp_logicals h2
+  | @sigT _ (fun x => _) => let x' := fresh x in let h1 := fresh in destruct h as [x' h1]; decomp_logicals h1
+  | @sigT2 _ (fun x => _) (fun _ => _) => let x' := fresh x in
+                                          let h1 := fresh in
+                                          let h2 := fresh in
+                                          destruct h as [x' h1 h2]; decomp_logicals h1; decomp_logicals h2
+  | and _ _ => let h1 := fresh in let h2 := fresh in destruct h as [h1 h2]; decomp_logicals h1; decomp_logicals h2
+  | iff _ _ => let h1 := fresh in let h2 := fresh in destruct h as [h1 h2]; decomp_logicals h1; decomp_logicals h2
+  | or _ _ => let h' := fresh in destruct h as [h' | h']; [decomp_logicals h' | decomp_logicals h' ]
+  | _ => idtac
+  end.
