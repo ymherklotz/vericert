@@ -475,15 +475,306 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite eval_predf_negate. rewrite H0. auto.
   Qed.
 
+  Lemma sem_pred_expr_updated :
+    forall A ctx f_p y x v p n ps,
+      sem_pred_expr f_p sem_value ctx x v ->
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+      eval_predf ps p = true ->
+      prune_predicated (app_predicated p y x) = Some n ->
+      @sem_pred_expr A _ _ f_p sem_value ctx n v.
+  Proof.
+    intros * SEM EVAL PRUNE. Admitted.
+
+  Lemma sem_merge_list :
+    forall A ctx f rs ps m args,
+      sem ctx f ((mk_instr_state rs ps m), None) ->
+      @sem_pred_expr A _ _ (forest_preds f) sem_val_list ctx
+        (merge (list_translation args f)) (rs ## args).
+  Proof.
+    intros. inv H. inv H6. inv H7. Admitted.
+
+  Inductive sem_ident {B A: Type} (c: @ctx B) (a: A): A -> Prop :=
+  | sem_ident_intro : sem_ident c a a.
+
+  Lemma sem_pred_expr_seq_app :
+    forall G A B V (s: @Abstr.ctx G -> B -> V -> Prop)
+        (f: predicated (A -> B))
+        ps ctx l v f_ l_,
+      sem_pred_expr ps sem_ident ctx l l_ ->
+      sem_pred_expr ps sem_ident ctx f f_ ->
+      s ctx (f_ l_) v ->
+      sem_pred_expr ps s ctx (seq_app f l) v.
+  Proof. Admitted.
+
+  Lemma sem_pred_expr_pred_ret :
+    forall G A (ctx: @Abstr.ctx G) (i: A) ps,
+      sem_pred_expr ps sem_ident ctx (pred_ret i) i.
+  Proof. intros; constructor; constructor. Qed.
+
+  Lemma sem_pred_expr_ident :
+    forall G A B ps (ctx: @Abstr.ctx G) (l: predicated A) (s: @Abstr.ctx G -> A -> B -> Prop) l_,
+      sem_pred_expr ps sem_ident ctx l l_ ->
+      forall (v: B),
+        s ctx l_ v ->
+        sem_pred_expr ps s ctx l v.
+  Proof.
+    induction 1.
+    - intros. constructor; auto. inv H0. auto.
+    - intros. apply sem_pred_expr_cons_false; auto.
+    - intros. inv H0. constructor; auto.
+  Qed.
+
+  Lemma sem_pred_expr_ident2 :
+    forall G A B ps (ctx: @Abstr.ctx G) (l: predicated A) (s: @Abstr.ctx G -> A -> B -> Prop) (v: B),
+        sem_pred_expr ps s ctx l v ->
+        exists l_, sem_pred_expr ps sem_ident ctx l l_ /\ s ctx l_ v.
+  Proof.
+    induction 1.
+    - exists e; split; auto. constructor; auto. constructor.
+    - inversion_clear IHsem_pred_expr as [x IH].
+      inversion_clear IH as [SEM EVALS].
+      exists x; split; auto. apply sem_pred_expr_cons_false; auto.
+    - exists e; split; auto; constructor; auto; constructor.
+  Qed.
+
+  Fixpoint of_elist (e: expression_list): list expression :=
+    match e with
+    | Econs a b => a :: of_elist b
+    | Enil => nil
+    end.
+
+  Fixpoint to_elist (e: list expression): expression_list :=
+    match e with
+    | a :: b => Econs a (to_elist b)
+    | nil => Enil
+    end.
+
+  Lemma sem_pred_expr_merge :
+    forall G (ctx: @Abstr.ctx G) args ps l,
+      Forall2 (sem_pred_expr ps sem_ident ctx) args l ->
+      sem_pred_expr ps sem_ident ctx (merge args) (to_elist l).
+  Proof. Admitted.
+
+  Lemma sem_val_list_elist :
+    forall G (ctx: @Abstr.ctx G) l j,
+      sem_val_list ctx (to_elist l) j ->
+      Forall2 (sem_value ctx) l j.
+  Proof. induction l; intros; cbn in *; inversion H; constructor; eauto. Qed.
+
+  Lemma sem_val_list_elist2 :
+    forall G (ctx: @Abstr.ctx G) l j,
+      Forall2 (sem_value ctx) l j ->
+      sem_val_list ctx (to_elist l) j.
+  Proof. induction l; intros; cbn in *; inversion H; constructor; eauto. Qed.
+
+  Lemma sem_val_list_elist3 :
+    forall G (ctx: @Abstr.ctx G) l j,
+      sem_val_list ctx l j ->
+      Forall2 (sem_value ctx) (of_elist l) j.
+  Proof. induction l; intros; cbn in *; inversion H; constructor; eauto. Qed.
+
+  Lemma sem_val_list_elist4 :
+    forall G (ctx: @Abstr.ctx G) l j,
+      Forall2 (sem_value ctx) (of_elist l) j ->
+      sem_val_list ctx l j.
+  Proof. induction l; intros; cbn in *; inversion H; constructor; eauto. Qed.
+
+  Lemma sem_pred_expr_list_translation :
+    forall G ctx args f i,
+      @sem G ctx f (i, None) ->
+      exists l,
+        Forall2 (sem_pred_expr (forest_preds f) sem_ident ctx) (list_translation args f) l
+        /\ sem_val_list ctx (to_elist l) ((is_rs i)##args).
+  Proof.
+    induction args; intros.
+    - exists nil; cbn; split; auto; constructor.
+    - exploit IHargs; try eassumption; intro EX.
+      inversion_clear EX as [l [FOR SEM]].
+      destruct i as [rs' m' ps'].
+      inversion_clear H as [? ? ? ? ? ? REGSET PREDSET MEM EXIT].
+      inversion_clear REGSET as [? ? ? REG].
+      pose proof (REG a).
+      exploit sem_pred_expr_ident2; eauto; intro IDENT.
+      inversion_clear IDENT as [l_ [SEMP SV]].
+      exists (l_ :: l). split. constructor; auto.
+      cbn; constructor; auto.
+  Qed.
+
+  Lemma sem_update_Iop :
+    forall A op rs args m v f ps ctx,
+      Op.eval_operation (ctx_ge ctx) (ctx_sp ctx) op rs ## args (is_mem (ctx_is ctx)) = Some v ->
+      sem ctx f ((mk_instr_state rs ps m), None) ->
+      @sem_pred_expr A _ _ (forest_preds f) sem_value ctx
+        (seq_app (pred_ret (Eop op)) (merge (list_translation args f))) v.
+  Proof.
+    intros * EVAL SEM.
+    exploit sem_pred_expr_list_translation; try eassumption.
+    intro H; inversion_clear H as [x [HS HV]].
+    eapply sem_pred_expr_seq_app.
+    - cbn in *; eapply sem_pred_expr_merge; eauto.
+    - apply sem_pred_expr_pred_ret.
+    - econstructor; [eauto|]; auto.
+  Qed.
+
+  Lemma storev_valid_pointer1 :
+    forall chunk m m' s d b z,
+      Mem.storev chunk m s d = Some m' ->
+      Mem.valid_pointer m b z = true ->
+      Mem.valid_pointer m' b z = true.
+  Proof using.
+    intros. unfold Mem.storev in *. destruct_match; try discriminate; subst.
+    apply Mem.valid_pointer_nonempty_perm. apply Mem.valid_pointer_nonempty_perm in H0.
+    eapply Mem.perm_store_1; eauto.
+  Qed.
+
+  Lemma storev_valid_pointer2 :
+    forall chunk m m' s d b z,
+      Mem.storev chunk m s d = Some m' ->
+      Mem.valid_pointer m' b z = true ->
+      Mem.valid_pointer m b z = true.
+  Proof using.
+    intros. unfold Mem.storev in *. destruct_match; try discriminate; subst.
+    apply Mem.valid_pointer_nonempty_perm. apply Mem.valid_pointer_nonempty_perm in H0.
+    eapply Mem.perm_store_2; eauto.
+  Qed.
+
+  Definition valid_mem m m' :=
+    forall b z, Mem.valid_pointer m b z = Mem.valid_pointer m' b z.
+
+  Lemma storev_valid_pointer :
+    forall chunk m m' s d,
+      Mem.storev chunk m s d = Some m' ->
+      valid_mem m m'.
+  Proof using.
+    unfold valid_mem. symmetry.
+    intros. destruct (Mem.valid_pointer m b z) eqn:?;
+                     eauto using storev_valid_pointer1.
+    apply not_true_iff_false.
+    apply not_true_iff_false in Heqb0.
+    eauto using storev_valid_pointer2.
+  Qed.
+
+  Lemma storev_cmpu_bool :
+    forall m m' c v v0,
+      valid_mem m m' ->
+      Val.cmpu_bool (Mem.valid_pointer m) c v v0 = Val.cmpu_bool (Mem.valid_pointer m') c v v0.
+  Proof using.
+    unfold valid_mem.
+    intros. destruct v, v0; crush.
+    { destruct_match; crush.
+      destruct_match; crush.
+      destruct_match; crush.
+      apply orb_true_iff in H1.
+      inv H1. rewrite H in H2. rewrite H2 in Heqb1.
+      simplify. rewrite H0 in Heqb1. crush.
+      rewrite H in H2. rewrite H2 in Heqb1.
+      rewrite H0 in Heqb1. crush.
+      destruct_match; auto. simplify.
+      apply orb_true_iff in H1.
+      inv H1. rewrite <- H in H2. rewrite H2 in Heqb1.
+      simplify. rewrite H0 in Heqb1. crush.
+      rewrite <- H in H2. rewrite H2 in Heqb1.
+      rewrite H0 in Heqb1. crush. }
+
+    { destruct_match; crush.
+      destruct_match; crush.
+      destruct_match; crush.
+      apply orb_true_iff in H1.
+      inv H1. rewrite H in H2. rewrite H2 in Heqb1.
+      simplify. rewrite H0 in Heqb1. crush.
+      rewrite H in H2. rewrite H2 in Heqb1.
+      rewrite H0 in Heqb1. crush.
+      destruct_match; auto. simplify.
+      apply orb_true_iff in H1.
+      inv H1. rewrite <- H in H2. rewrite H2 in Heqb1.
+      simplify. rewrite H0 in Heqb1. crush.
+      rewrite <- H in H2. rewrite H2 in Heqb1.
+      rewrite H0 in Heqb1. crush. }
+
+    { destruct_match; auto. destruct_match; auto; crush.
+      { destruct_match; crush.
+        { destruct_match; crush.
+          setoid_rewrite H in H0; eauto.
+          setoid_rewrite H in H1; eauto.
+          rewrite H0 in Heqb. rewrite H1 in Heqb; crush.
+        }
+        { destruct_match; crush.
+          setoid_rewrite H in Heqb0; eauto.
+          rewrite H0 in Heqb0. rewrite H1 in Heqb0; crush.
+        }
+      }
+      { destruct_match; crush.
+        { destruct_match; crush.
+          setoid_rewrite H in H0; eauto.
+          setoid_rewrite H in H1; eauto.
+          rewrite H0 in Heqb0. rewrite H1 in Heqb0; crush.
+        }
+        { destruct_match; crush.
+          setoid_rewrite H in Heqb0; eauto.
+          rewrite H0 in Heqb0. rewrite H1 in Heqb0; crush.
+        }
+      }
+    }
+  Qed.
+
+  Lemma storev_eval_condition :
+    forall m m' c rs,
+      valid_mem m m' ->
+      Op.eval_condition c rs m = Op.eval_condition c rs m'.
+  Proof using.
+    intros. destruct c; crush.
+    destruct rs; crush.
+    destruct rs; crush.
+    destruct rs; crush.
+    eapply storev_cmpu_bool; eauto.
+    destruct rs; crush.
+    destruct rs; crush.
+    eapply storev_cmpu_bool; eauto.
+  Qed.
+
+  Lemma eval_operation_valid_pointer :
+    forall A B (ge: Genv.t A B) sp op args m m' v,
+      valid_mem m m' ->
+      Op.eval_operation ge sp op args m' = Some v ->
+      Op.eval_operation ge sp op args m = Some v.
+  Proof.
+    intros * VALID OP. destruct op; auto.
+    - destruct cond; auto; cbn in *.
+      + repeat destruct_match; auto. setoid_rewrite <- storev_cmpu_bool in OP; eauto.
+      + repeat destruct_match; auto. setoid_rewrite <- storev_cmpu_bool in OP; eauto.
+    - destruct c; auto; cbn in *.
+      + repeat destruct_match; auto. setoid_rewrite <- storev_cmpu_bool in OP; eauto.
+      + repeat destruct_match; auto. setoid_rewrite <- storev_cmpu_bool in OP; eauto.
+  Qed.
+
+  Lemma bb_memory_consistency_eval_operation :
+    forall A B (ge: Genv.t A B) sp state i state' args op v,
+      step_instr ge sp (Iexec state) i (Iexec state') ->
+      Op.eval_operation ge sp op args (is_mem state) = Some v ->
+      Op.eval_operation ge sp op args (is_mem state') = Some v.
+  Proof.
+    inversion_clear 1; intro EVAL; auto.
+    cbn in *.
+    eapply eval_operation_valid_pointer. unfold valid_mem. symmetry.
+    eapply storev_valid_pointer; eauto.
+    auto.
+  Qed.
+
+  Lemma truthy_dflt :
+    forall ps p,
+      truthy ps p -> eval_predf ps (dfltp p) = true.
+  Proof. intros. destruct p; cbn; inv H; auto. Qed.
+
   Lemma sem_update_instr :
     forall f i' i'' a sp p i p' f',
       step_instr ge sp (Iexec i') a (Iexec i'') ->
+      valid_mem (is_mem i) (is_mem i') ->
       sem (mk_ctx i sp ge) f (i', None) ->
       update (p, f) a = Some (p', f') ->
       eval_predf (is_ps i') p = true ->
       sem (mk_ctx i sp ge) f' (i'', None).
   Proof.
-    inversion 1; subst; clear H; intros SEM UPD EVAL_PRED.
+    inversion 1; subst; clear H; intros VALID SEM UPD EVAL_PRED; pose proof SEM as SEM2.
     - inv UPD; auto.
     - inversion UPD as [PRUNE]. unfold Option.bind in PRUNE.
       destr. inversion_clear PRUNE.
@@ -491,16 +782,35 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rename Heqo into PRUNE.
       inversion_clear SEM as [? ? ? ? ? ? REG PRED MEM EXIT].
       cbn [is_ps] in *. constructor.
-      + admit.
+      + constructor; intro x. inversion_clear REG as [? ? ? REG']. specialize (REG' x).
+        destruct f as [fr fp fe]. cbn [forest_preds set_forest] in *.
+        destruct (peq x res); subst.
+        * rewrite forest_reg_gss in *. rewrite Regmap.gss in *.
+          eapply sem_pred_expr_updated; [| | |eauto].
+          replace fp with (forest_preds {| forest_regs := fr; forest_preds := fp; forest_exit := fe |}) by auto.
+          eapply sem_update_Iop; eauto. cbn in *.
+          eapply eval_operation_valid_pointer; eauto.
+          inversion_clear SEM2 as [? ? ? ? ? ? REG2 PRED2 MEM2 EXIT2].
+          inversion_clear PRED2; eauto.
+          cbn -[eval_predf]. rewrite eval_predf_Pand.
+          rewrite EVAL_PRED. rewrite truthy_dflt; auto.
+        * rewrite forest_reg_gso. rewrite Regmap.gso; auto.
+          unfold not in *; intros. apply n0. inv H; auto.
       + constructor; intros. inv PRED. rewrite forest_reg_pred. auto.
       + rewrite forest_reg_gso; auto; discriminate.
       + auto.
-    -
-
-  Lemma truthy_dflt :
-    forall ps p,
-      truthy ps p -> eval_predf ps (dfltp p) = true.
-  Proof. intros. destruct p; cbn; inv H; auto. Qed.
+    - cbn in *. unfold Option.bind in UPD.
+      destr. inversion_clear UPD.
+      rename H2 into EVAL_OP. rename H4 into LOAD. rename H6 into TRUTHY.
+      rename Heqo into PRUNE.
+      inversion_clear SEM as [? ? ? ? ? ? REG PRED MEM EXIT].
+      cbn [is_ps] in *. constructor.
+      + constructor; intro x. inversion_clear REG as [? ? ? REG']. specialize (REG' x).
+        destruct f as [fr fp fe]. cbn [forest_preds set_forest] in *.
+        destruct (peq x dst); subst.
+        * rewrite forest_reg_gss in *. rewrite Regmap.gss in *.
+          eapply sem_pred_expr_updated; [| | |eauto].
+          replace fp with (forest_preds {| forest_regs := fr; forest_preds := fp; forest_exit := fe |}) by auto.
 
   Lemma Pand_true_left :
     forall ps a b,
