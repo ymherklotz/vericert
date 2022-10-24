@@ -616,6 +616,29 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     - econstructor; [eauto|]; auto.
   Qed.
 
+  Lemma sem_update_Iload :
+    forall A rs args m v f ps ctx addr a0 chunk,
+      Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr rs ## args = Some a0 ->
+      Mem.loadv chunk m a0 = Some v ->
+      sem ctx f ((mk_instr_state rs ps m), None) ->
+      @sem_pred_expr A _ _ (forest_preds f) sem_value ctx
+        (seq_app (seq_app (pred_ret (Eload chunk addr)) (merge (list_translation args f))) (f #r Mem)) v.
+  Proof.
+    intros * EVAL MEM SEM.
+    exploit sem_pred_expr_list_translation; try eassumption.
+    intro H; inversion_clear H as [x [HS HV]].
+    inversion SEM as [? ? ? ? ? ? REG PRED HMEM EXIT]; subst.
+    exploit sem_pred_expr_ident2; [eapply HMEM|].
+    intros H; inversion_clear H as [x' [HS' HV']].
+    eapply sem_pred_expr_seq_app; eauto.
+    { eapply sem_pred_expr_seq_app; eauto.
+      - eapply sem_pred_expr_merge; eauto.
+      - apply sem_pred_expr_pred_ret.
+      - constructor.
+    }
+    econstructor; eauto.
+  Qed.
+
   Lemma storev_valid_pointer1 :
     forall chunk m m' s d b z,
       Mem.storev chunk m s d = Some m' ->
@@ -765,6 +788,20 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       truthy ps p -> eval_predf ps (dfltp p) = true.
   Proof. intros. destruct p; cbn; inv H; auto. Qed.
 
+  Lemma sem_update_Iop_top:
+    forall (f : forest) (sp : val) (p : pred_op) (i : instr_state) (p' : pred_op) (f' : forest) (rs : Regmap.t val)
+    (m : mem) (pr : predset) (op : Op.operation) (res : Registers.reg) (args : list positive) (p0 : option Gible.pred_op)
+    (v : val),
+      Op.eval_operation ge sp op rs ## args m = Some v ->
+      truthy pr p0 ->
+      valid_mem (is_mem i) (is_mem state') ->
+      sem state f (state', None) ->
+      update (p, f) (RBop p0 op args res) = Some (p', f') ->
+      eval_predf (is_ps state') p = true ->
+      sem state f' ({| is_rs := rs # res <- v; Gible.is_ps := pr; Gible.is_mem := m |}, None).
+    Proof.
+      intros f sp p i p' f' rs m pr op res args p0 v EVAL_OP TRUTHY VALID SEM UPD EVAL_PRED.
+
   Lemma sem_update_instr :
     forall f i' i'' a sp p i p' f',
       step_instr ge sp (Iexec i') a (Iexec i'') ->
@@ -776,7 +813,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof.
     inversion 1; subst; clear H; intros VALID SEM UPD EVAL_PRED; pose proof SEM as SEM2.
     - inv UPD; auto.
-    - inversion UPD as [PRUNE]. unfold Option.bind in PRUNE.
+    -
+    inversion UPD as [PRUNE]. unfold Option.bind in PRUNE.
       destr. inversion_clear PRUNE.
       rename H3 into EVAL_OP. rename H5 into TRUTHY.
       rename Heqo into PRUNE.
@@ -799,8 +837,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       + constructor; intros. inv PRED. rewrite forest_reg_pred. auto.
       + rewrite forest_reg_gso; auto; discriminate.
       + auto.
-    - cbn in *. unfold Option.bind in UPD.
-      destr. inversion_clear UPD.
+    - inversion UPD as [PRUNE]. unfold Option.bind in PRUNE. destr.
+      inversion_clear PRUNE.
       rename H2 into EVAL_OP. rename H4 into LOAD. rename H6 into TRUTHY.
       rename Heqo into PRUNE.
       inversion_clear SEM as [? ? ? ? ? ? REG PRED MEM EXIT].
@@ -811,6 +849,16 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         * rewrite forest_reg_gss in *. rewrite Regmap.gss in *.
           eapply sem_pred_expr_updated; [| | |eauto].
           replace fp with (forest_preds {| forest_regs := fr; forest_preds := fp; forest_exit := fe |}) by auto.
+          eapply sem_update_Iload; eauto.
+          inversion_clear PRED; eauto.
+          cbn -[eval_predf]. rewrite eval_predf_Pand.
+          rewrite EVAL_PRED. rewrite truthy_dflt; auto.
+        * rewrite forest_reg_gso. rewrite Regmap.gso; auto.
+          unfold not in *; intros. apply n0. inv H; auto.
+      + constructor; intros. inv PRED. rewrite forest_reg_pred. auto.
+      + rewrite forest_reg_gso; auto; discriminate.
+      + auto.
+    -
 
   Lemma Pand_true_left :
     forall ps a b,
