@@ -62,6 +62,7 @@ Fixpoint non_empty_prod {A B} (l: non_empty A) (l': non_empty B) :=
 
 Fixpoint of_list {A} (l: list A): option (non_empty A) :=
   match l with
+  | a::nil => Some (singleton a)
   | a::b =>
       match of_list b with
       | Some b' => Some (a ::| b')
