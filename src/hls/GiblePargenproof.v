@@ -597,11 +597,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_pred_expr_NEapp2 :
-    forall A f_p ctx a b v ps,
+    forall A B C sem f_p ctx a b v ps,
       (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
       (forall x, NE.In x a -> eval_predf ps (fst x) = false) ->
-      sem_pred_expr f_p sem_value ctx b v ->
-      @sem_pred_expr A _ _ f_p sem_value ctx (NE.app a b) v.
+      sem_pred_expr f_p sem ctx b v ->
+      @sem_pred_expr A B C f_p sem ctx (NE.app a b) v.
   Proof.
     induction a; crush.
     - assert (IN: NE.In a (NE.singleton a)) by constructor.
@@ -629,11 +629,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_pred_expr_map_Pand :
-    forall A ctx f_p ps x v p,
+    forall A B C sem ctx f_p ps x v p,
       (forall x : positive, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
       eval_predf ps p = true ->
-      sem_pred_expr f_p sem_value ctx x v ->
-      @sem_pred_expr A _ _ f_p sem_value ctx
+      sem_pred_expr f_p sem ctx x v ->
+      @sem_pred_expr A B C f_p sem ctx
         (NE.map (fun x0 => (p ∧ fst x0, snd x0)) x) v.
   Proof.
     induction x; crush.
@@ -651,11 +651,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_pred_expr_app_predicated :
-    forall A ctx f_p y x v p ps,
-      sem_pred_expr f_p sem_value ctx x v ->
+    forall A B C sem ctx f_p y x v p ps,
+      sem_pred_expr f_p sem ctx x v ->
       (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
       eval_predf ps p = true ->
-      @sem_pred_expr A _ _ f_p sem_value ctx (app_predicated p y x) v.
+      @sem_pred_expr A B C f_p sem ctx (app_predicated p y x) v.
   Proof.
     intros * SEM PS EVAL. unfold app_predicated.
     eapply sem_pred_expr_NEapp2; eauto.
@@ -665,34 +665,16 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_pred_expr_prune_predicated :
-    forall A ctx f_p y x v,
-      sem_pred_expr f_p sem_value ctx x v ->
+    forall A B C sem ctx f_p y x v,
+      sem_pred_expr f_p sem ctx x v ->
       prune_predicated x = Some y ->
-      @sem_pred_expr A _ _ f_p sem_value ctx y v.
+      @sem_pred_expr A B C f_p sem ctx y v.
   Proof.
-    intros * SEM PRUNE. Admitted.
-
-  Lemma sem_merge_list :
-    forall A ctx f rs ps m args,
-      sem ctx f ((mk_instr_state rs ps m), None) ->
-      @sem_pred_expr A _ _ (forest_preds f) sem_val_list ctx
-        (merge (list_translation args f)) (rs ## args).
-  Proof.
-    induction args; crush. cbn. constructor; constructor.
-    unfold merge. cbn.
+    intros * SEM PRUNE. unfold prune_predicated in *.
+    Admitted.
 
   Inductive sem_ident {B A: Type} (c: @ctx B) (a: A): A -> Prop :=
   | sem_ident_intro : sem_ident c a a.
-
-  Lemma sem_pred_expr_seq_app :
-    forall G A B V (s: @Abstr.ctx G -> B -> V -> Prop)
-        (f: predicated (A -> B))
-        ps ctx l v f_ l_,
-      sem_pred_expr ps sem_ident ctx l l_ ->
-      sem_pred_expr ps sem_ident ctx f f_ ->
-      s ctx (f_ l_) v ->
-      sem_pred_expr ps s ctx (seq_app f l) v.
-  Proof. Admitted.
 
   Lemma sem_pred_expr_pred_ret :
     forall G A (ctx: @Abstr.ctx G) (i: A) ps,
@@ -767,6 +749,265 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       sem_val_list ctx l j.
   Proof. induction l; intros; cbn in *; inversion H; constructor; eauto. Qed.
 
+  Lemma sem_pred_expr_predicated_map :
+    forall A B C pr (f: C -> B) ctx (pred: predicated C) (pred': C),
+      sem_pred_expr pr sem_ident ctx pred pred' ->
+      @sem_pred_expr A _ _ pr sem_ident ctx (predicated_map f pred) (f pred').
+  Proof.
+    induction pred; unfold predicated_map; intros.
+    - inv H. inv H3. constructor; eauto. constructor.
+    - inv H. inv H5. constructor; eauto. constructor.
+      eapply sem_pred_expr_cons_false; eauto.
+  Qed.
+
+  Lemma NEapp_NEmap :
+    forall A B (f: A -> B) a b,
+      NE.map f (NE.app a b) = NE.app (NE.map f a) (NE.map f b).
+  Proof. induction a; crush. Qed.
+
+  Lemma sem_pred_expr_predicated_prod :
+    forall A B C pr ctx (a: predicated C) (b: predicated B) a' b',
+      sem_pred_expr pr sem_ident ctx a a' ->
+      sem_pred_expr pr sem_ident ctx b b' ->
+      @sem_pred_expr A _ _ pr sem_ident ctx (predicated_prod a b) (a', b').
+  Proof.
+    induction a; intros.
+    - inv H. inv H4. unfold predicated_prod.
+      generalize dependent b. induction b; intros.
+      + cbn. destruct_match. inv Heqp. inv H0. inv H6.
+        constructor. simplify. replace true with (true && true) by auto.
+        eapply sem_pexpr_Pand; eauto. constructor.
+      + inv H0. inv H6. cbn. constructor; cbn.
+        replace true with (true && true) by auto.
+        constructor; auto. constructor.
+        eapply sem_pred_expr_cons_false; eauto.
+        cbn.
+        replace false with (true && false) by auto.
+        constructor; auto.
+    - unfold predicated_prod. simplify.
+      rewrite NEapp_NEmap.
+
+  Lemma sem_pred_expr_seq_app :
+    forall G A B (f: predicated (A -> B))
+        ps (ctx: @ctx G) l f_ l_,
+      sem_pred_expr ps sem_ident ctx l l_ ->
+      sem_pred_expr ps sem_ident ctx f f_ ->
+      sem_pred_expr ps sem_ident ctx (seq_app f l) (f_ l_).
+  Proof. Admitted.
+
+  Lemma sem_pred_expr_map :
+    forall A B C (ctx: @ctx A) ps (f: B -> C) y v,
+      sem_pred_expr ps sem_ident ctx y v ->
+      sem_pred_expr ps sem_ident ctx (NE.map (fun x => (fst x, f (snd x))) y) (f v).
+  Proof.
+    induction y; crush. inv H. constructor; crush. inv H3. constructor.
+    inv H. inv H5. constructor; eauto. constructor.
+    eapply sem_pred_expr_cons_false; eauto.
+  Qed.
+
+  Lemma sem_pred_expr_flap :
+    forall G A B C (f: predicated (A -> B -> C))
+        ps (ctx: @ctx G) l f_,
+      sem_pred_expr ps sem_ident ctx f f_ ->
+      sem_pred_expr ps sem_ident ctx (flap f l) (f_ l).
+  Proof.
+    induction f. unfold flap2; intros. inv H. inv H3.
+    constructor; eauto. constructor.
+    intros. inv H. cbn.
+    constructor; eauto. inv H5. constructor.
+    eapply sem_pred_expr_cons_false; eauto.
+   Qed.
+
+  Lemma sem_pred_expr_flap2 :
+    forall G A B C (f: predicated (A -> B -> C))
+        ps (ctx: @ctx G) l1 l2 f_,
+      sem_pred_expr ps sem_ident ctx f f_ ->
+      sem_pred_expr ps sem_ident ctx (flap2 f l1 l2) (f_ l1 l2).
+  Proof.
+    induction f. unfold flap2; intros. inv H. inv H3.
+    constructor; eauto. constructor.
+    intros. inv H. cbn.
+    constructor; eauto. inv H5. constructor.
+    eapply sem_pred_expr_cons_false; eauto.
+  Qed.
+
+  Lemma sem_pred_expr_seq_app_val :
+    forall G A B V (s: @Abstr.ctx G -> B -> V -> Prop)
+        (f: predicated (A -> B))
+        ps ctx l v f_ l_,
+      sem_pred_expr ps sem_ident ctx l l_ ->
+      sem_pred_expr ps sem_ident ctx f f_ ->
+      s ctx (f_ l_) v ->
+      sem_pred_expr ps s ctx (seq_app f l) v.
+  Proof.
+    intros. eapply sem_pred_expr_ident; [|eassumption].
+    eapply sem_pred_expr_seq_app; eauto.
+  Qed.
+
+  Fixpoint Eapp a b :=
+    match a with
+    | Enil => b
+    | Econs ax axs => Econs ax (Eapp axs b)
+    end.
+
+  Lemma Eapp_right_nil :
+    forall a, Eapp a Enil = a.
+  Proof. induction a; cbn; try rewrite IHa; auto. Qed.
+
+  Lemma Eapp_left_nil :
+    forall a, Eapp Enil a = a.
+  Proof. auto. Qed.
+
+  Lemma sem_pred_expr_cons_pred_expr :
+    forall A (ctx: @ctx A) pr s s' a e,
+      sem_pred_expr pr sem_ident ctx s s' ->
+      sem_pred_expr pr sem_ident ctx a e ->
+      sem_pred_expr pr sem_ident ctx (cons_pred_expr a s) (Econs e s').
+  Proof.
+    intros. unfold cons_pred_expr.
+    replace (Econs e s') with ((uncurry Econs) (e, s')) by auto.
+    eapply sem_pred_expr_predicated_map.
+    eapply sem_pred_expr_predicated_prod; eauto.
+  Qed.
+
+  Lemma sem_pred_expr_fold_right :
+    forall A pr ctx s a a' s',
+      sem_pred_expr pr sem_ident ctx s s' ->
+      Forall2 (sem_pred_expr pr sem_ident ctx) (NE.to_list a) (of_elist a') ->
+      @sem_pred_expr A _ _ pr sem_ident ctx (NE.fold_right cons_pred_expr s a) (Eapp a' s').
+  Proof.
+    induction a; crush. inv H0. inv H5. destruct a'; crush. destruct a'; crush.
+    inv H3. apply sem_pred_expr_cons_pred_expr; auto.
+    inv H0. destruct a'; crush. inv H3.
+    apply sem_pred_expr_cons_pred_expr; auto.
+  Qed.
+
+  Lemma sem_pred_expr_fold_right2 :
+    forall A pr ctx s a a' s',
+      sem_pred_expr pr sem_ident ctx s s' ->
+      @sem_pred_expr A _ _ pr sem_ident ctx (NE.fold_right cons_pred_expr s a) (Eapp a' s') ->
+      Forall2 (sem_pred_expr pr sem_ident ctx) (NE.to_list a) (of_elist a').
+  Proof.
+    induction a. Admitted.
+
+  Lemma NEof_list_some :
+    forall A a a' (e: A),
+      NE.of_list a = Some a' ->
+      NE.of_list (e :: a) = Some (NE.cons e a').
+  Proof.
+    induction a; [crush|].
+    intros.
+    cbn in H. destruct a0. inv H. auto.
+    destruct_match; [|discriminate].
+    inv H. specialize (IHa n a ltac:(trivial)).
+    cbn. destruct_match. unfold NE.of_list in IHa.
+    fold (@NE.of_list A) in IHa. rewrite IHa in Heqo0. inv Heqo0. auto.
+    unfold NE.of_list in IHa. fold (@NE.of_list A) in IHa. rewrite IHa in Heqo0. inv Heqo0.
+  Qed.
+
+  Lemma NEof_list_contra :
+    forall A b (a: A),
+      ~ NE.of_list (a :: b) = None.
+  Proof.
+    induction b; try solve [crush].
+    intros.
+    specialize (IHb a).
+    enough (X: exists x, NE.of_list (a :: b) = Some x).
+    inversion_clear X as [x X'].
+    erewrite NEof_list_some; eauto; discriminate.
+    destruct (NE.of_list (a :: b)) eqn:?; [eauto|contradiction].
+  Qed.
+
+  Lemma NEof_list_exists :
+    forall A b (a: A),
+      exists x, NE.of_list (a :: b) = Some x.
+  Proof.
+    intros. pose proof (NEof_list_contra _ b a).
+    destruct (NE.of_list (a :: b)); try contradiction.
+    eauto.
+  Qed.
+
+  Lemma NEof_list_exists2 :
+    forall A b (a c: A),
+      exists x,
+        NE.of_list (c :: a :: b) = Some (NE.cons c x)
+        /\ NE.of_list (a :: b) = Some x.
+  Proof.
+    intros. pose proof (NEof_list_exists _ b a).
+    inversion_clear H as [x B].
+    econstructor; split; eauto.
+    eapply NEof_list_some; eauto.
+  Qed.
+
+  Lemma NEof_list_to_list :
+    forall A (x: list A) y,
+      NE.of_list x = Some y ->
+      NE.to_list y = x.
+  Proof.
+    induction x; [crush|].
+    intros. destruct x; [crush|].
+    pose proof (NEof_list_exists2 _ x a0 a).
+    inversion_clear H0 as [x0 [HN1 HN2]]. rewrite HN1 in H. inv H.
+    cbn. f_equal. eauto.
+  Qed.
+
+  Lemma sem_pred_expr_merge2 :
+    forall A (ctx: @ctx A) pr l l',
+      sem_pred_expr pr sem_ident ctx (merge l) l' ->
+      Forall2 (sem_pred_expr pr sem_ident ctx) l (of_elist l').
+  Proof.
+    induction l; crush.
+    - unfold merge in *; cbn in *.
+      inv H. inv H5. constructor.
+    - unfold merge in H.
+      pose proof (NEof_list_exists _ l a) as Y.
+      inversion_clear Y as [x HNE]. rewrite HNE in H.
+      erewrite <- (NEof_list_to_list _ (a :: l)) by eassumption.
+      apply sem_pred_expr_fold_right2 with (s := (NE.singleton (T, Enil))) (s' := Enil).
+      repeat constructor.
+      rewrite Eapp_right_nil. auto.
+  Qed.
+
+  Lemma sem_merge_list :
+    forall A ctx f rs ps m args,
+      sem ctx f ((mk_instr_state rs ps m), None) ->
+      @sem_pred_expr A _ _ (forest_preds f) sem_val_list ctx
+        (merge (list_translation args f)) (rs ## args).
+  Proof.
+    induction args; crush. cbn. constructor; constructor.
+    unfold merge. specialize (IHargs H).
+    eapply sem_pred_expr_ident2 in IHargs.
+    inversion_clear IHargs as [l_ [HSEM HVAL]].
+    destruct_match; [|exfalso; eapply NEof_list_contra; eauto].
+    destruct args; cbn -[NE.of_list] in *.
+    - unfold merge in *. simplify.
+      inv H. inv H6. specialize (H a).
+      eapply sem_pred_expr_ident2 in H.
+      inversion_clear H as [l_2 [HSEM2 HVAL2]].
+      unfold cons_pred_expr.
+      eapply sem_pred_expr_ident.
+      eapply sem_pred_expr_predicated_map.
+      eapply sem_pred_expr_predicated_prod. eassumption.
+      constructor. constructor. constructor.
+      constructor. eauto. constructor.
+    - pose proof (NEof_list_exists2 _ (list_translation args f) (f #r (Reg r)) (f #r (Reg a))) as Y.
+      inversion_clear Y as [x [Y1 Y2]]. rewrite Heqo in Y1. inv Y1.
+      inversion_clear H as [? ? ? ? ? ? REG PRED MEM EXIT].
+      inversion_clear REG as [? ? ? REG'].
+      inversion_clear PRED as [? ? ? PRED'].
+      pose proof (REG' a) as REGa. pose proof (REG' r) as REGr.
+      exploit sem_pred_expr_ident2; [exact REGa|].
+      intro REGI'; inversion_clear REGI' as [a' [SEMa SEMa']].
+      exploit sem_pred_expr_ident2; [exact REGr|].
+      intro REGI'; inversion_clear REGI' as [r' [SEMr SEMr']].
+      apply sem_pred_expr_ident with (l_ := Econs a' l_); [|constructor; auto].
+      replace (Econs a' l_) with (Eapp (Econs a' l_) Enil) by (now apply Eapp_right_nil).
+      apply sem_pred_expr_fold_right. repeat constructor.
+      cbn. constructor; eauto.
+      erewrite NEof_list_to_list; eauto.
+      eapply sem_pred_expr_merge2; auto.
+  Qed.
+
   Lemma sem_pred_expr_list_translation :
     forall G ctx args f i,
       @sem G ctx f (i, None) ->
@@ -798,7 +1039,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     intros * EVAL SEM.
     exploit sem_pred_expr_list_translation; try eassumption.
     intro H; inversion_clear H as [x [HS HV]].
-    eapply sem_pred_expr_seq_app.
+    eapply sem_pred_expr_seq_app_val.
     - cbn in *; eapply sem_pred_expr_merge; eauto.
     - apply sem_pred_expr_pred_ret.
     - econstructor; [eauto|]; auto.
@@ -818,11 +1059,10 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     inversion SEM as [? ? ? ? ? ? REG PRED HMEM EXIT]; subst.
     exploit sem_pred_expr_ident2; [eapply HMEM|].
     intros H; inversion_clear H as [x' [HS' HV']].
-    eapply sem_pred_expr_seq_app; eauto.
+    eapply sem_pred_expr_seq_app_val; eauto.
     { eapply sem_pred_expr_seq_app; eauto.
       - eapply sem_pred_expr_merge; eauto.
       - apply sem_pred_expr_pred_ret.
-      - constructor.
     }
     econstructor; eauto.
   Qed.
@@ -971,6 +1211,31 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       truthy ps p -> eval_predf ps (dfltp p) = true.
   Proof. intros. destruct p; cbn; inv H; auto. Qed.
 
+  Lemma sem_update_Istore :
+    forall A rs args m v f ps ctx addr a0 chunk m' v',
+      Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr rs ## args = Some a0 ->
+      Mem.storev chunk m a0 v' = Some m' ->
+      sem_value ctx v v' ->
+      sem ctx f ((mk_instr_state rs ps m), None) ->
+      @sem_pred_expr A _ _ (forest_preds f) sem_mem ctx
+        (seq_app (seq_app (pred_ret (Estore v chunk addr))
+          (merge (list_translation args f))) (f #r Mem)) m'.
+  Proof. Admitted.
+  (*   intros * EVAL MEM SEM. *)
+  (*   exploit sem_pred_expr_list_translation; try eassumption. *)
+  (*   intro H; inversion_clear H as [x [HS HV]]. *)
+  (*   inversion SEM as [? ? ? ? ? ? REG PRED HMEM EXIT]; subst. *)
+  (*   exploit sem_pred_expr_ident2; [eapply HMEM|]. *)
+  (*   intros H; inversion_clear H as [x' [HS' HV']]. *)
+  (*   eapply sem_pred_expr_seq_app; eauto. *)
+  (*   { eapply sem_pred_expr_seq_app; eauto. *)
+  (*     - eapply sem_pred_expr_merge; eauto. *)
+  (*     - apply sem_pred_expr_pred_ret. *)
+  (*     - constructor. *)
+  (*   } *)
+  (*   econstructor; eauto. *)
+  (* Qed. *)
+
   Lemma sem_update_Iop_top:
     forall A f p p' f' rs m pr op res args p0 v state,
       Op.eval_operation (ctx_ge state) (ctx_sp state) op rs ## args m = Some v ->
@@ -1064,7 +1329,17 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     cbn [is_ps] in *. constructor.
     + constructor; intros. inv REG. rewrite forest_reg_gso; eauto. discriminate.
     + constructor; intros. inv PRED. rewrite forest_reg_pred. auto.
-    + destruct f as [fr fp fm]; cbn -[seq_app] in *. admit.
+    + destruct f as [fr fp fm]; cbn -[seq_app] in *.
+      rewrite forest_reg_gss.
+      exploit sem_pred_expr_ident2; [exact MEM|]; intro HSEM_;
+        inversion_clear HSEM_ as [x [HSEM1 HSEM2]].
+      eapply sem_pred_expr_prune_predicated; eauto.
+      eapply sem_pred_expr_app_predicated.
+      eapply sem_pred_expr_seq_app_val; [solve [eauto]| |].
+      eapply sem_pred_expr_seq_app. admit.
+      eapply sem_pred_expr_flap2.
+      eapply sem_pred_expr_seq_app. admit.
+      eapply sem_pred_expr_pred_ret.
     + auto.
   Admitted.
 

@@ -125,5 +125,5 @@ Fixpoint fold_left {A B} (f: A -> B -> A) (l: non_empty B) (a: A) {struct l} : A
 Fixpoint fold_right {A B} (f: B -> A -> A) (a: A) (l: non_empty B) {struct l} : A :=
   match l with
   | singleton a' => f a' a
-  | b ::| t => fold_right f (f b a) t
+  | b ::| t => f b (fold_right f a t)
   end.
