@@ -61,6 +61,38 @@ Definition is_regs i := match i with mk_instr_state rs _ _ => rs end.
 Definition is_mem i := match i with mk_instr_state _ _ m => m end.
 Definition is_ps i := match i with mk_instr_state _ p _ => p end.
 
+Definition evaluable {A} (ctx: @ctx A) p := exists b, sem_pexpr ctx p b.
+
+Definition all_evaluable {A B} (ctx: @ctx A) f_p (l: predicated B) :=
+  forall p y, NE.In (p, y) l -> evaluable ctx (from_pred_op f_p p).
+
+Lemma all_evaluable_cons :
+  forall A B pr ctx b a,
+    all_evaluable ctx pr (NE.cons a b) ->
+    @all_evaluable A B ctx pr b.
+Proof.
+  unfold all_evaluable; intros.
+  enough (NE.In (p, y) (NE.cons a b)); eauto.
+  constructor; tauto.
+Qed.
+
+Lemma all_evaluable_cons2 :
+  forall A B pr ctx b a p,
+    @all_evaluable A B ctx pr (NE.cons (p, a) b) ->
+    evaluable ctx (from_pred_op pr p).
+Proof.
+  unfold all_evaluable; intros.
+  eapply H. constructor; eauto.
+Qed.
+
+Lemma all_evaluable_singleton :
+  forall A B pr ctx b p,
+    @all_evaluable A B ctx pr (NE.singleton (p, b)) ->
+    evaluable ctx (from_pred_op pr p).
+Proof.
+  unfold all_evaluable; intros. eapply H. constructor.
+Qed.
+
 Inductive state_lessdef : instr_state -> instr_state -> Prop :=
   state_lessdef_intro :
     forall rs1 rs2 ps1 ps2 m1,
@@ -586,9 +618,9 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_pred_expr_NEapp :
-    forall A f_p ctx a b v,
-      sem_pred_expr f_p sem_value ctx a v ->
-      @sem_pred_expr A _ _ f_p sem_value ctx (NE.app a b) v.
+    forall A B C sem f_p ctx a b v,
+      sem_pred_expr f_p sem ctx a v ->
+      @sem_pred_expr A B C f_p sem ctx (NE.app a b) v.
   Proof.
     induction a; crush.
     - inv H. constructor; auto.
@@ -614,6 +646,24 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eapply sem_pred_expr_cons_false.
       eapply sem_pexpr_eval; eauto. eapply IHa; eauto.
       intros. eapply H0. constructor; tauto.
+  Qed.
+
+  Lemma sem_pred_expr_NEapp3 :
+    forall A B C sem f_p ctx (a b: predicated B) v,
+      (forall x, NE.In x a -> sem_pexpr ctx (from_pred_op f_p (fst x)) false) ->
+      sem_pred_expr f_p sem ctx b v ->
+      @sem_pred_expr A B C f_p sem ctx (NE.app a b) v.
+  Proof.
+    induction a; crush.
+    - assert (IN: NE.In a (NE.singleton a)) by constructor.
+      specialize (H _ IN). destruct a.
+      eapply sem_pred_expr_cons_false; eauto.
+    - assert (NE.In a (NE.cons a a0)) by (constructor; tauto).
+      apply H in H1.
+      destruct a. cbn [fst] in *.
+      eapply sem_pred_expr_cons_false; auto.
+      eapply IHa; eauto.
+      intros. eapply H. constructor; tauto.
   Qed.
 
   Lemma sem_pred_expr_map_not :
@@ -766,7 +816,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof. induction a; crush. Qed.
 
   Lemma sem_pred_expr_predicated_prod :
-    forall A B C pr ctx (a: predicated C) (b: predicated B) a' b',
+    forall A B C pr ctx (a: predicated C) (b: predicated B) a' b'
+      (EVALUABLE: all_evaluable ctx pr b),
       sem_pred_expr pr sem_ident ctx a a' ->
       sem_pred_expr pr sem_ident ctx b b' ->
       @sem_pred_expr A _ _ pr sem_ident ctx (predicated_prod a b) (a', b').
@@ -777,15 +828,47 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       + cbn. destruct_match. inv Heqp. inv H0. inv H6.
         constructor. simplify. replace true with (true && true) by auto.
         eapply sem_pexpr_Pand; eauto. constructor.
-      + inv H0. inv H6. cbn. constructor; cbn.
+      + apply all_evaluable_cons in EVALUABLE. inv H0. inv H6. cbn. constructor; cbn.
         replace true with (true && true) by auto.
         constructor; auto. constructor.
-        eapply sem_pred_expr_cons_false; eauto.
-        cbn.
+        eapply sem_pred_expr_cons_false; eauto. cbn.
         replace false with (true && false) by auto.
         constructor; auto.
     - unfold predicated_prod. simplify.
       rewrite NEapp_NEmap.
+      inv H. eapply sem_pred_expr_NEapp.
+      { induction b; crush.
+        destruct a. inv H0. constructor.
+        replace true with (true && true) by auto.
+        eapply sem_pexpr_Pand; auto. inv H6. inv H7.
+        constructor.
+
+        eapply all_evaluable_cons in EVALUABLE.
+        destruct a. inv H0. constructor.
+        replace true with (true && true) by auto.
+        constructor; auto. inv H8. inv H6. constructor.
+
+        specialize (IHb EVALUABLE H8). eapply sem_pred_expr_cons_false; auto.
+        replace false with (true && false) by auto.
+        constructor; auto.
+      }
+      { exploit IHa. eauto. eauto. apply H0. intros.
+        unfold predicated_prod in *.
+        eapply sem_pred_expr_NEapp3; eauto; [].
+        clear H. clear H0.
+        induction b.
+        { intros. inv H. destruct a. simpl. apply all_evaluable_singleton in EVALUABLE.
+          inversion_clear EVALUABLE.
+          replace false with (false && x) by auto. constructor; auto. }
+        { intros. inv H. inv H1. destruct a. simpl.
+          eapply all_evaluable_cons2 in EVALUABLE.
+          inversion_clear EVALUABLE.
+          replace false with (false && x) by auto. constructor; auto.
+          eapply all_evaluable_cons in EVALUABLE.
+          eauto.
+        }
+      }
+  Qed.
 
   Lemma sem_pred_expr_seq_app :
     forall G A B (f: predicated (A -> B))
@@ -859,7 +942,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof. auto. Qed.
 
   Lemma sem_pred_expr_cons_pred_expr :
-    forall A (ctx: @ctx A) pr s s' a e,
+    forall A (ctx: @ctx A) pr s s' a e
+        (ALLEVAL: all_evaluable ctx pr s),
       sem_pred_expr pr sem_ident ctx s s' ->
       sem_pred_expr pr sem_ident ctx a e ->
       sem_pred_expr pr sem_ident ctx (cons_pred_expr a s) (Econs e s').
@@ -871,16 +955,19 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_pred_expr_fold_right :
-    forall A pr ctx s a a' s',
+    forall A pr ctx s a a' s'
+        (ALLEVAL: all_evaluable ctx pr s)
+        (ALLEVAL2: Forall (all_evaluable ctx pr) (NE.to_list a)),
       sem_pred_expr pr sem_ident ctx s s' ->
       Forall2 (sem_pred_expr pr sem_ident ctx) (NE.to_list a) (of_elist a') ->
       @sem_pred_expr A _ _ pr sem_ident ctx (NE.fold_right cons_pred_expr s a) (Eapp a' s').
   Proof.
     induction a; crush. inv H0. inv H5. destruct a'; crush. destruct a'; crush.
-    inv H3. apply sem_pred_expr_cons_pred_expr; auto.
+    inv H3. eapply sem_pred_expr_cons_pred_expr; eauto.
     inv H0. destruct a'; crush. inv H3.
-    apply sem_pred_expr_cons_pred_expr; auto.
-  Qed.
+    eapply sem_pred_expr_cons_pred_expr; eauto. admit.
+    eapply IHa; eauto. admit.
+  Admitted.
 
   Lemma sem_pred_expr_fold_right2 :
     forall A pr ctx s a a' s',
@@ -968,6 +1055,14 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite Eapp_right_nil. auto.
   Qed.
 
+  Lemma evaluable_singleton :
+    forall A B ctx fp r,
+      @all_evaluable A B ctx fp (NE.singleton (T, r)).
+  Proof.
+    unfold all_evaluable, evaluable; intros.
+    inv H. simpl. exists true. constructor.
+  Qed.
+
   Lemma sem_merge_list :
     forall A ctx f rs ps m args,
       sem ctx f ((mk_instr_state rs ps m), None) ->
@@ -987,9 +1082,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       unfold cons_pred_expr.
       eapply sem_pred_expr_ident.
       eapply sem_pred_expr_predicated_map.
-      eapply sem_pred_expr_predicated_prod. eassumption.
-      constructor. constructor. constructor.
-      constructor. eauto. constructor.
+      eapply sem_pred_expr_predicated_prod; [eapply evaluable_singleton|eassumption|repeat constructor].
+      repeat constructor; auto.
     - pose proof (NEof_list_exists2 _ (list_translation args f) (f #r (Reg r)) (f #r (Reg a))) as Y.
       inversion_clear Y as [x [Y1 Y2]]. rewrite Heqo in Y1. inv Y1.
       inversion_clear H as [? ? ? ? ? ? REG PRED MEM EXIT].
@@ -1002,11 +1096,13 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       intro REGI'; inversion_clear REGI' as [r' [SEMr SEMr']].
       apply sem_pred_expr_ident with (l_ := Econs a' l_); [|constructor; auto].
       replace (Econs a' l_) with (Eapp (Econs a' l_) Enil) by (now apply Eapp_right_nil).
-      apply sem_pred_expr_fold_right. repeat constructor.
+      apply sem_pred_expr_fold_right. apply evaluable_singleton.
+      admit.
+      repeat constructor.
       cbn. constructor; eauto.
       erewrite NEof_list_to_list; eauto.
       eapply sem_pred_expr_merge2; auto.
-  Qed.
+  Admitted.
 
   Lemma sem_pred_expr_list_translation :
     forall G ctx args f i,
@@ -1309,6 +1405,20 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       + auto.
   Qed.
 
+  Lemma exists_sem_pred :
+    forall A B C (ctx: @ctx A) s pr r v,
+      @sem_pred_expr A B C pr s ctx r v ->
+      exists r',
+        NE.In r' r /\ s ctx (snd r') v.
+  Proof.
+    induction r; crush.
+    - inv H. econstructor. split. constructor. auto.
+    - inv H.
+      + econstructor. split. constructor. left; auto. auto.
+      + exploit IHr; eauto. intros HH. inversion_clear HH as [x HH']. inv HH'.
+        econstructor. split. constructor. right. eauto. auto.
+  Qed.
+
   Lemma sem_update_Istore_top:
     forall A f p p' f' rs m pr res args p0 state addr a chunk m',
       Op.eval_addressing (ctx_ge state) (ctx_sp state) addr rs ## args = Some a ->
@@ -1333,13 +1443,17 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite forest_reg_gss.
       exploit sem_pred_expr_ident2; [exact MEM|]; intro HSEM_;
         inversion_clear HSEM_ as [x [HSEM1 HSEM2]].
+      inv REG. specialize (H res). apply exists_sem_pred in H. inversion_clear H as [r' [HNE HVAL]].
       eapply sem_pred_expr_prune_predicated; eauto.
       eapply sem_pred_expr_app_predicated.
       eapply sem_pred_expr_seq_app_val; [solve [eauto]| |].
       eapply sem_pred_expr_seq_app. admit.
       eapply sem_pred_expr_flap2.
       eapply sem_pred_expr_seq_app. admit.
-      eapply sem_pred_expr_pred_ret.
+      eapply sem_pred_expr_pred_ret. econstructor. eauto. 3: { eauto. }
+      eauto. admit. eauto. inv PRED. eauto.
+      rewrite eval_predf_Pand. rewrite EVAL_PRED.
+      rewrite truthy_dflt. auto. auto.
     + auto.
   Admitted.
 
