@@ -1500,3 +1500,14 @@ Proof.
   unfold forest_preds, set_forest_p, get_forest_p'.
   rewrite PTree.gss; auto.
 Qed.
+
+Lemma forest_pred_gss2 :
+  forall (f : forest) r p,
+    (forest_preds (f #p r <- p)) ! r = Some p.
+Proof. intros. unfold set_forest_p. simpl. now rewrite PTree.gss. Qed.
+
+Lemma forest_pred_gso2 :
+  forall (f : forest) r w p,
+    r <> w ->
+    (forest_preds (f #p w <- p)) ! r = (forest_preds f) ! r.
+Proof. intros. unfold set_forest_p. simpl. now rewrite PTree.gso by auto. Qed.

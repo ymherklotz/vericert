@@ -66,6 +66,12 @@ Definition evaluable {A} (ctx: @ctx A) p := exists b, sem_pexpr ctx p b.
 Definition all_evaluable {A B} (ctx: @ctx A) f_p (l: predicated B) :=
   forall p y, NE.In (p, y) l -> evaluable ctx (from_pred_op f_p p).
 
+Definition pred_forest_evaluable {A} (ctx: @ctx A) (ps: PTree.t pred_pexpr) :=
+  forall i p, ps ! i = Some p -> evaluable ctx p.
+
+Definition forest_evaluable {A} (ctx: @ctx A) (f: forest) :=
+  pred_forest_evaluable ctx f.(forest_preds).
+
 Lemma all_evaluable_cons :
   forall A B pr ctx b a,
     all_evaluable ctx pr (NE.cons a b) ->
@@ -85,12 +91,45 @@ Proof.
   eapply H. constructor; eauto.
 Qed.
 
+Lemma all_evaluable_cons3 :
+  forall A B pr ctx b p a,
+    all_evaluable ctx pr b ->
+    evaluable ctx (from_pred_op pr p) ->
+    @all_evaluable A B ctx pr (NE.cons (p, a) b).
+Proof.
+  unfold all_evaluable; intros. inv H1. inv H3. inv H1. auto.
+  eauto.
+Qed.
+
 Lemma all_evaluable_singleton :
   forall A B pr ctx b p,
     @all_evaluable A B ctx pr (NE.singleton (p, b)) ->
     evaluable ctx (from_pred_op pr p).
 Proof.
   unfold all_evaluable; intros. eapply H. constructor.
+Qed.
+
+Lemma get_forest_p_evaluable :
+  forall A (ctx: @ctx A) f r,
+    forest_evaluable ctx f ->
+    evaluable ctx (f #p r).
+Proof.
+  intros. unfold "#p", get_forest_p'.
+  destruct_match. unfold forest_evaluable in *.
+  unfold pred_forest_evaluable in *. eauto.
+  unfold evaluable. eexists. constructor. constructor.
+Qed.
+
+Lemma set_forest_p_evaluable :
+  forall A (ctx: @ctx A) f r p,
+    forest_evaluable ctx f ->
+    evaluable ctx p ->
+    forest_evaluable ctx (f #p r <- p).
+Proof.
+  unfold forest_evaluable, pred_forest_evaluable; intros.
+  destruct (peq i r); subst.
+  - rewrite forest_pred_gss2 in H1. now inv H1.
+  - rewrite forest_pred_gso2 in H1 by auto; eauto.
 Qed.
 
 Inductive state_lessdef : instr_state -> instr_state -> Prop :=
@@ -769,12 +808,6 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     | nil => Enil
     end.
 
-  Lemma sem_pred_expr_merge :
-    forall G (ctx: @Abstr.ctx G) args ps l,
-      Forall2 (sem_pred_expr ps sem_ident ctx) args l ->
-      sem_pred_expr ps sem_ident ctx (merge args) (to_elist l).
-  Proof. Admitted.
-
   Lemma sem_val_list_elist :
     forall G (ctx: @Abstr.ctx G) l j,
       sem_val_list ctx (to_elist l) j ->
@@ -872,11 +905,17 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
   Lemma sem_pred_expr_seq_app :
     forall G A B (f: predicated (A -> B))
-        ps (ctx: @ctx G) l f_ l_,
+        ps (ctx: @ctx G) l f_ l_
+      (EVALUABLE: all_evaluable ctx ps l),
       sem_pred_expr ps sem_ident ctx l l_ ->
       sem_pred_expr ps sem_ident ctx f f_ ->
       sem_pred_expr ps sem_ident ctx (seq_app f l) (f_ l_).
-  Proof. Admitted.
+  Proof.
+    unfold seq_app; intros.
+    remember (fun x : (A -> B) * A => fst x (snd x)) as app.
+    replace (f_ l_) with (app (f_, l_)) by (rewrite Heqapp; auto).
+    eapply sem_pred_expr_predicated_map. eapply sem_pred_expr_predicated_prod; auto.
+  Qed.
 
   Lemma sem_pred_expr_map :
     forall A B C (ctx: @ctx A) ps (f: B -> C) y v,
@@ -917,7 +956,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Lemma sem_pred_expr_seq_app_val :
     forall G A B V (s: @Abstr.ctx G -> B -> V -> Prop)
         (f: predicated (A -> B))
-        ps ctx l v f_ l_,
+        ps ctx l v f_ l_
+      (EVALUABLE: all_evaluable ctx ps l),
       sem_pred_expr ps sem_ident ctx l l_ ->
       sem_pred_expr ps sem_ident ctx f f_ ->
       s ctx (f_ l_) v ->
@@ -1038,6 +1078,15 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     cbn. f_equal. eauto.
   Qed.
 
+  Lemma sem_pred_expr_merge :
+    forall G (ctx: @Abstr.ctx G) ps l args,
+      Forall2 (sem_pred_expr ps sem_ident ctx) args l ->
+      sem_pred_expr ps sem_ident ctx (merge args) (to_elist l).
+  Proof.
+    induction l; intros.
+    - inv H. cbn; repeat constructor.
+    - inv H. cbn. unfold merge. Admitted.
+
   Lemma sem_pred_expr_merge2 :
     forall A (ctx: @ctx A) pr l l',
       sem_pred_expr pr sem_ident ctx (merge l) l' ->
@@ -1125,38 +1174,267 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       cbn; constructor; auto.
   Qed.
 
+Lemma evaluable_and_true :
+  forall G (ctx: @ctx G) ps p,
+    evaluable ctx (from_pred_op ps p) ->
+    evaluable ctx (from_pred_op ps (p ∧ T)).
+Proof.
+  intros. unfold evaluable in *. inv H. exists (x && true). cbn.
+  constructor; auto. constructor.
+Qed.
+
+Lemma NEin_map :
+  forall A B p y (f: A -> B) a,
+    NE.In (p, y) (predicated_map f a) ->
+    exists x, NE.In (p, x) a /\ y = f x.
+Proof.
+  induction a; intros.
+  - inv H. destruct a. econstructor. split; eauto. constructor.
+  - inv H. inv H1. inv H. destruct a. cbn in *. econstructor; econstructor; eauto.
+    constructor; tauto.
+    specialize (IHa H). inv IHa. inv H0.
+    econstructor; econstructor; eauto. constructor; tauto.
+Qed.
+
+Lemma NEin_map2 :
+  forall A B (f: A -> B) a p y,
+    NE.In (p, y) a ->
+    NE.In (p, f y) (predicated_map f a).
+Proof.
+  induction a; crush.
+  inv H. constructor.
+  inv H. inv H1.
+  - constructor; auto.
+  - constructor; eauto.
+Qed.
+
+Lemma all_evaluable_predicated_map :
+  forall A B G (ctx: @ctx G) ps (f: A -> B) p,
+    all_evaluable ctx ps p ->
+    all_evaluable ctx ps (predicated_map f p).
+Proof.
+  induction p.
+  - unfold all_evaluable; intros.
+    exploit NEin_map; eauto; intros. inv H1. inv H2.
+    eapply H; eauto.
+  - intros. cbn.
+    eapply all_evaluable_cons3. eapply IHp. eapply all_evaluable_cons; eauto.
+    cbn. destruct a. cbn in *. eapply all_evaluable_cons2; eauto.
+Qed.
+
+Lemma all_evaluable_predicated_map2 :
+  forall A B G (ctx: @ctx G) ps (f: A -> B) p,
+    all_evaluable ctx ps (predicated_map f p) ->
+    all_evaluable ctx ps p.
+Proof.
+  induction p.
+  - unfold all_evaluable in *; intros.
+    eapply H. eapply NEin_map2; eauto.
+  - intros. cbn. destruct a.
+    cbn in H. pose proof H. eapply all_evaluable_cons in H; eauto.
+    eapply all_evaluable_cons2 in H0; eauto.
+    unfold all_evaluable. specialize (IHp H).
+    unfold all_evaluable in IHp.
+    intros. inv H1. inv H3. inv H1; eauto.
+    specialize (IHp _ _ H1). eauto.
+Qed.
+
+Lemma all_evaluable_map_and :
+  forall A B G (ctx: @ctx G) ps (a: NE.non_empty ((pred_op * A) * (pred_op * B))),
+    (forall p1 x p2 y,
+       NE.In ((p1, x), (p2, y)) a ->
+            evaluable ctx (from_pred_op ps p1)
+            /\ evaluable ctx (from_pred_op ps p2)) ->
+    all_evaluable ctx ps (NE.map (fun x => match x with ((a, b), (c, d)) => (Pand a c, (b, d)) end) a).
+Proof.
+  induction a.
+  - intros. cbn. repeat destruct_match. inv Heqp.
+    unfold all_evaluable; intros. inv H0.
+    unfold evaluable.
+    exploit H. constructor.
+    intros [Ha Hb]. inv Ha. inv Hb.
+    exists (x && x0). constructor; auto.
+  - intros. unfold all_evaluable; cbn; intros. inv H0. inv H2.
+    + repeat destruct_match. inv Heqp0. inv H0.
+      specialize (H p2 a1 p3 b ltac:(constructor; eauto)).
+      inv H. inv H0. inv H1. exists (x && x0).
+      constructor; eauto.
+    + eapply IHa; intros. eapply H. econstructor. right. eauto.
+      eauto.
+Qed.
+
+Lemma all_evaluable_map_add :
+  forall A B G (ctx: @ctx G) ps (a: pred_op * A) (b: predicated B) p1 x p2 y,
+    evaluable ctx (from_pred_op ps (fst a)) ->
+    all_evaluable ctx ps b ->
+    NE.In (p1, x, (p2, y)) (NE.map (fun x : pred_op * B => (a, x)) b) ->
+    evaluable ctx (from_pred_op ps p1) /\ evaluable ctx (from_pred_op ps p2).
+Proof.
+  induction b; intros.
+  - cbn in *. inv H1. unfold all_evaluable in *. specialize (H0 _ _ ltac:(constructor)).
+    auto.
+  - cbn in *. inv H1. inv H3.
+    + inv H1. unfold all_evaluable in H0. specialize (H0 _ _ ltac:(constructor; eauto)); auto.
+    + eapply all_evaluable_cons in H0. specialize (IHb _ _ _ _ H H0 H1). auto.
+Qed.
+
+Lemma NEin_NEapp5 :
+  forall A (a: A) x y,
+    NE.In a (NE.app x y) ->
+    NE.In a x \/ NE.In a y.
+Proof.
+  induction x; crush.
+  - inv H. inv H1. left. constructor. tauto.
+  - inv H. inv H1. left. constructor; tauto.
+    exploit IHx; eauto; intros. inv H0.
+    left. constructor; tauto. tauto.
+Qed.
+
+Lemma all_evaluable_non_empty_prod :
+  forall A B G (ctx: @ctx G) ps p1 x p2 y (a: predicated A) (b: predicated B),
+    all_evaluable ctx ps a ->
+    all_evaluable ctx ps b ->
+    NE.In ((p1, x), (p2, y)) (NE.non_empty_prod a b) ->
+    evaluable ctx (from_pred_op ps p1)
+    /\ evaluable ctx (from_pred_op ps p2).
+Proof.
+  induction a; intros.
+  - cbn in *. eapply all_evaluable_map_add; eauto. destruct a; cbn in *. eapply H; constructor.
+  - cbn in *. eapply NEin_NEapp5 in H1. inv H1. eapply all_evaluable_map_add; eauto.
+    destruct a; cbn in *. eapply all_evaluable_cons2; eauto.
+    eapply all_evaluable_cons in H. eauto.
+Qed.
+
+Lemma all_evaluable_predicated_prod :
+  forall A B G (ctx: @ctx G) ps (a: predicated A) (b: predicated B),
+    all_evaluable ctx ps a ->
+    all_evaluable ctx ps b ->
+    all_evaluable ctx ps (predicated_prod a b).
+Proof.
+  intros. unfold all_evaluable; intros.
+  unfold predicated_prod in *. exploit all_evaluable_map_and; eauto.
+  intros. eapply all_evaluable_non_empty_prod. 3: { eauto. }
+  eauto. eauto.
+Qed.
+
+Lemma cons_pred_expr_evaluable :
+  forall G (ctx: @ctx G) ps a b,
+    all_evaluable ctx ps a ->
+    all_evaluable ctx ps b ->
+    all_evaluable ctx ps (cons_pred_expr a b).
+Proof.
+  unfold cons_pred_expr; intros.
+  apply all_evaluable_predicated_map.
+  now apply all_evaluable_predicated_prod.
+Qed.
+
+Lemma fold_right_all_evaluable :
+  forall G (ctx: @ctx G) ps n,
+    Forall (all_evaluable ctx ps) (NE.to_list n) ->
+    all_evaluable ctx ps (NE.fold_right cons_pred_expr (NE.singleton (T, Enil)) n).
+Proof.
+  induction n; cbn in *; intros.
+  - unfold cons_pred_expr. eapply all_evaluable_predicated_map. eapply all_evaluable_predicated_prod.
+    inv H. auto. unfold all_evaluable; intros. inv H0. exists true. constructor.
+  - inv H. specialize (IHn H3). now eapply cons_pred_expr_evaluable.
+Qed.
+
+Lemma evaluable_negate :
+  forall G (ctx: @ctx G) p,
+    evaluable ctx p ->
+    evaluable ctx (¬ p).
+Proof.
+  induction p; intros.
+  - destruct p. cbn in *. inv H.
+    exists (negb x). constructor. inv H0.
+    rewrite negb_if. now rewrite negb_involutive.
+  - repeat econstructor.
+  - repeat econstructor.
+  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
+    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
+    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
+  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
+    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
+    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
+Qed.
+
+Lemma predicated_evaluable :
+  forall G (ctx: @ctx G) ps (p: pred_op),
+    pred_forest_evaluable ctx ps ->
+    evaluable ctx (from_pred_op ps p).
+Proof.
+  unfold pred_forest_evaluable; intros. induction p; intros; cbn.
+  - repeat destruct_match; subst; unfold get_forest_p'.
+    destruct_match. eapply H; eauto. econstructor. constructor. constructor.
+    eapply evaluable_negate.
+    destruct_match. eapply H; eauto. econstructor. constructor. constructor.
+  - repeat econstructor.
+  - repeat econstructor.
+  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
+  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
+Qed.
+
+Lemma predicated_evaluable_all :
+  forall A G (ctx: @ctx G) ps (p: predicated A),
+    pred_forest_evaluable ctx ps ->
+    all_evaluable ctx ps p.
+Proof.
+  unfold all_evaluable; intros.
+  eapply predicated_evaluable. eauto.
+Qed.
+
+Lemma merge_all_evaluable :
+  forall G (ctx: @ctx G) ps,
+    pred_forest_evaluable ctx ps ->
+    forall f args,
+      all_evaluable ctx ps (merge (list_translation args f)).
+Proof.
+  intros. eapply predicated_evaluable_all. eauto.
+Qed.
+
+(*|
+Here we can finally assume that everything in the forest is evaluable, which
+will allow us to prove that translating the list of register accesses will also
+all be evaluable.
+|*)
+
   Lemma sem_update_Iop :
-    forall A op rs args m v f ps ctx,
+    forall A op rs args m v f ps ctx
+      (EVALF: forest_evaluable ctx f),
       Op.eval_operation (ctx_ge ctx) (ctx_sp ctx) op rs ## args (is_mem (ctx_is ctx)) = Some v ->
       sem ctx f ((mk_instr_state rs ps m), None) ->
       @sem_pred_expr A _ _ (forest_preds f) sem_value ctx
         (seq_app (pred_ret (Eop op)) (merge (list_translation args f))) v.
   Proof.
-    intros * EVAL SEM.
+    intros * EVALF EVAL SEM.
     exploit sem_pred_expr_list_translation; try eassumption.
     intro H; inversion_clear H as [x [HS HV]].
     eapply sem_pred_expr_seq_app_val.
+    - eapply merge_all_evaluable; eauto.
     - cbn in *; eapply sem_pred_expr_merge; eauto.
     - apply sem_pred_expr_pred_ret.
     - econstructor; [eauto|]; auto.
   Qed.
 
   Lemma sem_update_Iload :
-    forall A rs args m v f ps ctx addr a0 chunk,
+    forall A rs args m v f ps ctx addr a0 chunk
+      (EVALF: forest_evaluable ctx f),
       Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr rs ## args = Some a0 ->
       Mem.loadv chunk m a0 = Some v ->
       sem ctx f ((mk_instr_state rs ps m), None) ->
       @sem_pred_expr A _ _ (forest_preds f) sem_value ctx
         (seq_app (seq_app (pred_ret (Eload chunk addr)) (merge (list_translation args f))) (f #r Mem)) v.
   Proof.
-    intros * EVAL MEM SEM.
+    intros * EVALF EVAL MEM SEM.
     exploit sem_pred_expr_list_translation; try eassumption.
     intro H; inversion_clear H as [x [HS HV]].
     inversion SEM as [? ? ? ? ? ? REG PRED HMEM EXIT]; subst.
     exploit sem_pred_expr_ident2; [eapply HMEM|].
     intros H; inversion_clear H as [x' [HS' HV']].
     eapply sem_pred_expr_seq_app_val; eauto.
+    { eapply predicated_evaluable_all; eauto. }
     { eapply sem_pred_expr_seq_app; eauto.
+      - eapply predicated_evaluable_all; eauto.
       - eapply sem_pred_expr_merge; eauto.
       - apply sem_pred_expr_pred_ret.
     }
@@ -1308,7 +1586,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Proof. intros. destruct p; cbn; inv H; auto. Qed.
 
   Lemma sem_update_Istore :
-    forall A rs args m v f ps ctx addr a0 chunk m' v',
+    forall A rs args m v f ps ctx addr a0 chunk m' v'
+      (EVALF: forest_evaluable ctx f),
       Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr rs ## args = Some a0 ->
       Mem.storev chunk m a0 v' = Some m' ->
       sem_value ctx v v' ->
@@ -1316,24 +1595,26 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       @sem_pred_expr A _ _ (forest_preds f) sem_mem ctx
         (seq_app (seq_app (pred_ret (Estore v chunk addr))
           (merge (list_translation args f))) (f #r Mem)) m'.
-  Proof. Admitted.
-  (*   intros * EVAL MEM SEM. *)
-  (*   exploit sem_pred_expr_list_translation; try eassumption. *)
-  (*   intro H; inversion_clear H as [x [HS HV]]. *)
-  (*   inversion SEM as [? ? ? ? ? ? REG PRED HMEM EXIT]; subst. *)
-  (*   exploit sem_pred_expr_ident2; [eapply HMEM|]. *)
-  (*   intros H; inversion_clear H as [x' [HS' HV']]. *)
-  (*   eapply sem_pred_expr_seq_app; eauto. *)
-  (*   { eapply sem_pred_expr_seq_app; eauto. *)
-  (*     - eapply sem_pred_expr_merge; eauto. *)
-  (*     - apply sem_pred_expr_pred_ret. *)
-  (*     - constructor. *)
-  (*   } *)
-  (*   econstructor; eauto. *)
-  (* Qed. *)
+  Proof.
+    intros * EVALF EVAL STOREV SEMVAL SEM.
+    exploit sem_merge_list; try eassumption.
+    intro MERGE. exploit sem_pred_expr_ident2; eauto.
+    intro TMP; inversion_clear TMP as [x [HS HV]].
+    inversion_clear SEM as [? ? ? ? ? ? REG PRED HMEM EXIT].
+    exploit sem_pred_expr_ident2; [eapply HMEM|].
+    intros TMP; inversion_clear TMP as [x' [HS' HV']].
+    eapply sem_pred_expr_ident.
+    eapply sem_pred_expr_seq_app; eauto.
+    eapply predicated_evaluable_all; eauto.
+    eapply sem_pred_expr_seq_app; eauto.
+    eapply predicated_evaluable_all; eauto.
+    eapply sem_pred_expr_pred_ret.
+    econstructor; eauto.
+  Qed.
 
   Lemma sem_update_Iop_top:
-    forall A f p p' f' rs m pr op res args p0 v state,
+    forall A f p p' f' rs m pr op res args p0 v state
+      (EVALF: forest_evaluable state f),
       Op.eval_operation (ctx_ge state) (ctx_sp state) op rs ## args m = Some v ->
       truthy pr p0 ->
       valid_mem (is_mem (ctx_is state)) m ->
@@ -1342,7 +1623,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eval_predf pr p = true ->
       @sem A state f' (mk_instr_state (rs # res <- v) pr m, None).
     Proof.
-      intros * EVAL_OP TRUTHY VALID SEM UPD EVAL_PRED.
+      intros * EVALF EVAL_OP TRUTHY VALID SEM UPD EVAL_PRED.
       pose proof SEM as SEM2.
       inversion UPD as [PRUNE]. unfold Option.bind in PRUNE.
       destr. inversion_clear PRUNE.
@@ -1370,7 +1651,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_update_Iload_top:
-    forall A f p p' f' rs m pr res args p0 v state addr a chunk,
+    forall A f p p' f' rs m pr res args p0 v state addr a chunk
+      (EVALF: forest_evaluable state f),
       Op.eval_addressing (ctx_ge state) (ctx_sp state) addr rs ## args = Some a ->
       Mem.loadv chunk m a = Some v ->
       truthy pr p0 ->
@@ -1380,7 +1662,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eval_predf pr p = true ->
       @sem A state f' (mk_instr_state (rs # res <- v) pr m, None).
     Proof.
-      intros * EVAL_OP LOAD TRUTHY VALID SEM UPD EVAL_PRED.
+      intros * EVALF EVAL_OP LOAD TRUTHY VALID SEM UPD EVAL_PRED.
       pose proof SEM as SEM2.
       inversion UPD as [PRUNE]. unfold Option.bind in PRUNE. destr.
       inversion_clear PRUNE.
@@ -1420,7 +1702,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Qed.
 
   Lemma sem_update_Istore_top:
-    forall A f p p' f' rs m pr res args p0 state addr a chunk m',
+    forall A f p p' f' rs m pr res args p0 state addr a chunk m'
+      (EVALF: forest_evaluable state f),
       Op.eval_addressing (ctx_ge state) (ctx_sp state) addr rs ## args = Some a ->
       Mem.storev chunk m a rs !! res = Some m' ->
       truthy pr p0 ->
@@ -1430,7 +1713,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eval_predf pr p = true ->
       @sem A state f' (mk_instr_state rs pr m', None).
   Proof.
-    intros * EVAL_OP STORE TRUTHY VALID SEM UPD EVAL_PRED.
+    intros * EVALF EVAL_OP STORE TRUTHY VALID SEM UPD EVAL_PRED.
     pose proof SEM as SEM2.
     inversion UPD as [PRUNE]. unfold Option.bind in PRUNE. destr.
     inversion_clear PRUNE.
@@ -1443,22 +1726,29 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite forest_reg_gss.
       exploit sem_pred_expr_ident2; [exact MEM|]; intro HSEM_;
         inversion_clear HSEM_ as [x [HSEM1 HSEM2]].
-      inv REG. specialize (H res). apply exists_sem_pred in H. inversion_clear H as [r' [HNE HVAL]].
+      inv REG. specialize (H res).
+      pose proof H as HRES.
+      eapply sem_pred_expr_ident2 in HRES.
+      inversion_clear HRES as [r2 [HRES1 HRES2]].
+      apply exists_sem_pred in H. inversion_clear H as [r' [HNE HVAL]].
+      exploit sem_merge_list. eauto. instantiate (2 := args). intro HSPE. eapply sem_pred_expr_ident2 in HSPE.
+      inversion_clear HSPE as [l_ [HSPE1 HSPE2]].
       eapply sem_pred_expr_prune_predicated; eauto.
       eapply sem_pred_expr_app_predicated.
-      eapply sem_pred_expr_seq_app_val; [solve [eauto]| |].
-      eapply sem_pred_expr_seq_app. admit.
+      eapply sem_pred_expr_seq_app_val; [solve [eapply predicated_evaluable_all; eauto]|solve [eauto]| |].
+      eapply sem_pred_expr_seq_app; [solve [eapply predicated_evaluable_all; eauto]|solve [eauto]|].
       eapply sem_pred_expr_flap2.
-      eapply sem_pred_expr_seq_app. admit.
+      eapply sem_pred_expr_seq_app; [solve [eapply predicated_evaluable_all; eauto]|solve [eauto]|].
       eapply sem_pred_expr_pred_ret. econstructor. eauto. 3: { eauto. }
-      eauto. admit. eauto. inv PRED. eauto.
+      eauto. auto. eauto. inv PRED. eauto.
       rewrite eval_predf_Pand. rewrite EVAL_PRED.
       rewrite truthy_dflt. auto. auto.
     + auto.
-  Admitted.
+  Qed.
 
   Lemma sem_update_instr :
-    forall f i' i'' a sp p i p' f',
+    forall f i' i'' a sp p i p' f'
+      (EVALF: forest_evaluable (mk_ctx i sp ge) f),
       step_instr ge sp (Iexec i') a (Iexec i'') ->
       valid_mem (is_mem i) (is_mem i') ->
       sem (mk_ctx i sp ge) f (i', None) ->
@@ -1466,7 +1756,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       eval_predf (is_ps i') p = true ->
       sem (mk_ctx i sp ge) f' (i'', None).
   Proof.
-    inversion 1; subst; clear H; intros VALID SEM UPD EVAL_PRED; pose proof SEM as SEM2.
+    inversion 2; subst; clear H; intros VALID SEM UPD EVAL_PRED; pose proof SEM as SEM2.
     - inv UPD; auto.
     - eauto using sem_update_Iop_top.
     - eauto using sem_update_Iload_top.
