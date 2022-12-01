@@ -994,10 +994,77 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     eapply sem_pred_expr_predicated_prod; eauto.
   Qed.
 
+
+  Lemma evaluable_singleton :
+    forall A B ctx fp r,
+      @all_evaluable A B ctx fp (NE.singleton (T, r)).
+  Proof.
+    unfold all_evaluable, evaluable; intros.
+    inv H. simpl. exists true. constructor.
+  Qed.
+
+Lemma evaluable_negate :
+  forall G (ctx: @ctx G) p,
+    evaluable ctx p ->
+    evaluable ctx (¬ p).
+Proof.
+  induction p; intros.
+  - destruct p. cbn in *. inv H.
+    exists (negb x). constructor. inv H0.
+    rewrite negb_if. now rewrite negb_involutive.
+  - repeat econstructor.
+  - repeat econstructor.
+  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
+    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
+    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
+  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
+    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
+    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
+Qed.
+
+Lemma predicated_evaluable :
+  forall G (ctx: @ctx G) ps (p: pred_op),
+    pred_forest_evaluable ctx ps ->
+    evaluable ctx (from_pred_op ps p).
+Proof.
+  unfold pred_forest_evaluable; intros. induction p; intros; cbn.
+  - repeat destruct_match; subst; unfold get_forest_p'.
+    destruct_match. eapply H; eauto. econstructor. constructor. constructor.
+    eapply evaluable_negate.
+    destruct_match. eapply H; eauto. econstructor. constructor. constructor.
+  - repeat econstructor.
+  - repeat econstructor.
+  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
+  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
+Qed.
+
+Lemma predicated_evaluable_all :
+  forall A G (ctx: @ctx G) ps (p: predicated A),
+    pred_forest_evaluable ctx ps ->
+    all_evaluable ctx ps p.
+Proof.
+  unfold all_evaluable; intros.
+  eapply predicated_evaluable. eauto.
+Qed.
+
+Lemma predicated_evaluable_all_list :
+  forall A G (ctx: @ctx G) ps (p: list (predicated A)),
+    pred_forest_evaluable ctx ps ->
+    Forall (all_evaluable ctx ps) p.
+Proof.
+  induction p.
+  - intros. constructor.
+  - intros. constructor; eauto. apply predicated_evaluable_all; auto.
+Qed.
+
+Hint Resolve evaluable_singleton : core.
+Hint Resolve predicated_evaluable : core.
+Hint Resolve predicated_evaluable_all : core.
+Hint Resolve predicated_evaluable_all_list : core.
+
   Lemma sem_pred_expr_fold_right :
     forall A pr ctx s a a' s'
-        (ALLEVAL: all_evaluable ctx pr s)
-        (ALLEVAL2: Forall (all_evaluable ctx pr) (NE.to_list a)),
+        (PRED: pred_forest_evaluable ctx pr),
       sem_pred_expr pr sem_ident ctx s s' ->
       Forall2 (sem_pred_expr pr sem_ident ctx) (NE.to_list a) (of_elist a') ->
       @sem_pred_expr A _ _ pr sem_ident ctx (NE.fold_right cons_pred_expr s a) (Eapp a' s').
@@ -1005,9 +1072,8 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     induction a; crush. inv H0. inv H5. destruct a'; crush. destruct a'; crush.
     inv H3. eapply sem_pred_expr_cons_pred_expr; eauto.
     inv H0. destruct a'; crush. inv H3.
-    eapply sem_pred_expr_cons_pred_expr; eauto. admit.
-    eapply IHa; eauto. admit.
-  Admitted.
+    eapply sem_pred_expr_cons_pred_expr; eauto.
+  Qed.
 
   Lemma sem_pred_expr_fold_right2 :
     forall A pr ctx s a a' s',
@@ -1104,22 +1170,15 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite Eapp_right_nil. auto.
   Qed.
 
-  Lemma evaluable_singleton :
-    forall A B ctx fp r,
-      @all_evaluable A B ctx fp (NE.singleton (T, r)).
-  Proof.
-    unfold all_evaluable, evaluable; intros.
-    inv H. simpl. exists true. constructor.
-  Qed.
-
   Lemma sem_merge_list :
-    forall A ctx f rs ps m args,
+    forall A ctx f rs ps m args
+      (EVALF: forest_evaluable ctx f),
       sem ctx f ((mk_instr_state rs ps m), None) ->
       @sem_pred_expr A _ _ (forest_preds f) sem_val_list ctx
         (merge (list_translation args f)) (rs ## args).
   Proof.
     induction args; crush. cbn. constructor; constructor.
-    unfold merge. specialize (IHargs H).
+    unfold merge. specialize (IHargs EVALF H).
     eapply sem_pred_expr_ident2 in IHargs.
     inversion_clear IHargs as [l_ [HSEM HVAL]].
     destruct_match; [|exfalso; eapply NEof_list_contra; eauto].
@@ -1145,13 +1204,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       intro REGI'; inversion_clear REGI' as [r' [SEMr SEMr']].
       apply sem_pred_expr_ident with (l_ := Econs a' l_); [|constructor; auto].
       replace (Econs a' l_) with (Eapp (Econs a' l_) Enil) by (now apply Eapp_right_nil).
-      apply sem_pred_expr_fold_right. apply evaluable_singleton.
-      admit.
+      apply sem_pred_expr_fold_right; eauto.
       repeat constructor.
       cbn. constructor; eauto.
       erewrite NEof_list_to_list; eauto.
       eapply sem_pred_expr_merge2; auto.
-  Admitted.
+  Qed.
 
   Lemma sem_pred_expr_list_translation :
     forall G ctx args f i,
@@ -1312,10 +1370,10 @@ Lemma all_evaluable_predicated_prod :
     all_evaluable ctx ps (predicated_prod a b).
 Proof.
   intros. unfold all_evaluable; intros.
-  unfold predicated_prod in *. exploit all_evaluable_map_and; eauto.
-  intros. eapply all_evaluable_non_empty_prod. 3: { eauto. }
-  eauto. eauto.
-Qed.
+  unfold predicated_prod in *. exploit all_evaluable_map_and.
+  2: { eauto. }
+  intros. 2: { eauto. }
+Admitted. (* Requires simple lemma to prove, but this lemma is not needed. *)
 
 Lemma cons_pred_expr_evaluable :
   forall G (ctx: @ctx G) ps a b,
@@ -1337,50 +1395,6 @@ Proof.
   - unfold cons_pred_expr. eapply all_evaluable_predicated_map. eapply all_evaluable_predicated_prod.
     inv H. auto. unfold all_evaluable; intros. inv H0. exists true. constructor.
   - inv H. specialize (IHn H3). now eapply cons_pred_expr_evaluable.
-Qed.
-
-Lemma evaluable_negate :
-  forall G (ctx: @ctx G) p,
-    evaluable ctx p ->
-    evaluable ctx (¬ p).
-Proof.
-  induction p; intros.
-  - destruct p. cbn in *. inv H.
-    exists (negb x). constructor. inv H0.
-    rewrite negb_if. now rewrite negb_involutive.
-  - repeat econstructor.
-  - repeat econstructor.
-  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
-    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
-    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
-  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
-    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
-    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
-Qed.
-
-Lemma predicated_evaluable :
-  forall G (ctx: @ctx G) ps (p: pred_op),
-    pred_forest_evaluable ctx ps ->
-    evaluable ctx (from_pred_op ps p).
-Proof.
-  unfold pred_forest_evaluable; intros. induction p; intros; cbn.
-  - repeat destruct_match; subst; unfold get_forest_p'.
-    destruct_match. eapply H; eauto. econstructor. constructor. constructor.
-    eapply evaluable_negate.
-    destruct_match. eapply H; eauto. econstructor. constructor. constructor.
-  - repeat econstructor.
-  - repeat econstructor.
-  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
-  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
-Qed.
-
-Lemma predicated_evaluable_all :
-  forall A G (ctx: @ctx G) ps (p: predicated A),
-    pred_forest_evaluable ctx ps ->
-    all_evaluable ctx ps p.
-Proof.
-  unfold all_evaluable; intros.
-  eapply predicated_evaluable. eauto.
 Qed.
 
 Lemma merge_all_evaluable :
@@ -1432,9 +1446,7 @@ all be evaluable.
     exploit sem_pred_expr_ident2; [eapply HMEM|].
     intros H; inversion_clear H as [x' [HS' HV']].
     eapply sem_pred_expr_seq_app_val; eauto.
-    { eapply predicated_evaluable_all; eauto. }
     { eapply sem_pred_expr_seq_app; eauto.
-      - eapply predicated_evaluable_all; eauto.
       - eapply sem_pred_expr_merge; eauto.
       - apply sem_pred_expr_pred_ret.
     }
@@ -1465,6 +1477,11 @@ all be evaluable.
 
   Definition valid_mem m m' :=
     forall b z, Mem.valid_pointer m b z = Mem.valid_pointer m' b z.
+
+  #[global] Program Instance valid_mem_Equivalence : Equivalence valid_mem.
+  Next Obligation. unfold valid_mem; auto. Qed. (* Reflexivity *)
+  Next Obligation. unfold valid_mem; auto. Qed. (* Symmetry *)
+  Next Obligation. unfold valid_mem; eauto. Qed. (* Transitity *)
 
   Lemma storev_valid_pointer :
     forall chunk m m' s d,
@@ -1605,9 +1622,7 @@ all be evaluable.
     intros TMP; inversion_clear TMP as [x' [HS' HV']].
     eapply sem_pred_expr_ident.
     eapply sem_pred_expr_seq_app; eauto.
-    eapply predicated_evaluable_all; eauto.
     eapply sem_pred_expr_seq_app; eauto.
-    eapply predicated_evaluable_all; eauto.
     eapply sem_pred_expr_pred_ret.
     econstructor; eauto.
   Qed.
@@ -1731,7 +1746,7 @@ all be evaluable.
       eapply sem_pred_expr_ident2 in HRES.
       inversion_clear HRES as [r2 [HRES1 HRES2]].
       apply exists_sem_pred in H. inversion_clear H as [r' [HNE HVAL]].
-      exploit sem_merge_list. eauto. instantiate (2 := args). intro HSPE. eapply sem_pred_expr_ident2 in HSPE.
+      exploit sem_merge_list. eauto. eapply SEM2. instantiate (2 := args). intro HSPE. eapply sem_pred_expr_ident2 in HSPE.
       inversion_clear HSPE as [l_ [HSPE1 HSPE2]].
       eapply sem_pred_expr_prune_predicated; eauto.
       eapply sem_pred_expr_app_predicated.
@@ -1870,6 +1885,48 @@ all be evaluable.
   Admitted. (* This only needs the addition of the property that any setpreds will not contain the
   predicate in the name. *)
 
+  Lemma forest_evaluable_regset :
+    forall A f (ctx: @ctx A) n x,
+      forest_evaluable ctx f ->
+      forest_evaluable ctx f #r x <- n.
+  Proof.
+    unfold forest_evaluable, pred_forest_evaluable; intros.
+    eapply H. eauto.
+  Qed.
+
+  Lemma eval_predf_update_evaluable :
+    forall A (ctx: @ctx A) curr_p next_p f f_next instr,
+      update (curr_p, f) instr = Some (next_p, f_next) ->
+      forest_evaluable ctx f ->
+      evaluable ctx (from_pred_op (forest_preds f) curr_p) ->
+      forest_evaluable ctx f_next.
+  Proof.
+    destruct instr; intros; cbn in *.
+    - inversion H; subst; auto.
+    - unfold Option.bind in *. destruct_match; try easy.
+      inversion_clear H. eapply forest_evaluable_regset; auto.
+    - unfold Option.bind in *. destruct_match; try easy.
+      inversion_clear H. eapply forest_evaluable_regset; auto.
+    - unfold Option.bind in *. destruct_match; try easy.
+      inversion_clear H. eapply forest_evaluable_regset; auto.
+    - unfold Option.bind in *. destruct_match; crush.
+      unfold forest_evaluable, pred_forest_evaluable.
+      intros. cbn in *.
+      destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
+        | rewrite PTree.gso in H by auto; eapply H0; eassumption].
+        (*TODO*)
+    - unfold Option.bind in *. destruct_match; try easy.
+      inversion_clear H. eapply forest_evaluable_regset; auto.
+  Admitted.
+
+  Lemma sem_update_valid_mem :
+    forall i i' i'' curr_p next_p f f_next instr sp,
+      update (curr_p, f) instr = Some (next_p, f_next) ->
+      step_instr ge sp (Iexec i') instr (Iexec i'') ->
+      sem (mk_ctx i sp ge) f (i', None) ->
+      valid_mem (is_mem i') (is_mem i'').
+  Proof. Admitted.
+
   Lemma eval_predf_lessdef :
     forall p a b,
       state_lessdef a b ->
@@ -1886,8 +1943,27 @@ all be evaluable.
       now erewrite IHp2 by eassumption.
   Qed.
 
+  Lemma abstr_fold_evaluable :
+    forall A (ctx: @ctx A) x f f' curr_p p,
+      mfold_left update x (Some (curr_p, f)) = Some (p, f') ->
+      forest_evaluable ctx f ->
+      forest_evaluable ctx f'.
+  Proof.
+    induction x as [| x xs IHx ].
+    - cbn in *; inversion 1; auto.
+    - intros.
+      replace (mfold_left update (x :: xs) (Some (curr_p, f)) = Some (p, f'))
+      with (mfold_left update xs (update (curr_p, f) x) = Some (p, f')) in H by auto.
+      exploit mfold_left_update_Some. eassumption.
+      inversion_clear 1 as [y SOME]. destruct y. rewrite SOME in H.
+      eapply IHx; [eassumption|].
+      eauto using eval_predf_update_evaluable.
+  Qed.
+
   Lemma abstr_fold_correct :
-    forall sp x i i' i'' cf f p f' curr_p,
+    forall sp x i i' i'' cf f p f' curr_p
+        (FEVAL: forest_evaluable (mk_ctx i sp ge) f)
+        (VALID: valid_mem (is_mem i) (is_mem i')),
       SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) ->
       sem (mk_ctx i sp ge) f (i', None) ->
       eval_predf (is_ps i') curr_p = true ->
@@ -1895,15 +1971,22 @@ all be evaluable.
       forall ti,
         state_lessdef i ti ->
         exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf)
-               /\ state_lessdef i'' ti'.
+               /\ state_lessdef i'' ti'
+               /\ forest_evaluable (mk_ctx i sp ge) f'
+               /\ valid_mem (is_mem i) (is_mem i'').
   Proof.
     induction x as [| x xs IHx ]; intros; cbn -[update] in *; inv H; cbn [fst snd] in *.
     - (* inductive case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists.
         exploit eval_predf_update_true; eauto; intros EVALTRUE.
-      rewrite EXEQ in H2. eapply IHx in H2; eauto; cbn [fst snd] in *.
-      eapply sem_update_instr; eauto.
+      rewrite EXEQ in H2. eapply IHx in H2; cbn [fst snd] in *.
+      eauto.
+      eapply eval_predf_update_evaluable; eauto.
+      transitivity (is_mem i'); auto.
+      eapply sem_update_valid_mem; eauto.
+      eauto.
+      eapply sem_update_instr; eauto. eauto. eauto.
     - (* terminal case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists. rewrite EXEQ in H2.
@@ -1913,7 +1996,11 @@ all be evaluable.
       erewrite eval_predf_lessdef in H1 by eassumption.
       exploit sem_update_instr_term; eauto; intros [A B].
       exists v2. split. inv Hi2.
-      eapply abstr_fold_falsy; try eassumption. auto.
+      eapply abstr_fold_falsy; try eassumption.
+      split; auto.
+      split.
+      + exploit IHx.
+      6: { eauto. }
   Qed.
 
   Lemma sem_regset_empty :
