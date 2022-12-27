@@ -88,10 +88,29 @@ Proof.
   constructor; tauto.
 Qed.
 
+Lemma all_evaluable2_cons :
+  forall A B C sem ctx b a,
+    all_evaluable2 ctx sem (NE.cons a b) ->
+    @all_evaluable2 A B C ctx sem b.
+Proof.
+  unfold all_evaluable2; intros.
+  enough (NE.In (p, y) (NE.cons a b)); eauto.
+  constructor; tauto.
+Qed.
+
 Lemma all_evaluable_cons2 :
   forall A B pr ctx b a p,
     @all_evaluable A B ctx pr (NE.cons (p, a) b) ->
     p_evaluable ctx (from_pred_op pr p).
+Proof.
+  unfold all_evaluable; intros.
+  eapply H. constructor; eauto.
+Qed.
+
+Lemma all_evaluable2_cons2 :
+  forall A B C sem ctx b a p,
+    @all_evaluable2 A B C ctx sem (NE.cons (p, a) b) ->
+    evaluable sem ctx a.
 Proof.
   unfold all_evaluable; intros.
   eapply H. constructor; eauto.
@@ -1914,23 +1933,54 @@ all be evaluable.
     eauto using sem_pexpr_negate.
   Qed.
 
+  Lemma parts_evaluable :
+    forall A (ctx: @ctx A) b p0,
+      evaluable sem_pred ctx p0 ->
+      evaluable sem_pexpr ctx (Plit (b, p0)).
+  Proof.
+    intros. unfold evaluable in *. inv H.
+    destruct b. do 2 econstructor. eauto.
+    exists (negb x). constructor. rewrite negb_involutive. auto.
+  Qed.
+
+  Lemma p_evaluable_Pand :
+    forall A (ctx: @ctx A) a b,
+      p_evaluable ctx a ->
+      p_evaluable ctx b ->
+      p_evaluable ctx (a ∧ b).
+  Proof.
+    intros. inv H. inv H0.
+    econstructor. econstructor; eauto.
+  Qed.
+
   Lemma from_predicated_evaluable :
-    forall A (ctx: @ctx A) f b,
+    forall A (ctx: @ctx A) f b a,
       pred_forest_evaluable ctx f ->
-      forall a,
-p_evaluable ctx (from_predicated b f a).
+      all_evaluable2 ctx sem_pred a ->
+      p_evaluable ctx (from_predicated b f a).
   Proof.
     induction a.
-    cbn. destruct_match.
+    cbn. destruct_match; intros.
     eapply evaluable_impl.
     eauto using predicated_evaluable.
-    econstructor. econstructor.
+    unfold all_evaluable2 in H0. unfold p_evaluable.
+    eapply parts_evaluable. eapply H0. econstructor.
+
+    intros. cbn. destruct_match.
+    eapply p_evaluable_Pand.
+    eapply all_evaluable2_cons2 in H0.
+    eapply evaluable_impl.
+    eauto using predicated_evaluable.
+    unfold all_evaluable2 in H0. unfold p_evaluable.
+    eapply parts_evaluable. eapply H0.
+    eapply all_evaluable2_cons in H0. eauto.
+  Qed.
 
   Lemma eval_predf_update_evaluable :
     forall A (ctx: @ctx A) curr_p next_p f f_next instr,
       update (curr_p, f) instr = Some (next_p, f_next) ->
       forest_evaluable ctx f ->
-      evaluable ctx (from_pred_op (forest_preds f) curr_p) ->
+      p_evaluable ctx (from_pred_op (forest_preds f) curr_p) ->
       forest_evaluable ctx f_next.
   Proof.
     destruct instr; intros; cbn in *.
@@ -1946,7 +1996,9 @@ p_evaluable ctx (from_predicated b f a).
       intros. cbn in *.
       destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
         | rewrite PTree.gso in H by auto; eapply H0; eassumption].
-
+      eapply evaluable_impl.
+      eapply p_evaluable_Pand. admit. admit.
+      eapply from_predicated_evaluable; auto.
     - unfold Option.bind in *. destruct_match; try easy.
       inversion_clear H. eapply forest_evaluable_regset; auto.
   Admitted.
