@@ -1976,14 +1976,19 @@ all be evaluable.
     eapply all_evaluable2_cons in H0. eauto.
   Qed.
 
+  Lemma all_evaluable_pred_ret :
+    forall A B G (ctx: @ctx G) (sem: @Abstr.ctx G -> A -> B -> Prop)
+        (a: A) (b: B),
+      sem ctx a b ->
+      all_evaluable2 ctx sem (pred_ret a).
+  Admitted.
+
   Lemma eval_predf_seq_app_evaluable :
-    forall A B C D (ctx: @ctx A) (sem: @Abstr.ctx A -> C -> D -> Prop)
-      (a: predicated (B -> C)) b,
-      all_evaluable2 ctx sem a ->
-      all_evaluable2 ctx sem b ->
-      all_evaluable2 ctx sem (seq_app a b).
+    forall A B G (ctx: @ctx G) (sem: @Abstr.ctx G -> A -> B -> Prop) (l: predicated A) a,
+      all_evaluable2 ctx sem l ->
+      all_evaluable2 ctx sem (seq_app a l).
   Proof.
-    intros.
+    intros. unfold seq_app.
 
   Lemma eval_predf_update_evaluable :
     forall A (ctx: @ctx A) curr_p next_p f f_next instr,
