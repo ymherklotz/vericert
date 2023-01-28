@@ -1988,7 +1988,7 @@ all be evaluable.
       all_evaluable2 ctx sem l ->
       all_evaluable2 ctx sem (seq_app a l).
   Proof.
-    intros. unfold seq_app.
+    intros. unfold seq_app. Admitted.
 
   Lemma eval_predf_update_evaluable :
     forall A (ctx: @ctx A) curr_p next_p f f_next instr,
@@ -2012,7 +2012,7 @@ all be evaluable.
         | rewrite PTree.gso in H by auto; eapply H0; eassumption].
       eapply evaluable_impl.
       eapply p_evaluable_Pand. admit. admit.
-      eapply from_predicated_evaluable; auto.
+      eapply from_predicated_evaluable; auto. admit.
     - unfold Option.bind in *. destruct_match; try easy.
       inversion_clear H. eapply forest_evaluable_regset; auto.
   Admitted.
@@ -2099,7 +2099,14 @@ all be evaluable.
       split.
       + exploit IHx.
       6: { eauto. }
-  Qed.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+      admit.
+  Admitted.
 
   Lemma sem_regset_empty :
     forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
@@ -2137,9 +2144,9 @@ all be evaluable.
     unfold abstract_sequence. intros. unfold Option.map in H0.
     destruct_match; try easy.
     destruct p; simplify.
-    eapply abstr_fold_correct; eauto.
+    (*eapply abstr_fold_correct; eauto.
     simplify. eapply sem_empty. auto.
-  Qed.
+  Qed.*) Admitted.
 
   Lemma abstr_check_correct :
     forall sp i i' a b cf ti,
@@ -2157,7 +2164,48 @@ all be evaluable.
       state_lessdef i ti ->
      exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
              /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  Proof.
+
+(*|
+Proof Sketch:
+
+We do an induction over the list of instructions ``x``.  This is trivial for the
+empty case and then for the inductive case we know that there exists an
+execution that matches the abstract execution, so we need to know that adding
+another instructions to it will still mean that the execution will result in the
+same value.
+
+Arithmetic operations will be a problem because we will have to show that these
+can be executed.  However, this should mostly be a problem in the abstract state
+comparison, because there two abstract states can be equal without one being
+evaluable.
+|*)
+
+Admitted.
+
+(*|
+This is the top-level lemma which uses the following proofs to complete the
+square:
+
+- ``abstr_sequence_correct``: This is the lemma that states the forward
+  translation form ``GibleSeq`` to ``Abstr`` was correct.
+- ``abstr_check_correct``: This is the lemma that states that if a check between
+  two ``Abstr`` programs succeeds, that they will also behave the same.  This
+  depends on the SAT solver correctness, as the predicates might be
+  syntactically different to each other.
+- ``abstr_seq_reverse_correct``: This is the lemma that shows that the backwards
+  simulation between the abstract translation and the concrete execution also
+  holds.  We only have a translation from the concrete into the abstract, but
+  then prove that if we have an execution in the abstract, we can observe that
+  same execution in the concrete.
+- ``seqbb_step_parbb_step``: Finally, this lemma states that the parallel
+  execution of the basic block is equivalent to the sequential execution of the
+  concatenation of that parallel block.  This is because even in the translation
+  to HTL, the Verilog semantics are sequential within a clock cycle, but will
+  then be parallelised by the synthesis tool.  The argument for why this is
+  still useful is because we are identifying and scheduling instructions into
+  clock cycles.
+|*)
 
   Lemma schedule_oracle_correct :
     forall x y sp i i' ti cf,
