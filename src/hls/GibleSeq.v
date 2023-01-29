@@ -309,3 +309,8 @@ Proof.
   exploit IHa; eauto; simplify.
   eexists; split; eauto. econstructor; eauto.
 Qed.
+
+Lemma step_instr_unchanged_state :
+  forall A (ge: Genv.t A unit) sp r st st' cf,
+    step_instr ge sp (Iexec st) r (Iterm st' cf) -> st = st'.
+Proof. intros. inv H; auto. Qed.

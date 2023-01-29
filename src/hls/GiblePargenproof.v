@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2023 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,7 +53,8 @@ RTLPargenproof
 RTLBlock to abstract translation
 ================================
 
-Correctness of translation from RTLBlock to the abstract interpretation language.
+Correctness of translation from RTLBlock to the abstract interpretation
+language.
 |*)
 
 Definition is_regs i := match i with mk_instr_state rs _ _ => rs end.
@@ -194,7 +195,8 @@ Definition check_dest i r' :=
   | _ => false
   end.
 
-Lemma check_dest_dec i r : {check_dest i r = true} + {check_dest i r = false}.
+Lemma check_dest_dec i r :
+  {check_dest i r = true} + {check_dest i r = false}.
 Proof. destruct (check_dest i r); tauto. Qed.
 
 Fixpoint check_dest_l l r :=
@@ -209,7 +211,8 @@ Lemma check_dest_l_forall :
   Forall (fun x => check_dest x r = false) l.
 Proof. induction l; crush. Qed.
 
-Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
+Lemma check_dest_l_dec i r :
+  {check_dest_l i r = true} + {check_dest_l i r = false}.
 Proof. destruct (check_dest_l i r); tauto. Qed.
 
 Lemma match_states_list :
@@ -1880,21 +1883,19 @@ all be evaluable.
     forall xs x v,
       mfold_left update xs x = Some v ->
       exists y, x = Some y.
-  Proof. Admitted.
+  Proof.
+    induction xs; intros.
+    { cbn in *. inv H. eauto. }
+    cbn in *. unfold Option.bind in *. exploit IHxs; eauto.
+    intros. simplify. destruct x; crush.
+    eauto.
+  Qed.
 
   Lemma step_instr_term_exists :
     forall A B ge sp v x v2 cf,
       @step_instr A B ge sp (Iexec v) x (Iterm v2 cf) ->
       exists p, x = RBexit p cf.
   Proof using. inversion 1; eauto. Qed.
-
-  Lemma abstr_fold_falsy :
-    forall A i sp ge f i' cf p f' ilist p',
-      @sem A (mk_ctx i sp ge) f (i', cf) ->
-      mfold_left update ilist (Some (p, f)) = Some (p', f') ->
-      eval_predf (is_ps i') p = false ->
-      sem (mk_ctx i sp ge) f' (i', cf).
-  Proof. Admitted.
 
   Lemma eval_predf_update_true :
     forall i i' curr_p next_p f f_next instr sp,
@@ -2058,6 +2059,38 @@ all be evaluable.
       eauto using eval_predf_update_evaluable.
   Qed.
 
+(*|
+``abstr_fold_falsy``: This lemma states that when we are at the end of an
+execution, the values in the register map do not continue to change.  This
+should mean that we can show the forest is still evaluable if it was evaluable
+at any point at the end of the execution.
+|*)
+
+  Lemma abstr_fold_falsy :
+    forall A i sp ge f res p f' ilist p',
+      @sem A (mk_ctx i sp ge) f res ->
+      forest_evaluable (mk_ctx i sp ge) f ->
+      mfold_left update ilist (Some (p, f)) = Some (p', f') ->
+      eval_predf (is_ps (fst res)) p = false ->
+      sem (mk_ctx i sp ge) f' res /\ forest_evaluable (mk_ctx i sp ge) f'.
+  Proof. Admitted.
+
+  (* Lemma abstr_fold_falsy_evaluable : *)
+  (*   forall sp x i i' i'' cf f p f' curr_p *)
+  (*       (FEVAL: forest_evaluable (mk_ctx i sp ge) f) *)
+  (*       (VALID: valid_mem (is_mem i) (is_mem i')), *)
+  (*     SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) -> *)
+  (*     sem (mk_ctx i sp ge) f (i', Some cf) -> *)
+  (*     mfold_left update x (Some (curr_p, f)) = Some (p, f') -> *)
+  (*     eval_predf (is_ps i') curr_p = false -> *)
+
+  Lemma forest_evaluable_lessdef :
+    forall A (ge: Genv.t A unit) sp st st' f,
+      forest_evaluable (mk_ctx st sp ge) f ->
+      state_lessdef st st' ->
+      forest_evaluable (mk_ctx st' sp ge) f.
+  Proof. Admitted. (* easy *)
+
   Lemma abstr_fold_correct :
     forall sp x i i' i'' cf f p f' curr_p
         (FEVAL: forest_evaluable (mk_ctx i sp ge) f)
@@ -2077,36 +2110,39 @@ all be evaluable.
     - (* inductive case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists.
-        exploit eval_predf_update_true; eauto; intros EVALTRUE.
+        exploit eval_predf_update_true; (* TODO *)
+        eauto; intros EVALTRUE.
       rewrite EXEQ in H2. eapply IHx in H2; cbn [fst snd] in *.
       eauto.
-      eapply eval_predf_update_evaluable; eauto.
+      eapply eval_predf_update_evaluable; eauto. (* TODO *)
       transitivity (is_mem i'); auto.
-      eapply sem_update_valid_mem; eauto.
+      eapply sem_update_valid_mem; eauto. (* TODO *)
       eauto.
-      eapply sem_update_instr; eauto. eauto. eauto.
+      eapply sem_update_instr; eauto. eauto. eauto. (* MAIN TODO *)
     - (* terminal case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists. rewrite EXEQ in H2.
-      exploit state_lessdef_sem; eauto; intros H; inversion H as [v [Hi LESSDEF]]; clear H.
-      exploit step_instr_lessdef_term; eauto; intros H; inversion H as [v2 [Hi2 LESSDEF2]]; clear H.
+      exploit state_lessdef_sem; (* TODO *)
+      eauto; intros H; inversion H as [v [Hi LESSDEF]]; clear H.
+      exploit step_instr_lessdef_term; (* TODO *)
+      eauto; intros H; inversion H as [v2 [Hi2 LESSDEF2]]; clear H.
       exploit step_instr_term_exists; eauto; inversion 1 as [? ?]; subst; clear H.
       erewrite eval_predf_lessdef in H1 by eassumption.
-      exploit sem_update_instr_term; eauto; intros [A B].
-      exists v2. split. inv Hi2.
-      eapply abstr_fold_falsy; try eassumption.
-      split; auto.
-      split.
-      + exploit IHx.
-      6: { eauto. }
-      admit.
-      admit.
-      admit.
-      admit.
-      admit.
-      admit.
-      admit.
-  Admitted.
+      exploit sem_update_instr_term; (* TODO *)
+      eauto; intros [A B].
+      exists v2.
+      exploit abstr_fold_falsy. (* TODO *)
+      apply A.
+      eapply forest_evaluable_lessdef; (* TODO *)
+      try eassumption.
+      eapply eval_predf_update_evaluable. (* TODO *)
+      eassumption. eassumption. auto.
+      eassumption. cbn. inversion Hi2; subst. auto. intros.
+      inversion_clear H as [Hsem Hforest]. split. auto. split. auto.
+      split. eapply forest_evaluable_lessdef; (* TODO *)
+      try eassumption.
+      symmetry. auto. inversion H7; subst. auto.
+  Qed.
 
   Lemma sem_regset_empty :
     forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
@@ -2143,10 +2179,11 @@ all be evaluable.
   Proof.
     unfold abstract_sequence. intros. unfold Option.map in H0.
     destruct_match; try easy.
-    destruct p; simplify.
-    (*eapply abstr_fold_correct; eauto.
-    simplify. eapply sem_empty. auto.
-  Qed.*) Admitted.
+    destruct p as [p TMP]; simplify.
+    exploit abstr_fold_correct; eauto; crush.
+    { apply sem_empty. }
+    exists x0. auto.
+  Qed.
 
   Lemma abstr_check_correct :
     forall sp i i' a b cf ti,
@@ -2155,7 +2192,17 @@ all be evaluable.
       state_lessdef i ti ->
       exists ti', sem (mk_ctx ti sp ge) b (ti', cf)
              /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  Proof.
+
+(*|
+Proof Sketch:
+
+Two abstract states can be equivalent, without it being obvious that they can
+actually both be executed assuming one can be executed.  One will therefore have
+to add a few more assumptions to makes it possible to execute the other.
+|*)
+
+  Admitted.
 
   Lemma abstr_seq_reverse_correct :
     forall sp x i i' ti cf x',
@@ -2181,7 +2228,7 @@ comparison, because there two abstract states can be equal without one being
 evaluable.
 |*)
 
-Admitted.
+  Admitted.
 
 (*|
 This is the top-level lemma which uses the following proofs to complete the
@@ -2231,7 +2278,13 @@ square:
       match_states s ts ->
       exists ts', step_cf_instr tge ts cf t ts'
              /\ match_states s' ts'.
-  Proof. Admitted.
+  Proof.
+
+(*|
+Proof Sketch:  Trivial because of structural equality.
+|*)
+
+  Admitted.
 
   Lemma match_states_stepBB :
     forall s f sp pc rs pr m sf' f' trs tps tm rs' pr' m' trs' tpr' tm',
