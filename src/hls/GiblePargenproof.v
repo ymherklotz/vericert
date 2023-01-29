@@ -79,6 +79,12 @@ Definition pred_forest_evaluable {A} (ctx: @ctx A) (ps: PTree.t pred_pexpr) :=
 Definition forest_evaluable {A} (ctx: @ctx A) (f: forest) :=
   pred_forest_evaluable ctx f.(forest_preds).
 
+(* Lemma all_evaluable2_NEmap : *)
+(*   forall G A (ctx: @ctx G) (f: (pred_op * A) -> (pred_op * pred_expression)) (x: predicated A), *)
+(*     all_evaluable2 ctx sem_pred (NE.map f x). *)
+(* Proof. *)
+(*   induction x. *)
+
 Lemma all_evaluable_cons :
   forall A B pr ctx b a,
     all_evaluable ctx pr (NE.cons a b) ->
@@ -1998,7 +2004,7 @@ all be evaluable.
       p_evaluable ctx (from_pred_op (forest_preds f) curr_p) ->
       forest_evaluable ctx f_next.
   Proof.
-    destruct instr; intros; cbn in *.
+    destruct instr; intros; cbn -[seq_app pred_ret merge list_translation] in *.
     - inversion H; subst; auto.
     - unfold Option.bind in *. destruct_match; try easy.
       inversion_clear H. eapply forest_evaluable_regset; auto.
@@ -2008,12 +2014,13 @@ all be evaluable.
       inversion_clear H. eapply forest_evaluable_regset; auto.
     - unfold Option.bind in *. destruct_match; crush.
       unfold forest_evaluable, pred_forest_evaluable.
-      intros. cbn in *.
+      intros. cbn -[seq_app pred_ret merge list_translation] in *.
       destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
         | rewrite PTree.gso in H by auto; eapply H0; eassumption].
       eapply evaluable_impl.
-      eapply p_evaluable_Pand. admit. admit.
-      eapply from_predicated_evaluable; auto. admit.
+      eapply p_evaluable_Pand; auto.
+      eapply from_predicated_evaluable; auto.
+      admit.
     - unfold Option.bind in *. destruct_match; try easy.
       inversion_clear H. eapply forest_evaluable_regset; auto.
   Admitted.
@@ -2110,7 +2117,7 @@ at any point at the end of the execution.
     - (* inductive case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists.
-        exploit eval_predf_update_true; (* TODO *)
+        exploit eval_predf_update_true; (* TODO: Needs an extra property about setpred (global, static) *)
         eauto; intros EVALTRUE.
       rewrite EXEQ in H2. eapply IHx in H2; cbn [fst snd] in *.
       eauto.
