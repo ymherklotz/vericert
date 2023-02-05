@@ -592,9 +592,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       constructor. inv H. auto.
     - inv H. constructor.
     - inv H. constructor.
-    - inv H. eapply IHp1 in H2. eapply IHp2 in H4. rewrite negb_andb.
-      constructor; auto.
-    - inv H. rewrite negb_orb. constructor; auto.
+    - inv H.
+      + constructor. replace true with (negb false) by trivial; eauto.
+      + constructor; try replace false with (negb true) by trivial; auto.
+    - inv H.
+      + constructor. replace false with (negb true) by trivial; eauto.
+      + constructor; try replace true with (negb false) by trivial; auto.
   Qed.
 
   Lemma sem_pexpr_evaluable :
@@ -607,8 +610,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       econstructor. eapply sem_pexpr_negate. eauto.
     - econstructor. constructor.
     - econstructor. constructor.
-    - econstructor. constructor; eauto.
-    - econstructor. constructor; eauto.
+    - destruct x0.
+      { eexists. apply sem_pexpr_Pand_second; eauto. }
+      econstructor. constructor; eauto.
+    - destruct x0.
+      { econstructor. constructor; eauto. }
+      eexists. apply sem_pexpr_Por_second; eauto.
   Qed.
 
   Lemma sem_pexpr_eval1 :
@@ -639,11 +646,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
        pose proof (sem_pexpr_evaluable _ _ _ _ H p1) as EVAL.
        inversion_clear EVAL as [x EVAL2].
        replace false with (x && false) by eauto with bool.
-       constructor; auto.
+       apply sem_pexpr_Pand; auto.
      - rewrite eval_predf_Por in H0.
        apply orb_false_iff in H0. inv H0.
        replace false with (false || false) by auto.
-       constructor; auto.
+       apply sem_pexpr_Por; auto.
   Qed.
 
   Lemma sem_pexpr_eval2 :
@@ -673,12 +680,12 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
        pose proof (sem_pexpr_evaluable _ _ _ _ H p2) as EVAL.
        inversion_clear EVAL as [x EVAL2].
        replace true with (true || x) by auto.
-       constructor; auto.
+       apply sem_pexpr_Por; auto.
        eapply IHp2 in H1.
        pose proof (sem_pexpr_evaluable _ _ _ _ H p1) as EVAL.
        inversion_clear EVAL as [x EVAL2].
        replace true with (x || true) by eauto with bool.
-       constructor; auto.
+       apply sem_pexpr_Por; auto.
   Qed.
 
   Lemma sem_pexpr_eval :
@@ -770,7 +777,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     constructor; auto.
     eapply sem_pexpr_eval; eauto.
     eapply sem_pred_expr_cons_false. cbn.
-    replace false with (true && false) by auto. constructor; auto.
+    replace false with (true && false) by auto. apply sem_pexpr_Pand; auto.
     eapply sem_pexpr_eval; eauto. eauto.
   Qed.
 
@@ -901,7 +908,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         constructor; auto. constructor.
         eapply sem_pred_expr_cons_false; eauto. cbn.
         replace false with (true && false) by auto.
-        constructor; auto.
+        apply sem_pexpr_Pand; auto.
     - unfold predicated_prod. simplify.
       rewrite NEapp_NEmap.
       inv H. eapply sem_pred_expr_NEapp.
@@ -918,7 +925,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
 
         specialize (IHb EVALUABLE H8). eapply sem_pred_expr_cons_false; auto.
         replace false with (true && false) by auto.
-        constructor; auto.
+        apply sem_pexpr_Pand; auto.
       }
       { exploit IHa. eauto. eauto. apply H0. intros.
         unfold predicated_prod in *.
@@ -1043,18 +1050,8 @@ Lemma evaluable_negate :
     p_evaluable ctx p ->
     p_evaluable ctx (¬ p).
 Proof.
-  induction p; intros.
-  - destruct p. cbn in *. inv H.
-    exists (negb x). constructor. inv H0.
-    rewrite negb_if. now rewrite negb_involutive.
-  - repeat econstructor.
-  - repeat econstructor.
-  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
-    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
-    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
-  - cbn. exploit IHp1. inv H. inv H0. econstructor. eauto.
-    intros. exploit IHp2. inv H. inv H1. econstructor. eauto.
-    intros.  inv H0. inv H1. econstructor. econstructor; eauto.
+  unfold p_evaluable, evaluable in *; intros.
+  inv H. eapply sem_pexpr_negate in H0. econstructor; eauto.
 Qed.
 
 Lemma predicated_evaluable :
@@ -1069,8 +1066,8 @@ Proof.
     destruct_match. eapply H; eauto. econstructor. constructor. constructor.
   - repeat econstructor.
   - repeat econstructor.
-  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
-  - inv IHp1. inv IHp2. econstructor. constructor; eauto.
+  - inv IHp1. inv IHp2. econstructor. apply sem_pexpr_Pand; eauto.
+  - inv IHp1. inv IHp2. econstructor. apply sem_pexpr_Por; eauto.
 Qed.
 
 Lemma predicated_evaluable_all :
@@ -1206,8 +1203,7 @@ Hint Resolve predicated_evaluable_all_list : core.
   Qed.
 
   Lemma sem_merge_list :
-    forall A ctx f rs ps m args
-      (EVALF: forest_evaluable ctx f),
+    forall A ctx f rs ps m args,
       sem ctx f ((mk_instr_state rs ps m), None) ->
       @sem_pred_expr A _ _ (forest_preds f) sem_val_list ctx
         (merge (list_translation args f)) (rs ## args).
@@ -1273,7 +1269,7 @@ Lemma evaluable_and_true :
     p_evaluable ctx (from_pred_op ps (p ∧ T)).
 Proof.
   intros. unfold evaluable in *. inv H. exists (x && true). cbn.
-  constructor; auto. constructor.
+  apply sem_pexpr_Pand; auto. constructor.
 Qed.
 
 Lemma NEin_map :
@@ -1346,12 +1342,12 @@ Proof.
     unfold evaluable.
     exploit H. constructor.
     intros [Ha Hb]. inv Ha. inv Hb.
-    exists (x && x0). constructor; auto.
+    exists (x && x0). apply sem_pexpr_Pand; auto.
   - intros. unfold all_evaluable; cbn; intros. inv H0. inv H2.
     + repeat destruct_match. inv Heqp0. inv H0.
       specialize (H p2 a1 p3 b ltac:(constructor; eauto)).
       inv H. inv H0. inv H1. exists (x && x0).
-      constructor; eauto.
+      apply sem_pexpr_Pand; eauto.
     + eapply IHa; intros. eapply H. econstructor. right. eauto.
       eauto.
 Qed.
@@ -1936,7 +1932,8 @@ all be evaluable.
     unfold evaluable.
     inversion_clear 1 as [b1 SEM1].
     inversion_clear 1 as [b2 SEM2].
-    econstructor. constructor;
+    unfold Pimplies.
+    econstructor. apply sem_pexpr_Por;
     eauto using sem_pexpr_negate.
   Qed.
 
@@ -1957,7 +1954,7 @@ all be evaluable.
       p_evaluable ctx (a ∧ b).
   Proof.
     intros. inv H. inv H0.
-    econstructor. econstructor; eauto.
+    econstructor. apply sem_pexpr_Pand; eauto.
   Qed.
 
   Lemma from_predicated_evaluable :
@@ -1990,15 +1987,56 @@ all be evaluable.
       all_evaluable2 ctx sem (pred_ret a).
   Admitted.
 
+  Lemma seq_app_cons :
+    forall A B  f a l p0 p1,
+      @seq_app A B (pred_ret f) (NE.cons a l) = NE.cons p0 p1 ->
+      @seq_app A B (pred_ret f) l = p1.
+  Proof. intros. cbn in *. inv H. eauto. Qed.
+
   Lemma eval_predf_seq_app_evaluable :
-    forall A B G (ctx: @ctx G) (sem: @Abstr.ctx G -> A -> B -> Prop) (l: predicated A) a,
-      all_evaluable2 ctx sem l ->
-      all_evaluable2 ctx sem (seq_app a l).
+    forall G (ctx: @ctx G) (l: predicated expression_list) f,
+      all_evaluable2 ctx sem_val_list l ->
+      all_evaluable2 ctx sem_pred (seq_app (pred_ret f) l).
   Proof.
-    intros. unfold seq_app. Admitted.
+(*    induction l; intros.
+    - cbn in *. unfold all_evaluable2. intros.
+      inv H0. unfold evaluable. destruct a. cbn.
+      unfold all_evaluable2 in *. specialize (H p e ltac:(constructor)).
+      inv H. econstructor. econstructor; eauto. admit.
+    - unfold all_evaluable2; intros.
+    
+      Opaque seq_app. inversion_clear H0. inversion_clear H1. Transparent seq_app.
+      destruct (seq_app (pred_ret (PEsetpred c)) (NE.cons a l)) eqn:?.
+
+      { destruct a0.  inversion_clear H0. 
+        destruct p0. cbn in *. discriminate. }
+
+      { cbn in *. destruct p0. inv H0. inv Heqp0. destruct a. cbn. admit. }
+
+      destruct (seq_app (pred_ret (PEsetpred c)) (NE.cons a l)) eqn:?. cbn in *.
+      { discriminate. }
+
+      eapply seq_app_cons in Heqp0. rewrite <- Heqp0 in H0.
+      apply all_evaluable2_cons in H.
+      exploit IHl. auto. eauto. auto.*)
+  Abort.
+
+
+  Lemma p_evaluable_imp :
+    forall A (ctx: @ctx A) a b,
+      sem_pexpr ctx a false ->
+      p_evaluable ctx (a → b).
+  Proof.
+    intros. unfold "→".
+    unfold p_evaluable, evaluable. exists true.
+    constructor. replace true with (negb false) by trivial.
+    now apply sem_pexpr_negate.
+  Qed.
 
   Lemma eval_predf_update_evaluable :
-    forall A (ctx: @ctx A) curr_p next_p f f_next instr,
+    forall A (ctx: @ctx A) i' curr_p out next_p f f_next instr
+        (SEM_EXISTS: sem ctx f (i', None))
+        (SEM_STEP: step_instr (ctx_ge ctx) (ctx_sp ctx) (Iexec i') instr out),
       update (curr_p, f) instr = Some (next_p, f_next) ->
       forest_evaluable ctx f ->
       p_evaluable ctx (from_pred_op (forest_preds f) curr_p) ->
@@ -2017,13 +2055,16 @@ all be evaluable.
       intros. cbn -[seq_app pred_ret merge list_translation] in *.
       destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
         | rewrite PTree.gso in H by auto; eapply H0; eassumption].
-      eapply evaluable_impl.
-      eapply p_evaluable_Pand; auto.
-      eapply from_predicated_evaluable; auto.
-      admit.
+      inv SEM_STEP.
+      { eapply evaluable_impl.
+        eapply p_evaluable_Pand; auto.
+        eapply from_predicated_evaluable; auto.
+        admit. }
+      apply p_evaluable_imp. inv H3. cbn. inv SEM_EXISTS. inv H5.
+      econstructor. eapply sem_pexpr_eval; eauto.
     - unfold Option.bind in *. destruct_match; try easy.
       inversion_clear H. eapply forest_evaluable_regset; auto.
-  Admitted.
+  Abort.
 
   Lemma sem_update_valid_mem :
     forall i i' i'' curr_p next_p f f_next instr sp,

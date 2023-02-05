@@ -215,7 +215,7 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
   | RBsetpred p' c args p =>
       let new_pred :=
         (from_pred_op f.(forest_preds) (dfltp p' ∧ pred)
-         → from_predicated true f.(forest_preds) (seq_app (pred_ret (PEsetpred c))
+           → from_predicated true f.(forest_preds) (seq_app (pred_ret (PEsetpred c))
                                                   (merge (list_translation args f))))
       in
       do _ <- is_initial_pred f p;
