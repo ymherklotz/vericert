@@ -174,10 +174,13 @@ Definition dfltp {A} (p: option (@Predicate.pred_op A)) := Option.default T p.
 Definition assert_ (b: bool): option unit :=
   if b then Some tt else None.
 
-Definition is_initial_pred (f: forest) (p: positive) :=
+Definition is_initial_pred_and_notin (f: forest) (p: positive) (p_next: pred_op): bool :=
   match f #p p with
-  | Plit (true, PEbase p') => if peq p p' then Some tt else None
-  | _ => None
+  | Plit (true, PEbase p') =>
+    if peq p p'
+    then negb (predin peq p p_next)
+    else false
+  | _ => false
   end.
 
 Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest) :=
@@ -218,7 +221,7 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
            → from_predicated true f.(forest_preds) (seq_app (pred_ret (PEsetpred c))
                                                   (merge (list_translation args f))))
       in
-      do _ <- is_initial_pred f p;
+      do _ <- assert_ (is_initial_pred_and_notin f p pred);
       Some (pred, f #p p <- new_pred)
   | RBexit p c =>
       let new_p := simplify (negate (dfltp p) ∧ pred) in

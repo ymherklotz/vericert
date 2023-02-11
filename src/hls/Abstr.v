@@ -311,34 +311,38 @@ Inductive sem_pexpr (c: ctx) : pred_pexpr -> bool -> Prop :=
 | sem_pexpr_Plit : forall p (b: bool) bres,
     sem_pred c p (if b then bres else negb bres) ->
     sem_pexpr c (Plit (b, p)) bres
-| sem_pexpr_Pand_first : forall p1 p2,
-  sem_pexpr c p1 false ->
+| sem_pexpr_Pand_false : forall p1 p2,
+  sem_pexpr c p1 false \/ sem_pexpr c p2 false ->
   sem_pexpr c (Pand p1 p2) false
-| sem_pexpr_Pand_second : forall p1 p2 b,
+| sem_pexpr_Pand_true : forall p1 p2,
   sem_pexpr c p1 true ->
-  sem_pexpr c p2 b ->
-  sem_pexpr c (Pand p1 p2) b
-| sem_pexpr_Por_first : forall p1 p2,
-  sem_pexpr c p1 true ->
+  sem_pexpr c p2 true ->
+  sem_pexpr c (Pand p1 p2) true
+| sem_pexpr_Por_true : forall p1 p2,
+  sem_pexpr c p1 true \/ sem_pexpr c p2 true ->
   sem_pexpr c (Por p1 p2) true
-| sem_pexpr_Por_second : forall p1 p2 b,
+| sem_pexpr_Por_false : forall p1 p2,
   sem_pexpr c p1 false ->
-  sem_pexpr c p2 b ->
-  sem_pexpr c (Por p1 p2) b.
+  sem_pexpr c p2 false ->
+  sem_pexpr c (Por p1 p2) false.
 
 Lemma sem_pexpr_Pand :
   forall ctx p1 p2 a b,
     sem_pexpr ctx p1 a ->
     sem_pexpr ctx p2 b ->
     sem_pexpr ctx (p1 ∧ p2) (a && b).
-Proof. intros. destruct a; constructor; auto. Qed.
+Proof.
+  intros. destruct a; cbn; try destruct b; solve [constructor; auto].
+Qed.
 
 Lemma sem_pexpr_Por :
   forall ctx p1 p2 a b,
     sem_pexpr ctx p1 a ->
     sem_pexpr ctx p2 b ->
     sem_pexpr ctx (p1 ∨ p2) (a || b).
-Proof. intros. destruct a; constructor; auto. Qed.
+Proof.
+  intros. destruct a; cbn; try destruct b; try solve [constructor; auto].
+Qed.
 
 (*|
 ``from_pred_op`` translates a ``pred_op`` into a ``pred_pexpr``.  The main

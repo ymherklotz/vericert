@@ -133,6 +133,13 @@ Section PRED_DEFINITION.
       | Plit a => Plit a
       end.
 
+    Fixpoint predin (a: predicate) (p: pred_op): bool :=
+      match p with
+      | Ptrue | Pfalse => false
+      | Pand p1 p2 | Por p1 p2 => predin a p1 || predin a p2
+      | Plit (_, a') => eqd a a'
+      end.
+
   End DEEP_SIMPLIFY.
 
 End PRED_DEFINITION.
@@ -154,6 +161,49 @@ Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
   | Por p1 p2 => sat_predicate p1 a || sat_predicate p2 a
   end.
+
+Inductive sat_predicateP (a: asgn): pred_op -> bool -> Prop :=
+| sat_prediacteP_Plit: forall b p',
+  sat_predicateP a (Plit (b, p')) (if b then a (Pos.to_nat p') else negb (a (Pos.to_nat p')))
+| sat_prediacteP_Ptrue:
+  sat_predicateP a Ptrue true
+| sat_prediacteP_Pfalse:
+  sat_predicateP a Pfalse false
+| sat_predicateP_Por_true1: forall p1 p2,
+  sat_predicateP a p1 true ->
+  sat_predicateP a (Por p1 p2) true
+| sat_predicateP_Por_true2: forall p1 p2,
+  sat_predicateP a p2 true ->
+  sat_predicateP a (Por p1 p2) true
+| sat_predicateP_Por_false: forall p1 p2,
+  sat_predicateP a p1 false ->
+  sat_predicateP a p2 false ->
+  sat_predicateP a (Por p1 p2) false
+| sat_predicateP_Pand_false1: forall p1 p2,
+  sat_predicateP a p1 false ->
+  sat_predicateP a (Pand p1 p2) false
+| sat_predicateP_Pand_false2: forall p1 p2,
+  sat_predicateP a p2 false ->
+  sat_predicateP a (Pand p1 p2) false
+| sat_predicateP_Pand_true: forall p1 p2,
+  sat_predicateP a p1 true ->
+  sat_predicateP a p2 true ->
+  sat_predicateP a (Pand p1 p2) true.
+
+Lemma sat_pred_equiv_sat_predicateP:
+  forall a p, sat_predicateP a p (sat_predicate p a).
+Proof.
+  induction p; crush.
+  - destruct_match. constructor.
+  - constructor.
+  - constructor.
+  - destruct (sat_predicate p1 a) eqn:?. cbn.
+    destruct (sat_predicate p2 a) eqn:?. cbn.
+    all: solve [constructor; auto].
+  - destruct (sat_predicate p1 a) eqn:?. cbn. solve [constructor; auto].
+    destruct (sat_predicate p2 a) eqn:?. cbn.
+    all: solve [constructor; auto].
+Qed.
 
 Definition sat_equiv p1 p2 := forall c, sat_predicate p1 c = sat_predicate p2 c.
 
