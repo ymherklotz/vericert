@@ -2073,15 +2073,28 @@ all be evaluable.
     apply Pand_true_left with (b := p') in H0.
     rewrite <- eval_predf_simplify in H0. split; auto.
     unfold "<-e". destruct i''.
-    inv H. constructor; auto. admit. admit. simplify.
-  Admitted.
+    inv H. constructor; auto.
+    constructor. inv H9. intros. cbn. eauto.
+    inv H10. constructor; intros. eauto.
+    cbn.
+    eapply sem_pred_expr_prune_predicated; eauto.
+    eapply sem_pred_expr_app_predicated.
+    constructor. constructor. constructor.
+    inv H10. eauto. cbn -[eval_predf] in *.
+    rewrite eval_predf_Pand. rewrite H2. now rewrite H6.
+  Qed.
 
   Lemma step_instr_lessdef_term :
     forall sp a i i' ti cf,
       step_instr ge sp (Iexec i) a (Iterm i' cf) ->
       state_lessdef i ti ->
       exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  Proof.
+    inversion 1; intros; subst.
+    econstructor. split; eauto. constructor.
+    destruct p. constructor. erewrite eval_predf_pr_equiv. inv H4.
+    eauto. inv H6. eauto. constructor.
+  Qed.
 
   Lemma combined_falsy :
     forall i o1 o,
@@ -2098,9 +2111,7 @@ all be evaluable.
       sem (mk_ctx i sp ge) f (i', cf) ->
       state_lessdef i ti ->
       exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
-  Proof. Admitted.
-
-  (* #[local] Opaque update. *)
+  Proof. Admitted. (* This needs a bit more in Abstr.v *)
 
   Lemma mfold_left_update_Some :
     forall xs x v,
@@ -2364,7 +2375,7 @@ at any point at the end of the execution.
       forest_evaluable (mk_ctx st sp ge) f ->
       state_lessdef st st' ->
       forest_evaluable (mk_ctx st' sp ge) f.
-  Proof. Admitted. (* easy *)
+  Proof. Abort.
 
   Lemma abstr_fold_correct :
     forall sp x i i' i'' cf f p f' curr_p
@@ -2396,7 +2407,7 @@ at any point at the end of the execution.
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists. rewrite EXEQ in H2.
       exploit state_lessdef_sem; (* TODO *)
       eauto; intros H; inversion H as [v [Hi LESSDEF]]; clear H.
-      exploit step_instr_lessdef_term; (* TODO *)
+      exploit step_instr_lessdef_term;
       eauto; intros H; inversion H as [v2 [Hi2 LESSDEF2]]; clear H.
       exploit step_instr_term_exists; eauto; inversion 1 as [? ?]; subst; clear H.
       erewrite eval_predf_lessdef in H1 by eassumption.
