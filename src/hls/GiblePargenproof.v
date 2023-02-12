@@ -2210,7 +2210,7 @@ all be evaluable.
         (a: A) (b: B),
       sem ctx a b ->
       all_evaluable2 ctx sem (pred_ret a).
-  Admitted.
+  Abort.
 
   Lemma seq_app_cons :
     forall A B  f a l p0 p1,
@@ -2246,7 +2246,6 @@ all be evaluable.
       exploit IHl. auto. eauto. auto.*)
   Abort.
 
-
   Lemma p_evaluable_imp :
     forall A (ctx: @ctx A) a b,
       sem_pexpr ctx a false ->
@@ -2278,7 +2277,7 @@ all be evaluable.
     - unfold Option.bind in *. destruct_match; crush.
       unfold forest_evaluable, pred_forest_evaluable.
       intros. cbn -[seq_app pred_ret merge list_translation] in *.
-      destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
+      (*destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
         | rewrite PTree.gso in H by auto; eapply H0; eassumption].
       inv SEM_STEP.
       { eapply evaluable_impl.
@@ -2286,18 +2285,22 @@ all be evaluable.
         eapply from_predicated_evaluable; auto.
         admit. }
       apply p_evaluable_imp. inv H3. cbn. inv SEM_EXISTS. inv H5.
-      econstructor. left. eapply sem_pexpr_eval; eauto.
+      econstructor. left. eapply sem_pexpr_eval; eauto.*) admit.
     - unfold Option.bind in *. destruct_match; try easy.
       inversion_clear H. eapply forest_evaluable_regset; auto.
-  Admitted.
+  Abort.
 
   Lemma sem_update_valid_mem :
     forall i i' i'' curr_p next_p f f_next instr sp,
-      update (curr_p, f) instr = Some (next_p, f_next) ->
       step_instr ge sp (Iexec i') instr (Iexec i'') ->
+      update (curr_p, f) instr = Some (next_p, f_next) ->
       sem (mk_ctx i sp ge) f (i', None) ->
       valid_mem (is_mem i') (is_mem i'').
-  Proof. Admitted.
+  Proof.
+    inversion 1; crush.
+    unfold Option.bind in *. destr. inv H7.
+    eapply storev_valid_pointer; eauto.
+  Qed.
 
   Lemma eval_predf_lessdef :
     forall p a b,
@@ -2329,8 +2332,8 @@ all be evaluable.
       exploit mfold_left_update_Some. eassumption.
       inversion_clear 1 as [y SOME]. destruct y. rewrite SOME in H.
       eapply IHx; [eassumption|].
-      eauto using eval_predf_update_evaluable.
-  Admitted.
+      (*eauto using eval_predf_update_evaluable.*)
+  Abort.
 
 (*|
 ``abstr_fold_falsy``: This lemma states that when we are at the end of an
@@ -2380,14 +2383,14 @@ at any point at the end of the execution.
     - (* inductive case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists.
-        exploit eval_predf_update_true; (* TODO: Needs an extra property about setpred (global, static) *)
+        exploit eval_predf_update_true;
         eauto; intros EVALTRUE.
       rewrite EXEQ in H2. eapply IHx in H2; cbn [fst snd] in *.
       eauto.
       transitivity (is_mem i'); auto.
-      eapply sem_update_valid_mem; eauto. (* TODO *)
+      eapply sem_update_valid_mem; eauto.
       eauto.
-      eapply sem_update_instr; eauto. eauto. eauto. (* MAIN TODO *)
+      eapply sem_update_instr; eauto. eauto. eauto.
     - (* terminal case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists. rewrite EXEQ in H2.
