@@ -1935,6 +1935,14 @@ all be evaluable.
     now apply sem_pexpr_negate.
   Qed.
 
+  Lemma eval_predf_simplify :
+    forall ps x,
+      eval_predf ps (simplify x) = eval_predf ps x.
+  Proof.
+    unfold eval_predf; intros.
+    rewrite simplify_correct. auto.
+  Qed.
+
   Lemma sem_update_falsy:
     forall A state f f' rs ps m p a p',
       instr_falsy ps a ->
@@ -2008,6 +2016,83 @@ all be evaluable.
         rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H0. auto.
   Qed.
 
+  Lemma sem_update_falsy_input:
+    forall A state f f' rs ps m p a p' exitcf,
+      eval_predf ps p = false ->
+      update (p, f) a = Some (p', f') ->
+      sem state f (mk_instr_state rs ps m, exitcf) ->
+      @sem A state f' (mk_instr_state rs ps m, exitcf)
+        /\ eval_predf ps p' = false.
+  Proof.
+    intros; destruct a; cbn [update] in *; intros.
+    - inv H0. auto.
+    - unfold Option.bind in *. destr. inv H0. split; [|solve [auto]].
+      constructor.
+      * constructor. intros. destruct (peq x r); subst.
+        rewrite forest_reg_gss. cbn.
+        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_app_predicated_false. inv H1. inv H7. auto.
+        inv H1. inv H8. eauto. rewrite eval_predf_Pand.
+        rewrite H. eauto with bool.
+        rewrite forest_reg_gso. inv H1. inv H7. auto.
+        unfold not; intros; apply n0. now inv H0.
+      * constructor; intros. rewrite forest_reg_pred. inv H1. inv H8. auto.
+      * rewrite forest_reg_gso. inv H1. auto. unfold not; intros. inversion H0.
+      * inv H1. auto.
+    - unfold Option.bind in *. destr. inv H0. split; [|solve [auto]].
+      constructor.
+      * constructor. intros. destruct (peq x r); subst.
+        rewrite forest_reg_gss. cbn.
+        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_app_predicated_false. inv H1. inv H7. auto.
+        inv H1. inv H8. eauto. rewrite eval_predf_Pand. cbn -[eval_predf].
+        rewrite H. eauto with bool.
+        rewrite forest_reg_gso. inv H1. inv H7. auto.
+        unfold not; intros; apply n0. now inv H0.
+      * constructor; intros. rewrite forest_reg_pred. inv H1. inv H8. auto.
+      * rewrite forest_reg_gso. inv H1. auto. unfold not; intros. inversion H0.
+      * inv H1. auto.
+    - unfold Option.bind in *. destr. inv H0. split; [|solve [auto]].
+      constructor.
+      * constructor. intros. rewrite forest_reg_gso by discriminate. inv H1. inv H7. auto.
+      * constructor; intros. rewrite forest_reg_pred. inv H1. inv H8. auto.
+      * rewrite forest_reg_gss. cbn. eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_app_predicated_false. inv H1. auto. inv H1. inv H8. eauto.
+        rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H. eauto with bool.
+      * inv H1. auto.
+    - unfold Option.bind in *. destr. destr. inv H0. split; [|solve [auto]].
+      constructor.
+      * constructor; intros. rewrite forest_pred_reg. apply sem_pred_not_in.
+        inv H1. inv H7. auto. apply pred_not_in_forestP. unfold assert_ in Heqo0. now destr.
+      * constructor. intros. destruct (peq x p0); subst.
+        rewrite forest_pred_gss. replace (ps !! p0) with (true && ps !! p0) by auto.
+        assert (sem_pexpr state0 (¬ (from_pred_op (forest_preds f) (dfltp o) ∧ from_pred_op (forest_preds f) p')) true).
+        { replace true with (negb false) by auto. apply sem_pexpr_negate.
+          constructor. right. eapply sem_pexpr_eval. inv H1. inv H8. eauto.
+          auto.
+        }
+        apply sem_pexpr_Pand. constructor; tauto.
+        apply sem_pexpr_impl. inv H1. inv H9. eauto.
+        { constructor. right. eapply sem_pexpr_eval. inv H1. inv H9. eauto.
+          rewrite eval_predf_negate. rewrite H. auto.
+        }
+        rewrite forest_pred_gso by auto. inv H1. inv H8. auto.
+      * rewrite forest_pred_reg. apply sem_pred_not_in. inv H1. auto.
+        apply pred_not_in_forestP. unfold assert_ in Heqo0. now destr.
+      * apply sem_pred_not_in. inv H1; auto. cbn.
+        apply pred_not_in_forest_exitP. unfold assert_ in Heqo0. now destr.
+    - unfold Option.bind in *. destr. inv H0. inv H1. split.
+      -- constructor.
+         * constructor. inv H7. auto.
+         * constructor. intros. inv H8. eauto.
+         * auto.
+         * cbn. eapply sem_pred_expr_prune_predicated; [|eauto].
+           eapply sem_pred_expr_app_predicated_false; auto.
+           inv H8. eauto.
+           rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H. eauto with bool.
+      -- rewrite eval_predf_simplify. rewrite eval_predf_Pand. rewrite H. eauto with bool.
+  Qed.
+
   Definition setpred_wf (i: instr): bool :=
     match i with
     | RBsetpred (Some op) _ _ p => negb (predin peq p op)
@@ -2050,11 +2135,6 @@ all be evaluable.
     rewrite eval_predf_Pand. rewrite H.
     eauto with bool.
   Qed.
-
-  Lemma eval_predf_simplify :
-    forall ps x,
-      eval_predf ps (simplify x) = eval_predf ps x.
-  Proof. Admitted.
 
   Lemma sem_update_instr_term :
     forall f i' i'' sp i cf p p' p'' f',
@@ -2348,27 +2428,26 @@ all be evaluable.
 
 (*|
 ``abstr_fold_falsy``: This lemma states that when we are at the end of an
-execution, the values in the register map do not continue to change.  This
-should mean that we can show the forest is still evaluable if it was evaluable
-at any point at the end of the execution.
+execution, the values in the register map do not continue to change.
 |*)
 
   Lemma abstr_fold_falsy :
-    forall A i sp ge f res p f' ilist p',
+    forall A ilist i sp ge f res p f' p',
       @sem A (mk_ctx i sp ge) f res ->
       mfold_left update ilist (Some (p, f)) = Some (p', f') ->
       eval_predf (is_ps (fst res)) p = false ->
-      sem (mk_ctx i sp ge) f' res /\ forest_evaluable (mk_ctx i sp ge) f'.
-  Proof. Admitted.
-
-  (* Lemma abstr_fold_falsy_evaluable : *)
-  (*   forall sp x i i' i'' cf f p f' curr_p *)
-  (*       (FEVAL: forest_evaluable (mk_ctx i sp ge) f) *)
-  (*       (VALID: valid_mem (is_mem i) (is_mem i')), *)
-  (*     SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) -> *)
-  (*     sem (mk_ctx i sp ge) f (i', Some cf) -> *)
-  (*     mfold_left update x (Some (curr_p, f)) = Some (p, f') -> *)
-  (*     eval_predf (is_ps i') curr_p = false -> *)
+      sem (mk_ctx i sp ge) f' res.
+  Proof.
+    induction ilist.
+    - intros. cbn in *. inv H0. auto.
+    - intros. cbn -[update] in H0.
+      exploit mfold_left_update_Some. eauto. intros. inv H2.
+      rewrite H3 in H0. destruct x.
+      destruct res. destruct i0.
+      exploit sem_update_falsy_input; try eassumption; intros.
+      inversion_clear H2.
+      eapply IHilist; eassumption.
+  Qed.
 
   Lemma forest_evaluable_lessdef :
     forall A (ge: Genv.t A unit) sp st st' f,
@@ -2411,7 +2490,7 @@ at any point at the end of the execution.
       eauto; intros H; inversion H as [v2 [Hi2 LESSDEF2]]; clear H.
       exploit step_instr_term_exists; eauto; inversion 1 as [? ?]; subst; clear H.
       erewrite eval_predf_lessdef in H1 by eassumption.
-      exploit sem_update_instr_term; (* TODO *)
+      exploit sem_update_instr_term;
       eauto; intros [A B].
       exists v2.
       exploit abstr_fold_falsy. (* TODO *)
