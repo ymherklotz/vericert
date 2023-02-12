@@ -2129,12 +2129,15 @@ all be evaluable.
   Proof.
     intros * UPD STEP EVAL. destruct instr; cbn [update] in UPD;
       try solve [unfold Option.bind in *; try destr; inv UPD; inv STEP; auto].
-    - unfold Option.bind in *. destr. inv UPD. inv STEP; auto. cbn [is_ps] in *. admit.
+    - unfold Option.bind in *. destr. destr. inv UPD. inv STEP; auto. cbn [is_ps] in *.
+      unfold is_initial_pred_and_notin in Heqo1. unfold assert_ in Heqo1. destr. destr.
+      destr. destr. destr. destr. subst. assert (~ PredIn p2 next_p).
+      unfold not; intros. apply negb_true_iff in Heqb0. apply not_true_iff_false in Heqb0.
+      apply Heqb0. now apply predin_PredIn. rewrite eval_predf_not_PredIn; auto.
     - unfold Option.bind in *. destr. inv UPD. inv STEP. inv H3. cbn.
       rewrite eval_predf_simplify. rewrite eval_predf_Pand. rewrite eval_predf_negate.
       destruct i'; cbn in *. rewrite H0. auto.
-  Admitted. (* TODO: This only needs the addition of the property that any
-  setpreds will not contain the predicate in the name. *)
+  Qed.
 
   Lemma forest_evaluable_regset :
     forall A f (ctx: @ctx A) n x,
