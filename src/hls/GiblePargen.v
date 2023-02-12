@@ -183,6 +183,23 @@ Definition is_initial_pred_and_notin (f: forest) (p: positive) (p_next: pred_op)
   | _ => false
   end.
 
+Definition predicated_not_in {A} (p: Gible.predicate) (l: predicated A): bool :=
+  NE.fold_right (fun (a: pred_op * A) (b: bool) =>
+    b && negb (predin peq p (fst a))
+  ) true l.
+
+Definition predicated_not_in_pred_expr (p: Gible.predicate) (tree: RTree.t pred_expr) :=
+  PTree.fold (fun b _ a =>
+    b && predicated_not_in p a
+  ) tree true.
+
+Definition predicated_not_in_pred_eexpr (p: Gible.predicate) (l: pred_eexpr) :=
+  predicated_not_in p l.
+
+Definition predicated_not_in_forest (p: Gible.predicate) (f: forest) :=
+  predicated_not_in_pred_expr p f.(forest_regs)
+  && predicated_not_in p f.(forest_exit).
+
 Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest) :=
   let (pred, f) := fop in
   match i with
@@ -220,7 +237,9 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
         (from_pred_op f.(forest_preds) (dfltp p' ∧ pred)
            → from_predicated true f.(forest_preds) (seq_app (pred_ret (PEsetpred c))
                                                   (merge (list_translation args f))))
+        ∧ (from_pred_op f.(forest_preds) (¬ (dfltp p') ∨ ¬ pred) → (f #p p))
       in
+      do _ <- assert_ (predicated_not_in_forest p f);
       do _ <- assert_ (is_initial_pred_and_notin f p pred);
       Some (pred, f #p p <- new_pred)
   | RBexit p c =>

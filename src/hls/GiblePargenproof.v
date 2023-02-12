@@ -793,6 +793,14 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     eapply sem_pred_expr_map_Pand; eauto.
   Qed.
 
+  Lemma sem_pred_expr_app_predicated_false :
+    forall A B C sem ctx f_p y x v p ps,
+      sem_pred_expr f_p sem ctx y v ->
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+      eval_predf ps p = false ->
+      @sem_pred_expr A B C f_p sem ctx (app_predicated p y x) v.
+  Admitted.
+
   Lemma sem_pred_expr_prune_predicated :
     forall A B C sem ctx f_p y x v,
       sem_pred_expr f_p sem ctx x v ->
@@ -1770,6 +1778,242 @@ all be evaluable.
     + auto.
   Qed.
 
+  Definition predicated_not_inP {A} (p: Gible.predicate) (l: predicated A) :=
+    forall op e, NE.In (op, e) l -> ~ PredIn p op.
+
+  Lemma predicated_not_inP_cons :
+    forall A p (a: (pred_op * A)) l,
+      predicated_not_inP p (NE.cons a l) ->
+      predicated_not_inP p l.
+  Proof.
+    unfold predicated_not_inP; intros. eapply H. econstructor. right; eauto.
+  Qed.
+
+  Lemma sem_pexpr_not_in :
+    forall G (ctx: @ctx G) p0 ps p e b,
+      ~ PredIn p p0 ->
+      sem_pexpr ctx (from_pred_op ps p0) b ->
+      sem_pexpr ctx (from_pred_op (PTree.set p e ps) p0) b.
+  Proof.
+    induction p0; auto; intros.
+    - cbn. destruct p. unfold get_forest_p'.
+      assert (p0 <> p) by
+        (unfold not; intros; apply H; subst; constructor).
+      rewrite PTree.gso; auto.
+    - cbn in *.
+      assert (X: ~ PredIn p p0_1 /\ ~ PredIn p p0_2) by
+        (split; unfold not; intros; apply H; constructor; tauto).
+      inversion_clear X as [X1 X2].
+      inv H0. inv H4.
+      specialize (IHp0_1 _ p e _ X1 H0). constructor. tauto.
+      specialize (IHp0_2 _ p e _ X2 H0). constructor. tauto.
+      constructor; auto.
+    - cbn in *.
+      assert (X: ~ PredIn p p0_1 /\ ~ PredIn p p0_2) by
+        (split; unfold not; intros; apply H; constructor; tauto).
+      inversion_clear X as [X1 X2].
+      inv H0. inv H4.
+      specialize (IHp0_1 _ p e _ X1 H0). constructor. tauto.
+      specialize (IHp0_2 _ p e _ X2 H0). constructor. tauto.
+      constructor; auto.
+  Qed.
+
+  Lemma sem_pred_not_in :
+    forall A B G (ctx: @ctx G) (s: @Abstr.ctx G -> A -> B -> Prop) l v p e ps,
+      sem_pred_expr ps s ctx l v ->
+      predicated_not_inP p l ->
+      sem_pred_expr (PTree.set p e ps) s ctx l v.
+  Proof.
+    induction l.
+    - intros. unfold predicated_not_inP in H0.
+      destruct a. constructor. apply sem_pexpr_not_in.
+      eapply H0. econstructor. inv H. auto. inv H. auto.
+    - intros. inv H. constructor. unfold predicated_not_inP in H0.
+      eapply sem_pexpr_not_in. eapply H0. constructor. left. eauto.
+      auto. auto.
+      apply sem_pred_expr_cons_false. apply sem_pexpr_not_in. eapply H0.
+      constructor. tauto. auto. auto.
+      eapply IHl. eauto. eapply predicated_not_inP_cons; eauto.
+  Qed.
+
+  Lemma pred_not_in_forestP :
+    forall pred f,
+      predicated_not_in_forest pred f = true ->
+      forall x, predicated_not_inP pred (f #r x).
+  Proof. Admitted.
+
+  Lemma pred_not_in_forest_exitP :
+    forall pred f,
+      predicated_not_in_forest pred f = true ->
+      predicated_not_inP pred (forest_exit f).
+  Proof. Admitted.
+
+  Lemma from_predicated_sem_pred_expr :
+    forall A (ctx: @ctx A) preds pe b,
+      sem_pred_expr preds sem_pred ctx pe b ->
+      sem_pexpr ctx (from_predicated true preds pe) b.
+  Proof. Admitted.
+
+  Lemma sem_update_Isetpred:
+    forall A (ctx: @ctx A) f pr p0 c args b rs m,
+      valid_mem (ctx_mem ctx) m ->
+      sem ctx f (mk_instr_state rs pr m, None) ->
+      Op.eval_condition c rs ## args m = Some b ->
+      truthy pr p0 ->
+      sem_pexpr ctx
+      (from_predicated true (forest_preds f) (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f)))) b.
+  Proof.
+    intros. eapply from_predicated_sem_pred_expr.
+    pose proof (sem_merge_list _ ctx f rs pr m args H0).
+    apply sem_pred_expr_ident2 in H3; simplify.
+    eapply sem_pred_expr_seq_app_val; [eauto| |].
+    constructor. constructor. constructor.
+    econstructor; eauto.
+    erewrite storev_eval_condition; eauto.
+  Qed.
+
+  Lemma sem_update_Isetpred_top:
+    forall A f p p' f' rs m pr args p0 state c pred b,
+      Op.eval_condition c rs ## args m = Some b ->
+      truthy pr p0 ->
+      valid_mem (is_mem (ctx_is state)) m ->
+      sem state f ((mk_instr_state rs pr m), None) ->
+      update (p, f) (RBsetpred p0 c args pred) = Some (p', f') ->
+      eval_predf pr p = true ->
+      @sem A state f' (mk_instr_state rs (pr # pred <- b) m, None).
+  Proof.
+    intros * EVAL_OP TRUTHY VALID SEM UPD EVAL_PRED.
+    pose proof SEM as SEM2.
+    inversion UPD as [PRUNE]. unfold Option.bind in PRUNE. destr. destr.
+    inversion_clear PRUNE.
+    rename Heqo into PRUNE.
+    inversion_clear SEM as [? ? ? ? ? ? REG PRED MEM EXIT].
+    cbn [is_ps] in *. constructor.
+    + constructor. intros. apply sem_pred_not_in. rewrite forest_pred_reg.
+      inv REG. auto. rewrite forest_pred_reg. apply pred_not_in_forestP.
+      unfold assert_ in *. repeat (destruct_match; try discriminate); auto.
+    + constructor; intros. destruct (peq x pred); subst.
+      * rewrite Regmap.gss.
+        rewrite forest_pred_gss.
+        cbn [update] in *. unfold Option.bind in *. destr. destr. inv UPD.
+        replace b with (b && true) by eauto with bool.
+        apply sem_pexpr_Pand.
+        destruct b. constructor. right.
+        eapply sem_update_Isetpred; eauto.
+        constructor. constructor. replace false with (negb true) by auto.
+        apply sem_pexpr_negate. inv TRUTHY. constructor.
+        cbn. eapply sem_pexpr_eval. inv PRED. eauto. auto.
+        replace false with (negb true) by auto.
+        apply sem_pexpr_negate.
+        eapply sem_pexpr_eval. inv PRED. eauto. auto.
+        eapply sem_update_Isetpred; eauto.
+        constructor. constructor. constructor.
+        replace true with (negb false) by auto. apply sem_pexpr_negate.
+        eapply sem_pexpr_eval. inv PRED. eauto. inv TRUTHY. auto. cbn -[eval_predf].
+        rewrite eval_predf_negate. rewrite H; auto.
+        replace true with (negb false) by auto. apply sem_pexpr_negate.
+        eapply sem_pexpr_eval. inv PRED. eauto. rewrite eval_predf_negate.
+        rewrite EVAL_PRED. auto.
+      * rewrite Regmap.gso by auto. inv PRED. specialize (H x).
+        rewrite forest_pred_gso by auto; auto.
+    + rewrite forest_pred_reg. apply sem_pred_not_in. auto. apply pred_not_in_forestP.
+      unfold assert_ in *. now repeat (destruct_match; try discriminate).
+    + cbn -[from_predicated from_pred_op seq_app]. apply sem_pred_not_in; auto.
+      apply pred_not_in_forest_exitP.
+      unfold assert_ in *. now repeat (destruct_match; try discriminate).
+  Qed.
+
+  Lemma sem_pexpr_impl :
+    forall A (state: @ctx A) a b res,
+      sem_pexpr state b res ->
+      sem_pexpr state a true ->
+      sem_pexpr state (a → b) res.
+  Proof.
+    intros. destruct res.
+    constructor; tauto.
+    constructor; auto. replace false with (negb true) by auto.
+    now apply sem_pexpr_negate.
+  Qed.
+
+  Lemma sem_update_falsy:
+    forall A state f f' rs ps m p a p',
+      instr_falsy ps a ->
+      update (p, f) a = Some (p', f') ->
+      sem state f (mk_instr_state rs ps m, None) ->
+      @sem A state f' (mk_instr_state rs ps m, None).
+  Proof.
+    inversion 1; cbn [update] in *; intros.
+    - unfold Option.bind in *. destr. inv H2.
+      constructor.
+      * constructor. intros. destruct (peq x res); subst.
+        rewrite forest_reg_gss. cbn.
+        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_app_predicated_false. inv H3. inv H8. auto.
+        inv H3. inv H9. eauto. rewrite eval_predf_Pand. cbn -[eval_predf].
+        rewrite H0. auto. 
+        rewrite forest_reg_gso. inv H3. inv H8. auto.
+        unfold not; intros; apply n0. now inv H1.
+      * constructor; intros. rewrite forest_reg_pred. inv H3. inv H9. auto.
+      * rewrite forest_reg_gso. inv H3. auto. unfold not; intros. inversion H1.
+      * inv H3. auto.
+    - unfold Option.bind in *. destr. inv H2.
+      constructor.
+      * constructor. intros. destruct (peq x dst); subst.
+        rewrite forest_reg_gss. cbn.
+        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_app_predicated_false. inv H3. inv H8. auto.
+        inv H3. inv H9. eauto. rewrite eval_predf_Pand. cbn -[eval_predf].
+        rewrite H0. auto. 
+        rewrite forest_reg_gso. inv H3. inv H8. auto.
+        unfold not; intros; apply n0. now inv H1.
+      * constructor; intros. rewrite forest_reg_pred. inv H3. inv H9. auto.
+      * rewrite forest_reg_gso. inv H3. auto. unfold not; intros. inversion H1.
+      * inv H3. auto.
+    - unfold Option.bind in *. destr. inv H2.
+      constructor.
+      * constructor. intros. rewrite forest_reg_gso by discriminate. inv H3. inv H8. auto.
+      * constructor; intros. rewrite forest_reg_pred. inv H3. inv H9. auto.
+      * rewrite forest_reg_gss. cbn. eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_app_predicated_false. inv H3. auto. inv H3. inv H9. eauto.
+        rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H0. auto.
+      * inv H3. auto.
+    - unfold Option.bind in *. destr. destr. inv H2.
+      constructor.
+      * constructor; intros. rewrite forest_pred_reg. apply sem_pred_not_in.
+        inv H3. inv H8. auto. apply pred_not_in_forestP. unfold assert_ in Heqo. now destr.
+      * constructor. intros. destruct (peq x pred); subst.
+        rewrite forest_pred_gss. replace (ps !! pred) with (true && ps !! pred) by auto.
+        assert (sem_pexpr state0 (¬ (from_pred_op (forest_preds f) p0 ∧ from_pred_op (forest_preds f) p')) true).
+        { replace true with (negb false) by auto. apply sem_pexpr_negate.
+          constructor. left. eapply sem_pexpr_eval. inv H3. inv H9. eauto.
+          auto.
+        }
+        apply sem_pexpr_Pand. constructor; tauto.
+        apply sem_pexpr_impl. inv H3. inv H10. eauto.
+        { constructor. left. eapply sem_pexpr_eval. inv H3. inv H10. eauto.
+          rewrite eval_predf_negate. rewrite H0. auto.
+        }
+        rewrite forest_pred_gso by auto. inv H3. inv H9. auto.
+      * rewrite forest_pred_reg. apply sem_pred_not_in. inv H3. auto.
+        apply pred_not_in_forestP. unfold assert_ in Heqo. now destr.
+      * apply sem_pred_not_in. inv H3; auto. cbn.
+        apply pred_not_in_forest_exitP. unfold assert_ in Heqo. now destr.
+    - unfold Option.bind in *. destr. inv H2. inv H3. constructor.
+      * constructor. inv H8. auto.
+      * constructor. intros. inv H9. eauto.
+      * auto.
+      * cbn. eapply sem_pred_expr_prune_predicated; [|eauto].
+        eapply sem_pred_expr_app_predicated_false; auto.
+        inv H9. eauto.
+        rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H0. auto.
+  Qed.
+
+  Definition setpred_wf (i: instr): bool :=
+    match i with
+    | RBsetpred (Some op) _ _ p => negb (predin peq p op)
+    | _ => true
+    end.
+
   Lemma sem_update_instr :
     forall f i' i'' a sp p i p' f',
       step_instr ge sp (Iexec i') a (Iexec i'') ->
@@ -1784,9 +2028,9 @@ all be evaluable.
     - eauto using sem_update_Iop_top.
     - eauto using sem_update_Iload_top.
     - eauto using sem_update_Istore_top.
-    - admit.
-    - admit.
-  Admitted.
+    - eauto using sem_update_Isetpred_top.
+    - destruct i''. eauto using sem_update_falsy.
+  Qed.
 
   Lemma Pand_true_left :
     forall ps a b,

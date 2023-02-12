@@ -158,6 +158,20 @@ Definition predset := PMap.t bool.
 Definition eval_predf (pr: predset) (p: pred_op) :=
   sat_predicate p (fun x => pr !! (Pos.of_nat x)).
 
+Lemma sat_pred_agree0 :
+  forall a b p,
+    (forall x, x <> 0%nat -> a x = b x) ->
+    sat_predicate p a = sat_predicate p b.
+Proof.
+  induction p; auto; intros.
+  - destruct p. cbn. assert (Pos.to_nat p <> 0%nat) by lia.
+    apply H in H0. now rewrite H0.
+  - specialize (IHp1 H). specialize (IHp2 H).
+    cbn. rewrite IHp1. rewrite IHp2. auto.
+  - specialize (IHp1 H). specialize (IHp2 H).
+    cbn. rewrite IHp1. rewrite IHp2. auto.
+Qed.
+
 #[global]
  Instance eval_predf_Proper : Proper (eq ==> equiv ==> eq) eval_predf.
 Proof.
@@ -188,6 +202,26 @@ Proof.
          repeat (destruct_match; []); inv Heqp0; rewrite <- H; auto);
     [repeat rewrite eval_predf_Pand|repeat rewrite eval_predf_Por];
     erewrite IHp1; try eassumption; erewrite IHp2; eauto.
+Qed.
+
+Lemma eval_predf_not_PredIn :
+  forall ps p b op,
+    ~ PredIn p op ->
+    eval_predf (ps # p <- b) op = eval_predf ps op.
+Proof.
+  induction op; auto.
+  - intros. destruct p0. cbn. rewrite Pos2Nat.id.
+    destruct (peq p p0); subst.
+      { exfalso; apply H; constructor. }
+    rewrite Regmap.gso; auto.
+  - intros. cbn. unfold eval_predf in *. rewrite IHop1.
+    rewrite IHop2. auto.
+    unfold not; intros; apply H; constructor; tauto.
+    unfold not; intros; apply H; constructor; tauto.
+  - intros. cbn. unfold eval_predf in *. rewrite IHop1.
+    rewrite IHop2. auto.
+    unfold not; intros; apply H; constructor; tauto.
+    unfold not; intros; apply H; constructor; tauto.
 Qed.
 
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=

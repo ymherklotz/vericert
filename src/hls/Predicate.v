@@ -87,6 +87,15 @@ Section PRED_DEFINITION.
     | Plit a => Plit a
     end.
 
+  Inductive PredIn (a: predicate): pred_op -> Prop :=
+  | PredIn_Plit: forall b, PredIn a (Plit (b, a))
+  | PredIn_Pand: forall p1 p2,
+    PredIn a p1 \/ PredIn a p2 ->
+    PredIn a (Pand p1 p2)
+  | PredIn_Por: forall p1 p2,
+    PredIn a p1 \/ PredIn a p2 ->
+    PredIn a (Por p1 p2).
+
   Section DEEP_SIMPLIFY.
 
     Context (eqd: forall a b: A, {a = b} + {a <> b}).
@@ -139,6 +148,18 @@ Section PRED_DEFINITION.
       | Pand p1 p2 | Por p1 p2 => predin a p1 || predin a p2
       | Plit (_, a') => eqd a a'
       end.
+
+    Lemma predin_PredIn:
+      forall a p, PredIn a p <-> predin a p = true.
+    Proof.
+      induction p; split; try solve [inversion 1 | discriminate].
+      - cbn. destruct p. inversion 1; subst. destruct eqd; auto.
+      - intros. cbn in *. destruct p. destruct eqd. subst. constructor. discriminate.
+      - inversion 1. apply orb_true_intro. tauto.
+      - intros. cbn in *. constructor. apply orb_prop in H. tauto.
+      - inversion 1. apply orb_true_intro. tauto.
+      - intros. cbn in *. apply orb_prop in H. constructor. tauto.
+    Qed.
 
   End DEEP_SIMPLIFY.
 
@@ -811,4 +832,35 @@ Proof.
     eapply in_app_or in H. inv H; eauto.
   - eapply Pos.max_le_iff.
     eapply in_app_or in H. inv H; eauto.
+Qed.
+
+Lemma PredIn_decidable:
+  forall A (a: A) p (eqd: forall a b: A, { a = b } + { a <> b }),
+    { PredIn a p } + { ~ PredIn a p }.
+Proof.
+  intros. destruct (predin eqd a p) eqn:?.
+  - apply predin_PredIn in Heqb. tauto.
+  - right. unfold not; intros. apply not_true_iff_false in Heqb.
+    apply Heqb. now apply predin_PredIn.
+Qed.
+
+Lemma sat_predicate_pred_not_in :
+  forall p a a' op,
+    (forall x, x <> (Pos.to_nat p) -> a x = a' x) ->
+    ~ PredIn p op ->
+    sat_predicate op a = sat_predicate op a'.
+Proof.
+  induction op; intros H; auto.
+  - destruct p0. intros. destruct (peq p p0); subst.
+    + exfalso. apply H0. constructor.
+    + cbn. assert (Pos.to_nat p0 <> Pos.to_nat p). unfold not; intros; apply n.
+      now apply Pos2Nat.inj. apply H in H1. rewrite H1. auto.
+  - intros. assert (~ PredIn p op1 /\ ~ PredIn p op2).
+    split; unfold not; intros; apply H0; constructor; tauto.
+    inv H1. specialize (IHop1 H H2). specialize (IHop2 H H3).
+    cbn. rewrite IHop1. rewrite IHop2. auto.
+  - intros. assert (~ PredIn p op1 /\ ~ PredIn p op2).
+    split; unfold not; intros; apply H0; constructor; tauto.
+    inv H1. specialize (IHop1 H H2). specialize (IHop2 H H3).
+    cbn. rewrite IHop1. rewrite IHop2. auto.
 Qed.
