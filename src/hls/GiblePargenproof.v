@@ -2296,46 +2296,11 @@ all be evaluable.
     eapply all_evaluable2_cons in H0. eauto.
   Qed.
 
-  Lemma all_evaluable_pred_ret :
-    forall A B G (ctx: @ctx G) (sem: @Abstr.ctx G -> A -> B -> Prop)
-        (a: A) (b: B),
-      sem ctx a b ->
-      all_evaluable2 ctx sem (pred_ret a).
-  Abort.
-
   Lemma seq_app_cons :
     forall A B  f a l p0 p1,
       @seq_app A B (pred_ret f) (NE.cons a l) = NE.cons p0 p1 ->
       @seq_app A B (pred_ret f) l = p1.
   Proof. intros. cbn in *. inv H. eauto. Qed.
-
-  Lemma eval_predf_seq_app_evaluable :
-    forall G (ctx: @ctx G) (l: predicated expression_list) f,
-      all_evaluable2 ctx sem_val_list l ->
-      all_evaluable2 ctx sem_pred (seq_app (pred_ret f) l).
-  Proof.
-(*    induction l; intros.
-    - cbn in *. unfold all_evaluable2. intros.
-      inv H0. unfold evaluable. destruct a. cbn.
-      unfold all_evaluable2 in *. specialize (H p e ltac:(constructor)).
-      inv H. econstructor. econstructor; eauto. admit.
-    - unfold all_evaluable2; intros.
-    
-      Opaque seq_app. inversion_clear H0. inversion_clear H1. Transparent seq_app.
-      destruct (seq_app (pred_ret (PEsetpred c)) (NE.cons a l)) eqn:?.
-
-      { destruct a0.  inversion_clear H0. 
-        destruct p0. cbn in *. discriminate. }
-
-      { cbn in *. destruct p0. inv H0. inv Heqp0. destruct a. cbn. admit. }
-
-      destruct (seq_app (pred_ret (PEsetpred c)) (NE.cons a l)) eqn:?. cbn in *.
-      { discriminate. }
-
-      eapply seq_app_cons in Heqp0. rewrite <- Heqp0 in H0.
-      apply all_evaluable2_cons in H.
-      exploit IHl. auto. eauto. auto.*)
-  Abort.
 
   Lemma p_evaluable_imp :
     forall A (ctx: @ctx A) a b,
@@ -2347,39 +2312,6 @@ all be evaluable.
     constructor. replace true with (negb false) by trivial. left.
     now apply sem_pexpr_negate.
   Qed.
-
-  Lemma eval_predf_update_evaluable :
-    forall A (ctx: @ctx A) i' curr_p out next_p f f_next instr
-        (SEM_EXISTS: sem ctx f (i', None))
-        (SEM_STEP: step_instr (ctx_ge ctx) (ctx_sp ctx) (Iexec i') instr out),
-      update (curr_p, f) instr = Some (next_p, f_next) ->
-      forest_evaluable ctx f ->
-      p_evaluable ctx (from_pred_op (forest_preds f) curr_p) ->
-      forest_evaluable ctx f_next.
-  Proof.
-    destruct instr; intros; cbn -[seq_app pred_ret merge list_translation] in *.
-    - inversion H; subst; auto.
-    - unfold Option.bind in *. destruct_match; try easy.
-      inversion_clear H. eapply forest_evaluable_regset; auto.
-    - unfold Option.bind in *. destruct_match; try easy.
-      inversion_clear H. eapply forest_evaluable_regset; auto.
-    - unfold Option.bind in *. destruct_match; try easy.
-      inversion_clear H. eapply forest_evaluable_regset; auto.
-    - unfold Option.bind in *. destruct_match; crush.
-      unfold forest_evaluable, pred_forest_evaluable.
-      intros. cbn -[seq_app pred_ret merge list_translation] in *.
-      (*destruct (peq i p); subst; [rewrite PTree.gss in H; inversion_clear H
-        | rewrite PTree.gso in H by auto; eapply H0; eassumption].
-      inv SEM_STEP.
-      { eapply evaluable_impl.
-        eapply p_evaluable_Pand; auto.
-        eapply from_predicated_evaluable; auto.
-        admit. }
-      apply p_evaluable_imp. inv H3. cbn. inv SEM_EXISTS. inv H5.
-      econstructor. left. eapply sem_pexpr_eval; eauto.*) admit.
-    - unfold Option.bind in *. destruct_match; try easy.
-      inversion_clear H. eapply forest_evaluable_regset; auto.
-  Abort.
 
   Lemma sem_update_valid_mem :
     forall i i' i'' curr_p next_p f f_next instr sp,
@@ -2409,23 +2341,6 @@ all be evaluable.
       now erewrite IHp2 by eassumption.
   Qed.
 
-  Lemma abstr_fold_evaluable :
-    forall A (ctx: @ctx A) x f f' curr_p p,
-      mfold_left update x (Some (curr_p, f)) = Some (p, f') ->
-      forest_evaluable ctx f ->
-      forest_evaluable ctx f'.
-  Proof.
-    induction x as [| x xs IHx ].
-    - cbn in *; inversion 1; auto.
-    - intros.
-      replace (mfold_left update (x :: xs) (Some (curr_p, f)) = Some (p, f'))
-      with (mfold_left update xs (update (curr_p, f) x) = Some (p, f')) in H by auto.
-      exploit mfold_left_update_Some. eassumption.
-      inversion_clear 1 as [y SOME]. destruct y. rewrite SOME in H.
-      eapply IHx; [eassumption|].
-      (*eauto using eval_predf_update_evaluable.*)
-  Abort.
-
 (*|
 ``abstr_fold_falsy``: This lemma states that when we are at the end of an
 execution, the values in the register map do not continue to change.
@@ -2448,13 +2363,6 @@ execution, the values in the register map do not continue to change.
       inversion_clear H2.
       eapply IHilist; eassumption.
   Qed.
-
-  Lemma forest_evaluable_lessdef :
-    forall A (ge: Genv.t A unit) sp st st' f,
-      forest_evaluable (mk_ctx st sp ge) f ->
-      state_lessdef st st' ->
-      forest_evaluable (mk_ctx st' sp ge) f.
-  Proof. Abort.
 
   Lemma abstr_fold_correct :
     forall sp x i i' i'' cf f p f' curr_p
@@ -2493,11 +2401,11 @@ execution, the values in the register map do not continue to change.
       exploit sem_update_instr_term;
       eauto; intros [A B].
       exists v2.
-      exploit abstr_fold_falsy. (* TODO *)
+      exploit abstr_fold_falsy.
       apply A.
-      eassumption. auto.
-      cbn. inversion Hi2; subst. auto. intros.
-      inversion_clear H as [Hsem Hforest]. split. auto. split. auto.
+      eassumption. auto. cbn. inversion Hi2; subst. auto. intros.
+      split; auto. split; auto.
+      inversion H7; subst; auto.
   Qed.
 
   Lemma sem_regset_empty :
