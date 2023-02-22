@@ -163,6 +163,33 @@ Module HashTree(H: Hashable).
       (nkey, PTree.set nkey e h)
     end.
 
+  Definition hash_value2 (max: hash) (e: t * t) (h: hash_tree): (hash * hash) * hash_tree :=
+    let (e1, e2) := e in
+    let (v1, h1) := hash_value max e1 h in
+    let (v2, h2) := hash_value max e2 h1 in
+    ((v1, v2), h2).
+
+  Definition hash_value3 (max: hash) (e: t * t * t) (h: hash_tree): (hash * hash * hash) * hash_tree :=
+    let '(e1, e2, e3) := e in
+    let (v1, h1) := hash_value max e1 h in
+    let (v2, h2) := hash_value max e2 h1 in
+    let (v3, h3) := hash_value max e3 h2 in
+    ((v1, v2, v3), h3).
+
+  Definition hash_value4 (max: hash) (e: t * t * t * t) (h: hash_tree): (hash * hash * hash * hash) * hash_tree :=
+    let '(e1, e2, e3, e4) := e in
+    let (v1, h1) := hash_value max e1 h in
+    let (v2, h2) := hash_value max e2 h1 in
+    let (v3, h3) := hash_value max e3 h2 in
+    let (v4, h4) := hash_value max e4 h3 in
+    ((v1, v2, v3, v4), h4).
+
+  Definition hash_list (max: hash) (e: list t) (h: hash_tree): list hash * hash_tree :=
+    fold_left (fun s e =>
+                 let (i, h') := hash_value max e (snd s) in
+                 (fst s ++ i::nil, h')
+              ) e (nil, h).
+
   Definition wf_hash_table h_tree :=
     forall x c, h_tree ! x = Some c -> find_tree c h_tree = Some x.
 
@@ -458,14 +485,28 @@ Module HashTree(H: Hashable).
 
   Module HashMonad := Statemonad(HashState).
 
-End HashTree.
-
-Definition gt_1 {A} h :=
-  forall x (y: A), h ! x = Some y -> 1 < x.
-
-Module HashTreeProperties (Import H: Hashable).
-
-  Module Import HT := HashTree(H).
+  Definition gt_1 h :=
+    forall x (y: t), h ! x = Some y -> 1 < x.
+  
+  Definition match_one (f: PTree.t t) lf :=
+    forall y z, lf ! y = Some z -> f ! y = Some z.
+  
+  Definition match_all (f: PTree.t t) lf :=
+    Forall (match_one f) lf.
+  
+  Lemma match_one_refl :
+    forall x, match_one x x.
+  Proof. unfold match_one; auto. Qed.
+  
+  Instance match_one_Reflexive : Reflexive match_one.
+  Proof. unfold Reflexive. auto using match_one_refl. Qed.
+  
+  Lemma match_one_trans :
+    forall x y z, match_one x y -> match_one y z -> match_one x z.
+  Proof. unfold match_one; auto. Qed.
+  
+  Instance match_one_Transitive : Transitive match_one.
+  Proof. unfold Transitive. eauto using match_one_trans. Qed.
 
   Lemma hash_value_gt :
     forall max v h,
@@ -478,4 +519,37 @@ Module HashTreeProperties (Import H: Hashable).
     cbn [snd] in *. rewrite PTree.gso in H0; eauto.
   Qed.
 
-End HashTreeProperties.
+  Lemma hash_value_in :
+    forall max f ht h ht',
+      hash_value max f ht = (h, ht') ->
+      ht' ! h = Some f.
+  Proof.
+    unfold hash_value. intros.
+    destruct_match.
+    - inv H. eapply find_tree_correct; eauto.
+    - inv H. rewrite PTree.gss. auto.
+  Qed.
+
+  Lemma match_one_hash_value :
+    forall max x h h' y y',
+      hash_value max y h = (y', h') ->
+      match_one x h' ->
+      match_one x h.
+  Proof.
+    unfold match_one.
+    intros.
+    eapply H0; eauto.
+    eapply hash_constant; eauto.
+  Qed.
+
+  Lemma hash_value_eq :
+    forall h v ht h',
+      wf_hash_table ht ->
+      ht ! h' = Some v ->
+      hash_value h v ht = (h', ht).
+  Proof.
+    intros. unfold hash_value. unfold wf_hash_table in *. apply H in H0.
+    rewrite H0; auto.
+  Qed.
+
+End HashTree.

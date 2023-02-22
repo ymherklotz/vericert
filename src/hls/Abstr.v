@@ -753,7 +753,12 @@ Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
   let (p2, h') := HN.encode_expression 1%positive pe2 h in
   equiv_check p1 p2.
 
+Definition pred_eexpr_eqb: forall pe1 pe2: pred_eexpr,
+  {pe1 = pe2} + {pe1 <> pe2}.
+Admitted.
+
 Definition beq_pred_eexpr (pe1 pe2: pred_eexpr) : bool :=
+  if pred_eexpr_eqb pe1 pe2 then true else
   let (p1, h) := EHN.encode_expression 1%positive pe1 (PTree.empty _) in
   let (p2, h') := EHN.encode_expression 1%positive pe2 h in
   equiv_check p1 p2.
@@ -912,13 +917,23 @@ Lemma norm_expression_sem_pred2 :
       sem_pred_expr sem ctx pe v.
 Proof. Admitted.*)
 
+Definition pred_expr_eqb: forall pe1 pe2: pred_expr,
+  {pe1 = pe2} + {pe1 <> pe2}.
+Admitted.
+
 Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
+  if pred_expr_eqb pe1 pe2 then true else
   let (np1, h) := HN.norm_expression 1 pe1 (PTree.empty _) in
   let (np2, h') := HN.norm_expression 1 pe2 h in
   forall_ptree (tree_equiv_check_el np2) np1
   && forall_ptree (tree_equiv_check_None_el np1) np2.
 
+Definition pred_pexpr_eqb: forall pe1 pe2: pred_pexpr,
+  {pe1 = pe2} + {pe1 <> pe2}.
+Admitted.
+
 Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
+  if pred_pexpr_eqb pe1 pe2 then true else
   let (np1, h) := hash_predicate 1 pe1 (PTree.empty _) in
   let (np2, h') := hash_predicate 1 pe2 h in
   equiv_check np1 np2.
@@ -1535,3 +1550,166 @@ Lemma forest_pred_gso2 :
     r <> w ->
     (forest_preds (f #p w <- p)) ! r = (forest_preds f) ! r.
 Proof. intros. unfold set_forest_p. simpl. now rewrite PTree.gso by auto. Qed.
+
+Inductive state_lessdef : instr_state -> instr_state -> Prop :=
+  state_lessdef_intro :
+    forall rs1 rs2 ps1 ps2 m1,
+      (forall x, rs1 !! x = rs2 !! x) ->
+      (forall x, ps1 !! x = ps2 !! x) ->
+      state_lessdef (mk_instr_state rs1 ps1 m1) (mk_instr_state rs2 ps2 m1).
+
+Lemma state_lessdef_refl x : state_lessdef x x.
+Proof. destruct x; constructor; auto. Qed.
+
+Lemma state_lessdef_symm x y : state_lessdef x y -> state_lessdef y x.
+Proof. destruct x; destruct y; inversion 1; subst; simplify; constructor; auto. Qed.
+
+Lemma state_lessdef_trans :
+  forall a b c,
+    state_lessdef a b ->
+    state_lessdef b c ->
+    state_lessdef a c.
+Proof.
+  inversion 1; inversion 1; subst; simplify.
+  constructor; eauto; intros. rewrite H0. auto.
+Qed.
+
+#[global] Instance Equivalence_state_lessdef : Equivalence state_lessdef :=
+  { Equivalence_Reflexive := state_lessdef_refl;
+    Equivalence_Symmetric := state_lessdef_symm;
+    Equivalence_Transitive := state_lessdef_trans;
+  }.
+
+Section CORRECT.
+
+Context (prog: GibleSeq.program) (tprog : GiblePar.program).
+Context (sp: val).
+
+Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
+Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
+
+Definition mkctx a := mk_ctx a sp ge.
+
+Lemma sem_pred_exec_beq_correct :
+  forall A B (sem: ctx -> A -> B -> Prop) a b i p r,
+    PTree.beq beq_pred_pexpr a b = true ->
+    sem_pred_expr a sem (mkctx i) p r ->
+    sem_pred_expr b sem (mkctx i) p r.
+Proof. Admitted.
+
+Lemma sem_pred_exec_beq_correct2 :
+  forall A B (sem: ctx -> A -> B -> Prop) a i ti p r,
+    state_lessdef i ti ->
+    sem_pred_expr a sem (mkctx i) p r ->
+    sem_pred_expr a sem (mkctx ti) p r.
+Proof. Admitted.
+
+Lemma sem_expr_beq_correct :
+  forall pt i a b v,
+    beq_pred_expr a b = true ->
+    sem_pred_expr pt sem_value (mkctx i) a v ->
+    sem_pred_expr pt sem_value (mkctx i) b v.
+Proof.
+  induction a.
+  - intros. inv H0.
+  unfold beq_pred_expr; intros. destruct_match; subst; auto.
+  repeat destruct_match. simplify. clear Heqs. clear n.
+  inv H0.
+
+Lemma sem_expr_beq_correct_mem :
+  forall pt i a b v,
+    beq_pred_expr a b = true ->
+    sem_pred_expr pt sem_mem (mkctx i) a v ->
+    sem_pred_expr pt sem_mem (mkctx i) b v.
+Proof. Admitted.
+
+Lemma sem_expr_beq_correct_exit :
+  forall pt i a b v,
+    beq_pred_eexpr a b = true ->
+    sem_pred_expr pt sem_exit (mkctx i) a v ->
+    sem_pred_expr pt sem_exit (mkctx i) b v.
+Proof. Admitted.
+
+Lemma sem_eexpr_beq_correct :
+  forall pt i a b v,
+    beq_pred_eexpr a b = true ->
+    sem_pred_expr pt sem_exit (mkctx i) a v ->
+    sem_pred_expr pt sem_exit (mkctx i) b v.
+Proof. Admitted.
+
+Lemma sem_pexpr_state_lessdef :
+  forall i i' a v,
+    state_lessdef i i' ->
+    sem_pexpr (mkctx i) a v ->
+    sem_pexpr (mkctx i') a v.
+Proof. Admitted.
+
+Lemma sem_pexpr_beq_correct :
+  forall i p1 p2 b,
+    beq_pred_pexpr p1 p2 = true ->
+    sem_pexpr (mkctx i) p1 b ->
+    sem_pexpr (mkctx i) p2 b.
+Proof. Admitted.
+
+Lemma tree_beq_pred_pexpr :
+  forall a b x,
+    RTree.beq beq_pred_pexpr (forest_preds a) (forest_preds b) = true ->
+    beq_pred_pexpr a #p x b #p x = true.
+Proof.
+  intros. unfold "#p". unfold get_forest_p'.
+  apply PTree.beq_correct with (x := x) in H.
+  destruct_match; destruct_match; auto.
+  unfold beq_pred_pexpr. destruct_match; auto.
+Qed.
+
+Lemma tree_beq_pred_expr :
+  forall a b x,
+    RTree.beq beq_pred_expr (forest_regs a) (forest_regs b) = true ->
+    beq_pred_expr a #r x b #r x = true.
+Proof.
+  intros. unfold "#r".
+  apply PTree.beq_correct with (x := (R_indexed.index x)) in H.
+  unfold RTree.get in *. 
+  destruct_match; destruct_match; auto.
+  unfold beq_pred_expr. destruct_match; auto.
+Qed.
+
+Lemma abstr_check_correct :
+  forall i i' a b cf ti,
+    check a b = true ->
+    sem (mkctx i) a (i', cf) ->
+    state_lessdef i ti ->
+    exists ti', sem (mkctx ti) b (ti', cf) /\ state_lessdef i' ti'.
+Proof.
+  intros. unfold check in H. simplify.
+  inv H0. inv H6. inv H7.
+  eexists. split. {
+  constructor.
+  - constructor. intros.
+    eapply sem_pred_exec_beq_correct; eauto.
+    eapply sem_pred_exec_beq_correct2; eauto.
+    eapply sem_expr_beq_correct. eapply tree_beq_pred_expr; eauto.
+    eauto.
+  - constructor. intros. apply sem_pexpr_beq_correct with (p1 := a #p x).
+    apply tree_beq_pred_pexpr; auto.
+    apply sem_pexpr_state_lessdef with (i := i); auto.
+  - eapply sem_pred_exec_beq_correct; eauto.
+    eapply sem_pred_exec_beq_correct2; eauto.
+    eapply sem_expr_beq_correct_mem. eapply tree_beq_pred_expr; eauto.
+    eauto.
+  - eapply sem_pred_exec_beq_correct; eauto.
+    eapply sem_pred_exec_beq_correct2; eauto.
+    eapply sem_expr_beq_correct_exit; eauto.
+  }
+  constructor; auto.
+Qed.
+
+(*|
+Proof Sketch:
+
+Two abstract states can be equivalent, without it being obvious that they can
+actually both be executed assuming one can be executed.  One will therefore have
+to add a few more assumptions to makes it possible to execute the other.
+|*)
+
+End CORRECT.

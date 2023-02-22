@@ -165,35 +165,6 @@ Proof.
   - rewrite forest_pred_gso2 in H1 by auto; eauto.
 Qed.
 
-Inductive state_lessdef : instr_state -> instr_state -> Prop :=
-  state_lessdef_intro :
-    forall rs1 rs2 ps1 ps2 m1,
-      (forall x, rs1 !! x = rs2 !! x) ->
-      (forall x, ps1 !! x = ps2 !! x) ->
-      state_lessdef (mk_instr_state rs1 ps1 m1) (mk_instr_state rs2 ps2 m1).
-
-Lemma state_lessdef_refl x : state_lessdef x x.
-Proof. destruct x; constructor; auto. Qed.
-
-Lemma state_lessdef_symm x y : state_lessdef x y -> state_lessdef y x.
-Proof. destruct x; destruct y; inversion 1; subst; simplify; constructor; auto. Qed.
-
-Lemma state_lessdef_trans :
-  forall a b c,
-    state_lessdef a b ->
-    state_lessdef b c ->
-    state_lessdef a c.
-Proof.
-  inversion 1; inversion 1; subst; simplify.
-  constructor; eauto; intros. rewrite H0. auto.
-Qed.
-
-#[global] Instance Equivalence_state_lessdef : Equivalence state_lessdef :=
-  { Equivalence_Reflexive := state_lessdef_refl;
-    Equivalence_Symmetric := state_lessdef_symm;
-    Equivalence_Transitive := state_lessdef_trans;
-  }.
-
 Definition check_dest i r' :=
   match i with
   | RBop p op rl r => (r =? r')%positive
@@ -2448,25 +2419,6 @@ execution, the values in the register map do not continue to change.
     { apply sem_empty. }
     exists x0. auto.
   Qed.
-
-  Lemma abstr_check_correct :
-    forall sp i i' a b cf ti,
-      check a b = true ->
-      sem (mk_ctx i sp ge) a (i', cf) ->
-      state_lessdef i ti ->
-      exists ti', sem (mk_ctx ti sp ge) b (ti', cf)
-             /\ state_lessdef i' ti'.
-  Proof.
-
-(*|
-Proof Sketch:
-
-Two abstract states can be equivalent, without it being obvious that they can
-actually both be executed assuming one can be executed.  One will therefore have
-to add a few more assumptions to makes it possible to execute the other.
-|*)
-
-  Admitted.
 
   Lemma abstr_seq_reverse_correct :
     forall sp x i i' ti cf x',
