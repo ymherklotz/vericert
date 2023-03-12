@@ -506,11 +506,10 @@ Lemma sat_measure_setClause' :
 Proof.
   induction cl; intros.
   { simpl in *. inv H. unfold not in *. intros. inv H. }
-  { simpl in H.
-    repeat (destruct_match; crush; []). destruct_match.
-    repeat (destruct_match; crush; []). inv H. eapply IHcl; eauto.
-    inv H. unfold not. intros. inv H. contradiction. eapply IHcl; eauto.
-  }
+  simpl in H.
+  repeat (destruct_match; crush; []). destruct_match.
+  repeat (destruct_match; crush; []). inv H. eapply IHcl; eauto.
+  inv H. unfold not. intros. inv H. contradiction. eapply IHcl; eauto.
 Qed.
 
 Lemma sat_measure_setClause'' :
@@ -533,6 +532,19 @@ Proof.
   }
 Qed.
 
+Lemma sat_measure_setClause2'' :
+  forall cl cl' l A,
+    setClause cl l = inleft (exist _ cl' A) ->
+    forall l',
+      l' <> snd l ->
+      In l' (map snd cl') ->
+      In l' (map snd cl).
+Proof.
+  induction cl; intros.
+  { cbn in *. inv H. cbn in *. auto. }
+  exploit IHcl; eauto.
+  Admitted.
+
 Lemma sat_measure_setClause :
   forall cl cl' l A,
     In (snd l) (map snd cl) ->
@@ -540,7 +552,7 @@ Lemma sat_measure_setClause :
     NSet.cardinal (lit_set_cl cl') < NSet.cardinal (lit_set_cl cl).
 Proof.
   intros. pose proof H0. apply sat_measure_setClause' in H0.
-  pose proof (sat_measure_setClause'' _ _ _ _ H1). admit.
+  pose proof (sat_measure_setClause'' _ _ _ _ H1).
 Admitted.
 
 Definition InFm l (fm: formula) := exists cl, In cl fm /\ In l cl.

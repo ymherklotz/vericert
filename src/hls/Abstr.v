@@ -1611,10 +1611,12 @@ Lemma sem_expr_beq_correct :
     sem_pred_expr pt sem_value (mkctx i) b v.
 Proof.
   induction a.
-  - intros. inv H0.
-  unfold beq_pred_expr; intros. destruct_match; subst; auto.
-  repeat destruct_match. simplify. clear Heqs. clear n.
-  inv H0.
+  - intros. inv H0. unfold beq_pred_expr in *; intros. destruct_match; subst; auto.
+    + constructor; auto.
+    + repeat destruct_match. simplify. inv Heqp. clear Heqs.
+      admit.
+  - intros.
+Admitted.
 
 Lemma sem_expr_beq_correct_mem :
   forall pt i a b v,
