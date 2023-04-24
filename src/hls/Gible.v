@@ -152,6 +152,33 @@ Definition max_pred_instr (m: positive) (i: instr) :=
   | _ => m
   end.
 
+Definition pred_uses i :=
+  match i with
+  | RBop (Some p) _ _ _
+  | RBload (Some p) _ _ _ _
+  | RBstore (Some p) _ _ _ _
+  | RBexit (Some p) _ => predicate_use p
+  | RBsetpred (Some p) _ _ p' => p' :: predicate_use p
+  | _ => nil
+  end.
+
+Lemma max_pred_instr_mono i p q :
+  (p <= q)%positive -> (p <= max_pred_instr q i)%positive.
+Proof.
+  now intro; destruct i; [assumption | | | | | ];
+    (destruct o; [eapply Pos.le_trans, Pos.le_max_l | ]).
+Qed.
+
+Lemma pred_lt p i mp :
+  In p (pred_uses i) -> (p <= max_pred_instr mp i)%positive.
+Proof.
+  intro H; destruct i; [easy | | | | | ].
+  4: { destruct o; [eapply Pos.le_trans, Pos.le_max_r | easy].
+    destruct H as [-> | ]; [exact (Pos.le_max_l _ _) | ].
+    now eapply Pos.le_trans, Pos.le_max_r; apply predicate_lt. }
+  all: now (destruct o; [eapply Pos.le_trans, Pos.le_max_r; apply predicate_lt | ]).
+Qed.
+
 Definition regset := Regmap.t val.
 Definition predset := PMap.t bool.
 
@@ -361,6 +388,29 @@ Inductive step_list_inter {A} (step_i: val -> istate -> A -> istate -> Prop):
 | exec_term_RBcons_term :
   forall i cf l sp,
     step_list_inter step_i sp (Iterm i cf) l (Iterm i cf).
+
+
+Ltac truthy_falsy :=
+  match goal with
+  | H: instr_falsy ?ps (RBop ?p _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBload ?p _ _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBstore ?p _ _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBexit ?p _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  | H: instr_falsy ?ps (RBsetpred ?p _ _ _), H2: truthy ?ps ?p |- _ =>
+      solve [inv H2; inv H; crush]
+  end.
+
+Lemma step_instr_determ {A B} {ge : Genv.t A B} {sp s1 a s2 s2'} :
+  step_instr ge sp s1 a s2 -> step_instr ge sp s1 a s2' -> s2 = s2'.
+Proof. intros H H'; inv H; inv H'; simplify; try easy; truthy_falsy. Qed.
+
+Lemma step_instr_false {A B} {ge : Genv.t A B} {sp i c a i0} :
+  ~ step_instr ge sp (Iterm i c) a (Iexec i0).
+Proof. destruct a; intro H; inv H. Qed.
 
 (*|
 Top-Level Type Definitions
@@ -674,14 +724,5 @@ type ~genv~ which was declared earlier.
                end
             ) b nil.
 
-    Definition pred_uses i :=
-      match i with
-      | RBop (Some p) _ _ _
-      | RBload (Some p) _ _ _ _
-      | RBstore (Some p) _ _ _ _
-      | RBexit (Some p) _ => predicate_use p
-      | RBsetpred (Some p) _ _ p' => p' :: predicate_use p
-      | _ => nil
-      end.
-
 End Gible.
+

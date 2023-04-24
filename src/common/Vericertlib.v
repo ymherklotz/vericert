@@ -224,6 +224,11 @@ Ltac boolInv :=
       idtac
   end.
 
+Ltac prove_assumption P :=
+  match type of P with
+  | ?A -> _ => let H := fresh in assert A as H; [ | specialize (P H); clear H]
+  end.
+
 Remark ptree_forall:
   forall (A: Type) (f: positive -> A -> bool) (m: Maps.PTree.t A),
   Maps.PTree.fold (fun (res: bool) (i: positive) (x: A) => res && f i x) m true = true ->

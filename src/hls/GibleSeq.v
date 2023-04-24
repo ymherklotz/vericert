@@ -79,11 +79,6 @@ Lemma forbidden_term_trans :
     ~ @SeqBB.step A B ge sp (Iterm i c) b (Iterm i' c').
 Proof. induction b; unfold not; intros; inv H. Qed.
 
-Lemma step_instr_false :
-  forall A B ge sp i c a i0,
-    ~ @step_instr A B ge sp (Iterm i c) a (Iexec i0).
-Proof. destruct a; unfold not; intros; inv H. Qed.
-
 Lemma step_list_false :
   forall A B ge sp a i0 s,
     ~ step_list (@step_instr A B ge) sp s a (Iexec i0).
@@ -149,42 +144,27 @@ Qed.
 
 #[local] Open Scope positive.
 
+Lemma max_pred_block_mono bb n :
+  forall p q, p <= q -> p <= max_pred_block q n bb.
+Proof. now induction bb; [ | intros; apply IHbb, max_pred_instr_mono]. Qed.
+
 Lemma max_pred_function_use :
   forall f pc bb i p,
     f.(fn_code) ! pc = Some bb ->
     In i bb ->
     In p (pred_uses i) ->
     p <= max_pred_function f.
-Proof. Admitted.
-
-Ltac truthy_falsy :=
-  match goal with
-  | H: instr_falsy ?ps (RBop ?p _ _ _), H2: truthy ?ps ?p |- _ =>
-      solve [inv H2; inv H; crush]
-  | H: instr_falsy ?ps (RBload ?p _ _ _ _), H2: truthy ?ps ?p |- _ =>
-      solve [inv H2; inv H; crush]
-  | H: instr_falsy ?ps (RBstore ?p _ _ _ _), H2: truthy ?ps ?p |- _ =>
-      solve [inv H2; inv H; crush]
-  | H: instr_falsy ?ps (RBexit ?p _), H2: truthy ?ps ?p |- _ =>
-      solve [inv H2; inv H; crush]
-  | H: instr_falsy ?ps (RBsetpred ?p _ _ _), H2: truthy ?ps ?p |- _ =>
-      solve [inv H2; inv H; crush]
-  end.
-
-Lemma exec_determ :
-  forall A B ge sp s1 a s2 s2',
-    @step_instr A B ge sp s1 a s2 ->
-    step_instr ge sp s1 a s2' ->
-    s2 = s2'.
 Proof.
-  inversion 1; subst; crush.
-  - inv H0; auto.
-  - inv H2; crush; truthy_falsy.
-  - inv H3; crush. truthy_falsy.
-  - inv H3; crush. truthy_falsy.
-  - inv H2; crush. truthy_falsy.
-  - inv H1; crush. truthy_falsy.
-  - destruct st; simplify. inv H1; crush; truthy_falsy.
+  unfold max_pred_function; intro f.
+  apply PTree_Properties.fold_ind; [now intros * Hrw ?; rewrite Hrw | ].
+  intros ? mp pc bb Hrw _ Hrec pc' bb' *.
+  case (peq pc' pc) as [-> | Hneq].
+  - rewrite Hrw; intros H Hi Hp; inv H; clear Hrec Hrw; revert Hi mp.
+    induction bb' as [ | ? bb Hrec]; [easy | ].
+    intros [-> | Hnin]; [ | intro; exact (Hrec Hnin _)].
+    now simpl; intro; apply max_pred_block_mono, pred_lt.
+  - specialize (Hrec pc'); rewrite (PTree.gro _ Hneq) in Hrec.
+    now intros H0 H1 **; apply max_pred_block_mono, (Hrec _ _ _ H0 H1).
 Qed.
 
 Lemma append3 :
@@ -194,8 +174,10 @@ Lemma append3 :
     @SeqBB.step A B ge sp (Iexec s2) l1 s3.
 Proof.
   induction l0; crush. inv H. auto.
-  inv H0. inv H. assert (i1 = (Iexec state')) by (eapply exec_determ; eauto). subst. eauto.
-  inv H. assert (i1 = (Iterm state' cf)) by (eapply exec_determ; eauto). subst.
+  inv H0. inv H.
+  assert (i1 = (Iexec state')) by (eapply step_instr_determ; eauto). subst. eauto.
+  inv H.
+  assert (i1 = (Iterm state' cf)) by (eapply step_instr_determ; eauto). subst.
   exfalso; eapply step_list2_false; eauto.
 Qed.
 
@@ -257,15 +239,15 @@ Proof.
   induction l; crush.  inv H.
   inv H; inv H0.
   assert (Iexec state' = Iexec state'0).
-  { eapply exec_determ; eauto. }
+  { eapply step_instr_determ; eauto. }
   inv H. eauto.
   assert (Iexec state' = Iterm state'0 cf0).
-  { eapply exec_determ; eauto. }
+  { eapply step_instr_determ; eauto. }
   discriminate.
   assert (Iterm state' cf = Iexec state'0).
-  { eapply exec_determ; eauto. }
+  { eapply step_instr_determ; eauto. }
   discriminate.
-  eapply exec_determ; eauto.
+  eapply step_instr_determ; eauto.
 Qed.
 
 Lemma step_options :

@@ -140,6 +140,7 @@ Definition match_prog (p: RTL.program) (tp: HTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp /\
   main_is_internal p = true.
 
+#[export]
 Instance TransfHTLLink (tr_fun: RTL.program -> Errors.res HTL.program):
   TransfLink (fun (p1: RTL.program) (p2: HTL.program) => match_prog p1 p2).
 Proof.

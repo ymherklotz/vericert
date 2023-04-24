@@ -654,8 +654,7 @@ Section CORRECTNESS.
     induction 1; intros.
     + inv H2.
       exploit transf_block_spec; eauto.
-      assert (X: forall A B (a: A * B), a = (fst a, snd a)).
-      { destruct a; auto. } eapply X. simplify.
+      eapply surjective_pairing. simplify.
       remember (replace_section elim_cond_s x bb). destruct p. symmetry in Heqp.
       exploit replace_section_spec; eauto.
       solve [eauto using max_pred_function_use].
