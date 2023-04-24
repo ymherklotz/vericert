@@ -12,14 +12,14 @@ Require Import Coq.Structures.OrdersAlt.
 Require Import Coq.Program.Wf.
 Require Import Vericertlib.
 
-Module Nat_OT := Update_OT Nat_as_OT.
-Module NSet := MSetList.Make Nat_OT.
+Module Positive_OT := Update_OT Positive_as_OT.
+Module PSet := MSetList.Make Positive_OT.
 
-#[local] Open Scope nat.
+#[local] Open Scope positive.
 
 (** * Problem Definition *)
 
-Definition var := nat.
+Definition var := positive.
 (** We identify propositional variables with natural numbers. *)
 
 Definition lit := (bool * var)%type.
@@ -79,7 +79,7 @@ Qed.
 (** Augment an assignment with a new mapping. *)
 Definition upd (a : asgn) (l : lit) : asgn :=
   fun v : var =>
-    if eq_nat_dec v (snd l)
+    if peq v (snd l)
     then fst l
     else a v.
 
@@ -88,7 +88,7 @@ Definition upd (a : asgn) (l : lit) : asgn :=
 Lemma satLit_upd_eq : forall l a,
     satLit l (upd a l).
   unfold satLit, upd; simpl; intros.
-  destruct (eq_nat_dec (snd l) (snd l)); tauto.
+  destruct (peq (snd l) (snd l)); tauto.
 Qed.
 
 #[local] Hint Resolve satLit_upd_eq : core.
@@ -98,7 +98,7 @@ Lemma satLit_upd_neq : forall v l s a,
     -> satLit (s, v) (upd a l)
     -> satLit (s, v) a.
   unfold satLit, upd; simpl; intros.
-  destruct (eq_nat_dec v (snd l)); tauto.
+  destruct (peq v (snd l)); tauto.
 Qed.
 
 #[local] Hint Resolve satLit_upd_neq : core.
@@ -108,7 +108,7 @@ Lemma satLit_upd_neq2 : forall v l s a,
     -> satLit (s, v) a
     -> satLit (s, v) (upd a l).
   unfold satLit, upd; simpl; intros.
-  destruct (eq_nat_dec v (snd l)); tauto.
+  destruct (peq v (snd l)); tauto.
 Qed.
 
 #[local] Hint Resolve satLit_upd_neq2 : core.
@@ -118,7 +118,7 @@ Lemma satLit_contra : forall s l a cl,
     -> satLit (s, snd l) (upd a l)
     -> satClause cl a.
   unfold satLit, upd; simpl; intros.
-  destruct (eq_nat_dec (snd l) (snd l)); intuition.
+  destruct (peq (snd l) (snd l)); intuition.
 Qed.
 
 #[local] Hint Resolve satLit_contra : core.
@@ -142,8 +142,8 @@ Definition setClause : forall (cl : clause) (l : lit),
               match setClause xs l with
               | inright p => inright _
               | inleft (exist _ cl' H) =>
-                match eq_nat_dec (snd x) (snd l), bool_eq_dec (fst x) (fst l) with
-                | left nat_eq, left bool_eq => inright _
+                match peq (snd x) (snd l), bool_eq_dec (fst x) (fst l) with
+                | left p_eq, left bool_eq => inright _
                 | left eq, right ne => inleft (exist _ cl' _)
                 | right neq, _ => inleft (exist _ (x :: cl') _)
                 end
@@ -194,7 +194,7 @@ Lemma satLit_idem_lit : forall l a l',
     -> satLit l' a
     -> satLit l' (upd a l).
   unfold satLit, upd; simpl; intros.
-  destruct (eq_nat_dec (snd l') (snd l)); congruence.
+  destruct (peq (snd l') (snd l)); congruence.
 Qed.
 
 #[local] Hint Resolve satLit_idem_lit : core.
@@ -341,7 +341,7 @@ Eval compute in unitPropagateSimple (((false, 0) :: (false, 1) :: nil) :: ((true
 Definition chooseSplit (fm : formula) :=
   match fm with
   | ((l :: _) :: _) => l
-  | _ => (true, 0)
+  | _ => (true, 1)
   end.
 
 Definition negate (l : lit) := (negb (fst l), snd l).
@@ -478,14 +478,14 @@ Eval compute in boundedSatSimple 100 (((true, 0) :: (false, 1) :: nil) :: ((fals
 Eval compute in boundedSatSimple 100 (((false, 0) :: (true, 1) :: nil) :: ((false, 1) :: (true, 0) :: nil) :: nil).*)
 
 Definition lit_set_cl (cl: clause) :=
-  fold_right NSet.add NSet.empty (map snd cl).
+  fold_right PSet.add PSet.empty (map snd cl).
 
 Definition lit_set (fm: formula) :=
-  fold_right NSet.union NSet.empty (map lit_set_cl fm).
+  fold_right PSet.union PSet.empty (map lit_set_cl fm).
 
 (* Compute NSet.cardinal (lit_set (((true, 1)::(true, 1)::(true, 1)::nil)::nil)). *)
 
-Definition sat_measure (fm: formula) := NSet.cardinal (lit_set fm).
+Definition sat_measure (fm: formula) := PSet.cardinal (lit_set fm).
 
 Lemma elim_clause :
   forall (cl: clause) l, In l cl -> exists H, setClause cl l = inright H.
@@ -493,7 +493,7 @@ Proof.
   induction cl; intros; simpl in *; try contradiction.
   destruct (setClause cl l) eqn:?; [|econstructor; eauto].
   destruct s. inversion H; subst. clear H.
-  destruct (Nat.eq_dec (snd l) (snd l)); [| contradiction].
+  destruct (peq (snd l) (snd l)); [| contradiction].
   destruct (bool_eq_dec (fst l) (fst l)); [| contradiction].
   econstructor. eauto. apply IHcl in H0.
   inversion H0. rewrite H1 in Heqs. discriminate.
@@ -543,17 +543,17 @@ Proof.
   induction cl; intros.
   { cbn in *. inv H. cbn in *. auto. }
   exploit IHcl; eauto.
-  Admitted.
+  Abort.
 
 Lemma sat_measure_setClause :
   forall cl cl' l A,
     In (snd l) (map snd cl) ->
     setClause cl l = inleft (exist _ cl' A) ->
-    NSet.cardinal (lit_set_cl cl') < NSet.cardinal (lit_set_cl cl).
+    (PSet.cardinal (lit_set_cl cl') < PSet.cardinal (lit_set_cl cl))%nat.
 Proof.
   intros. pose proof H0. apply sat_measure_setClause' in H0.
   pose proof (sat_measure_setClause'' _ _ _ _ H1).
-Admitted.
+Abort.
 
 Definition InFm l (fm: formula) := exists cl b, In cl fm /\ In (b, l) cl.
 
@@ -604,17 +604,30 @@ Definition hasNoNil : forall fm: formula, {In nil fm} + {~ In nil fm}.
   - apply in_cons; assumption.
 Defined.
 
+Lemma setFormula_set_cl :
+  forall fm cl fm' b l A,
+    setFormula (cl :: fm) (b, l) = inleft (exist _ fm' A) ->
+    exists cl' fm'' B, fm' = cl' :: fm''
+      /\ setClause cl (b, l) = inleft (exist _ cl' B).
+Proof.
+  intros. cbn in H. repeat (destruct_match; try discriminate; []).
+  destruct_match. admit.
+  inv H.
+
 Lemma sat_measure_setFormula :
   forall fm fm' l b A,
     InFm l fm ->
     setFormula fm (b, l) = inleft (exist _ fm' A) ->
-    sat_measure fm' < sat_measure fm.
-Proof. Admitted.
+    (sat_measure fm' < sat_measure fm)%nat.
+Proof.
+  induction fm.
+  - intros. inv H. inv H1. inv H. inv H1.
+  - intros. unfold sat_measure, lit_set. cbn -[PSet.cardinal].
 
 Lemma sat_measure_propagate_unit :
   forall fm' fm H,
     unitPropagate fm = Some (inleft (existT _ fm' H)) ->
-    sat_measure fm' < sat_measure fm.
+    (sat_measure fm' < sat_measure fm)%nat.
 Proof.
   induction fm; crush.
   repeat (destruct_match; crush; []).
@@ -684,11 +697,14 @@ Next Obligation.
   assert (c <> nil).
   { unfold not; intros. apply hasNoNilfm. constructor; auto. }
   destruct c; try discriminate.
-  Admitted.
+  replace p with (snd (b, p)) by auto. rewrite <- Heqp.
+  apply InFm_chooseSplit. Defined.
 Next Obligation.
   apply wildcard'0; auto. Defined.
 Next Obligation.
-  eapply sat_measure_setFormula. admit. symmetry. eauto. Admitted.
+  eapply sat_measure_setFormula; eauto.
+  destruct fm; try discriminate. destruct c; try discriminate.
+  apply InFm_chooseSplit. Defined.
 Next Obligation.
   apply wildcard'2; auto. Defined.
 Next Obligation.
@@ -708,7 +724,9 @@ Next Obligation.
   { eapply wildcard'; eauto. }
 Defined.
 Next Obligation.
-  Admitted.
+  eapply sat_measure_setFormula; eauto.
+  destruct fm; try discriminate. destruct c; try discriminate.
+  apply InFm_chooseSplit. Defined.
 Next Obligation.
   apply wildcard'1; auto. Defined.
 Next Obligation.
