@@ -182,8 +182,8 @@ Eval compute in setClauseSimple ((true, 0) :: (false, 1) :: nil) (true, 1).
 Eval compute in setClauseSimple ((true, 0) :: (false, 1) :: nil) (false, 1).*)
 
 (** It's useful to have this strongly-specified nilness check. *)
-Definition isNil : forall (A : Set) (ls : list A), {ls = nil} + {True}.
-  destruct ls; [left|right]; eauto.
+Definition isNil : forall (A : Set) (ls : list A), {ls = nil} + {ls <> nil}.
+  destruct ls; [left|right]; [auto|]; unfold not; intros; inversion H.
 Defined.
 Arguments isNil [A].
 
@@ -555,12 +555,59 @@ Proof.
   pose proof (sat_measure_setClause'' _ _ _ _ H1).
 Admitted.
 
-Definition InFm l (fm: formula) := exists cl, In cl fm /\ In l cl.
+Definition InFm l (fm: formula) := exists cl b, In cl fm /\ In (b, l) cl.
+
+Lemma satFormulaHasEmpty :
+  forall fm,
+    In nil fm ->
+    forall a, ~ satFormula fm a.
+Proof.
+  induction fm; crush.
+  unfold not; intros. inv H0. inv H; auto.
+  eapply IHfm; eauto.
+Qed.
+
+Lemma InFm_chooseSplit :
+  forall l b c,
+    InFm (snd (chooseSplit ((l :: b) :: c))) ((l :: b) :: c).
+Proof.
+  simpl; intros. destruct l; cbn.
+  exists ((b0, v) :: b). exists b0.
+  split; constructor; auto.
+Qed.
+
+Lemma InFm_negated_chooseSplit :
+  forall l b c,
+    InFm (snd (negate (chooseSplit ((l :: b) :: c)))) ((l :: b) :: c).
+Proof.
+  simpl; intros. destruct l; cbn.
+  exists ((b0, v) :: b). exists b0.
+  split; constructor; auto.
+Qed.
+
+Definition hasNoNil : forall fm: formula, {In nil fm} + {~ In nil fm}.
+  refine (fix hasNoNil (fm: formula) {struct fm} :=
+    match fm with
+    | cl :: fm' =>
+      match isNil cl with
+      | left clIsNil => left _
+      | right clIsNotNil =>
+        match hasNoNil fm' with
+        | left hasNilfm' => left _
+        | right hasNoNilfm' => right _
+        end
+      end
+    | nil => right _
+    end
+  ); auto.
+  - subst. apply in_eq.
+  - apply in_cons; assumption.
+Defined.
 
 Lemma sat_measure_setFormula :
-  forall fm fm' l A,
+  forall fm fm' l b A,
     InFm l fm ->
-    setFormula fm l = inleft (exist _ fm' A) ->
+    setFormula fm (b, l) = inleft (exist _ fm' A) ->
     sat_measure fm' < sat_measure fm.
 Proof. Admitted.
 
@@ -579,42 +626,50 @@ Proof.
 
 Program Fixpoint satSolve (fm: formula) { measure (sat_measure fm) }:
   {al : alist | satFormula fm (interp_alist al)} + {forall a, ~satFormula fm a} :=
-  if isNil fm
-  then inleft _ (exist _ nil _)
-  else match unitPropagate fm with
-       | Some (inleft (existT _ fm' (exist _ l _))) =>
-         match satSolve fm' with
-         | inleft (exist _ al _) => inleft _ (exist _ (l :: al) _)
-         | inright _ => inright _ _
-         end
-       | Some (inright _) => inright _ _
-       | None =>
-         let l := chooseSplit fm in
-         match setFormula fm l with
-         | inleft (exist _ fm' _) =>
-           match satSolve fm' with
-           | inleft (exist _ al _) => inleft _ (exist _ (l :: al) _)
-           | inright _ =>
-             match setFormula fm (negate l) with
-             | inleft (exist _ fm' _) =>
-               match satSolve fm' with
-               | inleft (exist _ al _) => inleft _ (exist _ (negate l :: al) _)
-               | inright _ => inright _ _
-               end
-             | inright _ => inright _ _
-             end
-           end
-         | inright _ =>
-           match setFormula fm (negate l) with
-           | inleft (exist _ fm' _) =>
-             match satSolve fm' with
-             | inleft (exist _ al _) => inleft _ (exist _ (negate l :: al) _)
-             | inright _ => inright _ _
-             end
-           | inright _ => inright _ _
-           end
-         end
-       end.
+  match isNil fm with
+  | left fmIsNil => inleft _ (exist _ nil _)
+  | right fmIsNotNil =>
+    match hasNoNil fm with
+    | left hasNilfm => inright _ _
+    | right hasNoNilfm =>
+      match unitPropagate fm with
+      | Some (inleft (existT _ fm' (exist _ l _))) =>
+        match satSolve fm' with
+        | inleft (exist _ al _) => inleft _ (exist _ (l :: al) _)
+        | inright _ => inright _ _
+        end
+      | Some (inright _) => inright _ _
+      | None =>
+        let l := chooseSplit fm in
+        match setFormula fm l with
+        | inleft (exist _ fm' _) =>
+          match satSolve fm' with
+          | inleft (exist _ al _) => inleft _ (exist _ (l :: al) _)
+          | inright _ =>
+            match setFormula fm (negate l) with
+            | inleft (exist _ fm' _) =>
+              match satSolve fm' with
+              | inleft (exist _ al _) => inleft _ (exist _ (negate l :: al) _)
+              | inright _ => inright _ _
+              end
+            | inright _ => inright _ _
+            end
+          end
+        | inright _ =>
+          match setFormula fm (negate l) with
+          | inleft (exist _ fm' _) =>
+            match satSolve fm' with
+            | inleft (exist _ al _) => inleft _ (exist _ (negate l :: al) _)
+            | inright _ => inright _ _
+            end
+          | inright _ => inright _ _
+          end
+        end
+      end
+    end
+  end.
+Next Obligation.
+  apply satFormulaHasEmpty; assumption. Defined.
 Next Obligation.
   eapply sat_measure_propagate_unit; eauto. Defined.
 Next Obligation.
@@ -622,11 +677,18 @@ Next Obligation.
 Next Obligation.
   unfold not; intros; eapply wildcard'; apply i; eauto. Defined.
 Next Obligation.
+  intros. symmetry in Heq_anonymous.
+  destruct (chooseSplit fm) eqn:?.
+  apply sat_measure_setFormula in Heq_anonymous; auto. unfold isNil in *.
+  destruct fm; try discriminate.
+  assert (c <> nil).
+  { unfold not; intros. apply hasNoNilfm. constructor; auto. }
+  destruct c; try discriminate.
   Admitted.
 Next Obligation.
   apply wildcard'0; auto. Defined.
 Next Obligation.
-  Admitted.
+  eapply sat_measure_setFormula. admit. symmetry. eauto. Admitted.
 Next Obligation.
   apply wildcard'2; auto. Defined.
 Next Obligation.

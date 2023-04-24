@@ -552,27 +552,6 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       rewrite eval_predf_negate. rewrite H0. auto.
   Qed.
 
-  Lemma sem_pexpr_negate :
-    forall A ctx p b,
-      sem_pexpr ctx p b ->
-      @sem_pexpr A ctx (¬ p) (negb b).
-  Proof.
-    induction p; crush.
-    - destruct_match. destruct b0; crush. inv Heqp0.
-      constructor. inv H. rewrite negb_involutive. auto.
-      constructor. inv H. auto.
-    - inv H. constructor.
-    - inv H. constructor.
-    - inv H. inv H3.
-      + apply IHp1 in H. solve [constructor; auto].
-      + apply IHp2 in H. solve [constructor; auto].
-      + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
-    - inv H. inv H3.
-      + apply IHp1 in H. solve [constructor; auto].
-      + apply IHp2 in H. solve [constructor; auto].
-      + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
-  Qed.
-
   Lemma sem_pexpr_evaluable :
     forall A ctx f_p ps,
       (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
