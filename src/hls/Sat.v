@@ -6,14 +6,15 @@ UC Berkeley *)
 
 Require Import Arith Bool List.
 Require Import Coq.funind.Recdef.
-Require Coq.MSets.MSetList.
+Require Coq.MSets.MSetPositive.
+Require Coq.MSets.MSetProperties.
 Require Import Coq.Structures.OrderedTypeEx.
 Require Import Coq.Structures.OrdersAlt.
 Require Import Coq.Program.Wf.
 Require Import Vericertlib.
 
-Module Positive_OT := Update_OT Positive_as_OT.
-Module PSet := MSetList.Make Positive_OT.
+Module PSet := MSetPositive.PositiveSet.
+Module PSetProp := MSetProperties.OrdProperties(PSet).
 
 #[local] Open Scope positive.
 
@@ -58,6 +59,13 @@ Fixpoint satFormula (fm: formula) (a: asgn) {struct fm} : Prop :=
 
 (** You'll probably want to compare booleans for equality at some point. *)
 Definition bool_eq_dec : forall (x y : bool), {x = y} + {x <> y}.
+  decide equality.
+Defined.
+
+(** You'll probably want to compare booleans for equality at some point. *)
+Definition boolpositive_eq_dec : forall (x y : (bool * positive)), {x = y} + {x <> y}.
+  pose proof bool_eq_dec.
+  pose proof peq.
   decide equality.
 Defined.
 
@@ -480,10 +488,39 @@ Eval compute in boundedSatSimple 100 (((false, 0) :: (true, 1) :: nil) :: ((fals
 Definition lit_set_cl (cl: clause) :=
   fold_right PSet.add PSet.empty (map snd cl).
 
+Lemma lit_set_cl_in_set :
+  forall cl v,
+    In v (map snd cl) ->
+    PSet.In v (lit_set_cl cl).
+Proof.
+  induction cl; crush.
+  destruct a; cbn [snd] in *; inv H.
+  - cbn. apply PSetProp.P.FM.add_1; auto.
+  - cbn. apply PSetProp.P.FM.add_2.
+    now apply IHcl.
+Qed.
+
+Lemma lit_set_cl_not_in_set :
+  forall cl v,
+    ~ In v (map snd cl) ->
+    ~ PSet.In v (lit_set_cl cl).
+Proof.
+  induction cl; crush.
+  destruct a; cbn [snd] in *.
+  assert (p <> v /\ ~ In v (map snd cl))
+    by (split; unfold not; intros; apply H; tauto).
+  inv H0. cbn. unfold not; intros. 
+  eapply IHcl; eauto.
+  unfold lit_set_cl.
+  eapply PSetProp.P.Dec.F.add_3; eassumption.
+Qed.
+
 Definition lit_set (fm: formula) :=
   fold_right PSet.union PSet.empty (map lit_set_cl fm).
 
 (* Compute NSet.cardinal (lit_set (((true, 1)::(true, 1)::(true, 1)::nil)::nil)). *)
+
+Definition sat_measure_cl (cl: clause) := PSet.cardinal (lit_set_cl cl).
 
 Definition sat_measure (fm: formula) := PSet.cardinal (lit_set fm).
 
@@ -604,15 +641,119 @@ Definition hasNoNil : forall fm: formula, {In nil fm} + {~ In nil fm}.
   - apply in_cons; assumption.
 Defined.
 
-Lemma setFormula_set_cl :
-  forall fm cl fm' b l A,
-    setFormula (cl :: fm) (b, l) = inleft (exist _ fm' A) ->
-    exists cl' fm'' B, fm' = cl' :: fm''
-      /\ setClause cl (b, l) = inleft (exist _ cl' B).
+Lemma sat_measure_setClause :
+  forall cl cl' l b A,
+    (forall b', ~ In (b', l) cl) ->
+    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    lit_set_cl cl = lit_set_cl cl'.
 Proof.
-  intros. cbn in H. repeat (destruct_match; try discriminate; []).
-  destruct_match. admit.
-  inv H.
+  induction cl; intros.
+  - inv H0. auto.
+  - cbn in H0. repeat (destruct_match; try discriminate; []).
+    destruct_match.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *.
+      exfalso.
+      eapply H. econstructor. auto.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *.
+      assert (forall b', ~ In (b', l) cl).
+      { unfold not; intros. eapply H. apply in_cons. eassumption. }
+      eapply IHcl in Heqs; [|assumption].
+      unfold sat_measure_cl. cbn -[PSet.cardinal].
+      unfold sat_measure_cl in Heqs.
+      replace (fold_right PSet.add PSet.empty (map snd cl))
+        with (lit_set_cl cl); auto.
+      rewrite Heqs. auto.
+Qed.
+
+Lemma in_map_snd_forall :
+  forall A B (cl: list (A * B)) l,
+    ~ In l (map snd cl) ->
+    (forall b', ~ In (b', l) cl).
+Proof.
+  unfold not; intros; apply H.
+  replace l with (snd (b', l)) by auto.
+  now apply in_map.
+Qed.
+
+Lemma sat_measure_setClause_In_neq :
+  forall cl cl' l v b A,
+    In v (map snd cl) ->
+    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    v <> l ->
+    In v (map snd cl').
+Proof.
+    induction cl; intros.
+  - inv H0. auto.
+  - cbn in H0. repeat (destruct_match; try discriminate; []).
+    destruct_match.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *. eapply IHcl; eauto.
+      inv H; auto. contradiction.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *.
+      destruct (peq v v0); subst.
+      { now constructor. }
+      cbn. right. eapply IHcl; eauto. inv H; auto.
+      contradiction.
+Qed.
+
+Lemma sat_measure_setClause_In :
+  forall cl cl' l b A,
+    In l (map snd cl) ->
+    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    (sat_measure_cl cl' < sat_measure_cl cl)%nat.
+Proof.
+  induction cl; intros.
+  - crush.
+  - cbn in H0. repeat (destruct_match; try discriminate; []).
+    destruct_match.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *. clear Heqs2. clear Heqs1.
+      inv H; cbn [snd fst] in *.
+      * destruct (in_dec peq v (map snd cl)).
+        -- exploit IHcl; eauto; intros. unfold sat_measure_cl in *.
+           cbn -[PSet.cardinal]. apply lit_set_cl_in_set in i0.
+           rewrite PSetProp.P.add_cardinal_1; auto.
+        -- apply sat_measure_setClause in Heqs; [|now apply in_map_snd_forall].
+           unfold sat_measure_cl in *. cbn -[PSet.cardinal].
+           setoid_rewrite Heqs.
+           apply lit_set_cl_not_in_set in n0.
+           rewrite PSetProp.P.add_cardinal_2; auto.
+           now rewrite <- Heqs.
+      * exploit IHcl; eauto; intros. unfold sat_measure_cl in *.
+        cbn. rewrite PSetProp.P.add_cardinal_1; auto.
+        now apply lit_set_cl_in_set.
+    + repeat (destruct_match; try discriminate; []). inv H0.
+      cbn [snd fst] in *. cbn in H. inv H; [contradiction|].
+      exploit IHcl; eauto; intros.
+      unfold sat_measure_cl in *. cbn.
+      destruct (in_dec peq v (map snd cl)); destruct (in_dec peq v (map snd x)).
+      * apply lit_set_cl_in_set in i0. apply lit_set_cl_in_set in i1.
+        repeat rewrite PSetProp.P.add_cardinal_1 by auto. auto.
+      * exploit sat_measure_setClause_In_neq. eapply i0. eauto. auto. intros.
+        contradiction.
+      * apply lit_set_cl_in_set in i0. apply lit_set_cl_not_in_set in n0.
+        rewrite PSetProp.P.add_cardinal_1 by auto.
+        rewrite PSetProp.P.add_cardinal_2 by auto. unfold lit_set_cl in *; lia.
+      * apply lit_set_cl_not_in_set in n0. apply lit_set_cl_not_in_set in n1.
+        repeat rewrite PSetProp.P.add_cardinal_2 by auto.
+        unfold lit_set_cl in *; lia.
+Qed.
+
+(* Lemma sat_measure_setFormula :
+  forall cl cl' l b b' A,
+    In (b', l) cl ->
+    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    (sat_measure_cl cl' < sat_measure_cl cl)%nat.
+Proof.
+  induction cl; intros.
+  - crush.
+  - cbn in H0. repeat (destruct_match; try discriminate; []).
+    destruct_match.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *.*)
 
 Lemma sat_measure_setFormula :
   forall fm fm' l b A,
@@ -623,6 +764,7 @@ Proof.
   induction fm.
   - intros. inv H. inv H1. inv H. inv H1.
   - intros. unfold sat_measure, lit_set. cbn -[PSet.cardinal].
+    Admitted.
 
 Lemma sat_measure_propagate_unit :
   forall fm' fm H,

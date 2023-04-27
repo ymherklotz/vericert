@@ -576,13 +576,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     induction p; crush.
     - destruct_match. inv Heqp0.
       destruct b.
-      + cbn in H0. rewrite <- H0.
-        rewrite Pos2Nat.id. eauto.
+      + cbn in H0. rewrite <- H0. eauto.
       + replace false with (negb true) by auto.
         apply sem_pexpr_negate. cbn in H0.
         apply negb_true_iff in H0. rewrite negb_involutive in H0.
-        rewrite <- H0. rewrite Pos2Nat.id.
-        eauto.
+        rewrite <- H0. eauto.
      - constructor.
      - rewrite eval_predf_Pand in H0.
        apply andb_false_iff in H0. inv H0. eapply IHp1 in H1.
@@ -611,13 +609,11 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     induction p; crush.
     - destruct_match. inv Heqp0.
       destruct b.
-      + cbn in H0. rewrite <- H0.
-        rewrite Pos2Nat.id. eauto.
+      + cbn in H0. rewrite <- H0. eauto.
       + replace true with (negb false) by auto.
         apply sem_pexpr_negate. cbn in H0.
         apply negb_true_iff in H0.
-        rewrite <- H0. rewrite Pos2Nat.id.
-        eauto.
+        rewrite <- H0. eauto.
      - constructor.
      - rewrite eval_predf_Pand in H0.
        apply andb_true_iff in H0. inv H0.

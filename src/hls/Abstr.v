@@ -941,11 +941,10 @@ Proof.
   induction p; crush.
   - destruct_match. inv Heqp0. destruct b.
     cbn. specialize (H p0).
-    rewrite Pos2Nat.id in *.
     apply sem_pexpr_determ with (b2 := false) in H; auto.
     specialize (H p0).
     apply sem_pexpr_determ with (b2 := true) in H; auto.
-    cbn. rewrite Pos2Nat.id in *. rewrite H. auto.
+    cbn. rewrite H. auto.
     replace false with (negb true) in H0 by trivial.
     apply sem_pexpr_negate2 in H0. auto.
   - inv H0.
@@ -964,11 +963,10 @@ Proof.
   induction p; crush.
   - destruct_match. inv Heqp0. destruct b.
     cbn. specialize (H p0).
-    rewrite Pos2Nat.id in *.
     apply sem_pexpr_determ with (b2 := true) in H; auto.
     specialize (H p0).
     apply sem_pexpr_determ with (b2 := false) in H; auto.
-    cbn. rewrite Pos2Nat.id in *. rewrite H. auto.
+    cbn. rewrite H. auto.
     replace true with (negb false) in H0 by trivial.
     apply sem_pexpr_negate2 in H0. auto.
   - inv H0.
@@ -1073,19 +1071,19 @@ Definition check f1 f2 :=
   && PTree.beq beq_pred_pexpr f1.(forest_preds) f2.(forest_preds)
   && beq_pred_eexpr f1.(forest_exit) f2.(forest_exit).
 
-Lemma inj_asgn_eg : forall a b, (a =? b)%nat = (a =? a)%nat -> a = b.
+Lemma inj_asgn_eg : forall a b, (a =? b)%positive = (a =? a)%positive -> a = b.
 Proof.
-  intros. destruct (Nat.eq_dec a b); subst.
-  auto. apply Nat.eqb_neq in n.
-  rewrite n in H. rewrite Nat.eqb_refl in H. discriminate.
+  intros. destruct (peq a b); subst.
+  auto. rewrite OrdersEx.Positive_as_OT.eqb_refl in H.
+  now apply Peqb_true_eq.
 Qed.
 
 Lemma inj_asgn :
-  forall a b, (forall (f: nat -> bool), f a = f b) -> a = b.
+  forall a b, (forall (f: positive -> bool), f a = f b) -> a = b.
 Proof. intros. apply inj_asgn_eg. eauto. Qed.
 
 Lemma inj_asgn_false:
-  forall n1 n2 , ~ (forall c: nat -> bool, c n1 = negb (c n2)).
+  forall n1 n2 , ~ (forall c: positive -> bool, c n1 = negb (c n2)).
 Proof.
   unfold not; intros. specialize (H (fun x => true)).
   simplify. discriminate.
@@ -1101,11 +1099,10 @@ Lemma sat_predicate_Plit_inj :
     Plit p1 == Plit p2 -> p1 = p2.
 Proof.
   simplify. destruct p1, p2.
-  destruct b, b0. assert (p = p0).
-  { apply Pos2Nat.inj. eapply inj_asgn. eauto. } solve [subst; auto].
-  exfalso; eapply inj_asgn_false; eauto.
-  exfalso; eapply inj_asgn_false; eauto.
-  assert (p = p0). apply Pos2Nat.inj. eapply inj_asgn. intros. specialize (H f).
+  destruct b, b0. f_equal. unfold sat_equiv in H. cbn in H. now apply inj_asgn.
+  solve [exfalso; eapply inj_asgn_false; eauto].
+  solve [exfalso; eapply inj_asgn_false; eauto].
+  assert (p = p0). eapply inj_asgn. intros. specialize (H f).
   apply negb_inj in H. auto. rewrite H0; auto.
 Qed.
 

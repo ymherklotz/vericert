@@ -156,16 +156,16 @@ Definition regset := Regmap.t val.
 Definition predset := PMap.t bool.
 
 Definition eval_predf (pr: predset) (p: pred_op) :=
-  sat_predicate p (fun x => pr !! (Pos.of_nat x)).
+  sat_predicate p (fun x => pr !! x).
 
 Lemma sat_pred_agree0 :
   forall a b p,
-    (forall x, x <> 0%nat -> a x = b x) ->
+    (forall x, a x = b x) ->
     sat_predicate p a = sat_predicate p b.
 Proof.
   induction p; auto; intros.
-  - destruct p. cbn. assert (Pos.to_nat p <> 0%nat) by lia.
-    apply H in H0. now rewrite H0.
+  - destruct p. cbn.
+    now rewrite H.
   - specialize (IHp1 H). specialize (IHp2 H).
     cbn. rewrite IHp1. rewrite IHp2. auto.
   - specialize (IHp1 H). specialize (IHp2 H).
@@ -210,7 +210,7 @@ Lemma eval_predf_not_PredIn :
     eval_predf (ps # p <- b) op = eval_predf ps op.
 Proof.
   induction op; auto.
-  - intros. destruct p0. cbn. rewrite Pos2Nat.id.
+  - intros. destruct p0. cbn.
     destruct (peq p p0); subst.
       { exfalso; apply H; constructor. }
     rewrite Regmap.gso; auto.

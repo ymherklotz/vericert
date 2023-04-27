@@ -102,7 +102,7 @@ Definition regset := Regmap.t val.
 Definition predset := PMap.t bool.
 
 Definition eval_predf (pr: predset) (p: pred_op) :=
-  sat_predicate p (fun x => pr !! (Pos.of_nat x)).
+  sat_predicate p (fun x => pr !! x).
 
 #[global]
  Instance eval_predf_Proper : Proper (eq ==> equiv ==> eq) eval_predf.

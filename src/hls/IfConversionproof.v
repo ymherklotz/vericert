@@ -697,7 +697,7 @@ Section CORRECTNESS.
     - destruct_match. inv Heqp1. simplify.
       unfold not in *.
       destruct (peq p1 p0); subst; try solve [exfalso; auto].
-      unfold eval_predf. simplify. rewrite ! Pos2Nat.id.
+      unfold eval_predf. simplify.
       rewrite ! Regmap.gso; auto.
     - rewrite eval_predf_Pand in *.
       assert ((~ In p0 (predicate_use p1_1)) /\ (~ In p0 (predicate_use p1_2))).

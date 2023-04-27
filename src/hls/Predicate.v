@@ -176,7 +176,7 @@ Notation "A → B" := (Pimplies A B) (at level 30) : pred_op.
 
 Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
   match p with
-  | Plit (b, p') => if b then a (Pos.to_nat p') else negb (a (Pos.to_nat p'))
+  | Plit (b, p') => if b then a p' else negb (a p')
   | Ptrue => true
   | Pfalse => false
   | Pand p1 p2 => sat_predicate p1 a && sat_predicate p2 a
@@ -185,7 +185,7 @@ Fixpoint sat_predicate (p: pred_op) (a: asgn) : bool :=
 
 Inductive sat_predicateP (a: asgn): pred_op -> bool -> Prop :=
 | sat_prediacteP_Plit: forall b p',
-  sat_predicateP a (Plit (b, p')) (if b then a (Pos.to_nat p') else negb (a (Pos.to_nat p')))
+  sat_predicateP a (Plit (b, p')) (if b then a p' else negb (a p'))
 | sat_prediacteP_Ptrue:
   sat_predicateP a Ptrue true
 | sat_prediacteP_Pfalse:
@@ -509,7 +509,7 @@ Fixpoint trans_pred (p: pred_op) :
       sat_predicate p a = true <-> satFormula fm a}.
   refine
     (match p with
-     | Plit (b, p') => exist _ (((b, Pos.to_nat p') :: nil) :: nil) _
+     | Plit (b, p') => exist _ (((b, p') :: nil) :: nil) _
      | Ptrue => exist _ nil _
      | Pfalse => exist _ (nil::nil) _
      | Pand p1 p2 =>
@@ -548,21 +548,21 @@ Definition stseytin_and (cur p1 p2: lit) : formula :=
     :: (bar cur :: p1 :: nil)
     :: (bar cur :: p2 :: nil) :: nil.
 
-Fixpoint xtseytin (next: nat) (p: pred_op) {struct p} : (nat * lit * formula) :=
+Fixpoint xtseytin (next: positive) (p: pred_op) {struct p} : (positive * lit * formula) :=
   match p with
-  | Plit (b, p') => (next, (b, Pos.to_nat p'), nil)
+  | Plit (b, p') => (next, (b, p'), nil)
   | Ptrue =>
-      ((next+1)%nat, (true, next), ((true, next)::nil)::nil)
+      ((next+1)%positive, (true, next), ((true, next)::nil)::nil)
   | Pfalse =>
-      ((next+1)%nat, (true, next), ((false, next)::nil)::nil)
+      ((next+1)%positive, (true, next), ((false, next)::nil)::nil)
   | Por p1 p2 =>
       let '(m1, n1, f1) := xtseytin next p1 in
       let '(m2, n2, f2) := xtseytin m1 p2 in
-      ((m2+1)%nat, (true, m2), stseytin_or (true, m2) n1 n2 ++ f1 ++ f2)
+      ((m2+1)%positive, (true, m2), stseytin_or (true, m2) n1 n2 ++ f1 ++ f2)
   | Pand p1 p2 =>
       let '(m1, n1, f1) := xtseytin next p1 in
       let '(m2, n2, f2) := xtseytin m1 p2 in
-      ((m2+1)%nat, (true, m2), stseytin_and (true, m2) n1 n2 ++ f1 ++ f2)
+      ((m2+1)%positive, (true, m2), stseytin_and (true, m2) n1 n2 ++ f1 ++ f2)
   end.
 
 Lemma stseytin_and_correct :
@@ -631,7 +631,7 @@ Proof.
     apply andb_prop in H0. inv H0.
     cbn in H.
     repeat destruct_match; try discriminate; []. inv H. eapply IHp1 in Heqp.
-    eapply IHp2 in Heqp1. apply Heqp1 in H2.
+(*    eapply IHp2 in Heqp1. apply Heqp1 in H2.
     apply Heqp in H1. inv H1. inv H2.
     assert
       (satFormula
@@ -640,7 +640,7 @@ Proof.
             :: (bar (true, n1) :: l1 :: nil) :: nil) c).
     eapply stseytin_and_correct. unfold stseytin_and. eauto.
     unfold satLit. simpl. admit.
-    inv H; try contradiction. inv H1; try contradiction. eauto.
+    inv H; try contradiction. inv H1; try contradiction. eauto.*)
 Admitted.
 
 Fixpoint max_predicate (p: pred_op) : positive :=
@@ -656,15 +656,15 @@ Definition tseytin (p: pred_op) :
   {fm: formula | forall a,
       sat_predicate p a = true <-> satFormula fm a}.
   refine (
-      (match xtseytin (Pos.to_nat (max_predicate p + 1)) p as X
-             return xtseytin (Pos.to_nat (max_predicate p + 1)) p = X ->
+      (match xtseytin (max_predicate p + 1) p as X
+             return xtseytin (max_predicate p + 1) p = X ->
                     {fm: formula | forall a, sat_predicate p a = true <-> satFormula fm a}
        with (m, n, fm) => fun H => exist _ ((n::nil) :: fm) _
-       end) (eq_refl (xtseytin (Pos.to_nat (max_predicate p + 1)) p))).
+       end) (eq_refl (xtseytin (max_predicate p + 1) p))).
   intros. eapply xtseytin_correct; eauto. Defined.
 
 Definition tseytin_simple (p: pred_op) : formula :=
-  let m := Pos.to_nat (max_predicate p + 1) in
+  let m := (max_predicate p + 1)%positive in
   let '(m, n, fm) := xtseytin m p in
   (n::nil) :: fm.
 
@@ -846,15 +846,14 @@ Qed.
 
 Lemma sat_predicate_pred_not_in :
   forall p a a' op,
-    (forall x, x <> (Pos.to_nat p) -> a x = a' x) ->
+    (forall x, x <> p -> a x = a' x) ->
     ~ PredIn p op ->
     sat_predicate op a = sat_predicate op a'.
 Proof.
   induction op; intros H; auto.
   - destruct p0. intros. destruct (peq p p0); subst.
     + exfalso. apply H0. constructor.
-    + cbn. assert (Pos.to_nat p0 <> Pos.to_nat p). unfold not; intros; apply n.
-      now apply Pos2Nat.inj. apply H in H1. rewrite H1. auto.
+    + cbn. assert (p0 <> p) by auto. apply H in H1. rewrite H1. auto.
   - intros. assert (~ PredIn p op1 /\ ~ PredIn p op2).
     split; unfold not; intros; apply H0; constructor; tauto.
     inv H1. specialize (IHop1 H H2). specialize (IHop2 H H3).
