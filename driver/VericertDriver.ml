@@ -49,7 +49,7 @@ let nolink () =
 
 let object_filename sourcename suff =
   if nolink () then
-    output_filename ~final: !option_c sourcename suff ".o"
+    output_filename ~final: !option_c sourcename ~suffix:suff
   else
     tmp_file ".o"
 
@@ -58,7 +58,7 @@ let object_filename sourcename suff =
 let compile_c_file sourcename ifile ofile =
   (* Prepare to dump Clight, RTL, etc, if requested *)
   let set_dest dst opt ext =
-    dst := if !opt then Some (output_filename sourcename ".c" ext)
+    dst := if !opt then Some (output_filename sourcename ~suffix:ext)
       else None in
   set_dest Vericert.Cprint.destination option_dparse ".parsed.c";
   set_dest Vericert.PrintCsyntax.destination option_dcmedium ".compcert.c";
@@ -118,12 +118,12 @@ let compile_i_file sourcename preproname =
         ""
   end else if !option_hls then begin
     compile_c_file sourcename preproname
-      (output_filename ~final:true sourcename ".c" ".v");
+      (output_filename ~final:true sourcename ~suffix:".v");
     ""
   end else begin
     let asmname =
       if !option_dasm
-      then output_filename sourcename ".c" ".s"
+      then output_filename sourcename ~suffix:".s"
       else tmp_file ".s" in
     compile_c_file sourcename preproname asmname;
     let objname = object_filename sourcename ".c" in
@@ -140,7 +140,7 @@ let process_c_file sourcename =
     ""
   end else begin
     let preproname = if !option_dprepro then
-      output_filename sourcename ".c" ".i"
+      output_filename sourcename ~suffix:".i"
     else
       tmp_file ".i" in
     preprocess sourcename preproname;

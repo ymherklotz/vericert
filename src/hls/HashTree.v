@@ -498,14 +498,14 @@ Module HashTree(H: Hashable).
     forall x, match_one x x.
   Proof. unfold match_one; auto. Qed.
   
-  Instance match_one_Reflexive : Reflexive match_one.
+  #[global] Instance match_one_Reflexive : Reflexive match_one.
   Proof. unfold Reflexive. auto using match_one_refl. Qed.
   
   Lemma match_one_trans :
     forall x y z, match_one x y -> match_one y z -> match_one x z.
   Proof. unfold match_one; auto. Qed.
   
-  Instance match_one_Transitive : Transitive match_one.
+  #[global] Instance match_one_Transitive : Transitive match_one.
   Proof. unfold Transitive. eauto using match_one_trans. Qed.
 
   Lemma hash_value_gt :
