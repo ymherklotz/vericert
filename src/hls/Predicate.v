@@ -413,41 +413,41 @@ Fixpoint mult {A: Type} (a b: list (list A)) : list (list A) :=
   | l :: ls => mult ls b ++ (List.map (fun x => l ++ x) b)
   end.
 
-Lemma satFormula_concat:
+Lemma sat_formula_concat:
   forall a b agn,
-    satFormula a agn ->
-    satFormula b agn ->
-    satFormula (a ++ b) agn.
+    sat_formula a agn ->
+    sat_formula b agn ->
+    sat_formula (a ++ b) agn.
 Proof. induction a; crush. Qed.
 
-Lemma satFormula_concat2:
+Lemma sat_formula_concat2:
   forall a b agn,
-    satFormula (a ++ b) agn ->
-    satFormula a agn /\ satFormula b agn.
+    sat_formula (a ++ b) agn ->
+    sat_formula a agn /\ sat_formula b agn.
 Proof.
   induction a; simplify;
     try apply IHa in H1; crush.
 Qed.
 
-Lemma satClause_concat:
+Lemma sat_clause_concat:
   forall a a1 a0,
-    satClause a a1 ->
-    satClause (a0 ++ a) a1.
+    sat_clause a a1 ->
+    sat_clause (a0 ++ a) a1.
 Proof. induction a0; crush. Qed.
 
-Lemma satClause_concat2:
+Lemma sat_clause_concat2:
   forall a a1 a0,
-    satClause a0 a1 ->
-    satClause (a0 ++ a) a1.
+    sat_clause a0 a1 ->
+    sat_clause (a0 ++ a) a1.
 Proof.
   induction a0; crush.
   inv H; crush.
 Qed.
 
-Lemma satClause_concat3:
+Lemma sat_clause_concat3:
   forall a b c,
-    satClause (a ++ b) c ->
-    satClause a c \/ satClause b c.
+    sat_clause (a ++ b) c ->
+    sat_clause a c \/ sat_clause b c.
 Proof.
   induction a; crush.
   inv H; crush.
@@ -455,58 +455,58 @@ Proof.
   inv H0; crush.
 Qed.
 
-Lemma satFormula_mult':
+Lemma sat_formula_mult':
   forall p2 a a0,
-    satFormula p2 a0 \/ satClause a a0 ->
-    satFormula (map (fun x : list lit => a ++ x) p2) a0.
+    sat_formula p2 a0 \/ sat_clause a a0 ->
+    sat_formula (map (fun x : list lit => a ++ x) p2) a0.
 Proof.
   induction p2; crush.
-  - inv H. inv H0. apply satClause_concat. auto.
-    apply satClause_concat2; auto.
+  - inv H. inv H0. apply sat_clause_concat. auto.
+    apply sat_clause_concat2; auto.
   - apply IHp2.
     inv H; crush; inv H0; crush.
 Qed.
 
-Lemma satFormula_mult2':
+Lemma sat_formula_mult2':
   forall p2 a a0,
-    satFormula (map (fun x : list lit => a ++ x) p2) a0 ->
-    satClause a a0 \/ satFormula p2 a0.
+    sat_formula (map (fun x : list lit => a ++ x) p2) a0 ->
+    sat_clause a a0 \/ sat_formula p2 a0.
 Proof.
   induction p2; crush.
   apply IHp2 in H1. inv H1; crush.
-  apply satClause_concat3 in H0.
+  apply sat_clause_concat3 in H0.
   inv H0; crush.
 Qed.
 
-Lemma satFormula_mult:
+Lemma sat_formula_mult:
   forall p1 p2 a,
-    satFormula p1 a \/ satFormula p2 a ->
-    satFormula (mult p1 p2) a.
+    sat_formula p1 a \/ sat_formula p2 a ->
+    sat_formula (mult p1 p2) a.
 Proof.
   induction p1; crush.
-  apply satFormula_concat; crush.
+  apply sat_formula_concat; crush.
   inv H. inv H0.
   apply IHp1. auto.
   apply IHp1. auto.
-  apply satFormula_mult';
+  apply sat_formula_mult';
     inv H; crush.
 Qed.
 
-Lemma satFormula_mult2:
+Lemma sat_formula_mult2:
   forall p1 p2 a,
-    satFormula (mult p1 p2) a ->
-    satFormula p1 a \/ satFormula p2 a.
+    sat_formula (mult p1 p2) a ->
+    sat_formula p1 a \/ sat_formula p2 a.
 Proof.
   induction p1; crush.
-  apply satFormula_concat2 in H; crush.
+  apply sat_formula_concat2 in H; crush.
   apply IHp1 in H0.
   inv H0; crush.
-  apply satFormula_mult2' in H1. inv H1; crush.
+  apply sat_formula_mult2' in H1. inv H1; crush.
 Qed.
 
 Fixpoint trans_pred (p: pred_op) :
   {fm: formula | forall a,
-      sat_predicate p a = true <-> satFormula fm a}.
+      sat_predicate p a = true <-> sat_formula fm a}.
   refine
     (match p with
      | Plit (b, p') => exist _ (((b, p') :: nil) :: nil) _
@@ -523,16 +523,16 @@ Fixpoint trans_pred (p: pred_op) :
      end); split; intros; simpl in *; auto; try solve [crush].
   - destruct b; auto. apply negb_true_iff in H. auto.
   - destruct b. inv H. inv H0; auto. apply negb_true_iff. inv H. inv H0; eauto. contradiction.
-  - apply satFormula_concat.
+  - apply sat_formula_concat.
     apply andb_prop in H. inv H. apply i in H0. auto.
     apply andb_prop in H. inv H. apply i0 in H1. auto.
-  - apply satFormula_concat2 in H. simplify. apply andb_true_intro.
+  - apply sat_formula_concat2 in H. simplify. apply andb_true_intro.
     split. apply i in H0. auto.
     apply i0 in H1. auto.
-  - apply orb_prop in H. inv H; apply satFormula_mult. apply i in H0. auto.
+  - apply orb_prop in H. inv H; apply sat_formula_mult. apply i in H0. auto.
     apply i0 in H0. auto.
   - apply orb_true_intro.
-    apply satFormula_mult2 in H. inv H. apply i in H0. auto.
+    apply sat_formula_mult2 in H. inv H. apply i in H0. auto.
     apply i0 in H0. auto.
 Defined.
 
@@ -568,21 +568,21 @@ Fixpoint xtseytin (next: positive) (p: pred_op) {struct p} : (positive * lit * f
 Lemma stseytin_and_correct :
   forall cur p1 p2 fm c,
     stseytin_and cur p1 p2 = fm ->
-    satLit cur c ->
-    satLit p1 c /\ satLit p2 c ->
-    satFormula fm c.
+    sat_lit cur c ->
+    sat_lit p1 c /\ sat_lit p2 c ->
+    sat_formula fm c.
 Proof.
   intros.
   unfold stseytin_and in *. rewrite <- H.
-  unfold satLit in *. destruct p1. destruct p2. destruct cur.
-  simpl in *|-. cbn. unfold satLit. cbn. crush.
+  unfold sat_lit in *. destruct p1. destruct p2. destruct cur.
+  simpl in *|-. cbn. unfold sat_lit. cbn. crush.
 Qed.
 
 Lemma stseytin_and_correct2 :
   forall cur p1 p2 fm c,
     stseytin_and cur p1 p2 = fm ->
-    satFormula fm c ->
-    satLit cur c <-> satLit p1 c /\ satLit p2 c.
+    sat_formula fm c ->
+    sat_lit cur c <-> sat_lit p1 c /\ sat_lit p2 c.
 Proof.
   intros. split. intros. inv H1. unfold stseytin_and in *.
   inv H0; try contradiction. Admitted.
@@ -590,29 +590,29 @@ Proof.
 Lemma stseytin_or_correct :
   forall cur p1 p2 fm c,
     stseytin_or cur p1 p2 = fm ->
-    satLit cur c ->
-    satLit p1 c \/ satLit p2 c ->
-    satFormula fm c.
+    sat_lit cur c ->
+    sat_lit p1 c \/ sat_lit p2 c ->
+    sat_formula fm c.
 Proof.
   intros.
   unfold stseytin_or in *. rewrite <- H. inv H1.
-  unfold satLit in *. destruct p1. destruct p2. destruct cur.
-  simpl in *|-. cbn. unfold satLit. cbn. crush.
-  unfold satLit in *. destruct p1. destruct p2. destruct cur.
-  simpl in *|-. cbn. unfold satLit. cbn. crush.
+  unfold sat_lit in *. destruct p1. destruct p2. destruct cur.
+  simpl in *|-. cbn. unfold sat_lit. cbn. crush.
+  unfold sat_lit in *. destruct p1. destruct p2. destruct cur.
+  simpl in *|-. cbn. unfold sat_lit. cbn. crush.
 Qed.
 
 Lemma stseytin_or_correct2 :
   forall cur p1 p2 fm c,
     stseytin_or cur p1 p2 = fm ->
-    satFormula fm c ->
-    satLit cur c <-> satLit p1 c \/ satLit p2 c.
+    sat_formula fm c ->
+    sat_lit cur c <-> sat_lit p1 c \/ sat_lit p2 c.
 Proof. Admitted.
 
 Lemma xtseytin_correct :
   forall p next l n fm c,
     xtseytin next p = (n, l, fm) ->
-    sat_predicate p c = true <-> satFormula ((l::nil)::fm) c.
+    sat_predicate p c = true <-> sat_formula ((l::nil)::fm) c.
 Proof.
   induction p.
   - intros. simplify. destruct p.
@@ -634,12 +634,12 @@ Proof.
 (*    eapply IHp2 in Heqp1. apply Heqp1 in H2.
     apply Heqp in H1. inv H1. inv H2.
     assert
-      (satFormula
+      (sat_formula
          (((true, n1) :: bar l0 :: bar l1 :: nil)
             :: (bar (true, n1) :: l0 :: nil)
             :: (bar (true, n1) :: l1 :: nil) :: nil) c).
     eapply stseytin_and_correct. unfold stseytin_and. eauto.
-    unfold satLit. simpl. admit.
+    unfold sat_lit. simpl. admit.
     inv H; try contradiction. inv H1; try contradiction. eauto.*)
 Admitted.
 
@@ -654,11 +654,11 @@ Fixpoint max_predicate (p: pred_op) : positive :=
 
 Definition tseytin (p: pred_op) :
   {fm: formula | forall a,
-      sat_predicate p a = true <-> satFormula fm a}.
+      sat_predicate p a = true <-> sat_formula fm a}.
   refine (
       (match xtseytin (max_predicate p + 1) p as X
              return xtseytin (max_predicate p + 1) p = X ->
-                    {fm: formula | forall a, sat_predicate p a = true <-> satFormula fm a}
+                    {fm: formula | forall a, sat_predicate p a = true <-> sat_formula fm a}
        with (m, n, fm) => fun H => exist _ ((n::nil) :: fm) _
        end) (eq_refl (xtseytin (max_predicate p + 1) p))).
   intros. eapply xtseytin_correct; eauto. Defined.
@@ -674,7 +674,7 @@ Definition sat_pred_tseytin (p: pred_op) :
   refine
     ( match tseytin p with
       | exist _ fm _ =>
-          match satSolve fm with
+          match sat_solve fm with
           | inleft (exist _ a _) => inleft (exist _ a _)
           | inright _ => inright _
           end
@@ -697,7 +697,7 @@ Definition sat_pred (p: pred_op) :
   refine
     ( match trans_pred p with
       | exist _ fm _ =>
-          match satSolve fm with
+          match sat_solve fm with
           | inleft (exist _ a _) => inleft (exist _ a _)
           | inright _ => inright _
           end

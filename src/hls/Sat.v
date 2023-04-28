@@ -1,9 +1,3 @@
-(**
-#<a href="http://www.cs.berkeley.edu/~adamc/itp/">#Interactive Computer Theorem
-Proving#</a><br>#
-CS294-9, Fall 2006#<br>#
-UC Berkeley *)
-
 Require Import Arith Bool List.
 Require Import Coq.funind.Recdef.
 Require Coq.MSets.MSetPositive.
@@ -18,42 +12,40 @@ Module PSetProp := MSetProperties.OrdProperties(PSet).
 
 #[local] Open Scope positive.
 
-(** * Problem Definition *)
+(** * Verified SAT Solver
+
+This development was heavily inspired by the example of a Sat solver given in:
+http://www.cs.berkeley.edu/~adamc/itp/.
+
+First, some basic definitions, such as variables, literals, clauses and
+formulas.  In this development [positive] is used instead of [nat] because it
+integrates better into CompCert itself. *)
 
 Definition var := positive.
-(** We identify propositional variables with natural numbers. *)
-
 Definition lit := (bool * var)%type.
-(** A literal is a combination of a truth value and a variable. *)
-
 Definition clause := list lit.
-(** A clause is a list (disjunction) of literals. *)
-
 Definition formula := list clause.
-(** A formula is a list (conjunction) of clauses. *)
+
+(** The most general version of an assignment is a function mapping variables to
+booleans.  This provides a possible value for all variables that could exist. *)
 
 Definition asgn := var -> bool.
-(** An assignment is a function from variables to their truth values. *)
 
-Definition satLit (l : lit) (a : asgn) :=
+Definition sat_lit (l : lit) (a : asgn) :=
   a (snd l) = fst l.
-(** An assignment satisfies a literal if it maps it to true. *)
 
-Fixpoint satClause (cl : clause) (a : asgn) {struct cl} : Prop :=
+Fixpoint sat_clause (cl : clause) (a : asgn) {struct cl} : Prop :=
   match cl with
   | nil => False
-  | l :: cl' => satLit l a \/ satClause cl' a
+  | l :: cl' => sat_lit l a \/ sat_clause cl' a
   end.
-(** An assignment satisfies a clause if it satisfies at least one of its
-  literals.
- *)
 
-Fixpoint satFormula (fm: formula) (a: asgn) {struct fm} : Prop :=
+(** An assignment satisfies a formula if it satisfies all of its clauses. *)
+Fixpoint sat_formula (fm: formula) (a: asgn) {struct fm} : Prop :=
   match fm with
   | nil => True
-  | cl :: fm' => satClause cl a /\ satFormula fm' a
+  | cl :: fm' => sat_clause cl a /\ sat_formula fm' a
   end.
-(** An assignment satisfies a formula if it satisfies all of its clauses. *)
 
 (** * Subroutines *)
 
@@ -62,7 +54,6 @@ Definition bool_eq_dec : forall (x y : bool), {x = y} + {x <> y}.
   decide equality.
 Defined.
 
-(** You'll probably want to compare booleans for equality at some point. *)
 Definition boolpositive_eq_dec : forall (x y : (bool * positive)), {x = y} + {x <> y}.
   pose proof bool_eq_dec.
   pose proof peq.
@@ -72,9 +63,10 @@ Defined.
 (** A literal and its negation can't be true simultaneously. *)
 Lemma contradictory_assignment : forall s l cl a,
     s <> fst l
-    -> satLit l a
-    -> satLit (s, snd l) a
-    -> satClause cl a.
+    -> sat_lit l a
+    -> sat_lit (s, snd l) a
+    -> sat_clause cl a.
+Proof.
   intros.
   red in H0, H1.
   simpl in H1.
@@ -93,61 +85,61 @@ Definition upd (a : asgn) (l : lit) : asgn :=
 
 (** Some lemmas about [upd] *)
 
-Lemma satLit_upd_eq : forall l a,
-    satLit l (upd a l).
-  unfold satLit, upd; simpl; intros.
+Lemma sat_lit_upd_eq : forall l a,
+    sat_lit l (upd a l).
+  unfold sat_lit, upd; simpl; intros.
   destruct (peq (snd l) (snd l)); tauto.
 Qed.
 
-#[local] Hint Resolve satLit_upd_eq : core.
+#[local] Hint Resolve sat_lit_upd_eq : core.
 
-Lemma satLit_upd_neq : forall v l s a,
+Lemma sat_lit_upd_neq : forall v l s a,
     v <> snd l
-    -> satLit (s, v) (upd a l)
-    -> satLit (s, v) a.
-  unfold satLit, upd; simpl; intros.
+    -> sat_lit (s, v) (upd a l)
+    -> sat_lit (s, v) a.
+  unfold sat_lit, upd; simpl; intros.
   destruct (peq v (snd l)); tauto.
 Qed.
 
-#[local] Hint Resolve satLit_upd_neq : core.
+#[local] Hint Resolve sat_lit_upd_neq : core.
 
-Lemma satLit_upd_neq2 : forall v l s a,
+Lemma sat_lit_upd_neq2 : forall v l s a,
     v <> snd l
-    -> satLit (s, v) a
-    -> satLit (s, v) (upd a l).
-  unfold satLit, upd; simpl; intros.
+    -> sat_lit (s, v) a
+    -> sat_lit (s, v) (upd a l).
+  unfold sat_lit, upd; simpl; intros.
   destruct (peq v (snd l)); tauto.
 Qed.
 
-#[local] Hint Resolve satLit_upd_neq2 : core.
+#[local] Hint Resolve sat_lit_upd_neq2 : core.
 
-Lemma satLit_contra : forall s l a cl,
+Lemma sat_lit_contra : forall s l a cl,
     s <> fst l
-    -> satLit (s, snd l) (upd a l)
-    -> satClause cl a.
-  unfold satLit, upd; simpl; intros.
+    -> sat_lit (s, snd l) (upd a l)
+    -> sat_clause cl a.
+  unfold sat_lit, upd; simpl; intros.
   destruct (peq (snd l) (snd l)); intuition auto with *.
 Qed.
 
-#[local] Hint Resolve satLit_contra : core.
+#[local] Hint Resolve sat_lit_contra : core.
 
 Ltac magic_solver := simpl; intros; subst; intuition eauto; firstorder;
                      match goal with
-                     | [ H1 : satLit ?l ?a, H2 : satClause ?cl ?a |- _ ] =>
-                       assert (satClause cl (upd a l)); firstorder
+                     | [ H1 : sat_lit ?l ?a, H2 : sat_clause ?cl ?a |- _ ] =>
+                       assert (sat_clause cl (upd a l)); firstorder
                      end.
 
-(** Strongly-specified function to update a clause to reflect the effect of making a particular
-  literal true.  *)
-Definition setClause : forall (cl : clause) (l : lit),
+(** Strongly-specified function to update a clause to reflect the effect of
+  making a particular literal true.  *)
+Definition set_clause : forall (cl : clause) (l : lit),
     {cl' : clause |
-      forall a, satClause cl (upd a l) <-> satClause cl' a}
-    + {forall a, satLit l a -> satClause cl a}.
-  refine (fix setClause (cl: clause) (l: lit) {struct cl} :=
+      forall a, sat_clause cl (upd a l) <-> sat_clause cl' a}
+    + {forall a, sat_lit l a -> sat_clause cl a}.
+  refine (fix set_clause (cl: clause) (l: lit) {struct cl} :=
             match cl with
             | nil => inleft (exist _ nil _)
             | x :: xs =>
-              match setClause xs l with
+              match set_clause xs l with
               | inright p => inright _
               | inleft (exist _ cl' H) =>
                 match peq (snd x) (snd l), bool_eq_dec (fst x) (fst l) with
@@ -156,38 +148,38 @@ Definition setClause : forall (cl : clause) (l : lit),
                 | right neq, _ => inleft (exist _ (x :: cl') _)
                 end
               end
-            end); clear setClause; try magic_solver.
+            end); clear set_clause; try magic_solver.
   - intros; simpl; left; apply injective_projections in bool_eq; subst; auto.
-  - split; intros. simpl in H0. inversion H0. eapply satLit_contra; eauto.
+  - split; intros. simpl in H0. inversion H0. eapply sat_lit_contra; eauto.
     destruct x; simpl in *; subst. auto.
     apply H. eauto.
     simpl. right. apply H; eauto.
   - split; intros; simpl in *. inversion H0. destruct x; simpl in *; subst.
     left. eauto.
     right. apply H. eauto.
-    inversion H0. left. apply satLit_upd_neq2. auto. auto.
+    inversion H0. left. apply sat_lit_upd_neq2. auto. auto.
     right. apply H. auto.
 Defined.
 
 (** For testing purposes, we define a weakly-specified function as a thin
-  wrapper around [setClause].
+  wrapper around [set_clause].
  *)
-Definition setClauseSimple (cl : clause) (l : lit) :=
-  match setClause cl l with
+Definition set_clause_simple (cl : clause) (l : lit) :=
+  match set_clause cl l with
   | inleft (exist _ cl' _) => Some cl'
   | inright _ => None
   end.
 
-(*Eval compute in setClauseSimple ((false, 1%nat) :: nil) (true, 1%nat).*)
-(*Eval compute in setClauseSimple nil (true, 0).
-Eval compute in setClauseSimple ((true, 0) :: nil) (true, 0).
-Eval compute in setClauseSimple ((true, 0) :: nil) (false, 0).
-Eval compute in setClauseSimple ((true, 0) :: nil) (true, 1).
-Eval compute in setClauseSimple ((true, 0) :: nil) (false, 1).
-Eval compute in setClauseSimple ((true, 0) :: (true, 1) :: nil) (true, 1).
-Eval compute in setClauseSimple ((true, 0) :: (true, 1) :: nil) (false, 1).
-Eval compute in setClauseSimple ((true, 0) :: (false, 1) :: nil) (true, 1).
-Eval compute in setClauseSimple ((true, 0) :: (false, 1) :: nil) (false, 1).*)
+(*Eval compute in set_clause_simple ((false, 1%nat) :: nil) (true, 1%nat).*)
+(*Eval compute in set_clause_simple nil (true, 0).
+Eval compute in set_clause_simple ((true, 0) :: nil) (true, 0).
+Eval compute in set_clause_simple ((true, 0) :: nil) (false, 0).
+Eval compute in set_clause_simple ((true, 0) :: nil) (true, 1).
+Eval compute in set_clause_simple ((true, 0) :: nil) (false, 1).
+Eval compute in set_clause_simple ((true, 0) :: (true, 1) :: nil) (true, 1).
+Eval compute in set_clause_simple ((true, 0) :: (true, 1) :: nil) (false, 1).
+Eval compute in set_clause_simple ((true, 0) :: (false, 1) :: nil) (true, 1).
+Eval compute in set_clause_simple ((true, 0) :: (false, 1) :: nil) (false, 1).*)
 
 (** It's useful to have this strongly-specified nilness check. *)
 Definition isNil : forall (A : Set) (ls : list A), {ls = nil} + {ls <> nil}.
@@ -197,47 +189,47 @@ Arguments isNil [A].
 
 (** Some more lemmas that I found helpful.... *)
 
-Lemma satLit_idem_lit : forall l a l',
-    satLit l a
-    -> satLit l' a
-    -> satLit l' (upd a l).
-  unfold satLit, upd; simpl; intros.
+Lemma sat_lit_idem_lit : forall l a l',
+    sat_lit l a
+    -> sat_lit l' a
+    -> sat_lit l' (upd a l).
+  unfold sat_lit, upd; simpl; intros.
   destruct (peq (snd l') (snd l)); congruence.
 Qed.
 
-#[local] Hint Resolve satLit_idem_lit : core.
+#[local] Hint Resolve sat_lit_idem_lit : core.
 
-Lemma satLit_idem_clause : forall l a cl,
-    satLit l a
-    -> satClause cl a
-    -> satClause cl (upd a l).
+Lemma sat_lit_idem_clause : forall l a cl,
+    sat_lit l a
+    -> sat_clause cl a
+    -> sat_clause cl (upd a l).
   induction cl; simpl; intuition.
 Qed.
 
-#[local] Hint Resolve satLit_idem_clause : core.
+#[local] Hint Resolve sat_lit_idem_clause : core.
 
-Lemma satLit_idem_formula : forall l a fm,
-    satLit l a
-    -> satFormula fm a
-    -> satFormula fm (upd a l).
+Lemma sat_lit_idem_formula : forall l a fm,
+    sat_lit l a
+    -> sat_formula fm a
+    -> sat_formula fm (upd a l).
   induction fm; simpl; intuition.
 Qed.
 
-#[local] Hint Resolve satLit_idem_formula : core.
+#[local] Hint Resolve sat_lit_idem_formula : core.
 
 (** Function that updates an entire formula to reflect setting a literal to true.  *)
-Definition setFormula : forall (fm : formula) (l : lit),
+Definition set_formula : forall (fm : formula) (l : lit),
     {fm' : formula |
-      forall a, satFormula fm (upd a l) <-> satFormula fm' a}
-    + {forall a, satLit l a -> ~satFormula fm a}.
-  refine (fix setFormula (fm: formula) (l: lit) {struct fm} :=
+      forall a, sat_formula fm (upd a l) <-> sat_formula fm' a}
+    + {forall a, sat_lit l a -> ~sat_formula fm a}.
+  refine (fix set_formula (fm: formula) (l: lit) {struct fm} :=
             match fm with
             | nil => inleft (exist _ nil _)
             | cl' :: fm' =>
-              match setFormula fm' l with
+              match set_formula fm' l with
               | inright p => inright _
               | inleft (exist _ fm'' H) =>
-                match setClause cl' l with
+                match set_clause cl' l with
                 | inright H' => inleft (exist _ fm'' _)
                 | inleft (exist _ cl'' _) =>
                   if isNil cl''
@@ -245,22 +237,22 @@ Definition setFormula : forall (fm : formula) (l : lit),
                   else inleft (exist _ (cl'' :: fm'') _)
                 end
               end
-            end); clear setFormula; magic_solver.
+            end); clear set_formula; magic_solver.
 Defined.
 
-Definition setFormulaSimple (fm : formula) (l : lit) :=
-  match setFormula fm l with
+Definition set_formula_simple (fm : formula) (l : lit) :=
+  match set_formula fm l with
   | inleft (exist _ fm' _) => Some fm'
   | inright _ => None
   end.
 
-(* Eval compute in setFormulaSimple (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil) (true, 1%nat). *)
-(* Eval compute in setFormulaSimple nil (true, 0). *)
-(* Eval compute in setFormulaSimple (((true, 0) :: nil) :: nil) (true, 0). *)
-(* Eval compute in setFormulaSimple (((false, 0) :: nil) :: nil) (true, 0). *)
-(* Eval compute in setFormulaSimple (((false, 1) :: nil) :: nil) (true, 0). *)
-(* Eval compute in setFormulaSimple (((false, 1) :: (true, 0) :: nil) :: nil) (true, 0). *)
-(* Eval compute in setFormulaSimple (((false, 1) :: (false, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in set_formula_simple (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil) (true, 1%nat). *)
+(* Eval compute in set_formula_simple nil (true, 0). *)
+(* Eval compute in set_formula_simple (((true, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in set_formula_simple (((false, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in set_formula_simple (((false, 1) :: nil) :: nil) (true, 0). *)
+(* Eval compute in set_formula_simple (((false, 1) :: (true, 0) :: nil) :: nil) (true, 0). *)
+(* Eval compute in set_formula_simple (((false, 1) :: (false, 0) :: nil) :: nil) (true, 0). *)
 
 #[local] Hint Extern 1 False => discriminate : core.
 
@@ -270,75 +262,78 @@ match goal with
 end : core.
 
 (** Code that either finds a unit clause in a formula or declares that there are none.  *)
-Definition findUnitClause : forall (fm: formula),
+Definition find_unit_clause : forall (fm: formula),
     {l : lit | In (l :: nil) fm}
     + {forall l, ~In (l :: nil) fm}.
-  refine (fix findUnitClause (fm: formula) {struct fm} :=
+  refine (fix find_unit_clause (fm: formula) {struct fm} :=
             match fm with
             | nil => inright _
             | (l :: nil) :: fm' => inleft (exist _ l _)
             | _ :: fm' =>
-              match findUnitClause fm' with
+              match find_unit_clause fm' with
               | inleft (exist _ l _) => inleft (exist _ l _)
               | inright H => inright _
               end
             end
-         ); clear findUnitClause; magic_solver.
+         ); clear find_unit_clause; magic_solver.
 Defined.
 
 (** The literal in a unit clause must always be true in a satisfying assignment.  *)
-Lemma unitClauseTrue : forall l a fm,
+Lemma unit_clause_true : forall l a fm,
     In (l :: nil) fm
-    -> satFormula fm a
-    -> satLit l a.
+    -> sat_formula fm a
+    -> sat_lit l a.
   induction fm; intuition auto with *.
   inversion H.
   inversion H; subst; simpl in H0; intuition.
   apply IHfm; eauto. inv H0. eauto.
 Qed.
 
-#[local] Hint Resolve unitClauseTrue : core.
+#[local] Hint Resolve unit_clause_true : core.
 
-(** Unit propagation.  The return type of [unitPropagate] signifies that three results are possible:
+(** Unit propagation.  The return type of [unit_propagate] signifies that three
+results are possible:
+
   - [None]: There are no unit clauses.
   - [Some (inleft _)]: There is a unit clause, and here is a formula reflecting
     setting its literal to true.
   - [Some (inright _)]: There is a unit clause, and propagating it reveals that
     the formula is unsatisfiable.
  *)
-Definition unitPropagate : forall (fm : formula), option (sigT (fun fm' : formula =>
-                                                                  {l : lit |
-                                                                    (forall a, satFormula fm a -> satLit l a)
-                                                                    /\ forall a, satFormula fm (upd a l) <-> satFormula fm' a})
-                                                          + {forall a, ~satFormula fm a}).
-  refine (fix unitPropagate (fm: formula) {struct fm} :=
-            match findUnitClause fm with
+Definition unit_propagate :
+  forall (fm : formula), option (sigT (fun fm' : formula =>
+                                         {l : lit |
+                                           (forall a, sat_formula fm a -> sat_lit l a)
+                                           /\ forall a, sat_formula fm (upd a l) <-> sat_formula fm' a})
+                                 + {forall a, ~sat_formula fm a}).
+  refine (fix unit_propagate (fm: formula) {struct fm} :=
+            match find_unit_clause fm with
             | inright H => None
             | inleft (exist _ l _) =>
-              match setFormula fm l with
+              match set_formula fm l with
               | inright _ => Some (inright _)
               | inleft (exist _ fm' _) =>
                 Some (inleft (existT _ fm' (exist _ l _)))
               end
             end
-         ); clear unitPropagate; magic_solver.
+         ); clear unit_propagate; magic_solver.
 Defined.
 
 
-Definition unitPropagateSimple (fm : formula) :=
-  match unitPropagate fm with
+Definition unit_propagate_simple (fm : formula) :=
+  match unit_propagate fm with
   | None => None
   | Some (inleft (existT _ fm' (exist _ l _))) => Some (Some (fm', l))
   | Some (inright _) => Some None
   end.
 
-(*Eval compute in unitPropagateSimple (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil).
-Eval compute in unitPropagateSimple nil.
-Eval compute in unitPropagateSimple (((true, 0) :: nil) :: nil).
-Eval compute in unitPropagateSimple (((true, 0) :: nil) :: ((false, 0) :: nil) :: nil).
-Eval compute in unitPropagateSimple (((true, 0) :: nil) :: ((false, 1) :: nil) :: nil).
-Eval compute in unitPropagateSimple (((true, 0) :: nil) :: ((false, 0) :: (false, 1) :: nil) :: nil).
-Eval compute in unitPropagateSimple (((false, 0) :: (false, 1) :: nil) :: ((true, 0) :: nil) :: nil).*)
+(*Eval compute in unit_propagate_simple (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil).
+Eval compute in unit_propagate_simple nil.
+Eval compute in unit_propagate_simple (((true, 0) :: nil) :: nil).
+Eval compute in unit_propagate_simple (((true, 0) :: nil) :: ((false, 0) :: nil) :: nil).
+Eval compute in unit_propagate_simple (((true, 0) :: nil) :: ((false, 1) :: nil) :: nil).
+Eval compute in unit_propagate_simple (((true, 0) :: nil) :: ((false, 0) :: (false, 1) :: nil) :: nil).
+Eval compute in unit_propagate_simple (((false, 0) :: (false, 1) :: nil) :: ((true, 0) :: nil) :: nil).*)
 
 
 (** * The SAT Solver *)
@@ -346,7 +341,7 @@ Eval compute in unitPropagateSimple (((false, 0) :: (false, 1) :: nil) :: ((true
 (** This section defines a DPLL SAT solver in terms of the subroutines.  *)
 
 (** An arbitrary heuristic to choose the next variable to split on *)
-Definition chooseSplit (fm : formula) :=
+Definition choose_split (fm : formula) :=
   match fm with
   | ((l :: _) :: _) => l
   | _ => (true, 1)
@@ -354,12 +349,12 @@ Definition chooseSplit (fm : formula) :=
 
 Definition negate (l : lit) := (negb (fst l), snd l).
 
-#[local] Hint Unfold satFormula : core.
+#[local] Hint Unfold sat_formula : core.
 
-Lemma satLit_dec : forall l a,
-    {satLit l a} + {satLit (negate l) a}.
+Lemma sat_lit_dec : forall l a,
+    {sat_lit l a} + {sat_lit (negate l) a}.
   destruct l.
-  unfold satLit; simpl; intro.
+  unfold sat_lit; simpl; intro.
   destruct b; destruct (a v); simpl; auto.
 Qed.
 
@@ -372,14 +367,14 @@ Fixpoint interp_alist (al : alist) : asgn :=
   | l :: al' => upd (interp_alist al') l
   end.
 
-(*Eval compute in boundedSatSimple 100 nil.
-Eval compute in boundedSatSimple 100 (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil).
-Eval compute in boundedSatSimple 100 (((true, 0) :: nil) :: nil).
-Eval compute in boundedSatSimple 100 (((true, 0) :: nil) :: ((false, 0) :: nil) :: nil).
-Eval compute in boundedSatSimple 100 (((true, 0) :: (false, 1) :: nil) :: ((true, 1) :: nil) :: nil).
-Eval compute in boundedSatSimple 100 (((true, 0) :: (false, 1) :: nil) :: ((true, 1) :: (false, 0) :: nil) :: nil).
-Eval compute in boundedSatSimple 100 (((true, 0) :: (false, 1) :: nil) :: ((false, 0) :: (false, 0) :: nil) :: ((true, 1) :: nil) :: nil).
-Eval compute in boundedSatSimple 100 (((false, 0) :: (true, 1) :: nil) :: ((false, 1) :: (true, 0) :: nil) :: nil).*)
+(*Eval compute in boundedSat_simple 100 nil.
+Eval compute in boundedSat_simple 100 (((true, 1%nat) :: nil) :: ((false, 1%nat) :: nil) :: nil).
+Eval compute in boundedSat_simple 100 (((true, 0) :: nil) :: nil).
+Eval compute in boundedSat_simple 100 (((true, 0) :: nil) :: ((false, 0) :: nil) :: nil).
+Eval compute in boundedSat_simple 100 (((true, 0) :: (false, 1) :: nil) :: ((true, 1) :: nil) :: nil).
+Eval compute in boundedSat_simple 100 (((true, 0) :: (false, 1) :: nil) :: ((true, 1) :: (false, 0) :: nil) :: nil).
+Eval compute in boundedSat_simple 100 (((true, 0) :: (false, 1) :: nil) :: ((false, 0) :: (false, 0) :: nil) :: ((true, 1) :: nil) :: nil).
+Eval compute in boundedSat_simple 100 (((false, 0) :: (true, 1) :: nil) :: ((false, 1) :: (true, 0) :: nil) :: nil).*)
 
 Definition lit_set_cl (cl: clause) :=
   fold_right PSet.add PSet.empty (map snd cl).
@@ -430,10 +425,10 @@ Definition sat_measure_cl (cl: clause) := PSet.cardinal (lit_set_cl cl).
 Definition sat_measure (fm: formula) := PSet.cardinal (lit_set fm).
 
 Lemma elim_clause :
-  forall (cl: clause) l, In l cl -> exists H, setClause cl l = inright H.
+  forall (cl: clause) l, In l cl -> exists H, set_clause cl l = inright H.
 Proof.
   induction cl; intros; simpl in *; try contradiction.
-  destruct (setClause cl l) eqn:?; [|econstructor; eauto].
+  destruct (set_clause cl l) eqn:?; [|econstructor; eauto].
   destruct s. inversion H; subst. clear H.
   destruct (peq (snd l) (snd l)); [| contradiction].
   destruct (bool_eq_dec (fst l) (fst l)); [| contradiction].
@@ -441,9 +436,9 @@ Proof.
   inversion H0. rewrite H1 in Heqs. discriminate.
 Qed.
 
-Lemma sat_measure_setClause' :
+Lemma sat_measure_set_clause' :
   forall cl cl' l A,
-    setClause cl l = inleft (exist _ cl' A) ->
+    set_clause cl l = inleft (exist _ cl' A) ->
     ~ In (snd l) (map snd cl').
 Proof.
   induction cl; intros.
@@ -454,9 +449,9 @@ Proof.
   inv H. unfold not. intros. inv H. contradiction. eapply IHcl; eauto.
 Qed.
 
-Lemma sat_measure_setClause'' :
+Lemma sat_measure_set_clause'' :
   forall cl cl' l A,
-    setClause cl l = inleft (exist _ cl' A) ->
+    set_clause cl l = inleft (exist _ cl' A) ->
     forall l',
       l' <> snd l ->
       In l' (map snd cl) ->
@@ -476,28 +471,28 @@ Qed.
 
 Definition InFm l (fm: formula) := exists cl b, In cl fm /\ In (b, l) cl.
 
-Lemma satFormulaHasEmpty :
+Lemma sat_formulaHasEmpty :
   forall fm,
     In nil fm ->
-    forall a, ~ satFormula fm a.
+    forall a, ~ sat_formula fm a.
 Proof.
   induction fm; crush.
   unfold not; intros. inv H0. inv H; auto.
   eapply IHfm; eauto.
 Qed.
 
-Lemma InFm_chooseSplit :
+Lemma InFm_choose_split :
   forall l b c,
-    InFm (snd (chooseSplit ((l :: b) :: c))) ((l :: b) :: c).
+    InFm (snd (choose_split ((l :: b) :: c))) ((l :: b) :: c).
 Proof.
   simpl; intros. destruct l; cbn.
   exists ((b0, v) :: b). exists b0.
   split; constructor; auto.
 Qed.
 
-Lemma InFm_negated_chooseSplit :
+Lemma InFm_negated_choose_split :
   forall l b c,
-    InFm (snd (negate (chooseSplit ((l :: b) :: c)))) ((l :: b) :: c).
+    InFm (snd (negate (choose_split ((l :: b) :: c)))) ((l :: b) :: c).
 Proof.
   simpl; intros. destruct l; cbn.
   exists ((b0, v) :: b). exists b0.
@@ -523,10 +518,10 @@ Definition hasNoNil : forall fm: formula, {In nil fm} + {~ In nil fm}.
   - apply in_cons; assumption.
 Defined.
 
-Lemma sat_measure_setClause :
+Lemma sat_measure_set_clause :
   forall cl cl' l b A,
     (forall b', ~ In (b', l) cl) ->
-    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    set_clause cl (b, l) = inleft (exist _ cl' A) ->
     lit_set_cl cl = lit_set_cl cl'.
 Proof.
   induction cl; intros.
@@ -559,10 +554,10 @@ Proof.
   now apply in_map.
 Qed.
 
-Lemma sat_measure_setClause_In_neq :
+Lemma sat_measure_set_clause_In_neq :
   forall cl cl' l v b A,
     In v (map snd cl) ->
-    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    set_clause cl (b, l) = inleft (exist _ cl' A) ->
     v <> l ->
     In v (map snd cl').
 Proof.
@@ -581,10 +576,10 @@ Proof.
       contradiction.
 Qed.
 
-Lemma sat_measure_setClause_In_rev :
+Lemma sat_measure_set_clause_In_rev :
   forall cl cl' l v b A,
     In v (map snd cl') ->
-    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    set_clause cl (b, l) = inleft (exist _ cl' A) ->
     In v (map snd cl).
 Proof.
     induction cl; intros.
@@ -602,9 +597,9 @@ Proof.
       inv H; auto. contradiction.
 Qed.
 
-Lemma sat_measure_setClause_In_neq2 :
+Lemma sat_measure_set_clause_In_neq2 :
   forall cl cl' l b A,
-    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    set_clause cl (b, l) = inleft (exist _ cl' A) ->
     ~ In l (map snd cl').
 Proof.
     induction cl; intros.
@@ -619,10 +614,10 @@ Proof.
       eapply IHcl; eauto.
 Qed.
 
-Lemma sat_measure_setClause_In :
+Lemma sat_measure_set_clause_In :
   forall cl cl' l b A,
     In l (map snd cl) ->
-    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    set_clause cl (b, l) = inleft (exist _ cl' A) ->
     (sat_measure_cl cl' < sat_measure_cl cl)%nat.
 Proof.
   induction cl; intros.
@@ -636,7 +631,7 @@ Proof.
         -- exploit IHcl; eauto; intros. unfold sat_measure_cl in *.
            cbn -[PSet.cardinal]. apply lit_set_cl_in_set in i0.
            rewrite PSetProp.P.add_cardinal_1; auto.
-        -- apply sat_measure_setClause in Heqs; [|now apply in_map_snd_forall].
+        -- apply sat_measure_set_clause in Heqs; [|now apply in_map_snd_forall].
            unfold sat_measure_cl in *. cbn -[PSet.cardinal].
            setoid_rewrite Heqs.
            apply lit_set_cl_not_in_set in n0.
@@ -652,7 +647,7 @@ Proof.
       destruct (in_dec peq v (map snd cl)); destruct (in_dec peq v (map snd x)).
       * apply lit_set_cl_in_set in i0. apply lit_set_cl_in_set in i1.
         repeat rewrite PSetProp.P.add_cardinal_1 by auto. auto.
-      * exploit sat_measure_setClause_In_neq. eapply i0. eauto. auto. intros.
+      * exploit sat_measure_set_clause_In_neq. eapply i0. eauto. auto. intros.
         contradiction.
       * apply lit_set_cl_in_set in i0. apply lit_set_cl_not_in_set in n0.
         rewrite PSetProp.P.add_cardinal_1 by auto.
@@ -661,19 +656,6 @@ Proof.
         repeat rewrite PSetProp.P.add_cardinal_2 by auto.
         unfold lit_set_cl in *; lia.
 Qed.
-
-(* Lemma sat_measure_setFormula :
-  forall cl cl' l b b' A,
-    In (b', l) cl ->
-    setClause cl (b, l) = inleft (exist _ cl' A) ->
-    (sat_measure_cl cl' < sat_measure_cl cl)%nat.
-Proof.
-  induction cl; intros.
-  - crush.
-  - cbn in H0. repeat (destruct_match; try discriminate; []).
-    destruct_match.
-    + repeat (destruct_match; try discriminate; []).
-      inv H0. cbn [snd fst] in *.*)
 
 Lemma InFm_dec:
   forall l fm, { InFm l fm } + { ~ InFm l fm }.
@@ -741,7 +723,7 @@ Qed.
 Lemma lit_set_cl_eq :
   forall cl v b cl' A,
     In v (map snd cl) ->
-    setClause cl (b, v) = inleft (exist _ cl' A) ->
+    set_clause cl (b, v) = inleft (exist _ cl' A) ->
     PSet.Equal (lit_set_cl cl) (PSet.add v (lit_set_cl cl')).
 Proof.
   constructor; intros.
@@ -749,31 +731,31 @@ Proof.
     + apply PSetProp.P.FM.add_1; auto.
     + apply PSetProp.P.FM.add_2.
       apply lit_set_cl_in_set2 in H1. apply lit_set_cl_in_set.
-      eapply sat_measure_setClause_In_neq; eauto.
+      eapply sat_measure_set_clause_In_neq; eauto.
   - apply PSet.add_spec in H1. inv H1.
     + apply lit_set_cl_in_set; auto.
     + apply lit_set_cl_in_set. apply lit_set_cl_in_set2 in H2.
-      eapply sat_measure_setClause_In_rev; eauto.
+      eapply sat_measure_set_clause_In_rev; eauto.
 Qed.
 
 Lemma lit_set_cl_neq :
   forall cl v b cl' A,
     ~ In v (map snd cl) ->
-    setClause cl (b, v) = inleft (exist _ cl' A) ->
+    set_clause cl (b, v) = inleft (exist _ cl' A) ->
     PSet.Equal (lit_set_cl cl) (lit_set_cl cl').
 Proof.
   constructor; intros.
-  - erewrite <- sat_measure_setClause; eauto.
+  - erewrite <- sat_measure_set_clause; eauto.
     intros. unfold not; intros. apply H.
     replace v with (snd (b', v)) by auto; apply in_map; auto.
-  - erewrite sat_measure_setClause; eauto.
+  - erewrite sat_measure_set_clause; eauto.
     intros. unfold not; intros. apply H.
     replace v with (snd (b', v)) by auto; apply in_map; auto.
 Qed.
 
-Lemma sat_measure_setFormula1 :
+Lemma sat_measure_set_formula1 :
   forall fm fm' l b A,
-    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    set_formula fm (b, l) = inleft (exist _ fm' A) ->
     ~ InFm l fm'.
 Proof.
   induction fm.
@@ -783,17 +765,17 @@ Proof.
     destruct_match; repeat (destruct_match; try discriminate; []); inv H.
     + eapply IHfm in Heqs.
       assert (~ In l (map snd x0))
-        by (eapply sat_measure_setClause_In_neq2; eauto).
+        by (eapply sat_measure_set_clause_In_neq2; eauto).
       unfold not; intros.
       apply InFm_cons in H0. inv H0; auto. inv H1.
       apply H. replace l with (snd (x1, l)) by auto. apply in_map; auto.
     + eapply IHfm in Heqs. auto.
 Qed.
 
-Lemma sat_measure_setFormula2 :
+Lemma sat_measure_set_formula2 :
   forall fm fm' l v b A,
     InFm v fm' ->
-    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    set_formula fm (b, l) = inleft (exist _ fm' A) ->
     InFm v fm.
 Proof.
   induction fm.
@@ -804,7 +786,7 @@ Proof.
     + apply InFm_cons in H. inv H.
       * destruct H0 as (b0 & H0).
         apply in_map with (f := snd) in H0. cbn in H0.
-        exploit sat_measure_setClause_In_rev; eauto; intros.
+        exploit sat_measure_set_clause_In_rev; eauto; intros.
         apply list_in_map_inv in H. destruct H as (c & H1 & H2). destruct c. inv H1.
         cbn. exists a. exists b1. intuition auto with *.
       * exploit IHfm; eauto; intros. eapply InFm_cons2; tauto.
@@ -813,73 +795,73 @@ Proof.
   all: exact true.
 Qed.
 
-Lemma sat_measure_setFormula3 :
+Lemma sat_measure_set_formula3 :
   forall fm fm' l b A,
-    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    set_formula fm (b, l) = inleft (exist _ fm' A) ->
     PSet.Subset (lit_set fm') (lit_set fm).
 Proof.
   unfold PSet.Subset; intros.
   apply lit_set_in_set.
   apply lit_set_in_set2 in H0.
-  eapply sat_measure_setFormula2; eauto.
+  eapply sat_measure_set_formula2; eauto.
 Qed.
 
-Lemma sat_measure_setFormula :
+Lemma sat_measure_set_formula :
   forall fm fm' l b A,
     InFm l fm ->
-    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    set_formula fm (b, l) = inleft (exist _ fm' A) ->
     (sat_measure fm' < sat_measure fm)%nat.
 Proof.
   intros. unfold sat_measure.
   apply PSetProp.P.subset_cardinal_lt with (x:=l).
-  eapply sat_measure_setFormula3; eauto.
+  eapply sat_measure_set_formula3; eauto.
   now apply lit_set_in_set.
   unfold not; intros.
-  eapply sat_measure_setFormula1. eauto.
+  eapply sat_measure_set_formula1. eauto.
   now apply lit_set_in_set2 in H1.
 Qed.
 
 Lemma sat_measure_propagate_unit :
   forall fm' fm H,
-    unitPropagate fm = Some (inleft (existT _ fm' H)) ->
+    unit_propagate fm = Some (inleft (existT _ fm' H)) ->
     (sat_measure fm' < sat_measure fm)%nat.
 Proof.
-  unfold unitPropagate; intros. cbn in *.
+  unfold unit_propagate; intros. cbn in *.
   destruct fm; intros. crush.
   repeat (destruct_match; try discriminate; []). inv H0.
   destruct x.
-  eapply sat_measure_setFormula; eauto.
+  eapply sat_measure_set_formula; eauto.
   cbn in i. clear Heqs. clear H3. inv i.
   eexists. exists b. split. constructor. auto. now constructor.
   exists ((b, v) :: nil). exists b. split.
   apply in_cons. auto. now constructor.
 Qed.
 
-Program Fixpoint satSolve (fm: formula) { measure (sat_measure fm) }:
-  {al : alist | satFormula fm (interp_alist al)} + {forall a, ~satFormula fm a} :=
+Program Fixpoint sat_solve (fm: formula) { measure (sat_measure fm) }:
+  {al : alist | sat_formula fm (interp_alist al)} + {forall a, ~sat_formula fm a} :=
   match isNil fm with
   | left fmIsNil => inleft _ (exist _ nil _)
   | right fmIsNotNil =>
     match hasNoNil fm with
     | left hasNilfm => inright _ _
     | right hasNoNilfm =>
-      match unitPropagate fm with
+      match unit_propagate fm with
       | Some (inleft (existT _ fm' (exist _ l _))) =>
-        match satSolve fm' with
+        match sat_solve fm' with
         | inleft (exist _ al _) => inleft _ (exist _ (l :: al) _)
         | inright _ => inright _ _
         end
       | Some (inright _) => inright _ _
       | None =>
-        let l := chooseSplit fm in
-        match setFormula fm l with
+        let l := choose_split fm in
+        match set_formula fm l with
         | inleft (exist _ fm' _) =>
-          match satSolve fm' with
+          match sat_solve fm' with
           | inleft (exist _ al _) => inleft _ (exist _ (l :: al) _)
           | inright _ =>
-            match setFormula fm (negate l) with
+            match set_formula fm (negate l) with
             | inleft (exist _ fm' _) =>
-              match satSolve fm' with
+              match sat_solve fm' with
               | inleft (exist _ al _) => inleft _ (exist _ (negate l :: al) _)
               | inright _ => inright _ _
               end
@@ -887,9 +869,9 @@ Program Fixpoint satSolve (fm: formula) { measure (sat_measure fm) }:
             end
           end
         | inright _ =>
-          match setFormula fm (negate l) with
+          match set_formula fm (negate l) with
           | inleft (exist _ fm' _) =>
-            match satSolve fm' with
+            match sat_solve fm' with
             | inleft (exist _ al _) => inleft _ (exist _ (negate l :: al) _)
             | inright _ => inright _ _
             end
@@ -900,7 +882,7 @@ Program Fixpoint satSolve (fm: formula) { measure (sat_measure fm) }:
     end
   end.
 Next Obligation.
-  apply satFormulaHasEmpty; assumption. Defined.
+  apply sat_formulaHasEmpty; assumption. Defined.
 Next Obligation.
   eapply sat_measure_propagate_unit; eauto. Defined.
 Next Obligation.
@@ -909,63 +891,61 @@ Next Obligation.
   unfold not; intros; eapply wildcard'; apply i; eauto. Defined.
 Next Obligation.
   intros. symmetry in Heq_anonymous.
-  destruct (chooseSplit fm) eqn:?.
-  apply sat_measure_setFormula in Heq_anonymous; auto. unfold isNil in *.
+  destruct (choose_split fm) eqn:?.
+  apply sat_measure_set_formula in Heq_anonymous; auto. unfold isNil in *.
   destruct fm; try discriminate.
   assert (c <> nil).
   { unfold not; intros. apply hasNoNilfm. constructor; auto. }
   destruct c; try discriminate.
   replace p with (snd (b, p)) by auto. rewrite <- Heqp.
-  apply InFm_chooseSplit. Defined.
+  apply InFm_choose_split. Defined.
 Next Obligation.
   apply wildcard'0; auto. Defined.
 Next Obligation.
-  eapply sat_measure_setFormula; eauto.
+  eapply sat_measure_set_formula; eauto.
   destruct fm; try discriminate. destruct c; try discriminate.
-  apply InFm_chooseSplit. Defined.
+  apply InFm_choose_split. Defined.
 Next Obligation.
   apply wildcard'2; auto. Defined.
 Next Obligation.
   unfold not in *; intros.
-  destruct (satLit_dec (chooseSplit fm) a);
-  [assert (satFormula fm (upd a (chooseSplit fm)))
-  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; auto.
+  destruct (sat_lit_dec (choose_split fm) a);
+  [assert (sat_formula fm (upd a (choose_split fm)))
+  | assert (sat_formula fm (upd a (negate (choose_split fm))))]; auto.
   { eapply wildcard'1. apply wildcard'0; eauto. }
   { eapply wildcard'. apply wildcard'2; eauto. }
 Defined.
 Next Obligation.
   unfold not in *; intros.
-  destruct (satLit_dec (chooseSplit fm) a);
-  [assert (satFormula fm (upd a (chooseSplit fm)))
-  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; auto.
+  destruct (sat_lit_dec (choose_split fm) a);
+  [assert (sat_formula fm (upd a (choose_split fm)))
+  | assert (sat_formula fm (upd a (negate (choose_split fm))))]; auto.
   { eapply wildcard'1. eapply wildcard'0. eauto. }
   { eapply wildcard'; eauto. }
 Defined.
 Next Obligation.
-  eapply sat_measure_setFormula; eauto.
+  eapply sat_measure_set_formula; eauto.
   destruct fm; try discriminate. destruct c; try discriminate.
-  apply InFm_chooseSplit. Defined.
+  apply InFm_choose_split. Defined.
 Next Obligation.
   apply wildcard'1; auto. Defined.
 Next Obligation.
   unfold not in *; intros.
-  destruct (satLit_dec (chooseSplit fm) a);
-  [assert (satFormula fm (upd a (chooseSplit fm)))
-  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; auto.
+  destruct (sat_lit_dec (choose_split fm) a);
+  [assert (sat_formula fm (upd a (choose_split fm)))
+  | assert (sat_formula fm (upd a (negate (choose_split fm))))]; auto.
   { eapply wildcard'0; eauto. }
   { eapply wildcard'; apply wildcard'1; eauto. }
 Defined.
 Next Obligation.
   unfold not in *; intros.
-  destruct (satLit_dec (chooseSplit fm) a).
+  destruct (sat_lit_dec (choose_split fm) a).
   { eapply wildcard'0; eauto. }
   { eapply wildcard'; eauto. }
 Defined.
 
-Definition satSolveSimple (fm : formula) :=
-  match satSolve fm with
+Definition sat_solve_simple (fm : formula) :=
+  match sat_solve fm with
   | inleft (exist _ a _) => Some a
   | inright _ => None
   end.
-
-(* Eval compute in satSolveSimple nil. *)
