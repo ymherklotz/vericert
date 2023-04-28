@@ -126,7 +126,7 @@ Lemma satLit_contra : forall s l a cl,
     -> satLit (s, snd l) (upd a l)
     -> satClause cl a.
   unfold satLit, upd; simpl; intros.
-  destruct (peq (snd l) (snd l)); intuition.
+  destruct (peq (snd l) (snd l)); intuition auto with *.
 Qed.
 
 #[local] Hint Resolve satLit_contra : core.
@@ -291,7 +291,7 @@ Lemma unitClauseTrue : forall l a fm,
     In (l :: nil) fm
     -> satFormula fm a
     -> satLit l a.
-  induction fm; intuition.
+  induction fm; intuition auto with *.
   inversion H.
   inversion H; subst; simpl in H0; intuition.
   apply IHfm; eauto. inv H0. eauto.
@@ -411,6 +411,15 @@ Proof.
   eapply PSetProp.P.Dec.F.add_3; eassumption.
 Qed.
 
+Lemma lit_set_cl_in_set2 :
+  forall cl v,
+    PSet.In v (lit_set_cl cl) ->
+    In v (map snd cl).
+Proof.
+  intros. destruct (in_dec peq v (map snd cl)); auto.
+  apply lit_set_cl_not_in_set in n. contradiction.
+Qed.
+
 Definition lit_set (fm: formula) :=
   fold_right PSet.union PSet.empty (map lit_set_cl fm).
 
@@ -464,29 +473,6 @@ Proof.
     inv H. simpl. right. eapply IHcl; eauto.
   }
 Qed.
-
-Lemma sat_measure_setClause2'' :
-  forall cl cl' l A,
-    setClause cl l = inleft (exist _ cl' A) ->
-    forall l',
-      l' <> snd l ->
-      In l' (map snd cl') ->
-      In l' (map snd cl).
-Proof.
-  induction cl; intros.
-  { cbn in *. inv H. cbn in *. auto. }
-  exploit IHcl; eauto.
-  Abort.
-
-Lemma sat_measure_setClause :
-  forall cl cl' l A,
-    In (snd l) (map snd cl) ->
-    setClause cl l = inleft (exist _ cl' A) ->
-    (PSet.cardinal (lit_set_cl cl') < PSet.cardinal (lit_set_cl cl))%nat.
-Proof.
-  intros. pose proof H0. apply sat_measure_setClause' in H0.
-  pose proof (sat_measure_setClause'' _ _ _ _ H1).
-Abort.
 
 Definition InFm l (fm: formula) := exists cl b, In cl fm /\ In (b, l) cl.
 
@@ -595,6 +581,44 @@ Proof.
       contradiction.
 Qed.
 
+Lemma sat_measure_setClause_In_rev :
+  forall cl cl' l v b A,
+    In v (map snd cl') ->
+    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    In v (map snd cl).
+Proof.
+    induction cl; intros.
+  - inv H0. auto.
+  - cbn in H0. repeat (destruct_match; try discriminate; []).
+    destruct_match.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *.
+      cbn; exploit IHcl; eauto.
+    + repeat (destruct_match; try discriminate; []).
+      inv H0. cbn [snd fst] in *.
+      destruct (peq v v0); subst.
+      { now constructor. }
+      cbn. right. eapply IHcl in Heqs; eauto. cbn in H.
+      inv H; auto. contradiction.
+Qed.
+
+Lemma sat_measure_setClause_In_neq2 :
+  forall cl cl' l b A,
+    setClause cl (b, l) = inleft (exist _ cl' A) ->
+    ~ In l (map snd cl').
+Proof.
+    induction cl; intros.
+  - inv H. auto.
+  - cbn in H. repeat (destruct_match; try discriminate; []).
+    destruct_match.
+    + repeat (destruct_match; try discriminate; []).
+      inv H. cbn [snd fst] in *. eapply IHcl; eauto.
+    + repeat (destruct_match; try discriminate; []).
+      inv H. cbn [snd fst] in *.
+      cbn. unfold not; intros. inv H. contradiction.
+      eapply IHcl; eauto.
+Qed.
+
 Lemma sat_measure_setClause_In :
   forall cl cl' l b A,
     In l (map snd cl) ->
@@ -651,29 +675,185 @@ Proof.
     + repeat (destruct_match; try discriminate; []).
       inv H0. cbn [snd fst] in *.*)
 
+Lemma InFm_dec:
+  forall l fm, { InFm l fm } + { ~ InFm l fm }.
+Proof.
+  intros. induction fm.
+  right. unfold InFm. unfold not. intros. inv H. inv H0. inv H. inv H0.
+  destruct (in_dec peq l (map snd a)).
+  - assert (exists b, In a (a :: fm) /\ In (b, l) a).
+    { apply list_in_map_inv in i. inv i. inv H. destruct x. econstructor. split. constructor; auto.
+      eauto.
+    }
+    left. unfold InFm. exists a. eauto.
+  - inv IHfm.
+    + left. unfold InFm in H. destruct H as (cl & b & H1 & H2).
+      unfold InFm. exists cl. exists b. constructor; auto. apply in_cons. auto.
+    + right. unfold not; intros.
+      destruct H0 as (cl & b & H1 & H2). inv H1.
+      * apply n. replace l with (snd (b, l)) by auto.
+        now apply in_map.
+      * apply H. unfold InFm; firstorder.
+Qed.
+
+Lemma InFm_cons :
+  forall l cl fm,
+    InFm l (cl :: fm) ->
+    (exists b, In (b, l) cl) \/ (InFm l fm).
+Proof.
+  intros. destruct H as (cl' & b' & H1 & H2).
+  inv H1; firstorder.
+Qed.
+
+Lemma InFm_cons2 :
+  forall l cl b fm,
+    In (b, l) cl \/ (InFm l fm) ->
+    InFm l (cl :: fm).
+Proof. intros. inv H; firstorder. Qed.
+
+Lemma lit_set_in_set :
+  forall fm v,
+    InFm v fm ->
+    PSet.In v (lit_set fm).
+Proof.
+  induction fm; intros.
+  - destruct H as (cl & b & H1 & H2); inv H1.
+  - apply InFm_cons in H. inv H.
+    + inv H0. cbn. apply PSetProp.P.FM.union_2. apply lit_set_cl_in_set.
+      replace v with (snd (x, v)) by auto. now apply in_map.
+    + cbn. apply PSetProp.P.FM.union_3. eauto.
+Qed.
+
+Lemma lit_set_in_set2 :
+  forall fm v,
+    PSet.In v (lit_set fm) ->
+    InFm v fm.
+Proof.
+  induction fm; intros.
+  - cbn in H. apply PSetProp.P.FM.empty_iff in H; contradiction.
+  - cbn in H. apply PSetProp.P.Dec.F.union_1 in H. inv H.
+    + apply lit_set_cl_in_set2 in H0. apply list_in_map_inv in H0.
+      destruct H0 as [[b v'] [EQ H0]]. inv EQ. cbn.
+      exists a. exists b. split; auto. now constructor.
+    + apply InFm_cons2 with (b := true); right. eauto.
+Qed.
+
+Lemma lit_set_cl_eq :
+  forall cl v b cl' A,
+    In v (map snd cl) ->
+    setClause cl (b, v) = inleft (exist _ cl' A) ->
+    PSet.Equal (lit_set_cl cl) (PSet.add v (lit_set_cl cl')).
+Proof.
+  constructor; intros.
+  - destruct (peq a v); subst.
+    + apply PSetProp.P.FM.add_1; auto.
+    + apply PSetProp.P.FM.add_2.
+      apply lit_set_cl_in_set2 in H1. apply lit_set_cl_in_set.
+      eapply sat_measure_setClause_In_neq; eauto.
+  - apply PSet.add_spec in H1. inv H1.
+    + apply lit_set_cl_in_set; auto.
+    + apply lit_set_cl_in_set. apply lit_set_cl_in_set2 in H2.
+      eapply sat_measure_setClause_In_rev; eauto.
+Qed.
+
+Lemma lit_set_cl_neq :
+  forall cl v b cl' A,
+    ~ In v (map snd cl) ->
+    setClause cl (b, v) = inleft (exist _ cl' A) ->
+    PSet.Equal (lit_set_cl cl) (lit_set_cl cl').
+Proof.
+  constructor; intros.
+  - erewrite <- sat_measure_setClause; eauto.
+    intros. unfold not; intros. apply H.
+    replace v with (snd (b', v)) by auto; apply in_map; auto.
+  - erewrite sat_measure_setClause; eauto.
+    intros. unfold not; intros. apply H.
+    replace v with (snd (b', v)) by auto; apply in_map; auto.
+Qed.
+
+Lemma sat_measure_setFormula1 :
+  forall fm fm' l b A,
+    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    ~ InFm l fm'.
+Proof.
+  induction fm.
+  - intros. inv H. unfold not. intros. destruct H as (cl & b0 & H1 & H2). inv H1.
+  - intros. unfold sat_measure, lit_set.
+    cbn in H. repeat (destruct_match; try discriminate; []).
+    destruct_match; repeat (destruct_match; try discriminate; []); inv H.
+    + eapply IHfm in Heqs.
+      assert (~ In l (map snd x0))
+        by (eapply sat_measure_setClause_In_neq2; eauto).
+      unfold not; intros.
+      apply InFm_cons in H0. inv H0; auto. inv H1.
+      apply H. replace l with (snd (x1, l)) by auto. apply in_map; auto.
+    + eapply IHfm in Heqs. auto.
+Qed.
+
+Lemma sat_measure_setFormula2 :
+  forall fm fm' l v b A,
+    InFm v fm' ->
+    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    InFm v fm.
+Proof.
+  induction fm.
+  - intros. simplify. inv H0. destruct H as (cl & b0 & Y1 & Y2). inv Y1.
+  - intros. unfold sat_measure, lit_set.
+    cbn in H0. repeat (destruct_match; try discriminate; []).
+    destruct_match; repeat (destruct_match; try discriminate; []); inv H0.
+    + apply InFm_cons in H. inv H.
+      * destruct H0 as (b0 & H0).
+        apply in_map with (f := snd) in H0. cbn in H0.
+        exploit sat_measure_setClause_In_rev; eauto; intros.
+        apply list_in_map_inv in H. destruct H as (c & H1 & H2). destruct c. inv H1.
+        cbn. exists a. exists b1. intuition auto with *.
+      * exploit IHfm; eauto; intros. eapply InFm_cons2; tauto.
+    + exploit IHfm; eauto; intros. eapply InFm_cons2; tauto.
+  Unshelve.
+  all: exact true.
+Qed.
+
+Lemma sat_measure_setFormula3 :
+  forall fm fm' l b A,
+    setFormula fm (b, l) = inleft (exist _ fm' A) ->
+    PSet.Subset (lit_set fm') (lit_set fm).
+Proof.
+  unfold PSet.Subset; intros.
+  apply lit_set_in_set.
+  apply lit_set_in_set2 in H0.
+  eapply sat_measure_setFormula2; eauto.
+Qed.
+
 Lemma sat_measure_setFormula :
   forall fm fm' l b A,
     InFm l fm ->
     setFormula fm (b, l) = inleft (exist _ fm' A) ->
     (sat_measure fm' < sat_measure fm)%nat.
 Proof.
-  induction fm.
-  - intros. inv H. inv H1. inv H. inv H1.
-  - intros. unfold sat_measure, lit_set. cbn -[PSet.cardinal].
-    Admitted.
+  intros. unfold sat_measure.
+  apply PSetProp.P.subset_cardinal_lt with (x:=l).
+  eapply sat_measure_setFormula3; eauto.
+  now apply lit_set_in_set.
+  unfold not; intros.
+  eapply sat_measure_setFormula1. eauto.
+  now apply lit_set_in_set2 in H1.
+Qed.
 
 Lemma sat_measure_propagate_unit :
   forall fm' fm H,
     unitPropagate fm = Some (inleft (existT _ fm' H)) ->
     (sat_measure fm' < sat_measure fm)%nat.
 Proof.
-  induction fm; crush.
-  repeat (destruct_match; crush; []).
-  destruct_match.
-  repeat (destruct_match; crush; []).
-  inv Heqs1.
-  unfold sat_measure.
-  Admitted.
+  unfold unitPropagate; intros. cbn in *.
+  destruct fm; intros. crush.
+  repeat (destruct_match; try discriminate; []). inv H0.
+  destruct x.
+  eapply sat_measure_setFormula; eauto.
+  cbn in i. clear Heqs. clear H3. inv i.
+  eexists. exists b. split. constructor. auto. now constructor.
+  exists ((b, v) :: nil). exists b. split.
+  apply in_cons. auto. now constructor.
+Qed.
 
 Program Fixpoint satSolve (fm: formula) { measure (sat_measure fm) }:
   {al : alist | satFormula fm (interp_alist al)} + {forall a, ~satFormula fm a} :=
@@ -749,7 +929,7 @@ Next Obligation.
   unfold not in *; intros.
   destruct (satLit_dec (chooseSplit fm) a);
   [assert (satFormula fm (upd a (chooseSplit fm)))
-  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; firstorder.
+  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; auto.
   { eapply wildcard'1. apply wildcard'0; eauto. }
   { eapply wildcard'. apply wildcard'2; eauto. }
 Defined.
@@ -757,7 +937,7 @@ Next Obligation.
   unfold not in *; intros.
   destruct (satLit_dec (chooseSplit fm) a);
   [assert (satFormula fm (upd a (chooseSplit fm)))
-  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; firstorder.
+  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; auto.
   { eapply wildcard'1. eapply wildcard'0. eauto. }
   { eapply wildcard'; eauto. }
 Defined.
@@ -771,7 +951,7 @@ Next Obligation.
   unfold not in *; intros.
   destruct (satLit_dec (chooseSplit fm) a);
   [assert (satFormula fm (upd a (chooseSplit fm)))
-  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; firstorder.
+  | assert (satFormula fm (upd a (negate (chooseSplit fm))))]; auto.
   { eapply wildcard'0; eauto. }
   { eapply wildcard'; apply wildcard'1; eauto. }
 Defined.
