@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2021-2022 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2021-2023 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -511,7 +511,7 @@ Proof.
     unfold not in *; intros. inv H. rewrite beq_expression_list_refl in H0; discriminate.
 Qed.
 
-Lemma expression_dec: forall e1 e2: expression, {e1 = e2} + {e1 <> e2}.
+Definition expression_dec: forall e1 e2: expression, {e1 = e2} + {e1 <> e2}.
 Proof.
   intros.
   destruct (beq_expression e1 e2) eqn:?. apply beq_expression_correct in Heqb. auto.
@@ -577,31 +577,34 @@ Qed.
 Definition pred_expr_item_eq (pe1 pe2: pred_op * expression) : bool :=
   @equiv_dec _ SATSetoid _ (fst pe1) (fst pe2) && beq_expression (snd pe1) (snd pe2).
 
-Lemma pred_expr_dec: forall (pe1 pe2: pred_op * expression),
+Definition pred_eexpr_item_eq (pe1 pe2: pred_op * exit_expression) : bool :=
+  @equiv_dec _ SATSetoid _ (fst pe1) (fst pe2) && beq_exit_expression (snd pe1) (snd pe2).
+
+Definition pred_expr_dec: forall (pe1 pe2: pred_op * expression),
     {pred_expr_item_eq pe1 pe2 = true} + {pred_expr_item_eq pe1 pe2 = false}.
 Proof.
   intros; destruct (pred_expr_item_eq pe1 pe2) eqn:?; unfold not; [tauto | now right].
-Qed.
+Defined.
 
-Lemma pred_expr_dec2: forall (pe1 pe2: pred_op * expression),
+Definition pred_expr_dec2: forall (pe1 pe2: pred_op * expression),
     {pred_expr_item_eq pe1 pe2 = true} + {~ pred_expr_item_eq pe1 pe2 = true}.
 Proof.
   intros; destruct (pred_expr_item_eq pe1 pe2) eqn:?; unfold not; [tauto | now right].
-Qed.
+Defined.
 
-Lemma pred_expression_dec:
+Definition pred_expression_dec:
   forall e1 e2: pred_expression, {e1 = e2} + {e1 <> e2}.
 Proof.
   intros. destruct (beq_pred_expression e1 e2) eqn:?.
   eauto using beq_pred_expression_correct.
   eauto using beq_pred_expression_correct2.
-Qed.
+Defined.
 
 Lemma exit_expression_refl:
   forall e, beq_exit_expression e e = true.
 Proof. destruct e; crush; destruct_match; crush. Qed.
 
-Lemma exit_expression_dec:
+Definition exit_expression_dec:
   forall e1 e2: exit_expression, {e1 = e2} + {e1 <> e2}.
 Proof.
   intros. destruct (beq_exit_expression e1 e2) eqn:?.
@@ -610,7 +613,16 @@ Proof.
     assert (X: ~ (beq_exit_expression e1 e2 = true))
       by eauto with bool.
     subst. apply X. apply exit_expression_refl.
-Qed.
+Defined.
+
+Lemma pred_eexpression_dec:
+  forall (e1 e2: exit_expression) (p1 p2: pred_op),
+    {(p1, e1) = (p2, e2)} + {(p1, e1) <> (p2, e2)}.
+Proof.
+  pose proof (Predicate.eq_dec peq).
+  pose proof (exit_expression_dec).
+  decide equality.
+Defined.
 
 Module HashExpr' <: MiniDecidableType.
   Definition t := expression.
@@ -789,12 +801,19 @@ Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
   let (p2, h') := HN.encode_expression 1%positive pe2 h in
   equiv_check p1 p2.
 
-Definition pred_eexpr_eqb: forall pe1 pe2: pred_eexpr,
+Definition pred_eexpr_dec: forall pe1 pe2: pred_eexpr,
   {pe1 = pe2} + {pe1 <> pe2}.
-Admitted.
+Proof.
+  pose proof exit_expression_dec as X.
+  pose proof (Predicate.eq_dec peq).
+  pose proof (NE.eq_dec _ X).
+  assert (forall a b: pred_op * exit_expression, {a = b} + {a <> b})
+   by decide equality.
+  decide equality.
+Defined.
 
 Definition beq_pred_eexpr (pe1 pe2: pred_eexpr) : bool :=
-  if pred_eexpr_eqb pe1 pe2 then true else
+  if pred_eexpr_dec pe1 pe2 then true else
   let (p1, h) := EHN.encode_expression 1%positive pe1 (PTree.empty _) in
   let (p2, h') := EHN.encode_expression 1%positive pe2 h in
   equiv_check p1 p2.
@@ -1047,7 +1066,14 @@ Proof. Admitted.
 
 Definition pred_expr_eqb: forall pe1 pe2: pred_expr,
   {pe1 = pe2} + {pe1 <> pe2}.
-Admitted.
+Proof.
+  pose proof expression_dec.
+  pose proof NE.eq_dec.
+  pose proof (Predicate.eq_dec peq).
+  assert (forall a b: pred_op * expression, {a = b} + {a <> b})
+   by decide equality.
+  decide equality.
+Defined.
 
 Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
   if pred_expr_eqb pe1 pe2 then true else
@@ -1058,7 +1084,11 @@ Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
 
 Definition pred_pexpr_eqb: forall pe1 pe2: pred_pexpr,
   {pe1 = pe2} + {pe1 <> pe2}.
-Admitted.
+Proof.
+  pose proof pred_expression_dec.
+  pose proof (Predicate.eq_dec pred_expression_dec).
+  apply X.
+Defined.
 
 Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
   if pred_pexpr_eqb pe1 pe2 then true else
@@ -1725,12 +1755,90 @@ Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
 
 Definition mkctx a := mk_ctx a sp ge.
 
+(*|
+Suitably restrict the predicate set so that one can evaluate a hashed predicate
+using that predicate set.  However, one issue might be that we do not know that
+all the atoms of the original formula are actually evaluable.
+|*)
+Definition match_pred_states {A: Type}
+  (ctx: @ctx A) (ht: PHT.hash_tree) (p_out: pred_op) (pred_set: predset) :=
+  forall (p: positive) (br: bool) (p_in: pred_expression),
+    PredIn p p_out ->
+    ht ! p = Some p_in ->
+    sem_pred ctx p_in (pred_set !! p).
+
+Lemma eval_hash_predicate :
+  forall max p_in ht p_out ht' i br pred_set,
+    hash_predicate max p_in ht = (p_out, ht') ->
+    sem_pexpr (mkctx i) p_in br ->
+    match_pred_states (mkctx i) ht' p_out pred_set ->
+    eval_predf pred_set p_out = br.
+Proof.
+  induction p_in; simplify.
+  + repeat destruct_match. inv H.
+    unfold eval_predf. cbn.
+    inv H0. inv H4. unfold match_pred_states in H1.
+    specialize (H1 h br).
+Admitted.
+
+Lemma sem_pexpr_get_forest_eq :
+  forall a b i br,
+    beq_pred_pexpr a b = true ->
+    sem_pexpr (mkctx i) a br ->
+    sem_pexpr (mkctx i) b br.
+Proof.
+  unfold beq_pred_pexpr.
+  induction a; intros; destruct_match; crush.
+  Admitted.
+
+(*|
+This should only require a proof of sem_pexpr_get_forest_eq, the rest is
+straightforward.
+|*)
+
+Lemma pred_pexpr_beq_pred_pexpr :
+  forall pr a b i br,
+    PTree.beq beq_pred_pexpr a b = true ->
+    sem_pexpr (mkctx i) (from_pred_op a pr) br ->
+    sem_pexpr (mkctx i) (from_pred_op b pr) br.
+Proof.
+  induction pr; crush.
+  - destruct_match. inv Heqp0. destruct b0.
+    + unfold get_forest_p' in *.
+      apply PTree.beq_correct with (x := p0) in H.
+      destruct a ! p0; destruct b ! p0; try (exfalso; assumption); auto.
+      eapply sem_pexpr_get_forest_eq; eauto.
+    + replace br with (negb (negb br)) by (now apply negb_involutive).
+      replace br with (negb (negb br)) in H0 by (now apply negb_involutive).
+      apply sem_pexpr_negate. apply sem_pexpr_negate2 in H0.
+      unfold get_forest_p' in *.
+      apply PTree.beq_correct with (x := p0) in H.
+      destruct a ! p0; destruct b ! p0; try (exfalso; assumption); auto.
+      eapply sem_pexpr_get_forest_eq; eauto.
+  - inv H0; try inv H4.
+    + eapply IHpr1 in H0; eauto. apply sem_pexpr_Pand_false; tauto.
+    + eapply IHpr2 in H0; eauto. apply sem_pexpr_Pand_false; tauto.
+    + eapply IHpr1 in H3; eauto. eapply IHpr2 in H5; eauto.
+      apply sem_pexpr_Pand_true; auto.
+  - inv H0; try inv H4.
+    + eapply IHpr1 in H0; eauto. apply sem_pexpr_Por_true; tauto.
+    + eapply IHpr2 in H0; eauto. apply sem_pexpr_Por_true; tauto.
+    + eapply IHpr1 in H3; eauto. eapply IHpr2 in H5; eauto.
+      apply sem_pexpr_Por_false; auto.
+Qed.
+
 Lemma sem_pred_exec_beq_correct :
-  forall A B (sem: ctx -> A -> B -> Prop) a b i p r,
+  forall A B (sem: ctx -> A -> B -> Prop) p a b i r,
     PTree.beq beq_pred_pexpr a b = true ->
     sem_pred_expr a sem (mkctx i) p r ->
     sem_pred_expr b sem (mkctx i) p r.
-Proof. Admitted.
+Proof.
+  induction p; intros; inv H0.
+  - constructor; auto. eapply pred_pexpr_beq_pred_pexpr; eauto.
+  - constructor; auto. eapply pred_pexpr_beq_pred_pexpr; eauto.
+  - apply sem_pred_expr_cons_false; eauto.
+    eapply pred_pexpr_beq_pred_pexpr; eauto.
+Qed.
 
 Lemma sem_pred_exec_beq_correct2 :
   forall A B (sem: ctx -> A -> B -> Prop) a i ti p r,
@@ -1747,7 +1855,6 @@ Lemma sem_expr_beq_correct :
 Proof.
   intros. unfold beq_pred_expr in H. destruct_match; subst; auto.
   repeat (destruct_match; []). simplify.
-  
 Admitted.
 
 Lemma sem_expr_beq_correct_mem :
