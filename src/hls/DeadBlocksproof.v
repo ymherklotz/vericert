@@ -368,7 +368,7 @@ Proof.
   destruct stack; inv HH9.
   assert (forall j : node, (cfg code **) entry j -> In j seen); intros.
   elim (iter_hh7 seen nil HH7 entry j); auto.
-  destruct 1; intuition.
+  destruct 1; intuition auto with *.
   split; auto.
   intros.
   rewrite PTree.gcombine; auto.
@@ -391,7 +391,7 @@ Proof.
   destruct stack; inv HH9.
   assert (forall j : node, (cfg code **) entry j -> In j seen); intros.
   elim (iter_hh7 seen nil HH7 entry j); auto.
-  destruct 1; intuition.
+  destruct 1; intuition auto with *.
   split; auto.
   intros.
   rewrite PTree.gcombine; auto.
@@ -925,14 +925,16 @@ Proof.
 
   eexists ; split ; eauto. constructor; eauto with valagree.
   constructor; eauto. constructor; eauto. try_succ f pc pc'; eauto.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   exploit spec_ros_id_find_function ; eauto.
   intros. destruct H5 as [tf' [Hfind OKtf']].
 
   eexists ; split ; eauto. constructor; eauto with valagree.
   constructor; eauto. constructor; eauto. try_succ f pc pc'; eauto.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (*itailcall*)
   destruct ros.
@@ -960,7 +962,8 @@ Proof.
   eapply external_call_symbols_preserved; eauto with valagree.
 
   constructor; auto. try_succ f pc pc'.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (* ifso *)
   destruct b.
@@ -968,14 +971,16 @@ Proof.
   eapply exec_RBcond ; eauto.
   constructor; auto.
   try_succ f pc ifso.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (*ifnot*)
   exists (State stk' tf sp ifnot rs pr m); split ; eauto.
   eapply exec_RBcond ; eauto.
   constructor; auto.
   try_succ f pc ifnot.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (* ijump *)
   exists (State stk' tf sp pc' rs pr m); split ; eauto.
@@ -995,7 +1000,8 @@ Proof.
   eapply exec_RBgoto; eauto.
   constructor; auto.
   try_succ f pc pc'.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 Qed.
 
 Lemma transl_step_correct:
