@@ -17,6 +17,12 @@
  *)
 
 Require Import Coq.Lists.List.
+Require Import Coq.Classes.RelationClasses.
+Require Import Coq.Classes.DecidableClass.
+Require Import Coq.Setoids.Setoid.
+Require Export Coq.Classes.SetoidClass.
+Require Export Coq.Classes.SetoidDec.
+Require Import Coq.Logic.Decidable.
 
 Inductive non_empty (A: Type) :=
 | singleton : A -> non_empty A
@@ -127,3 +133,74 @@ Fixpoint fold_right {A B} (f: B -> A -> A) (a: A) (l: non_empty B) {struct l} : 
   | singleton a' => f a' a
   | b ::| t => f b (fold_right f a t)
   end.
+
+Fixpoint eqb {A} (val_eqb: forall a b: A, {a = b} + {a <> b})
+  (n1 n2: non_empty A): bool :=
+  match n1, n2 with
+  | n1a ::| n1b, n2a ::| n2b =>
+    if val_eqb n1a n2a
+    then eqb val_eqb n1b n2b
+    else false
+  | singleton a, singleton b => if val_eqb a b then true else false
+  | _, _ => false
+  end.
+
+Lemma eqb_sound:
+  forall A val_eqb n1 n2,
+    @eqb A val_eqb n1 n2 = true ->
+    n1 = n2.
+Proof.
+  induction n1; destruct n2; intros; try discriminate;
+    cbn in H; destruct (val_eqb a a0); try now subst; [].
+  f_equal; now eauto.
+Qed.
+
+Lemma eqb_complete:
+  forall A val_eqb n1 n2,
+    n1 = n2 ->
+    @eqb A val_eqb n1 n2 = true.
+Proof.
+  induction n1; destruct n2; intros; try discriminate;
+    cbn in *; inv H; destruct (val_eqb a0 a0); auto.
+Qed.
+
+Definition eq_dec:
+  forall A (val_eqb: forall a b: A, {a = b} + {a <> b}) (n1 n2: non_empty A),
+    {n1 = n2} + {n1 <> n2}.
+Proof.
+  intros.
+  case_eq (@eqb A val_eqb n1 n2); intros.
+  - apply eqb_sound in H; tauto.
+  - assert (n1 <> n2); unfold not; intros.
+    apply Bool.not_true_iff_false in H. apply H.
+    apply eqb_complete; auto. tauto.
+Qed.
+
+Inductive Forall2 {A B : Type} (R : A -> B -> Prop) : non_empty A -> non_empty B -> Prop :=
+  | Forall2_singleton : forall a b, R a b -> Forall2 R (singleton a) (singleton b)
+  | Forall2_cons : forall (x : A) (y : B) (l : non_empty A) (l' : non_empty B),
+    R x y -> Forall2 R l l' -> Forall2 R (x ::| l) (y ::| l').
+
+Definition equivP {A R} `{Equivalence A R} n1 n2 := Forall2 R n1 n2.
+
+Fixpoint equivb {A} `{EqDec A} (n1 n2: non_empty A): bool :=
+  match n1, n2 with
+  | n1a ::| n1b, n2a ::| n2b =>
+    if n1a == n2a
+    then equivb n1b n2b
+    else false
+  | singleton a, singleton b => if a == b then true else false
+  | _, _ => false
+  end.
+
+Lemma equivb_symm : forall A (SET: Setoid A) (EQD: EqDec SET) (a b: non_empty A),
+  equivb a b = equivb b a.
+Proof.
+  induction a; destruct b; try easy; cbn.
+  - destruct (a == a0).
+    + symmetry in e. destruct (a0 == a); easy.
+    + destruct (a0 == a); try easy. now symmetry in e.
+  - destruct (a == a1).
+    + symmetry in e. destruct (a1 == a); easy.
+    + destruct (a1 == a); try easy. now symmetry in e.
+Qed.
