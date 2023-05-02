@@ -161,6 +161,15 @@ Section PRED_DEFINITION.
       - intros. cbn in *. apply orb_prop in H. constructor. tauto.
     Qed.
 
+    Definition eq_dec: forall a b: pred_op,
+      {a = b} + {a <> b}.
+    Proof.
+      pose proof bool_eq_dec.
+      assert (forall a b: bool * predicate, {a = b} + {a <> b})
+        by decide equality.
+      induction a; destruct b; decide equality.
+    Defined.
+
   End DEEP_SIMPLIFY.
 
 End PRED_DEFINITION.
@@ -862,4 +871,24 @@ Proof.
     split; unfold not; intros; apply H0; constructor; tauto.
     inv H1. specialize (IHop1 H H2). specialize (IHop2 H H3).
     cbn. rewrite IHop1. rewrite IHop2. auto.
+Qed.
+
+Lemma sat_predicateP_det :
+  forall a p b b',
+    sat_predicateP a p b ->
+    sat_predicateP a p b' ->
+    b = b'.
+Proof. induction p; crush; inv H; inv H0; auto. Qed.
+
+Lemma equiv_sat_predicate_sat_predicateP :
+  forall p p' a b,
+    p == p' ->
+    sat_predicateP a p b ->
+    sat_predicateP a p' b.
+Proof.
+  intros.
+  pose proof (sat_pred_equiv_sat_predicateP a p).
+  pose proof (sat_pred_equiv_sat_predicateP a p').
+  pose proof (sat_predicateP_det a p _ _ H1 H0).
+  rewrite H in H3. now rewrite H3 in H2.
 Qed.
