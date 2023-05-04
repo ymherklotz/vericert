@@ -333,7 +333,7 @@ Definition transl_function (f: GibleSeq.function)
                           f.(GibleSeq.fn_entrypoint))
   else
     Errors.Error
-      (Errors.msg "RTLPargen: Could not prove the blocks equivalent.").
+      (Errors.msg "GiblePargen: Could not prove the blocks equivalent.").
 
 Definition transl_fundef := transf_partial_fundef transl_function.
 

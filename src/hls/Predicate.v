@@ -53,14 +53,6 @@ Section PRED_DEFINITION.
 
   Definition simplify' (p: pred_op) :=
     match p with
-    (* | (Plit (b1, a)) ∧ (Plit (b2, b)) as p' => *)
-    (*     if Pos.eqb a b then *)
-    (*       if negb (xorb b1 b2) then Plit (b1, a) else ⟂ *)
-    (*     else p' *)
-    (* | (Plit (b1, a)) ∨ (Plit (b2, b)) as p' => *)
-    (*     if Pos.eqb a b then *)
-    (*       if negb (xorb b1 b2) then Plit (b1, a) else T *)
-    (*     else p' *)
     | Pand A Ptrue => A
     | Pand Ptrue A => A
     | Pand _ Pfalse => Pfalse
@@ -100,6 +92,15 @@ Section PRED_DEFINITION.
 
     Context (eqd: forall a b: A, {a = b} + {a <> b}).
 
+    Definition eq_dec: forall a b: pred_op,
+      {a = b} + {a <> b}.
+    Proof.
+      pose proof bool_eq_dec.
+      assert (forall a b: bool * predicate, {a = b} + {a <> b})
+        by decide equality.
+      induction a; destruct b; decide equality.
+    Defined.
+
     Definition deep_simplify' (p: pred_op) :=
       match p with
       | Pand A Ptrue => A
@@ -111,18 +112,13 @@ Section PRED_DEFINITION.
       | Por A Pfalse => A
       | Por Pfalse A => A
 
-      | Pand (Plit (b1, a)) (Plit (b2, b)) =>
-          if eqd a b then
-            if bool_eqdec b1 b2 then
-              Plit (b1, a)
-            else Pfalse
-          else Pand (Plit (b1, a)) (Plit (b2, b))
-      | Por (Plit (b1, a)) (Plit (b2, b)) =>
-          if eqd a b then
-            if bool_eqdec b1 b2 then
-              Plit (b1, a)
-            else Ptrue
-          else Por (Plit (b1, a)) (Plit (b2, b))
+      | Pand A B =>
+        if eq_dec A B then A
+        else Pand A B
+
+      | Por A B =>
+        if eq_dec A B then A
+        else Por A B
 
       | A => A
       end.
@@ -160,15 +156,6 @@ Section PRED_DEFINITION.
       - inversion 1. apply orb_true_intro. tauto.
       - intros. cbn in *. apply orb_prop in H. constructor. tauto.
     Qed.
-
-    Definition eq_dec: forall a b: pred_op,
-      {a = b} + {a <> b}.
-    Proof.
-      pose proof bool_eq_dec.
-      assert (forall a b: bool * predicate, {a = b} + {a <> b})
-        by decide equality.
-      induction a; destruct b; decide equality.
-    Defined.
 
   End DEEP_SIMPLIFY.
 
@@ -395,9 +382,9 @@ Lemma simplify'_correct :
   forall h a,
     sat_predicate (simplify' h) a = sat_predicate h a.
 Proof.
-(*destruct h; crush; repeat destruct_match; crush;
+  destruct h; crush; repeat destruct_match; crush;
   solve [rewrite andb_true_r; auto | rewrite orb_false_r; auto].
-Qed.*) Admitted.
+Qed.
 
 Lemma simplify_correct :
   forall h a,

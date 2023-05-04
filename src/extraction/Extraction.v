@@ -183,6 +183,7 @@ Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 (*Extract Constant Pipeline.pipeline => "pipelining.pipeline".*)
 Extract Constant GibleSeqgen.partition => "Partition.partition".
 Extract Constant GiblePargen.schedule => "Schedule.schedule_fn".
+Extract Constant Abstr.print_forest => "(PrintAbstr.print_forest stdout)".
 
 (* Loop normalization *)
 Extract Constant IfConversion.build_bourdoncle => "BourdoncleAux.build_bourdoncle".

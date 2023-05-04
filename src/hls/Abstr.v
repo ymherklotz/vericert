@@ -162,7 +162,9 @@ Record forest : Type :=
     forest_regs : RTree.t pred_expr;
     forest_preds : PTree.t pred_pexpr;
     forest_exit : pred_eexpr
-  }.
+    }.
+
+Parameter print_forest : forest -> unit.
 
 Definition empty : forest :=
   mk_forest (RTree.empty _) (PTree.empty _) (NE.singleton (Ptrue, EEbase)).
@@ -796,6 +798,34 @@ Inductive similar {A B} : @ctx A -> @ctx B -> Prop :=
     match_states ist ist' ->
     similar (mk_ctx ist sp ge) (mk_ctx ist' sp tge).
 
+Lemma ge_preserved_refl:
+  forall A B (a: Genv.t A B), ge_preserved a a.
+Proof. auto. Qed.
+
+Lemma similar_refl:
+  forall A (a: @Abstr.ctx A), similar a a.
+Proof. intros; destruct a; constructor; auto. reflexivity. Qed.
+
+Lemma similar_commut:
+  forall A B (a: @Abstr.ctx A) (b: @Abstr.ctx B), similar a b -> similar b a.
+Proof.
+  inversion 1; constructor; auto.
+  - unfold ge_preserved in *; inv H0; split; intros.
+    rewrite H4; auto. rewrite H5; auto.
+  - symmetry; auto.
+Qed.
+
+Lemma similar_trans:
+  forall A B C (a: @Abstr.ctx A) (b: @Abstr.ctx B) (c: @Abstr.ctx C),
+    similar a b -> similar b c -> similar a c.
+Proof.
+  repeat inversion 1; constructor.
+  - unfold ge_preserved in *; inv H0; inv H9; split; intros.
+    rewrite H11. rewrite H0; auto.
+    rewrite H12. rewrite H2. auto.
+  - transitivity ist'; auto.
+Qed.
+
 Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
   let (p1, h) := HN.encode_expression 1%positive pe1 (PTree.empty _) in
   let (p2, h') := HN.encode_expression 1%positive pe2 h in
@@ -903,13 +933,6 @@ Lemma norm_expr_mutexcl :
     p ⇒ ¬ p'.
 Proof. Abort.
 
-Lemma sem_pexpr_determ :
-  forall A c p b1 b2,
-    @sem_pexpr A c p b1 ->
-    sem_pexpr c p b2 ->
-    b1 = b2.
-Proof. Admitted. (** This requires proof of determinism for all of sem *)
-
 Lemma sem_pexpr_negate :
   forall A ctx p b,
     sem_pexpr ctx p b ->
@@ -949,120 +972,6 @@ Proof.
     + constructor. inv H1; eauto.
     + destruct b; try discriminate. constructor; eauto.
 Qed.
-
-Lemma sem_pexpr_forward_eval1 :
-  forall A ctx f_p ps,
-    (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
-    forall p,
-      @sem_pexpr A ctx (from_pred_op f_p p) false ->
-      eval_predf ps p = false.
-Proof.
-  induction p; crush.
-  - destruct_match. inv Heqp0. destruct b.
-    cbn. specialize (H p0).
-    apply sem_pexpr_determ with (b2 := false) in H; auto.
-    specialize (H p0).
-    apply sem_pexpr_determ with (b2 := true) in H; auto.
-    cbn. rewrite H. auto.
-    replace false with (negb true) in H0 by trivial.
-    apply sem_pexpr_negate2 in H0. auto.
-  - inv H0.
-  - inv H0. inv H2. rewrite eval_predf_Pand. rewrite IHp1; eauto.
-    rewrite eval_predf_Pand. rewrite IHp2; eauto with bool.
-  - inv H0. rewrite eval_predf_Por. rewrite IHp1; eauto.
-Qed.
-
-Lemma sem_pexpr_forward_eval2 :
-  forall A ctx f_p ps,
-    (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
-    forall p,
-      @sem_pexpr A ctx (from_pred_op f_p p) true ->
-      eval_predf ps p = true.
-Proof.
-  induction p; crush.
-  - destruct_match. inv Heqp0. destruct b.
-    cbn. specialize (H p0).
-    apply sem_pexpr_determ with (b2 := true) in H; auto.
-    specialize (H p0).
-    apply sem_pexpr_determ with (b2 := false) in H; auto.
-    cbn. rewrite H. auto.
-    replace true with (negb false) in H0 by trivial.
-    apply sem_pexpr_negate2 in H0. auto.
-  - inv H0.
-  - inv H0. rewrite eval_predf_Pand. rewrite IHp1; eauto.
-  - inv H0. inv H2. rewrite eval_predf_Por. rewrite IHp1; eauto.
-    rewrite eval_predf_Por. rewrite IHp2; eauto with bool.
-Qed.
-
-Lemma sem_pexpr_forward_eval :
-  forall A ctx f_p ps,
-    (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
-    forall p b,
-      @sem_pexpr A ctx (from_pred_op f_p p) b ->
-      eval_predf ps p = b.
-Proof.
-  intros; destruct b; eauto using sem_pexpr_forward_eval1, sem_pexpr_forward_eval2.
-Qed.
-
-Lemma norm_expression_sem_pred :
-  forall A B f sem ctx pe v,
-    sem_pred_expr f sem ctx pe v ->
-    (forall x : positive, sem_pexpr ctx (get_forest_p' x f) (ctx_ps ctx) !! x) ->
-    forall pt et et' max,
-      predicated_mutexcl pe ->
-      max_pred_expr pe <= max ->
-      HN.norm_expression max pe et = (pt, et') ->
-      @sem_pred_tree A B sem ctx et' pt v.
-Proof.
-  induction 1; crush; repeat (destruct_match; []); try destruct_match;
-  match goal with
-  | H: (_, _) = (_, _) |- _ => inv H
-  end.
-  { econstructor. 3: { apply PTree.gss. }
-    2: { eassumption. }
-    { simplify. pose proof Heqp as Y1. apply hash_value_in in Y1.
-    eapply norm_expr_constant in Heqn; [|eassumption]. eapply sem_pexpr_forward_eval in H.
-    rewrite eval_predf_Por. rewrite H. eauto with bool. assumption. }
-(*    { apply hash_value_in in Heqp. eapply norm_expr_constant in Heqp0; eauto. }
-  }
-  { econstructor; eauto. apply PTree.gss.
-    apply hash_value_in in Heqp.
-    eapply norm_expr_constant in Heqp0; eauto.
-  }
-  { assert (sem_pred_tree sem0 ctx0 et' t v).
-    eapply IHsem_pred_expr.
-    eapply predicated_cons; eauto.
-    instantiate (1 := max). lia.
-    eassumption.
-    inv H3.
-    destruct (Pos.eq_dec e0 h); subst. rewrite H6 in Heqo. simplify.
-    econstructor; try apply PTree.gss; eauto.
-    unfold eval_predf in *. simplify. auto with bool.
-    econstructor; eauto. now rewrite PTree.gso.
-  }
-  { assert (X: sem_pred_tree sem0 ctx0 et' t v).
-    eapply IHsem_pred_expr.
-    eapply predicated_cons; eauto.
-    instantiate (1 := max). lia.
-    eassumption.
-    inv X.
-    destruct (Pos.eq_dec e0 h); crush.
-    econstructor; eauto. now rewrite PTree.gso.
-  }
-  { econstructor; eauto. apply PTree.gss.
-    eapply hash_value_in; eassumption.
-  }
-Qed.*) Admitted.
-
-Lemma norm_expression_sem_pred2 :
-  forall A B f sem ctx v pt et et',
-    @sem_pred_tree A B sem ctx et' pt v ->
-    (forall x : positive, sem_pexpr ctx (get_forest_p' x f) (ctx_ps ctx) !! x) ->
-    forall pe,
-      predicated_mutexcl pe ->
-      HN.norm_expression (max_pred_expr pe) pe et = (pt, et') ->
-      sem_pred_expr f sem ctx pe v.
-Proof. Admitted.
 
 Definition pred_expr_eqb: forall pe1 pe2: pred_expr,
   {pe1 = pe2} + {pe1 <> pe2}.
@@ -1197,10 +1106,9 @@ Qed.*)
 
 Section CORRECT.
 
-  Definition fd := GibleSeq.fundef.
-  Definition tfd := GiblePar.fundef.
+  Context {FUN TFUN: Type}.
 
-  Context (ictx: @ctx fd) (octx: @ctx tfd) (HSIM: similar ictx octx).
+  Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
 
   Lemma sem_value_mem_det:
     forall e v v' m m',
@@ -1270,36 +1178,31 @@ Section CORRECT.
   Qed.
 
   Lemma sem_value_det:
-    forall e v v',
-      sem_value ictx e v -> sem_value octx e v' -> v = v'.
+    forall e v v', sem_value ictx e v -> sem_value octx e v' -> v = v'.
   Proof using HSIM.
     intros. eapply sem_value_mem_det; eauto; apply Mem.empty.
   Qed.
 
   Lemma sem_value_corr:
-    forall e v,
-      sem_value ictx e v -> sem_value octx e v.
+    forall e v, sem_value ictx e v -> sem_value octx e v.
   Proof using HSIM.
     intros. eapply sem_value_mem_corr; eauto; apply Mem.empty.
   Qed.
 
   Lemma sem_mem_det:
-    forall e v v',
-      sem_mem ictx e v -> sem_mem octx e v' -> v = v'.
+    forall e v v', sem_mem ictx e v -> sem_mem octx e v' -> v = v'.
   Proof using HSIM.
     intros. eapply sem_value_mem_det; eauto; apply (Vint (Int.repr 0%Z)).
   Qed.
 
   Lemma sem_mem_corr:
-    forall e v,
-      sem_mem ictx e v -> sem_mem octx e v.
+    forall e v, sem_mem ictx e v -> sem_mem octx e v.
   Proof using HSIM.
     intros. eapply sem_value_mem_corr; eauto; apply (Vint (Int.repr 0%Z)).
   Qed.
 
   Lemma sem_val_list_det:
-    forall e l l',
-      sem_val_list ictx e l -> sem_val_list octx e l' -> l = l'.
+    forall e l l', sem_val_list ictx e l -> sem_val_list octx e l' -> l = l'.
   Proof using HSIM.
     induction e; simplify.
     - inv H; inv H0; auto.
@@ -1308,8 +1211,7 @@ Section CORRECT.
   Qed.
 
   Lemma sem_val_list_corr:
-    forall e l,
-      sem_val_list ictx e l -> sem_val_list octx e l.
+    forall e l, sem_val_list ictx e l -> sem_val_list octx e l.
   Proof using HSIM.
     induction e; simplify.
     - inv H; constructor.
@@ -1318,8 +1220,7 @@ Section CORRECT.
   Qed.
 
   Lemma sem_pred_det:
-    forall e v v',
-      sem_pred ictx e v -> sem_pred octx e v' -> v = v'.
+    forall e v v', sem_pred ictx e v -> sem_pred octx e v' -> v = v'.
   Proof using HSIM.
     try solve [inversion 1]; pose proof sem_value_det; pose proof sem_val_list_det; inv HSIM;
       match goal with H: match_states _ _ |- _ => inv H end; simplify.
@@ -1328,14 +1229,214 @@ Section CORRECT.
   Qed.
 
   Lemma sem_pred_corr:
-    forall e v,
-      sem_pred ictx e v -> sem_pred octx e v.
+    forall e v, sem_pred ictx e v -> sem_pred octx e v.
   Proof using HSIM.
     try solve [inversion 1]; pose proof sem_value_corr; pose proof sem_val_list_corr; inv HSIM;
       match goal with H: match_states _ _ |- _ => inv H end; simplify.
     inv H2; auto. apply H0 in H5. econstructor; eauto.
     unfold ctx_ps; cbn. rewrite H4. constructor.
   Qed.
+
+  Lemma sem_exit_det:
+    forall e v v', sem_exit ictx e v -> sem_exit octx e v' -> v = v'.
+  Proof using HSIM.
+    try solve [inversion 1]; pose proof sem_value_det; pose proof sem_val_list_det; inv HSIM;
+      match goal with H: match_states _ _ |- _ => inv H end; simplify.
+    inv H2; inv H5; auto.
+  Qed.
+
+  Lemma sem_exit_corr:
+    forall e v, sem_exit ictx e v -> sem_exit octx e v.
+  Proof using HSIM.
+    try solve [inversion 1]; pose proof sem_value_corr; pose proof sem_val_list_corr; inv HSIM;
+      match goal with H: match_states _ _ |- _ => inv H end; simplify.
+    inv H2; auto; constructor.
+  Qed.
+
+  Lemma sem_pexpr_det :
+    forall p b1 b2, sem_pexpr ictx p b1 -> sem_pexpr octx p b2 -> b1 = b2.
+  Proof.
+    induction p; crush; inv H; inv H0; firstorder.
+    destruct b.
+    - apply sem_pred_det with (e:=p0); auto.
+    - apply negb_inj. apply sem_pred_det with (e:=p0); auto.
+  Qed.
+
+  Lemma sem_pexpr_corr :
+    forall p b, sem_pexpr ictx p b -> sem_pexpr octx p b.
+  Proof.
+    induction p; crush; inv H; constructor;
+      try solve [try inv H3; firstorder].
+    now apply sem_pred_corr.
+  Qed.
+
+  Lemma sem_pred_exec_beq_correct2 :
+    forall A B (sem: forall G, @Abstr.ctx G -> A -> B -> Prop) a p r R,
+      (forall x y,
+          sem _ ictx x y ->
+          exists y', sem _ octx x y' /\ R y y') ->
+      sem_pred_expr a (sem _) ictx p r ->
+      exists r', sem_pred_expr a (sem _) octx p r' /\ R r r'.
+  Proof.
+    induction p; crush.
+    - inv H0. apply H in H4. simplify.
+      exists x; split; auto.
+      constructor; auto.
+      now apply sem_pexpr_corr.
+    - inv H0.
+      + apply H in H6; simplify.
+        exists x; split; auto.
+        constructor; auto.
+        now apply sem_pexpr_corr.
+      + exploit IHp; auto. exact H6. intros. simplify.
+        exists x; split; auto.
+        apply sem_pred_expr_cons_false; auto.
+        now apply sem_pexpr_corr.
+  Qed.
+  
+  Lemma sem_pred_expr_corr :
+    forall A B (sem: forall G, @Abstr.ctx G -> A -> B -> Prop) a p r,
+      (forall x y, sem _ ictx x y -> sem _ octx x y) ->
+      sem_pred_expr a (sem _) ictx p r ->
+      sem_pred_expr a (sem _) octx p r.
+  Proof.
+    intros.
+    assert
+      (forall x y,
+          sem0 _ ictx x y ->
+          exists y', sem0 _ octx x y' /\ eq y y') by firstorder.
+    pose proof (sem_pred_exec_beq_correct2 _ _ sem0 a p r _ H1 H0).
+    crush.
+  Qed.
+
+  Lemma sem_correct:
+    forall f i cf, sem ictx f (i, cf) -> sem octx f (i, cf).
+  Proof.
+    intros. inv H. constructor.
+    - inv H2. constructor; intros. specialize (H x).
+      apply sem_pred_expr_corr; auto. exact sem_value_corr.
+    - inv H3; constructor; intros. specialize (H x).
+      now apply sem_pexpr_corr.
+    - apply sem_pred_expr_corr; auto. exact sem_mem_corr.
+    - apply sem_pred_expr_corr; auto. exact sem_exit_corr.
+  Qed.
+
+End CORRECT.
+
+Lemma sem_pexpr_forward_eval1 :
+  forall A ctx f_p ps,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+    forall p,
+      @sem_pexpr A ctx (from_pred_op f_p p) false ->
+      eval_predf ps p = false.
+Proof.
+  induction p; crush.
+  - destruct_match. inv Heqp0. destruct b.
+    cbn. specialize (H p0).
+    eapply sem_pexpr_det; eauto. apply similar_refl.
+    specialize (H p0).
+    replace false with (negb true) in H0 by auto.
+    eapply sem_pexpr_negate2 in H0. cbn.
+    symmetry; apply negb_sym. cbn.
+    eapply sem_pexpr_det; eauto. apply similar_refl.
+  - inv H0.
+  - inv H0. inv H2. rewrite eval_predf_Pand. rewrite IHp1; eauto.
+    rewrite eval_predf_Pand. rewrite IHp2; eauto with bool.
+  - inv H0. rewrite eval_predf_Por. rewrite IHp1; eauto.
+Qed.
+
+Lemma sem_pexpr_forward_eval2 :
+  forall A ctx f_p ps,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+    forall p,
+      @sem_pexpr A ctx (from_pred_op f_p p) true ->
+      eval_predf ps p = true.
+Proof.
+  induction p; crush.
+  - destruct_match. inv Heqp0. destruct b.
+    cbn. specialize (H p0).
+    eapply sem_pexpr_det; eauto. apply similar_refl.
+    cbn. symmetry. apply negb_sym; cbn.
+    replace true with (negb false) in H0 by auto.
+    eapply sem_pexpr_negate2 in H0.
+    eapply sem_pexpr_det; eauto. apply similar_refl.
+  - inv H0.
+  - inv H0. rewrite eval_predf_Pand. rewrite IHp1; eauto.
+  - inv H0. inv H2. rewrite eval_predf_Por. rewrite IHp1; eauto.
+    rewrite eval_predf_Por. rewrite IHp2; eauto with bool.
+Qed.
+
+Lemma sem_pexpr_forward_eval :
+  forall A ctx f_p ps,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+    forall p b,
+      @sem_pexpr A ctx (from_pred_op f_p p) b ->
+      eval_predf ps p = b.
+Proof.
+  intros; destruct b; eauto using sem_pexpr_forward_eval1, sem_pexpr_forward_eval2.
+Qed.
+
+Lemma norm_expression_sem_pred :
+  forall A B f sem ctx pe v,
+    sem_pred_expr f sem ctx pe v ->
+    (forall x : positive, sem_pexpr ctx (get_forest_p' x f) (ctx_ps ctx) !! x) ->
+    forall pt et et' max,
+      predicated_mutexcl pe ->
+      max_pred_expr pe <= max ->
+      HN.norm_expression max pe et = (pt, et') ->
+      @sem_pred_tree A B sem ctx et' pt v.
+Proof.
+  induction 1; crush; repeat (destruct_match; []); try destruct_match;
+  match goal with
+  | H: (_, _) = (_, _) |- _ => inv H
+  end.
+  { econstructor. 3: { apply PTree.gss. }
+    2: { eassumption. }
+    { simplify. pose proof Heqp as Y1. apply hash_value_in in Y1.
+    eapply norm_expr_constant in Heqn; [|eassumption]. eapply sem_pexpr_forward_eval in H.
+    rewrite eval_predf_Por. rewrite H. eauto with bool. assumption. }
+(*    { apply hash_value_in in Heqp. eapply norm_expr_constant in Heqp0; eauto. }
+  }
+  { econstructor; eauto. apply PTree.gss.
+    apply hash_value_in in Heqp.
+    eapply norm_expr_constant in Heqp0; eauto.
+  }
+  { assert (sem_pred_tree sem0 ctx0 et' t v).
+    eapply IHsem_pred_expr.
+    eapply predicated_cons; eauto.
+    instantiate (1 := max). lia.
+    eassumption.
+    inv H3.
+    destruct (Pos.eq_dec e0 h); subst. rewrite H6 in Heqo. simplify.
+    econstructor; try apply PTree.gss; eauto.
+    unfold eval_predf in *. simplify. auto with bool.
+    econstructor; eauto. now rewrite PTree.gso.
+  }
+  { assert (X: sem_pred_tree sem0 ctx0 et' t v).
+    eapply IHsem_pred_expr.
+    eapply predicated_cons; eauto.
+    instantiate (1 := max). lia.
+    eassumption.
+    inv X.
+    destruct (Pos.eq_dec e0 h); crush.
+    econstructor; eauto. now rewrite PTree.gso.
+  }
+  { econstructor; eauto. apply PTree.gss.
+    eapply hash_value_in; eassumption.
+  }
+Qed.*) Admitted.
+
+Lemma norm_expression_sem_pred2 :
+  forall A B f sem ctx v pt et et',
+    @sem_pred_tree A B sem ctx et' pt v ->
+    (forall x : positive, sem_pexpr ctx (get_forest_p' x f) (ctx_ps ctx) !! x) ->
+    forall pe,
+      predicated_mutexcl pe ->
+      HN.norm_expression (max_pred_expr pe) pe et = (pt, et') ->
+      sem_pred_expr f sem ctx pe v.
+Proof. Admitted.
+
+
 
   #[local] Opaque PTree.set.
 
@@ -1397,8 +1498,11 @@ Section CORRECT.
   Section SEM_PRED.
 
     Context (B: Type).
-    Context (isem: @ctx fd -> expression -> B -> Prop).
-    Context (osem: @ctx tfd -> expression -> B -> Prop).
+    Context {FUN TFUN: Type}.
+    Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
+
+    Context (isem: @ctx FUN -> expression -> B -> Prop).
+    Context (osem: @ctx TFUN -> expression -> B -> Prop).
     Context (SEMSIM: forall e v v', isem ictx e v -> osem octx e v' -> v = v').
 
     Ltac simplify' l := intros; unfold_constants; cbn -[l] in *;
@@ -1536,9 +1640,12 @@ Section CORRECT.
 
   Section SEM_PRED_CORR.
 
-    Context (B: Type).
-    Context (isem: @ctx fd -> expression -> B -> Prop).
-    Context (osem: @ctx tfd -> expression -> B -> Prop).
+    Context {B: Type}.
+    Context {FUN TFUN: Type}.
+    Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
+
+    Context (isem: @ctx FUN -> expression -> B -> Prop).
+    Context (osem: @ctx TFUN -> expression -> B -> Prop).
     Context (SEMCORR: forall e v, isem ictx e v -> osem octx e v).
 
 (*    Lemma sem_pred_tree_corr:
@@ -1550,8 +1657,6 @@ Section CORRECT.
              sem_pred_tree isem ictx h t v ->
              sem_pred_tree osem octx h' t' v.
     Proof using SEMCORR. Admitted.*)
-
-  End SEM_PRED_CORR.
 
   Lemma check_correct: forall (fa fb : forest) i i',
       check fa fb = true ->
@@ -1568,7 +1673,7 @@ Section CORRECT.
       exists i', sem octx fb i' /\ match_states (fst i) (fst i') /\ snd i = snd i'.
   Proof. Admitted.
 
-End CORRECT.
+  End SEM_PRED_CORR.
 
 Lemma get_empty:
   forall r, empty#r r = NE.singleton (Ptrue, Ebase r).
@@ -1716,62 +1821,29 @@ Lemma forest_pred_gso2 :
     (forest_preds (f #p w <- p)) ! r = (forest_preds f) ! r.
 Proof. intros. unfold set_forest_p. simpl. now rewrite PTree.gso by auto. Qed.
 
-Inductive state_lessdef : instr_state -> instr_state -> Prop :=
-  state_lessdef_intro :
-    forall rs1 rs2 ps1 ps2 m1,
-      (forall x, rs1 !! x = rs2 !! x) ->
-      (forall x, ps1 !! x = ps2 !! x) ->
-      state_lessdef (mk_instr_state rs1 ps1 m1) (mk_instr_state rs2 ps2 m1).
+Section GENERIC_CONTEXT.
 
-Lemma state_lessdef_refl x : state_lessdef x x.
-Proof. destruct x; constructor; auto. Qed.
-
-Lemma state_lessdef_symm x y : state_lessdef x y -> state_lessdef y x.
-Proof. destruct x; destruct y; inversion 1; subst; simplify; constructor; auto. Qed.
-
-Lemma state_lessdef_trans :
-  forall a b c,
-    state_lessdef a b ->
-    state_lessdef b c ->
-    state_lessdef a c.
-Proof.
-  inversion 1; inversion 1; subst; simplify.
-  constructor; eauto; intros. rewrite H0. auto.
-Qed.
-
-#[global] Instance Equivalence_state_lessdef : Equivalence state_lessdef :=
-  { Equivalence_Reflexive := state_lessdef_refl;
-    Equivalence_Symmetric := state_lessdef_symm;
-    Equivalence_Transitive := state_lessdef_trans;
-  }.
-
-Section CORRECT.
-
-Context (prog: GibleSeq.program) (tprog : GiblePar.program).
-Context (sp: val).
-
-Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
-Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
-
-Definition mkctx a := mk_ctx a sp ge.
+Context {A: Type}.
+Context (ctx: @ctx A).
 
 (*|
 Suitably restrict the predicate set so that one can evaluate a hashed predicate
 using that predicate set.  However, one issue might be that we do not know that
 all the atoms of the original formula are actually evaluable.
 |*)
-Definition match_pred_states {A: Type}
-  (ctx: @ctx A) (ht: PHT.hash_tree) (p_out: pred_op) (pred_set: predset) :=
+
+Definition match_pred_states
+  (ht: PHT.hash_tree) (p_out: pred_op) (pred_set: predset) :=
   forall (p: positive) (br: bool) (p_in: pred_expression),
     PredIn p p_out ->
     ht ! p = Some p_in ->
     sem_pred ctx p_in (pred_set !! p).
 
 Lemma eval_hash_predicate :
-  forall max p_in ht p_out ht' i br pred_set,
+  forall max p_in ht p_out ht' br pred_set,
     hash_predicate max p_in ht = (p_out, ht') ->
-    sem_pexpr (mkctx i) p_in br ->
-    match_pred_states (mkctx i) ht' p_out pred_set ->
+    sem_pexpr ctx p_in br ->
+    match_pred_states ht' p_out pred_set ->
     eval_predf pred_set p_out = br.
 Proof.
   induction p_in; simplify.
@@ -1781,40 +1853,40 @@ Proof.
     specialize (H1 h br).
 Admitted.
 
-Lemma sem_pexpr_get_forest_eq :
-  forall a b i br,
-    beq_pred_pexpr a b = true ->
-    sem_pexpr (mkctx i) a br ->
-    sem_pexpr (mkctx i) b br.
+Lemma sem_pexpr_beq_correct :
+  forall p1 p2 b,
+    beq_pred_pexpr p1 p2 = true ->
+    sem_pexpr ctx p1 b ->
+    sem_pexpr ctx p2 b.
 Proof.
   unfold beq_pred_pexpr.
-  induction a; intros; destruct_match; crush.
+  induction p1; intros; destruct_match; crush.
   Admitted.
 
 (*|
-This should only require a proof of sem_pexpr_get_forest_eq, the rest is
+This should only require a proof of sem_pexpr_beq_correct, the rest is
 straightforward.
 |*)
 
 Lemma pred_pexpr_beq_pred_pexpr :
-  forall pr a b i br,
+  forall pr a b br,
     PTree.beq beq_pred_pexpr a b = true ->
-    sem_pexpr (mkctx i) (from_pred_op a pr) br ->
-    sem_pexpr (mkctx i) (from_pred_op b pr) br.
+    sem_pexpr ctx (from_pred_op a pr) br ->
+    sem_pexpr ctx (from_pred_op b pr) br.
 Proof.
   induction pr; crush.
   - destruct_match. inv Heqp0. destruct b0.
     + unfold get_forest_p' in *.
       apply PTree.beq_correct with (x := p0) in H.
       destruct a ! p0; destruct b ! p0; try (exfalso; assumption); auto.
-      eapply sem_pexpr_get_forest_eq; eauto.
+      eapply sem_pexpr_beq_correct; eauto.
     + replace br with (negb (negb br)) by (now apply negb_involutive).
       replace br with (negb (negb br)) in H0 by (now apply negb_involutive).
       apply sem_pexpr_negate. apply sem_pexpr_negate2 in H0.
       unfold get_forest_p' in *.
       apply PTree.beq_correct with (x := p0) in H.
       destruct a ! p0; destruct b ! p0; try (exfalso; assumption); auto.
-      eapply sem_pexpr_get_forest_eq; eauto.
+      eapply sem_pexpr_beq_correct; eauto.
   - inv H0; try inv H4.
     + eapply IHpr1 in H0; eauto. apply sem_pexpr_Pand_false; tauto.
     + eapply IHpr2 in H0; eauto. apply sem_pexpr_Pand_false; tauto.
@@ -1827,11 +1899,18 @@ Proof.
       apply sem_pexpr_Por_false; auto.
 Qed.
 
+(*|
+This lemma requires a theorem that equivalence of symbolic predicates means they
+will be.  This further needs three-valued logic to be able to compare arbitrary
+predicates with each other, that will also show that the predicate will also be
+computable.
+|*)
+
 Lemma sem_pred_exec_beq_correct :
-  forall A B (sem: ctx -> A -> B -> Prop) p a b i r,
+  forall A B (sem: Abstr.ctx -> A -> B -> Prop) p a b r,
     PTree.beq beq_pred_pexpr a b = true ->
-    sem_pred_expr a sem (mkctx i) p r ->
-    sem_pred_expr b sem (mkctx i) p r.
+    sem_pred_expr a sem ctx p r ->
+    sem_pred_expr b sem ctx p r.
 Proof.
   induction p; intros; inv H0.
   - constructor; auto. eapply pred_pexpr_beq_pred_pexpr; eauto.
@@ -1840,57 +1919,38 @@ Proof.
     eapply pred_pexpr_beq_pred_pexpr; eauto.
 Qed.
 
-Lemma sem_pred_exec_beq_correct2 :
-  forall A B (sem: ctx -> A -> B -> Prop) a i ti p r,
-    state_lessdef i ti ->
-    sem_pred_expr a sem (mkctx i) p r ->
-    sem_pred_expr a sem (mkctx ti) p r.
-Proof. Admitted.
-
 Lemma sem_expr_beq_correct :
-  forall pt i a b v,
+  forall pt a b v,
     beq_pred_expr a b = true ->
-    sem_pred_expr pt sem_value (mkctx i) a v ->
-    sem_pred_expr pt sem_value (mkctx i) b v.
+    sem_pred_expr pt sem_value ctx a v ->
+    sem_pred_expr pt sem_value ctx b v.
 Proof.
   intros. unfold beq_pred_expr in H. destruct_match; subst; auto.
   repeat (destruct_match; []). simplify.
 Admitted.
 
 Lemma sem_expr_beq_correct_mem :
-  forall pt i a b v,
+  forall pt a b v,
     beq_pred_expr a b = true ->
-    sem_pred_expr pt sem_mem (mkctx i) a v ->
-    sem_pred_expr pt sem_mem (mkctx i) b v.
+    sem_pred_expr pt sem_mem ctx a v ->
+    sem_pred_expr pt sem_mem ctx b v.
 Proof. Admitted.
 
 Lemma sem_expr_beq_correct_exit :
-  forall pt i a b v,
+  forall pt a b v,
     beq_pred_eexpr a b = true ->
-    sem_pred_expr pt sem_exit (mkctx i) a v ->
-    sem_pred_expr pt sem_exit (mkctx i) b v.
+    sem_pred_expr pt sem_exit ctx a v ->
+    sem_pred_expr pt sem_exit ctx b v.
 Proof. Admitted.
 
 Lemma sem_eexpr_beq_correct :
-  forall pt i a b v,
+  forall pt a b v,
     beq_pred_eexpr a b = true ->
-    sem_pred_expr pt sem_exit (mkctx i) a v ->
-    sem_pred_expr pt sem_exit (mkctx i) b v.
+    sem_pred_expr pt sem_exit ctx a v ->
+    sem_pred_expr pt sem_exit ctx b v.
 Proof. Admitted.
 
-Lemma sem_pexpr_state_lessdef :
-  forall i i' a v,
-    state_lessdef i i' ->
-    sem_pexpr (mkctx i) a v ->
-    sem_pexpr (mkctx i') a v.
-Proof. Admitted.
-
-Lemma sem_pexpr_beq_correct :
-  forall i p1 p2 b,
-    beq_pred_pexpr p1 p2 = true ->
-    sem_pexpr (mkctx i) p1 b ->
-    sem_pexpr (mkctx i) p2 b.
-Proof. Admitted.
+End GENERIC_CONTEXT.
 
 Lemma tree_beq_pred_pexpr :
   forall a b x,
@@ -1915,31 +1975,35 @@ Proof.
   unfold beq_pred_expr. destruct_match; auto.
 Qed.
 
+Section CORRECT.
+
+Context {FUN TFUN: Type}.
+Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
+
 Lemma abstr_check_correct :
-  forall i i' a b cf ti,
+  forall i' a b cf,
     check a b = true ->
-    sem (mkctx i) a (i', cf) ->
-    state_lessdef i ti ->
-    exists ti', sem (mkctx ti) b (ti', cf) /\ state_lessdef i' ti'.
+    sem ictx a (i', cf) ->
+    exists ti', sem octx b (ti', cf) /\ match_states i' ti'.
 Proof.
   intros. unfold check in H. simplify.
-  inv H0. inv H6. inv H7.
+  inv H0. inv H5. inv H6.
   eexists. split. {
   constructor.
   - constructor. intros.
     eapply sem_pred_exec_beq_correct; eauto.
-    eapply sem_pred_exec_beq_correct2; eauto.
+    eapply sem_pred_expr_corr; eauto. now apply sem_value_corr.
     eapply sem_expr_beq_correct. eapply tree_beq_pred_expr; eauto.
     eauto.
   - constructor. intros. apply sem_pexpr_beq_correct with (p1 := a #p x).
     apply tree_beq_pred_pexpr; auto.
-    apply sem_pexpr_state_lessdef with (i := i); auto.
+    apply sem_pexpr_corr with (ictx:=ictx); auto.
   - eapply sem_pred_exec_beq_correct; eauto.
-    eapply sem_pred_exec_beq_correct2; eauto.
+    eapply sem_pred_expr_corr; eauto. now apply sem_mem_corr.
     eapply sem_expr_beq_correct_mem. eapply tree_beq_pred_expr; eauto.
     eauto.
   - eapply sem_pred_exec_beq_correct; eauto.
-    eapply sem_pred_exec_beq_correct2; eauto.
+    eapply sem_pred_expr_corr; eauto. now apply sem_exit_corr.
     eapply sem_expr_beq_correct_exit; eauto.
   }
   constructor; auto.
