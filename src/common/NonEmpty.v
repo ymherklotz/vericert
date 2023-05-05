@@ -204,3 +204,8 @@ Proof.
     + symmetry in e. destruct (a1 == a); easy.
     + destruct (a1 == a); try easy. now symmetry in e.
 Qed.
+
+Inductive norepet {A : Type} : non_empty A -> Prop :=
+| norepet_singleton a : norepet (singleton a)
+| list_norepet_cons hd tl :
+  ~ In hd tl -> norepet tl -> norepet (hd ::| tl).

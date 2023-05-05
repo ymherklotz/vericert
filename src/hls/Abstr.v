@@ -756,157 +756,17 @@ Fixpoint hash_predicate (max: predicate) (ap: pred_pexpr) (h: PHT.hash_tree)
   end.
 
 Definition predicated_mutexcl {A: Type} (pe: predicated A): Prop :=
-  forall x y, NE.In x pe -> NE.In y pe -> x <> y -> fst x ⇒ ¬ fst y.
+  (forall x y, NE.In x pe -> NE.In y pe -> x <> y -> fst x ⇒ ¬ fst y)
+  /\ NE.norepet pe.
 
 Lemma predicated_cons :
   forall A (a: pred_op * A) x,
     predicated_mutexcl (a ::| x) ->
     predicated_mutexcl x.
 Proof.
-  unfold predicated_mutexcl; intros.
-  apply H; auto; constructor; tauto.
+  unfold predicated_mutexcl; intros. inv H. inv H1. split; auto.
+  intros. apply H0; auto; constructor; tauto.
 Qed.
-
-Module HashExprNorm(H: Hashable).
-  Module H := HashTree(H).
-
-  Definition norm_tree: Type := PTree.t pred_op * H.hash_tree.
-
-  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: H.hash_tree)
-    : norm_tree :=
-    match pe with
-    | NE.singleton (p, e) =>
-        let (hashed_e, h') := H.hash_value max e h in
-        (PTree.set hashed_e p (PTree.empty _), h')
-    | (p, e) ::| pr =>
-        let (hashed_e, h') := H.hash_value max e h in
-        let (norm_pr, h'') := norm_expression max pr h' in
-        match norm_pr ! hashed_e with
-        | Some pr_op =>
-            (PTree.set hashed_e (pr_op ∨ p) norm_pr, h'')
-        | None =>
-            (PTree.set hashed_e p norm_pr, h'')
-        end
-    end.
-
-  Definition mk_pred_stmnt' (e: predicate) p_e := ¬ p_e ∨ Plit (true, e).
-
-  Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
-
-  Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) :=
-    fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
-
-  Definition encode_expression max pe h :=
-    let (tree, h) := norm_expression max pe h in
-    (mk_pred_stmnt tree, h).
-
-  Definition pred_expr_dec: forall pe1 pe2: predicated H.t,
-    {pe1 = pe2} + {pe1 <> pe2}.
-  Proof.
-    pose proof H.eq_dec as X.
-    pose proof (Predicate.eq_dec peq).
-    pose proof (NE.eq_dec _ X).
-    assert (forall a b: pred_op * H.t, {a = b} + {a <> b})
-     by decide equality.
-    decide equality.
-  Defined.
-
-  Definition beq_pred_expr' (pe1 pe2: predicated H.t) : bool :=
-    if pred_expr_dec pe1 pe2 then true else
-    let (p1, h) := encode_expression 1%positive pe1 (PTree.empty _) in
-    let (p2, h') := encode_expression 1%positive pe2 h in
-    equiv_check p1 p2.
-
-  Lemma mk_pred_stmnt_equiv' :
-    forall l l' e p,
-      mk_pred_stmnt_l l == mk_pred_stmnt_l l' ->
-      In (e, p) l ->
-      list_norepet (map fst l) ->
-      (exists p', In (e, p') l' /\ p == p')
-      \/ ~ In e (map fst l') /\ p == ⟂.
-  Proof. Abort.
-
-  Lemma mk_pred_stmnt_equiv :
-    forall tree tree',
-      mk_pred_stmnt tree == mk_pred_stmnt tree'.
-  Proof. Abort.
-
-  Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
-    match np2 ! n with
-    | Some p' => equiv_check p p'
-    | None => equiv_check p ⟂
-    end.
-  
-  Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
-    match np2 ! n with
-    | Some p' => true
-    | None => equiv_check p ⟂
-    end.
-
-  Definition beq_pred_expr (pe1 pe2: predicated H.t) : bool :=
-    if pred_expr_dec pe1 pe2 then true else
-    let (np1, h) := norm_expression 1 pe1 (PTree.empty _) in
-    let (np2, h') := norm_expression 1 pe2 h in
-    forall_ptree (tree_equiv_check_el np2) np1
-    && forall_ptree (tree_equiv_check_None_el np1) np2.
-
-  Lemma beq_pred_expr_correct:
-    forall np1 np2 e p p',
-      forall_ptree (tree_equiv_check_el np2) np1 = true ->
-      np1 ! e = Some p ->
-      np2 ! e = Some p' ->
-      p == p'.
-  Proof.
-    intros.
-    eapply forall_ptree_true in H; try eassumption.
-    unfold tree_equiv_check_el in H.
-    rewrite H1 in H. now apply equiv_check_correct.
-  Qed.
-
-  Lemma beq_pred_expr_correct2:
-    forall np1 np2 e p,
-      forall_ptree (tree_equiv_check_el np2) np1 = true ->
-      np1 ! e = Some p ->
-      np2 ! e = None ->
-      p == ⟂.
-  Proof.
-    intros.
-    eapply forall_ptree_true in H; try eassumption.
-    unfold tree_equiv_check_el in H.
-    rewrite H1 in H. now apply equiv_check_correct.
-  Qed.
-
-  Lemma beq_pred_expr_correct3:
-    forall np1 np2 e p,
-      forall_ptree (tree_equiv_check_None_el np1) np2 = true ->
-      np1 ! e = None ->
-      np2 ! e = Some p ->
-      p == ⟂.
-  Proof.
-    intros.
-    eapply forall_ptree_true in H; try eassumption.
-    unfold tree_equiv_check_None_el in H.
-    rewrite H0 in H. now apply equiv_check_correct.
-  Qed.
-
-  Variant sem_pred_tree {A B: Type} (pr: PTree.t pred_pexpr) (sem: ctx -> H.t -> B -> Prop):
-      @ctx A -> PTree.t H.t -> PTree.t pred_op -> B -> Prop :=
-  | sem_pred_tree_intro :
-      forall ctx expr e v et pt,
-        eval_predf (ctx_ps ctx) pr = true ->
-        sem ctx expr v ->
-        pt ! e = Some pr ->
-        et ! e = Some expr ->
-        sem_pred_tree sem ctx et pt v.
-
-  Lemma exec_tree_exec_non_empty :
-    forall (s)
-    sem_pred_tree s
-
-End HashExprNorm.
-
-Module HN := HashExprNorm(HashExpr).
-Module EHN := HashExprNorm(EHashExpr).
 
 (*
 
@@ -961,46 +821,6 @@ Lemma norm_expr_mutexcl :
     p ⇒ ¬ p'.
 Proof. Abort.*)
 
-Lemma sem_pexpr_negate :
-  forall A ctx p b,
-    sem_pexpr ctx p b ->
-    @sem_pexpr A ctx (¬ p) (negb b).
-Proof.
-  induction p; crush.
-  - destruct_match. destruct b0; crush. inv Heqp0.
-    constructor. inv H. rewrite negb_involutive. auto.
-    constructor. inv H. auto.
-  - inv H. constructor.
-  - inv H. constructor.
-  - inv H. inv H3.
-    + apply IHp1 in H. solve [constructor; auto].
-    + apply IHp2 in H. solve [constructor; auto].
-    + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
-  - inv H. inv H3.
-    + apply IHp1 in H. solve [constructor; auto].
-    + apply IHp2 in H. solve [constructor; auto].
-    + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
-Qed.
-
-Lemma sem_pexpr_negate2 :
-  forall A ctx p b,
-    @sem_pexpr A ctx (¬ p) (negb b) ->
-    sem_pexpr ctx p b.
-Proof.
-  induction p; crush.
-  - destruct_match. destruct b0; crush. inv Heqp0.
-    constructor. inv H. rewrite negb_involutive in *. auto.
-    constructor. inv H. auto.
-  - inv H. destruct b; try discriminate. constructor.
-  - inv H. destruct b; try discriminate. constructor.
-  - inv H. destruct b; try discriminate.
-    + constructor. inv H1; eauto.
-    + destruct b; try discriminate. constructor; eauto.
-  - inv H. destruct b; try discriminate.
-    + constructor. inv H1; eauto.
-    + destruct b; try discriminate. constructor; eauto.
-Qed.
-
 Definition pred_expr_eqb: forall pe1 pe2: pred_expr,
   {pe1 = pe2} + {pe1 <> pe2}.
 Proof.
@@ -1025,11 +845,6 @@ Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
   let (np1, h) := hash_predicate 1 pe1 (PTree.empty _) in
   let (np2, h') := hash_predicate 1 pe2 h in
   equiv_check np1 np2.
-
-Definition check f1 f2 :=
-  RTree.beq beq_pred_expr f1.(forest_regs) f2.(forest_regs)
-  && PTree.beq beq_pred_pexpr f1.(forest_preds) f2.(forest_preds)
-  && beq_pred_eexpr f1.(forest_exit) f2.(forest_exit).
 
 Lemma inj_asgn_eg : forall a b, (a =? b)%positive = (a =? a)%positive -> a = b.
 Proof.
@@ -1343,6 +1158,501 @@ Section CORRECT.
   Qed.
 
 End CORRECT.
+
+Section SEM_PRED_EXEC.
+
+  Context (A: Type).
+  Context (ctx: @Abstr.ctx A).
+
+  Lemma sem_pexpr_negate :
+    forall p b,
+      sem_pexpr ctx p b ->
+      sem_pexpr ctx (¬ p) (negb b).
+  Proof.
+    induction p; crush.
+    - destruct_match. destruct b0; crush. inv Heqp0.
+      constructor. inv H. rewrite negb_involutive. auto.
+      constructor. inv H. auto.
+    - inv H. constructor.
+    - inv H. constructor.
+    - inv H. inv H3.
+      + apply IHp1 in H. solve [constructor; auto].
+      + apply IHp2 in H. solve [constructor; auto].
+      + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
+    - inv H. inv H3.
+      + apply IHp1 in H. solve [constructor; auto].
+      + apply IHp2 in H. solve [constructor; auto].
+      + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
+  Qed.
+  
+  Lemma sem_pexpr_negate2 :
+    forall p b,
+      sem_pexpr ctx (¬ p) (negb b) ->
+      sem_pexpr ctx p b.
+  Proof.
+    induction p; crush.
+    - destruct_match. destruct b0; crush. inv Heqp0.
+      constructor. inv H. rewrite negb_involutive in *. auto.
+      constructor. inv H. auto.
+    - inv H. destruct b; try discriminate. constructor.
+    - inv H. destruct b; try discriminate. constructor.
+    - inv H. destruct b; try discriminate.
+      + constructor. inv H1; eauto.
+      + destruct b; try discriminate. constructor; eauto.
+    - inv H. destruct b; try discriminate.
+      + constructor. inv H1; eauto.
+      + destruct b; try discriminate. constructor; eauto.
+  Qed.
+
+  Lemma sem_pexpr_evaluable :
+    forall f_p ps,
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+      forall p, exists b, sem_pexpr ctx (from_pred_op f_p p) b.
+  Proof.
+    induction p; crush.
+    - destruct_match. inv Heqp0. destruct b. econstructor. eauto.
+      econstructor. eapply sem_pexpr_negate. eauto.
+    - econstructor. constructor.
+    - econstructor. constructor.
+    - destruct x0, x; solve [eexists; constructor; auto].
+    - destruct x0, x; solve [eexists; constructor; auto].
+  Qed.
+
+  Lemma sem_pexpr_eval1 :
+    forall f_p ps,
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+      forall p,
+        eval_predf ps p = false ->
+        sem_pexpr ctx (from_pred_op f_p p) false.
+  Proof.
+    induction p; crush.
+    - destruct_match. inv Heqp0.
+      destruct b.
+      + cbn in H0. rewrite <- H0. eauto.
+      + replace false with (negb true) by auto.
+        apply sem_pexpr_negate. cbn in H0.
+        apply negb_true_iff in H0. rewrite negb_involutive in H0.
+        rewrite <- H0. eauto.
+     - constructor.
+     - rewrite eval_predf_Pand in H0.
+       apply andb_false_iff in H0. inv H0. eapply IHp1 in H1.
+       pose proof (sem_pexpr_evaluable _ _ H p2) as EVAL.
+       inversion_clear EVAL as [x EVAL2].
+       replace false with (false && x) by auto.
+       constructor; auto.
+       eapply IHp2 in H1.
+       pose proof (sem_pexpr_evaluable _ _ H p1) as EVAL.
+       inversion_clear EVAL as [x EVAL2].
+       replace false with (x && false) by eauto with bool.
+       apply sem_pexpr_Pand; auto.
+     - rewrite eval_predf_Por in H0.
+       apply orb_false_iff in H0. inv H0.
+       replace false with (false || false) by auto.
+       apply sem_pexpr_Por; auto.
+  Qed.
+
+  Lemma sem_pexpr_eval2 :
+    forall f_p ps,
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+      forall p,
+        eval_predf ps p = true ->
+        sem_pexpr ctx (from_pred_op f_p p) true.
+  Proof.
+    induction p; crush.
+    - destruct_match. inv Heqp0.
+      destruct b.
+      + cbn in H0. rewrite <- H0. eauto.
+      + replace true with (negb false) by auto.
+        apply sem_pexpr_negate. cbn in H0.
+        apply negb_true_iff in H0.
+        rewrite <- H0. eauto.
+     - constructor.
+     - rewrite eval_predf_Pand in H0.
+       apply andb_true_iff in H0. inv H0.
+       replace true with (true && true) by auto.
+       constructor; auto.
+     - rewrite eval_predf_Por in H0.
+       apply orb_true_iff in H0. inv H0. eapply IHp1 in H1.
+       pose proof (sem_pexpr_evaluable _ _ H p2) as EVAL.
+       inversion_clear EVAL as [x EVAL2].
+       replace true with (true || x) by auto.
+       apply sem_pexpr_Por; auto.
+       eapply IHp2 in H1.
+       pose proof (sem_pexpr_evaluable _ _ H p1) as EVAL.
+       inversion_clear EVAL as [x EVAL2].
+       replace true with (x || true) by eauto with bool.
+       apply sem_pexpr_Por; auto.
+  Qed.
+
+  Lemma sem_pexpr_eval :
+    forall f_p ps b,
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+      forall p,
+        eval_predf ps p = b ->
+        sem_pexpr ctx (from_pred_op f_p p) b.
+  Proof.
+    intros; destruct b; eauto using sem_pexpr_eval1, sem_pexpr_eval2.
+  Qed.
+
+  Lemma sem_pexpr_eval_inv :
+    forall f_p ps b,
+      (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+      forall p,
+        sem_pexpr ctx (from_pred_op f_p p) b ->
+        eval_predf ps p = b.
+  Proof.
+    induction p; intros.
+    - cbn in H0. destruct_match. destruct b0; cbn in *.
+      + specialize (H p0). eapply sem_pexpr_det; eauto. apply similar_refl.
+      + rewrite <- negb_involutive in H0. apply sem_pexpr_negate2 in H0.
+        symmetry; apply negb_sym. eapply sem_pexpr_det; eauto.
+        apply similar_refl.
+    - now inv H0.
+    - now inv H0.
+    - inv H0; try inv H4; rewrite eval_predf_Pand.
+      + apply IHp1 in H0. rewrite H0. auto.
+      + apply IHp2 in H0. rewrite H0. auto with bool.
+      + apply IHp2 in H5. apply IHp1 in H3. rewrite H3. rewrite H5. auto.
+    - inv H0; try inv H4; rewrite eval_predf_Por.
+      + apply IHp1 in H0. rewrite H0. auto.
+      + apply IHp2 in H0. rewrite H0. auto with bool.
+      + apply IHp2 in H5. apply IHp1 in H3. rewrite H3. rewrite H5. auto.
+  Qed.
+
+  Context {C B: Type}.
+  Context (f: PTree.t pred_pexpr).
+  Context (ps: PMap.t bool).
+  Context (a_sem: @Abstr.ctx A -> C -> B -> Prop).
+
+  Context (F_EVALULABLE: forall x, sem_pexpr ctx (get_forest_p' x f) ps !! x).
+
+  Lemma sem_pexpr_equiv :
+    forall p1 p2 b,
+      p1 == p2 ->
+      sem_pexpr ctx (from_pred_op f p1) b ->
+      sem_pexpr ctx (from_pred_op f p2) b.
+  Proof.
+    intros.
+    eapply sem_pexpr_eval_inv in H0; eauto.
+    eapply sem_pexpr_eval; eauto.
+  Qed.
+
+End SEM_PRED_EXEC.
+
+Module HashExprNorm(H: Hashable).
+  Module H := HashTree(H).
+
+  Definition norm_tree: Type := PTree.t pred_op * H.hash_tree.
+
+  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: H.hash_tree)
+    : norm_tree :=
+    match pe with
+    | NE.singleton (p, e) =>
+        let (hashed_e, h') := H.hash_value max e h in
+        (PTree.set hashed_e p (PTree.empty _), h')
+    | (p, e) ::| pr =>
+        let (hashed_e, h') := H.hash_value max e h in
+        let (norm_pr, h'') := norm_expression max pr h' in
+        match norm_pr ! hashed_e with
+        | Some pr_op =>
+            (PTree.set hashed_e (pr_op ∨ p) norm_pr, h'')
+        | None =>
+            (PTree.set hashed_e p norm_pr, h'')
+        end
+    end.
+
+  Definition mk_pred_stmnt' (e: predicate) p_e := ¬ p_e ∨ Plit (true, e).
+
+  Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
+
+  Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) :=
+    fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
+
+  Definition encode_expression max pe h :=
+    let (tree, h) := norm_expression max pe h in
+    (mk_pred_stmnt tree, h).
+
+  Definition pred_expr_dec: forall pe1 pe2: predicated H.t,
+    {pe1 = pe2} + {pe1 <> pe2}.
+  Proof.
+    pose proof H.eq_dec as X.
+    pose proof (Predicate.eq_dec peq).
+    pose proof (NE.eq_dec _ X).
+    assert (forall a b: pred_op * H.t, {a = b} + {a <> b})
+     by decide equality.
+    decide equality.
+  Defined.
+
+  Definition beq_pred_expr' (pe1 pe2: predicated H.t) : bool :=
+    if pred_expr_dec pe1 pe2 then true else
+    let (p1, h) := encode_expression 1%positive pe1 (PTree.empty _) in
+    let (p2, h') := encode_expression 1%positive pe2 h in
+    equiv_check p1 p2.
+
+  Lemma mk_pred_stmnt_equiv' :
+    forall l l' e p,
+      mk_pred_stmnt_l l == mk_pred_stmnt_l l' ->
+      In (e, p) l ->
+      list_norepet (map fst l) ->
+      (exists p', In (e, p') l' /\ p == p')
+      \/ ~ In e (map fst l') /\ p == ⟂.
+  Proof. Abort.
+
+  Lemma mk_pred_stmnt_equiv :
+    forall tree tree',
+      mk_pred_stmnt tree == mk_pred_stmnt tree'.
+  Proof. Abort.
+
+  Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+    match np2 ! n with
+    | Some p' => equiv_check p p'
+    | None => equiv_check p ⟂
+    end.
+  
+  Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+    match np2 ! n with
+    | Some p' => true
+    | None => equiv_check p ⟂
+    end.
+
+  Definition beq_pred_expr (pe1 pe2: predicated H.t) : bool :=
+    if pred_expr_dec pe1 pe2 then true else
+    let (np1, h) := norm_expression 1 pe1 (PTree.empty _) in
+    let (np2, h') := norm_expression 1 pe2 h in
+    forall_ptree (tree_equiv_check_el np2) np1
+    && forall_ptree (tree_equiv_check_None_el np1) np2.
+
+  Lemma beq_pred_expr_correct:
+    forall np1 np2 e p p',
+      forall_ptree (tree_equiv_check_el np2) np1 = true ->
+      np1 ! e = Some p ->
+      np2 ! e = Some p' ->
+      p == p'.
+  Proof.
+    intros.
+    eapply forall_ptree_true in H; try eassumption.
+    unfold tree_equiv_check_el in H.
+    rewrite H1 in H. now apply equiv_check_correct.
+  Qed.
+
+  Lemma beq_pred_expr_correct2:
+    forall np1 np2 e p,
+      forall_ptree (tree_equiv_check_el np2) np1 = true ->
+      np1 ! e = Some p ->
+      np2 ! e = None ->
+      p == ⟂.
+  Proof.
+    intros.
+    eapply forall_ptree_true in H; try eassumption.
+    unfold tree_equiv_check_el in H.
+    rewrite H1 in H. now apply equiv_check_correct.
+  Qed.
+
+  Lemma beq_pred_expr_correct3:
+    forall np1 np2 e p,
+      forall_ptree (tree_equiv_check_None_el np1) np2 = true ->
+      np1 ! e = None ->
+      np2 ! e = Some p ->
+      p == ⟂.
+  Proof.
+    intros.
+    eapply forall_ptree_true in H; try eassumption.
+    unfold tree_equiv_check_None_el in H.
+    rewrite H0 in H. now apply equiv_check_correct.
+  Qed.
+
+  Section PRED_PROOFS.
+
+  Context {G B: Type}.
+  Context (f: PTree.t pred_pexpr).
+  Context (ps: PMap.t bool).
+  Context (a_sem: @Abstr.ctx G -> H.t -> B -> Prop).
+  Context (ctx: @Abstr.ctx G).
+
+  Context (F_EVALULABLE: forall x, sem_pexpr ctx (get_forest_p' x f) ps !! x).
+
+  Variant sem_pred_tree: PTree.t H.t -> PTree.t pred_op -> B -> Prop :=
+  | sem_pred_tree_intro :
+      forall expr e v et pt pr,
+        sem_pexpr ctx (from_pred_op f pr) true ->
+        a_sem ctx expr v ->
+        pt ! e = Some pr ->
+        et ! e = Some expr ->
+        sem_pred_tree et pt v.
+
+  Lemma norm_expression_wf :
+    forall pe et pt h,
+      H.wf_hash_table h ->
+      norm_expression 1 pe h = (pt, et) ->
+      H.wf_hash_table et.
+  Proof. Admitted.
+
+  Lemma norm_expression_in :
+    forall pe et pt h x y,
+      H.wf_hash_table h ->
+      norm_expression 1 pe h = (pt, et) ->
+      h ! x = Some y ->
+      et ! x = Some y.
+  Proof. Admitted.
+
+  Lemma norm_expression_in2 :
+    forall pe et pt h x y,
+      H.wf_hash_table h ->
+      norm_expression 1 pe h = (pt, et) ->
+      h ! x = Some y ->
+      et ! x = Some y.
+  Proof. Admitted.
+
+  Lemma sem_pred_expr_in_true :
+    forall pe v,
+      sem_pred_expr f a_sem ctx pe v ->
+      exists p e, NE.In (p, e) pe
+                  /\ sem_pexpr ctx (from_pred_op f p) true
+                  /\ a_sem ctx e v.
+  Proof.
+    induction pe; crush.
+    - inv H. do 2 eexists; split; try split; eauto. constructor.
+    - inv H.
+      + do 2 eexists; split; try split; eauto. constructor; tauto.
+      + exploit IHpe; eauto. simplify.
+        do 2 eexists; split; try split; eauto. constructor; tauto.
+  Qed.
+
+  Definition pred_Ht_dec :
+    forall x y: pred_op * H.t, {x = y} + {x <> y}.
+  Proof.
+    pose proof H.eq_dec.
+    pose proof (@Predicate.eq_dec positive peq).
+    decide equality.
+  Defined.
+
+  Lemma sem_pred_mutexcl :
+    forall pe p t v,
+      predicated_mutexcl ((p, t) ::| pe) ->
+      sem_pred_expr f a_sem ctx pe v ->
+      sem_pexpr ctx (from_pred_op f p) false.
+  Proof.
+    intros. unfold predicated_mutexcl in H.
+    exploit sem_pred_expr_in_true; eauto; simplify.
+    unfold "⇒" in *. inv H5.
+    destruct (pred_Ht_dec (x, x0) (p, t)); subst.
+    { inv e; exfalso; apply H7; auto. }
+    assert (NE.In (x, x0) ((p, t) ::| pe)) by (constructor; tauto).
+    assert (NE.In (p, t) ((p, t) ::| pe)) by (constructor; tauto).
+    pose proof (H3 _ _ H H5 n).
+    assert (forall c, eval_predf c x = true -> eval_predf c (¬ p) = true)
+      by eauto.
+    eapply sem_pexpr_eval_inv in H1; eauto.
+    eapply sem_pexpr_eval; eauto. apply H9 in H1.
+    unfold eval_predf in *. rewrite negate_correct in H1.
+    symmetry in H1. apply negb_sym in H1. auto.
+  Qed.
+
+  Lemma exec_tree_exec_pe :
+    forall pe et pt v h
+      (MUTEXCL: predicated_mutexcl pe),
+      H.wf_hash_table h ->
+      norm_expression 1 pe h = (pt, et) ->
+      sem_pred_tree et pt v ->
+      sem_pred_expr f a_sem ctx pe v.
+  Proof.
+    induction pe; simplify; repeat (destruct_match; try discriminate; []).
+    - inv Heqp. inv H0. inv H1.
+      destruct (peq e h0); subst.
+      2: { rewrite PTree.gso in H3 by auto.
+           rewrite PTree.gempty in H3. discriminate. }
+      assert (expr = t).
+      { apply H.hash_value_in in Heqp0. rewrite H4 in Heqp0. now inv Heqp0. }
+      subst. constructor; auto. rewrite PTree.gss in H3. inv H3; auto.
+    - inv Heqp. inv H1. destruct_match; inv H0; destruct (peq h0 e); subst.
+      + rewrite PTree.gss in H4. inv H4. inv H2. inv H1.
+        * exploit IHpe. eauto using predicated_cons.
+          eapply H.wf_hash_table_distr; eauto. eauto.
+          econstructor. eauto. eauto. eauto. eauto. intros.
+          assert (sem_pexpr ctx (from_pred_op f p) false)
+            by (eapply sem_pred_mutexcl; eauto).
+          eapply sem_pred_expr_cons_false; auto.
+        * assert (et ! e = Some t).
+          { eapply norm_expression_in. eapply H.wf_hash_table_distr; eauto.
+            eauto. apply H.hash_value_in in Heqp0.  auto. }
+          rewrite H1 in H5. inv H5.
+          constructor; auto.
+      + exploit IHpe. eauto using predicated_cons.
+        eapply H.wf_hash_table_distr; eauto. eauto.
+        econstructor. eauto. eauto. rewrite PTree.gso in H4; eauto. auto.
+        intros.
+        assert (sem_pexpr ctx (from_pred_op f p) false)
+          by (eapply sem_pred_mutexcl; eauto).
+        eapply sem_pred_expr_cons_false; auto.
+      + rewrite PTree.gss in H4. inv H4.
+        econstructor; auto.
+        assert (et ! e = Some t).
+          { eapply norm_expression_in. eapply H.wf_hash_table_distr; eauto.
+            eauto. apply H.hash_value_in in Heqp0.  auto. }
+        rewrite H0 in H5; inv H5. auto.
+      + rewrite PTree.gso in H4 by auto.
+        exploit IHpe. eauto using predicated_cons.
+        eapply H.wf_hash_table_distr; eauto. eauto.
+        econstructor. eauto. eauto. eauto. eauto. intros.
+        assert (sem_pexpr ctx (from_pred_op f p) false)
+          by (eapply sem_pred_mutexcl; eauto).
+        eapply sem_pred_expr_cons_false; auto.
+  Qed.
+
+  Lemma exec_pe_exec_tree :
+    forall pe et pt v h
+      (MUTEXCL: predicated_mutexcl pe),
+      H.wf_hash_table h ->
+      norm_expression 1 pe h = (pt, et) ->
+      sem_pred_expr f a_sem ctx pe v ->
+      sem_pred_tree et pt v.
+  Proof.
+    induction pe; simplify; repeat (destruct_match; try discriminate; []).
+    - inv H0. inv H1. econstructor; eauto. apply PTree.gss.
+      eapply H.hash_value_in; eauto.
+    - inv H1.
+      + destruct_match.
+        * inv H0. econstructor.
+          2: { eauto. }
+          2: { apply PTree.gss. }
+          constructor; tauto.
+          eapply norm_expression_in. eapply H.wf_hash_table_distr; eauto.
+          eauto. eapply H.hash_value_in; eauto.
+        * inv H0. econstructor. eauto. eauto. apply PTree.gss.
+          eapply norm_expression_in. eapply H.wf_hash_table_distr; eauto.
+          eauto. eapply H.hash_value_in; eauto.
+      + destruct_match.
+        * inv H0. exploit IHpe.
+          eauto using predicated_cons.
+          eapply H.wf_hash_table_distr; eauto.
+          eauto. eauto. intros. inv H0.
+          destruct (peq e h0); subst.
+          -- rewrite H3 in Heqo. inv Heqo.
+             econstructor.
+             3: { apply PTree.gss. }
+             constructor; tauto. eauto. auto.
+          -- econstructor. eauto. eauto. rewrite PTree.gso by eauto. auto.
+             auto.
+        * inv H0. exploit IHpe.
+          eauto using predicated_cons.
+          eapply H.wf_hash_table_distr; eauto.
+          eauto. eauto. intros. inv H0.
+          destruct (peq e h0); subst.
+          -- rewrite H3 in Heqo; discriminate.
+          -- econstructor; eauto. rewrite PTree.gso by auto. auto.
+  Qed.
+
+  End PRED_PROOFS.
+
+End HashExprNorm.
+
+Module HN := HashExprNorm(HashExpr).
+Module EHN := HashExprNorm(EHashExpr).
+
+Definition check f1 f2 :=
+  RTree.beq beq_pred_expr f1.(forest_regs) f2.(forest_regs)
+  && PTree.beq beq_pred_pexpr f1.(forest_preds) f2.(forest_preds)
+  && beq_pred_eexpr f1.(forest_exit) f2.(forest_exit).
 
 Lemma sem_pexpr_forward_eval1 :
   forall A ctx f_p ps,
