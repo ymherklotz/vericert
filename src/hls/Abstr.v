@@ -626,119 +626,6 @@ Proof.
   decide equality.
 Defined.
 
-Module HashExpr' <: MiniDecidableType.
-  Definition t := expression.
-  Definition eq_dec := expression_dec.
-End HashExpr'.
-
-Module HashExpr := Make_UDT(HashExpr').
-Module Import HT := HashTree(HashExpr).
-
-Module PHashExpr' <: MiniDecidableType.
-  Definition t := pred_expression.
-  Definition eq_dec := pred_expression_dec.
-End PHashExpr'.
-
-Module PHashExpr := Make_UDT(PHashExpr').
-Module PHT := HashTree(PHashExpr).
-
-Module EHashExpr' <: MiniDecidableType.
-  Definition t := exit_expression.
-  Definition eq_dec := exit_expression_dec.
-End EHashExpr'.
-
-Module EHashExpr := Make_UDT(EHashExpr').
-Module EHT := HashTree(EHashExpr).
-
-Fixpoint hash_predicate (max: predicate) (ap: pred_pexpr) (h: PHT.hash_tree)
-  : pred_op * PHT.hash_tree :=
-  match ap with
-  | Ptrue => (Ptrue, h)
-  | Pfalse => (Pfalse, h)
-  | Plit (b, ap') =>
-      let (p', h') := PHT.hash_value max ap' h in
-      (Plit (b, p'), h')
-  | Pand p1 p2 =>
-      let (p1', h') := hash_predicate max p1 h in
-      let (p2', h'') := hash_predicate max p2 h' in
-      (Pand p1' p2', h'')
-  | Por p1 p2 =>
-      let (p1', h') := hash_predicate max p1 h in
-      let (p2', h'') := hash_predicate max p2 h' in
-      (Por p1' p2', h'')
-  end.
-
-Module HashExprNorm(H: Hashable).
-  Module H := HashTree(H).
-
-  Definition norm_tree: Type := PTree.t pred_op * H.hash_tree.
-
-  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: H.hash_tree)
-    : norm_tree :=
-    match pe with
-    | NE.singleton (p, e) =>
-        let (hashed_e, h') := H.hash_value max e h in
-        (PTree.set hashed_e p (PTree.empty _), h')
-    | (p, e) ::| pr =>
-        let (hashed_e, h') := H.hash_value max e h in
-        let (norm_pr, h'') := norm_expression max pr h' in
-        match norm_pr ! hashed_e with
-        | Some pr_op =>
-            (PTree.set hashed_e (pr_op ∨ p) norm_pr, h'')
-        | None =>
-            (PTree.set hashed_e p norm_pr, h'')
-        end
-    end.
-
-  Definition mk_pred_stmnt' (e: predicate) p_e := ¬ p_e ∨ Plit (true, e).
-
-  Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
-
-  Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) :=
-    fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
-
-  Definition encode_expression max pe h :=
-    let (tree, h) := norm_expression max pe h in
-    (mk_pred_stmnt tree, h).
-
-  Definition sem_adapter {G A: Type} (ht: H.hash_tree) (default: H.t) (sem: @ctx G -> H.t -> A -> Prop)
-    : @ctx G -> positive -> A -> Prop :=
-    fun c p a =>
-      match ht ! p with
-      | Some res => sem c res a
-      | None => sem c default a
-      end.
-
-  Definition predicated_of_hashed (default: pred_op * positive)
-    (nt: PTree.t pred_op): predicated positive :=
-    NE.of_list_def default (map (fun a: positive * pred_op =>
-                                   let (f, s) := a in (s, f))
-                                (PTree.elements nt)).
-
-  Definition sem_norm_expr {G A: Type} (f: PTree.t pred_pexpr) (default: H.t)
-    (sem: @ctx G -> H.t -> A -> Prop) (c: @ctx G) (nt: norm_tree) (res: A): Prop :=
-    let (nt', ht) := nt in
-    let adapter := sem_adapter ht default sem in
-    let new_predicated := predicated_of_hashed (Ptrue, 1%positive) nt' in
-    sem_pred_expr f adapter c new_predicated res.
-
-  Lemma sem_norm_expr1 :
-    forall A G f max default (sem: @ctx G -> H.t -> A -> Prop) c pred res,
-      sem_pred_expr f sem c pred res ->
-      sem_norm_expr f default sem c (norm_expression max pred (PTree.empty _)) res.
-  Proof. Admitted.
-
-  Lemma sem_norm_expr2 :
-    forall A G f max default (sem: @ctx G -> H.t -> A -> Prop) c pred res,
-      sem_norm_expr f default sem c (norm_expression max pred (PTree.empty _)) res ->
-      sem_pred_expr f sem c pred res.
-  Proof. Admitted.
-
-End HashExprNorm.
-
-Module HN := HashExprNorm(HashExpr).
-Module EHN := HashExprNorm(EHashExpr).
-
 (*Fixpoint encode_expression_ne (max: predicate) (pe: pred_expr_ne) (h: hash_tree)
   : (PTree.t pred_op) * hash_tree :=
   match pe with
@@ -826,59 +713,50 @@ Proof.
   - transitivity ist'; auto.
 Qed.
 
-Definition beq_pred_expr_once (pe1 pe2: pred_expr) : bool :=
-  let (p1, h) := HN.encode_expression 1%positive pe1 (PTree.empty _) in
-  let (p2, h') := HN.encode_expression 1%positive pe2 h in
-  equiv_check p1 p2.
+Module HashExpr' <: MiniDecidableType.
+  Definition t := expression.
+  Definition eq_dec := expression_dec.
+End HashExpr'.
 
-Definition pred_eexpr_dec: forall pe1 pe2: pred_eexpr,
-  {pe1 = pe2} + {pe1 <> pe2}.
-Proof.
-  pose proof exit_expression_dec as X.
-  pose proof (Predicate.eq_dec peq).
-  pose proof (NE.eq_dec _ X).
-  assert (forall a b: pred_op * exit_expression, {a = b} + {a <> b})
-   by decide equality.
-  decide equality.
-Defined.
+Module HashExpr := Make_UDT(HashExpr').
+Module Import HT := HashTree(HashExpr).
 
-Definition beq_pred_eexpr (pe1 pe2: pred_eexpr) : bool :=
-  if pred_eexpr_dec pe1 pe2 then true else
-  let (p1, h) := EHN.encode_expression 1%positive pe1 (PTree.empty _) in
-  let (p2, h') := EHN.encode_expression 1%positive pe2 h in
-  equiv_check p1 p2.
+Module PHashExpr' <: MiniDecidableType.
+  Definition t := pred_expression.
+  Definition eq_dec := pred_expression_dec.
+End PHashExpr'.
 
-Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
-  match np2 ! n with
-  | Some p' => equiv_check p p'
-  | None => equiv_check p ⟂
+Module PHashExpr := Make_UDT(PHashExpr').
+Module PHT := HashTree(PHashExpr).
+
+Module EHashExpr' <: MiniDecidableType.
+  Definition t := exit_expression.
+  Definition eq_dec := exit_expression_dec.
+End EHashExpr'.
+
+Module EHashExpr := Make_UDT(EHashExpr').
+Module EHT := HashTree(EHashExpr).
+
+Fixpoint hash_predicate (max: predicate) (ap: pred_pexpr) (h: PHT.hash_tree)
+  : pred_op * PHT.hash_tree :=
+  match ap with
+  | Ptrue => (Ptrue, h)
+  | Pfalse => (Pfalse, h)
+  | Plit (b, ap') =>
+      let (p', h') := PHT.hash_value max ap' h in
+      (Plit (b, p'), h')
+  | Pand p1 p2 =>
+      let (p1', h') := hash_predicate max p1 h in
+      let (p2', h'') := hash_predicate max p2 h' in
+      (Pand p1' p2', h'')
+  | Por p1 p2 =>
+      let (p1', h') := hash_predicate max p1 h in
+      let (p2', h'') := hash_predicate max p2 h' in
+      (Por p1' p2', h'')
   end.
-
-Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
-  match np2 ! n with
-  | Some p' => true
-  | None => equiv_check p ⟂
-  end.
-
-Variant sem_pred_tree {A B: Type} (sem: ctx -> expression -> B -> Prop):
-    @ctx A -> PTree.t expression -> PTree.t pred_op -> B -> Prop :=
-| sem_pred_tree_intro :
-    forall ctx expr e pr v et pt,
-      eval_predf (ctx_ps ctx) pr = true ->
-      sem ctx expr v ->
-      pt ! e = Some pr ->
-      et ! e = Some expr ->
-      sem_pred_tree sem ctx et pt v.
 
 Definition predicated_mutexcl {A: Type} (pe: predicated A): Prop :=
   forall x y, NE.In x pe -> NE.In y pe -> x <> y -> fst x ⇒ ¬ fst y.
-
-Lemma norm_expr_constant :
-  forall x m h t h' e p,
-    HN.norm_expression m x h = (t, h') ->
-    h ! e = Some p ->
-    h' ! e = Some p.
-Proof. Admitted.
 
 Lemma predicated_cons :
   forall A (a: pred_op * A) x,
@@ -888,6 +766,156 @@ Proof.
   unfold predicated_mutexcl; intros.
   apply H; auto; constructor; tauto.
 Qed.
+
+Module HashExprNorm(H: Hashable).
+  Module H := HashTree(H).
+
+  Definition norm_tree: Type := PTree.t pred_op * H.hash_tree.
+
+  Fixpoint norm_expression (max: predicate) (pe: predicated H.t) (h: H.hash_tree)
+    : norm_tree :=
+    match pe with
+    | NE.singleton (p, e) =>
+        let (hashed_e, h') := H.hash_value max e h in
+        (PTree.set hashed_e p (PTree.empty _), h')
+    | (p, e) ::| pr =>
+        let (hashed_e, h') := H.hash_value max e h in
+        let (norm_pr, h'') := norm_expression max pr h' in
+        match norm_pr ! hashed_e with
+        | Some pr_op =>
+            (PTree.set hashed_e (pr_op ∨ p) norm_pr, h'')
+        | None =>
+            (PTree.set hashed_e p norm_pr, h'')
+        end
+    end.
+
+  Definition mk_pred_stmnt' (e: predicate) p_e := ¬ p_e ∨ Plit (true, e).
+
+  Definition mk_pred_stmnt t := PTree.fold (fun x a b => mk_pred_stmnt' a b ∧ x) t T.
+
+  Definition mk_pred_stmnt_l (t: list (predicate * pred_op)) :=
+    fold_left (fun x a => uncurry mk_pred_stmnt' a ∧ x) t T.
+
+  Definition encode_expression max pe h :=
+    let (tree, h) := norm_expression max pe h in
+    (mk_pred_stmnt tree, h).
+
+  Definition pred_expr_dec: forall pe1 pe2: predicated H.t,
+    {pe1 = pe2} + {pe1 <> pe2}.
+  Proof.
+    pose proof H.eq_dec as X.
+    pose proof (Predicate.eq_dec peq).
+    pose proof (NE.eq_dec _ X).
+    assert (forall a b: pred_op * H.t, {a = b} + {a <> b})
+     by decide equality.
+    decide equality.
+  Defined.
+
+  Definition beq_pred_expr' (pe1 pe2: predicated H.t) : bool :=
+    if pred_expr_dec pe1 pe2 then true else
+    let (p1, h) := encode_expression 1%positive pe1 (PTree.empty _) in
+    let (p2, h') := encode_expression 1%positive pe2 h in
+    equiv_check p1 p2.
+
+  Lemma mk_pred_stmnt_equiv' :
+    forall l l' e p,
+      mk_pred_stmnt_l l == mk_pred_stmnt_l l' ->
+      In (e, p) l ->
+      list_norepet (map fst l) ->
+      (exists p', In (e, p') l' /\ p == p')
+      \/ ~ In e (map fst l') /\ p == ⟂.
+  Proof. Abort.
+
+  Lemma mk_pred_stmnt_equiv :
+    forall tree tree',
+      mk_pred_stmnt tree == mk_pred_stmnt tree'.
+  Proof. Abort.
+
+  Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+    match np2 ! n with
+    | Some p' => equiv_check p p'
+    | None => equiv_check p ⟂
+    end.
+  
+  Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+    match np2 ! n with
+    | Some p' => true
+    | None => equiv_check p ⟂
+    end.
+
+  Definition beq_pred_expr (pe1 pe2: predicated H.t) : bool :=
+    if pred_expr_dec pe1 pe2 then true else
+    let (np1, h) := norm_expression 1 pe1 (PTree.empty _) in
+    let (np2, h') := norm_expression 1 pe2 h in
+    forall_ptree (tree_equiv_check_el np2) np1
+    && forall_ptree (tree_equiv_check_None_el np1) np2.
+
+  Lemma beq_pred_expr_correct:
+    forall np1 np2 e p p',
+      forall_ptree (tree_equiv_check_el np2) np1 = true ->
+      np1 ! e = Some p ->
+      np2 ! e = Some p' ->
+      p == p'.
+  Proof.
+    intros.
+    eapply forall_ptree_true in H; try eassumption.
+    unfold tree_equiv_check_el in H.
+    rewrite H1 in H. now apply equiv_check_correct.
+  Qed.
+
+  Lemma beq_pred_expr_correct2:
+    forall np1 np2 e p,
+      forall_ptree (tree_equiv_check_el np2) np1 = true ->
+      np1 ! e = Some p ->
+      np2 ! e = None ->
+      p == ⟂.
+  Proof.
+    intros.
+    eapply forall_ptree_true in H; try eassumption.
+    unfold tree_equiv_check_el in H.
+    rewrite H1 in H. now apply equiv_check_correct.
+  Qed.
+
+  Lemma beq_pred_expr_correct3:
+    forall np1 np2 e p,
+      forall_ptree (tree_equiv_check_None_el np1) np2 = true ->
+      np1 ! e = None ->
+      np2 ! e = Some p ->
+      p == ⟂.
+  Proof.
+    intros.
+    eapply forall_ptree_true in H; try eassumption.
+    unfold tree_equiv_check_None_el in H.
+    rewrite H0 in H. now apply equiv_check_correct.
+  Qed.
+
+  Variant sem_pred_tree {A B: Type} (pr: PTree.t pred_pexpr) (sem: ctx -> H.t -> B -> Prop):
+      @ctx A -> PTree.t H.t -> PTree.t pred_op -> B -> Prop :=
+  | sem_pred_tree_intro :
+      forall ctx expr e v et pt,
+        eval_predf (ctx_ps ctx) pr = true ->
+        sem ctx expr v ->
+        pt ! e = Some pr ->
+        et ! e = Some expr ->
+        sem_pred_tree sem ctx et pt v.
+
+  Lemma exec_tree_exec_non_empty :
+    forall (s)
+    sem_pred_tree s
+
+End HashExprNorm.
+
+Module HN := HashExprNorm(HashExpr).
+Module EHN := HashExprNorm(EHashExpr).
+
+(*
+
+Lemma norm_expr_constant :
+  forall x m h t h' e p,
+    HN.norm_expression m x h = (t, h') ->
+    h ! e = Some p ->
+    h' ! e = Some p.
+Proof. Abort.
 
 Definition sat_aequiv ap1 ap2 :=
   exists h p1 p2,
@@ -931,7 +959,7 @@ Lemma norm_expr_mutexcl :
     t ! e' = Some p' ->
     e <> e' ->
     p ⇒ ¬ p'.
-Proof. Abort.
+Proof. Abort.*)
 
 Lemma sem_pexpr_negate :
   forall A ctx p b,
@@ -983,13 +1011,6 @@ Proof.
    by decide equality.
   decide equality.
 Defined.
-
-Definition beq_pred_expr (pe1 pe2: pred_expr) : bool :=
-  if pred_expr_eqb pe1 pe2 then true else
-  let (np1, h) := HN.norm_expression 1 pe1 (PTree.empty _) in
-  let (np2, h') := HN.norm_expression 1 pe2 h in
-  forall_ptree (tree_equiv_check_el np2) np1
-  && forall_ptree (tree_equiv_check_None_el np1) np2.
 
 Definition pred_pexpr_eqb: forall pe1 pe2: pred_pexpr,
   {pe1 = pe2} + {pe1 <> pe2}.
@@ -1851,7 +1872,7 @@ Proof.
     unfold eval_predf. cbn.
     inv H0. inv H4. unfold match_pred_states in H1.
     specialize (H1 h br).
-Admitted.
+Abort.
 
 Lemma sem_pexpr_beq_correct :
   forall p1 p2 b,

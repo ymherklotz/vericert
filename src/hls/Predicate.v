@@ -737,6 +737,14 @@ Proof.
   rewrite <- simplify_correct. eauto.
 Qed.
 
+Lemma equiv_check_destr :
+  forall p1 p2 p1' p2',
+    Pand p1 p2 == Pand p1' p2' ->
+    p1 == p1' /\ p2 == p2'
+    \/ p1 == p2' /\ p2 == p1'.
+Proof.
+  induction p1. intros; cbn in *; unfold sat_equiv in *; cbn in *.
+
 Opaque simplify.
 Opaque simplify'.
 
