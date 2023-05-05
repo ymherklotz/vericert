@@ -1480,28 +1480,60 @@ Module HashExprNorm(H: Hashable).
         et ! e = Some expr ->
         sem_pred_tree et pt v.
 
-  Lemma norm_expression_wf :
-    forall pe et pt h,
-      H.wf_hash_table h ->
-      norm_expression 1 pe h = (pt, et) ->
-      H.wf_hash_table et.
-  Proof. Admitted.
-
   Lemma norm_expression_in :
     forall pe et pt h x y,
       H.wf_hash_table h ->
       norm_expression 1 pe h = (pt, et) ->
       h ! x = Some y ->
       et ! x = Some y.
-  Proof. Admitted.
+  Proof.
+    induction pe; crush; repeat (destruct_match; try discriminate; []).
+    - inv H0. eauto using H.hash_constant.
+    - destruct_match.
+      + inv H0. eapply IHpe.
+        eapply H.wf_hash_table_distr; eauto. eauto.
+        eauto using H.hash_constant.
+      + inv H0. eapply IHpe.
+        eapply H.wf_hash_table_distr; eauto. eauto.
+        eauto using H.hash_constant.
+  Qed.
 
-  Lemma norm_expression_in2 :
+  Lemma norm_expression_exists :
     forall pe et pt h x y,
       H.wf_hash_table h ->
       norm_expression 1 pe h = (pt, et) ->
-      h ! x = Some y ->
-      et ! x = Some y.
-  Proof. Admitted.
+      pt ! x = Some y ->
+      exists z, et ! x = Some z.
+  Proof.
+    induction pe; crush; repeat (destruct_match; try discriminate; []).
+    - inv H0. destruct (peq x h0); subst; inv H1.
+      + eexists. eauto using H.hash_value_in.
+      + rewrite PTree.gso in H2 by auto. now rewrite PTree.gempty in H2.
+    - assert (H.wf_hash_table h1) by eauto using H.wf_hash_table_distr.
+      destruct_match; inv H0.
+      + destruct (peq h0 x); subst; eauto. 
+        rewrite PTree.gso in H1 by auto. eauto.
+      + destruct (peq h0 x); subst; eauto.
+        * pose proof Heqp0 as X.
+          eapply H.hash_value_in in Heqp0.
+          eapply norm_expression_in in Heqn; eauto.
+        * rewrite PTree.gso in H1 by auto. eauto.
+  Qed.
+
+  Lemma norm_expression_wf :
+    forall pe et pt h,
+      H.wf_hash_table h ->
+      norm_expression 1 pe h = (pt, et) ->
+      H.wf_hash_table et.
+  Proof.
+    induction pe; crush; repeat (destruct_match; try discriminate; []).
+    - inv H0. eauto using H.wf_hash_table_distr.
+    - destruct_match.
+      + inv H0. eapply IHpe.
+        eapply H.wf_hash_table_distr; eauto. eauto.
+      + inv H0. eapply IHpe.
+        eapply H.wf_hash_table_distr; eauto. eauto.
+  Qed.
 
   Lemma sem_pred_expr_in_true :
     forall pe v,
@@ -1640,6 +1672,70 @@ Module HashExprNorm(H: Hashable).
           destruct (peq e h0); subst.
           -- rewrite H3 in Heqo; discriminate.
           -- econstructor; eauto. rewrite PTree.gso by auto. auto.
+  Qed.
+
+  Lemma beq_pred_expr_correct_top:
+    forall p1 p2 v
+           (MUTEXCL1: predicated_mutexcl p1)
+           (MUTEXCL2: predicated_mutexcl p2),
+      beq_pred_expr p1 p2 = true ->
+      sem_pred_expr f a_sem ctx p1 v ->
+      sem_pred_expr f a_sem ctx p2 v.
+  Proof.
+    unfold beq_pred_expr; intros.
+    destruct_match; subst; auto.
+    repeat (destruct_match; []).
+    symmetry in H. apply andb_true_eq in H. inv H.
+    symmetry in H1. symmetry in H2.
+    pose proof Heqn0. eapply norm_expression_wf in H.
+    2: { unfold H.wf_hash_table; intros. now rewrite PTree.gempty in H3. }
+    eapply exec_tree_exec_pe; eauto.
+    eapply exec_pe_exec_tree in H0; auto.
+    3: { eauto. }
+    2: { unfold H.wf_hash_table; intros. now rewrite PTree.gempty in H3. }
+    inv H0. destruct (t0 ! e) eqn:?.
+    - assert (pr == p) by eauto using beq_pred_expr_correct.
+      assert (sem_pexpr ctx (from_pred_op f p) true).
+      { eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H3; eauto. }
+      econstructor. apply H7. eauto. eauto.
+      eapply norm_expression_in; eauto.
+    - assert (pr == ⟂) by eauto using beq_pred_expr_correct2.
+      eapply sem_pexpr_eval_inv in H3; eauto. now rewrite H0 in H3.
+  Qed.
+
+  Lemma beq_pred_expr_correct_top2:
+    forall p1 p2 v
+           (MUTEXCL1: predicated_mutexcl p1)
+           (MUTEXCL2: predicated_mutexcl p2),
+      beq_pred_expr p1 p2 = true ->
+      sem_pred_expr f a_sem ctx p2 v ->
+      sem_pred_expr f a_sem ctx p1 v.
+  Proof.
+    unfold beq_pred_expr; intros.
+    destruct_match; subst; auto.
+    repeat (destruct_match; []).
+    symmetry in H. apply andb_true_eq in H. inv H.
+    symmetry in H1. symmetry in H2.
+    pose proof Heqn0. eapply norm_expression_wf in H.
+    2: { unfold H.wf_hash_table; intros. now rewrite PTree.gempty in H3. }
+    eapply exec_tree_exec_pe; auto.
+    2: { eauto. }
+    unfold H.wf_hash_table; intros. now rewrite PTree.gempty in H3.
+    eapply exec_pe_exec_tree in H0; auto.
+    3: { eauto. }
+    2: { auto. }
+    inv H0. destruct (t ! e) eqn:?.
+    - assert (p == pr) by eauto using beq_pred_expr_correct.
+      assert (sem_pexpr ctx (from_pred_op f p) true).
+      { eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H3; eauto. }
+      econstructor. apply H7. eauto. eauto.
+      exploit norm_expression_exists.
+      2: { eapply Heqn0. }  unfold H.wf_hash_table; intros * YH.
+      now rewrite PTree.gempty in YH. eauto. simplify.
+      exploit norm_expression_in. 2: { eauto. } auto. eauto. intros.
+      crush.
+    - assert (pr == ⟂) by eauto using beq_pred_expr_correct3.
+      eapply sem_pexpr_eval_inv in H3; eauto. now rewrite H0 in H3.
   Qed.
 
   End PRED_PROOFS.
