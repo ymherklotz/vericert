@@ -2023,8 +2023,8 @@ all be evaluable.
   Lemma step_instr_lessdef_term :
     forall sp a i i' ti cf,
       step_instr ge sp (Iexec i) a (Iterm i' cf) ->
-      state_lessdef i ti ->
-      exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
+      Abstr.match_states i ti ->
+      exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ Abstr.match_states i' ti'.
   Proof.
     inversion 1; intros; subst.
     econstructor. split; eauto. constructor.
@@ -2042,11 +2042,11 @@ all be evaluable.
     constructor. auto.
   Qed.
 
-  Lemma state_lessdef_sem :
+  Lemma Abstr_match_states_sem :
     forall i sp f i' ti cf,
       sem (mk_ctx i sp ge) f (i', cf) ->
-      state_lessdef i ti ->
-      exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
+      Abstr.match_states i ti ->
+      exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ Abstr.match_states i' ti'.
   Proof. Admitted. (* This needs a bit more in Abstr.v *)
 
   Lemma mfold_left_update_Some :
@@ -2183,7 +2183,7 @@ all be evaluable.
 
   Lemma eval_predf_lessdef :
     forall p a b,
-      state_lessdef a b ->
+      Abstr.match_states a b ->
       eval_predf (is_ps a) p = eval_predf (is_ps b) p.
   Proof using.
     induction p; crush.
@@ -2228,9 +2228,9 @@ execution, the values in the register map do not continue to change.
       eval_predf (is_ps i') curr_p = true ->
       mfold_left update x (Some (curr_p, f)) = Some (p, f') ->
       forall ti,
-        state_lessdef i ti ->
+        Abstr.match_states i ti ->
         exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf)
-               /\ state_lessdef i'' ti'
+               /\ Abstr.match_states i'' ti'
                /\ valid_mem (is_mem i) (is_mem i'').
   Proof.
     induction x as [| x xs IHx ]; intros; cbn -[update] in *; inv H; cbn [fst snd] in *.
@@ -2248,7 +2248,7 @@ execution, the values in the register map do not continue to change.
     - (* terminal case *)
       exploit mfold_left_update_Some; eauto; intros Hexists;
         inversion Hexists as [[curr_p_inter f_inter] EXEQ]; clear Hexists. rewrite EXEQ in H2.
-      exploit state_lessdef_sem; (* TODO *)
+      exploit Abstr_match_states_sem; (* TODO *)
       eauto; intros H; inversion H as [v [Hi LESSDEF]]; clear H.
       exploit step_instr_lessdef_term;
       eauto; intros H; inversion H as [v2 [Hi2 LESSDEF2]]; clear H.
@@ -2293,9 +2293,9 @@ execution, the values in the register map do not continue to change.
       SeqBB.step ge sp (Iexec i) x (Iterm i'' cf) ->
       abstract_sequence x = Some x' ->
       forall ti,
-        state_lessdef i ti ->
+        Abstr.match_states i ti ->
         exists ti', sem (mk_ctx ti sp ge) x' (ti', Some cf)
-               /\ state_lessdef i'' ti'.
+               /\ Abstr.match_states i'' ti'.
   Proof.
     unfold abstract_sequence. intros. unfold Option.map in H0.
     destruct_match; try easy.
@@ -2309,9 +2309,9 @@ execution, the values in the register map do not continue to change.
     forall sp x i i' ti cf x',
       abstract_sequence x = Some x' ->
       sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
-      state_lessdef i ti ->
+      Abstr.match_states i ti ->
      exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
-             /\ state_lessdef i' ti'.
+             /\ Abstr.match_states i' ti'.
   Proof.
 
 (*|
@@ -2355,18 +2355,33 @@ square:
   clock cycles.
 |*)
 
+  Definition local_abstr_check_correct :=
+    @abstr_check_correct GibleSeq.fundef GiblePar.fundef.
+
+  Definition local_abstr_check_correct2 :=
+    @abstr_check_correct GibleSeq.fundef GibleSeq.fundef.
+
+  Lemma ge_preserved_local :
+    ge_preserved ge tge.
+  Proof.
+    unfold ge_preserved; 
+    eauto using Op.eval_operation_preserved, Op.eval_addressing_preserved.
+  Qed.
+
   Lemma schedule_oracle_correct :
     forall x y sp i i' ti cf,
       schedule_oracle x y = true ->
       SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
-      state_lessdef i ti ->
+      Abstr.match_states i ti ->
       exists ti', ParBB.step tge sp (Iexec ti) y (Iterm ti' cf)
-             /\ state_lessdef i' ti'.
+             /\ Abstr.match_states i' ti'.
   Proof.
     unfold schedule_oracle; intros. repeat (destruct_match; try discriminate). simplify.
     exploit abstr_sequence_correct; eauto; simplify.
-    exploit abstr_check_correct; eauto. apply state_lessdef_refl. simplify.
-    exploit abstr_seq_reverse_correct; eauto. apply state_lessdef_refl. simplify.
+    exploit local_abstr_check_correct2; eauto.
+    { constructor. eapply ge_preserved_refl. reflexivity. }
+    simplify.
+    exploit abstr_seq_reverse_correct; eauto. reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.
     econstructor; split; eauto.
     etransitivity; eauto.
@@ -2390,7 +2405,7 @@ Proof Sketch:  Trivial because of structural equality.
   Lemma match_states_stepBB :
     forall s f sp pc rs pr m sf' f' trs tps tm rs' pr' m' trs' tpr' tm',
       match_states (GibleSeq.State s f sp pc rs pr m) (State sf' f' sp pc trs tps tm) ->
-      state_lessdef (mk_instr_state rs' pr' m') (mk_instr_state trs' tpr' tm') ->
+      Abstr.match_states (mk_instr_state rs' pr' m') (mk_instr_state trs' tpr' tm') ->
       match_states (GibleSeq.State s f sp pc rs' pr' m') (State sf' f' sp pc trs' tpr' tm').
   Proof.
     inversion 1; subst; simplify.

@@ -176,10 +176,14 @@ Proof.
     apply eqb_complete; auto. tauto.
 Qed.
 
+Inductive Forall {A : Type} (P : A -> Prop) : non_empty A -> Prop :=
+| Forall_singleton a : P a -> Forall P (singleton a)
+| Forall_cons x l : P x -> Forall P l -> Forall P (x ::| l).
+
 Inductive Forall2 {A B : Type} (R : A -> B -> Prop) : non_empty A -> non_empty B -> Prop :=
-  | Forall2_singleton : forall a b, R a b -> Forall2 R (singleton a) (singleton b)
-  | Forall2_cons : forall (x : A) (y : B) (l : non_empty A) (l' : non_empty B),
-    R x y -> Forall2 R l l' -> Forall2 R (x ::| l) (y ::| l').
+| Forall2_singleton : forall a b, R a b -> Forall2 R (singleton a) (singleton b)
+| Forall2_cons : forall (x : A) (y : B) (l : non_empty A) (l' : non_empty B),
+  R x y -> Forall2 R l l' -> Forall2 R (x ::| l) (y ::| l').
 
 Definition equivP {A R} `{Equivalence A R} n1 n2 := Forall2 R n1 n2.
 
