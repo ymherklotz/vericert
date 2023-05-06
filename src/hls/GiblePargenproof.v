@@ -2380,6 +2380,7 @@ square:
     exploit abstr_sequence_correct; eauto; simplify.
     exploit local_abstr_check_correct2; eauto.
     { constructor. eapply ge_preserved_refl. reflexivity. }
+    { inv H. inv H8. exists pr'. intros x0. specialize (H x0). auto. }
     simplify.
     exploit abstr_seq_reverse_correct; eauto. reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.

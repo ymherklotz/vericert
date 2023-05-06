@@ -768,6 +768,14 @@ Proof.
   intros. apply H0; auto; constructor; tauto.
 Qed.
 
+Lemma predicated_singleton :
+  forall A (a: (pred_op * A)), predicated_mutexcl (NE.singleton a).
+Proof.
+  unfold predicated_mutexcl; intros; split; intros.
+  { inv H. now inv H0. }
+  constructor.
+Qed.
+
 (*
 
 Lemma norm_expr_constant :
@@ -1759,8 +1767,24 @@ Definition check_mutexcl {A} (pe: predicated A) :=
   | _ => false
   end.
 
+Lemma check_mutexcl_correct:
+  forall A (pe: predicated A),
+    check_mutexcl pe = true ->
+    predicated_mutexcl pe.
+Proof. Admitted.
+
 Definition check_mutexcl_tree {A} (f: PTree.t (predicated A)) :=
   forall_ptree (fun _ => check_mutexcl) f.
+
+Lemma check_mutexcl_tree_correct:
+  forall A (f: PTree.t (predicated A)) i pe,
+    check_mutexcl_tree f = true ->
+    f ! i = Some pe ->
+    predicated_mutexcl pe.
+Proof.
+  unfold check_mutexcl_tree; intros.
+  eapply forall_ptree_true in H; eauto using check_mutexcl_correct.
+Qed.
 
 Definition check f1 f2 :=
   RTree.beq HN.beq_pred_expr f1.(forest_regs) f2.(forest_regs)
@@ -2068,37 +2092,6 @@ Proof.
     eapply pred_pexpr_beq_pred_pexpr; eauto.
 Qed.
 
-Lemma sem_expr_beq_correct :
-  forall pt a b v,
-    HN.beq_pred_expr a b = true ->
-    sem_pred_expr pt sem_value ctx a v ->
-    sem_pred_expr pt sem_value ctx b v.
-Proof.
-  intros. unfold HN.beq_pred_expr in H. destruct_match; subst; auto.
-  repeat (destruct_match; []). simplify.
-Admitted.
-
-Lemma sem_expr_beq_correct_mem :
-  forall pt a b v,
-    HN.beq_pred_expr a b = true ->
-    sem_pred_expr pt sem_mem ctx a v ->
-    sem_pred_expr pt sem_mem ctx b v.
-Proof. Admitted.
-
-Lemma sem_expr_beq_correct_exit :
-  forall pt a b v,
-    EHN.beq_pred_expr a b = true ->
-    sem_pred_expr pt sem_exit ctx a v ->
-    sem_pred_expr pt sem_exit ctx b v.
-Proof. Admitted.
-
-Lemma sem_eexpr_beq_correct :
-  forall pt a b v,
-    EHN.beq_pred_expr a b = true ->
-    sem_pred_expr pt sem_exit ctx a v ->
-    sem_pred_expr pt sem_exit ctx b v.
-Proof. Admitted.
-
 End GENERIC_CONTEXT.
 
 Lemma tree_beq_pred_pexpr :
@@ -2132,31 +2125,34 @@ Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
 
 Lemma abstr_check_correct :
   forall i' a b cf,
+    (exists ps, forall x, sem_pexpr ictx (get_forest_p' x (forest_preds a)) ps !! x) ->
     check a b = true ->
     sem ictx a (i', cf) ->
     exists ti', sem octx b (ti', cf) /\ match_states i' ti'.
 Proof.
-  intros. unfold check in H. simplify.
-  inv H0. inv H9. inv H10.
-  eexists. split. {
-  constructor.
+  intros * EVALUABLE **. unfold check in H. simplify.
+  inv H0. inv H10. inv H11.
+  eexists; split; constructor; auto.
   - constructor. intros.
     eapply sem_pred_exec_beq_correct; eauto.
     eapply sem_pred_expr_corr; eauto. now apply sem_value_corr.
-    eapply sem_expr_beq_correct. eapply tree_beq_pred_expr; eauto.
-    eauto.
-  - constructor. intros. apply sem_pexpr_beq_correct with (p1 := a #p x).
+    eapply HN.beq_pred_expr_correct_top; eauto.
+    { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
+    { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
+    eapply tree_beq_pred_expr; eauto.
+  - (* This is where three-valued logic would be needed. *)
+    constructor. intros. apply sem_pexpr_beq_correct with (p1 := a #p x0).
     apply tree_beq_pred_pexpr; auto.
     apply sem_pexpr_corr with (ictx:=ictx); auto.
   - eapply sem_pred_exec_beq_correct; eauto.
     eapply sem_pred_expr_corr; eauto. now apply sem_mem_corr.
-    eapply sem_expr_beq_correct_mem. eapply tree_beq_pred_expr; eauto.
-    eauto.
+    eapply HN.beq_pred_expr_correct_top; eauto.
+    { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
+    { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
+    eapply tree_beq_pred_expr; eauto.
   - eapply sem_pred_exec_beq_correct; eauto.
     eapply sem_pred_expr_corr; eauto. now apply sem_exit_corr.
-    eapply sem_expr_beq_correct_exit; eauto.
-  }
-  constructor; auto.
+    eapply EHN.beq_pred_expr_correct_top; eauto using check_mutexcl_correct.
 Qed.
 
 (*|
@@ -2165,6 +2161,16 @@ Proof Sketch:
 Two abstract states can be equivalent, without it being obvious that they can
 actually both be executed assuming one can be executed.  One will therefore have
 to add a few more assumptions to makes it possible to execute the other.
+
+It currently assumes that all the predicates in the predicate tree are
+evaluable, which is actually something that can either be checked, or something
+that can be proven constructively.  I believe that it should already be possible
+using the latter, so here it will only be assumed.
+
+Similarly, the current assumption is that mutual exclusivity of predicates is
+being checked within the ``check`` function, which could possibly also be proven
+constructively about the update function.  This is a simpler short-term fix
+though.
 |*)
 
 End CORRECT.
