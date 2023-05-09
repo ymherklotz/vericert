@@ -879,3 +879,9 @@ Proof.
   pose proof (sat_predicateP_det a p _ _ H1 H0).
   rewrite H in H3. now rewrite H3 in H2.
 Qed.
+
+Definition and_list {A} (p: list (@pred_op A)): @pred_op A :=
+  fold_left Pand p T.
+
+Definition or_list {A} (p: list (@pred_op A)): @pred_op A :=
+  fold_left Por p ⟂.

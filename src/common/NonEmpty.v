@@ -213,3 +213,14 @@ Inductive norepet {A : Type} : non_empty A -> Prop :=
 | norepet_singleton a : norepet (singleton a)
 | list_norepet_cons hd tl :
   ~ In hd tl -> norepet tl -> norepet (hd ::| tl).
+
+Lemma NEin_NEapp5 :
+  forall A (a: A) x y,
+    In a (app x y) ->
+    In a x \/ In a y.
+Proof.
+  induction x; cbn in *; intros.
+  - inv H. inv H1. left. constructor. tauto.
+  - inv H. inv H1. left. constructor; tauto.
+    apply IHx in H. inv H; intuition (constructor; auto).
+Qed.

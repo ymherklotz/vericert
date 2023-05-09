@@ -36,6 +36,8 @@ Require Import vericert.hls.Gible.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Require Import vericert.common.DecEq.
+Require Import vericert.hls.GiblePargenproofEquiv.
+
 Import NE.NonEmptyNotation.
 
 #[local] Open Scope positive.
@@ -79,6 +81,31 @@ Definition predicated_prod {A B: Type} (p1: predicated A) (p2: predicated B) :=
 
 Definition predicated_map {A B: Type} (f: A -> B) (p: predicated A)
   : predicated B := NE.map (fun x => (fst x, f (snd x))) p.
+
+Lemma NEin_map :
+  forall A B p y (f: A -> B) a,
+    NE.In (p, y) (predicated_map f a) ->
+    exists x, NE.In (p, x) a /\ y = f x.
+Proof.
+  induction a; intros.
+  - inv H. destruct a. econstructor. split; eauto. constructor.
+  - inv H. inv H1. inv H. destruct a. cbn in *. econstructor; econstructor; eauto.
+    constructor; tauto.
+    specialize (IHa H). inv IHa. inv H0.
+    econstructor; econstructor; eauto. constructor; tauto.
+Qed.
+
+Lemma NEin_map2 :
+  forall A B (f: A -> B) a p y,
+    NE.In (p, y) a ->
+    NE.In (p, f y) (predicated_map f a).
+Proof.
+  induction a; crush.
+  inv H. constructor.
+  inv H. inv H1.
+  - constructor; auto.
+  - constructor; eauto.
+Qed.
 
 Definition cons_pred_expr (pel: pred_expr) (tpel: predicated expression_list) :=
   predicated_map (uncurry Econs) (predicated_prod pel tpel).
