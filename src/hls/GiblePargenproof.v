@@ -35,6 +35,7 @@ Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Require Import vericert.common.Monad.
 Require Import vericert.hls.GiblePargenproofForward.
+Require Import vericert.hls.GiblePargenproofBackward.
 
 Module Import OptionExtra := MonadExtra(Option).
 
@@ -169,9 +170,10 @@ Section CORRECTNESS.
   Lemma schedule_oracle_nil2:
       schedule_oracle nil nil = true.
   Proof using .
-    unfold schedule_oracle, check_control_flow_instr.
+    unfold schedule_oracle, check_control_flow_instr, check.
     simplify; repeat destruct_match; crush.
-  Admitted.
+    now rewrite ! check_mutexcl_singleton.
+  Qed.
 
   Lemma eval_op_eq:
     forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
@@ -206,35 +208,7 @@ RTLBlock to abstract translation
 
 Correctness of translation from RTLBlock to the abstract interpretation
 language.
-|*)
 
-  Lemma abstr_seq_reverse_correct :
-    forall sp x i i' ti cf x',
-      abstract_sequence x = Some x' ->
-      sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
-      state_lessdef i ti ->
-     exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
-             /\ state_lessdef i' ti'.
-  Proof.
-
-(*|
-Proof Sketch:
-
-We do an induction over the list of instructions ``x``.  This is trivial for the
-empty case and then for the inductive case we know that there exists an
-execution that matches the abstract execution, so we need to know that adding
-another instructions to it will still mean that the execution will result in the
-same value.
-
-Arithmetic operations will be a problem because we will have to show that these
-can be executed.  However, this should mostly be a problem in the abstract state
-comparison, because there two abstract states can be equal without one being
-evaluable.
-|*)
-
-  Admitted.
-
-(*|
 This is the top-level lemma which uses the following proofs to complete the
 square:
 

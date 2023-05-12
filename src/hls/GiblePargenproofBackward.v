@@ -47,3 +47,50 @@ Module Import OptionExtra := MonadExtra(Option).
 #[local] Ltac destr := destruct_match; try discriminate; [].
 
 Definition state_lessdef := GiblePargenproofEquiv.match_states.
+
+(*|
+===================================
+GiblePar to Abstr Translation Proof
+===================================
+
+This proof is for the correctness of the translation from the parallel Gible
+program into the Abstr language, which is the symbolic execution language.  The
+main characteristic of this proof is that it has to be performed backwards, as
+the translation goes from GiblePar to Abstr, whereas the correctness proof is
+needed from Abstr to GiblePar to get the proper direction of the proof.
+|*)
+
+Section CORRECTNESS.
+
+Context (prog: GibleSeq.program) (tprog : GiblePar.program).
+
+Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
+Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
+
+Lemma abstr_seq_reverse_correct :
+  forall sp x i i' ti cf x',
+    abstract_sequence x = Some x' ->
+    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
+    state_lessdef i ti ->
+   exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
+           /\ state_lessdef i' ti'.
+Proof.
+
+(*|
+Proof Sketch:
+
+We do an induction over the list of instructions ``x``.  This is trivial for the
+empty case and then for the inductive case we know that there exists an
+execution that matches the abstract execution, so we need to know that adding
+another instructions to it will still mean that the execution will result in the
+same value.
+
+Arithmetic operations will be a problem because we will have to show that these
+can be executed.  However, this should mostly be a problem in the abstract state
+comparison, because there two abstract states can be equal without one being
+evaluable.
+|*)
+
+Admitted.
+
+End CORRECTNESS.

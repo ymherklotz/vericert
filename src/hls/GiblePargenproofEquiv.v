@@ -1396,6 +1396,10 @@ Lemma check_mutexcl_correct:
     predicated_mutexcl pe.
 Proof. Admitted.
 
+Lemma check_mutexcl_singleton :
+  check_mutexcl (NE.singleton (T, EEbase)) = true.
+Proof. Admitted.
+
 Definition check_mutexcl_tree {A} (f: PTree.t (predicated A)) :=
   forall_ptree (fun _ => check_mutexcl) f.
 
