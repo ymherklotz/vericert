@@ -67,6 +67,22 @@ Context (prog: GibleSeq.program) (tprog : GiblePar.program).
 Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
 Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
 
+Lemma sem_equiv_execution :
+  forall sp x i i' ti cf x' ti',
+    abstract_sequence x = Some x' ->
+    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
+    SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf) ->
+    state_lessdef i ti ->
+    state_lessdef i' ti'.
+Proof. Admitted.
+
+Lemma sem_exists_execution :
+  forall sp x i i' ti cf x',
+    abstract_sequence x = Some x' ->
+    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
+    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf).
+Proof. Admitted.
+
 Lemma abstr_seq_reverse_correct :
   forall sp x i i' ti cf x',
     abstract_sequence x = Some x' ->
@@ -75,6 +91,9 @@ Lemma abstr_seq_reverse_correct :
    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
            /\ state_lessdef i' ti'.
 Proof.
+  intros. exploit sem_exists_execution; eauto; simplify.
+  eauto using sem_equiv_execution.
+Qed.
 
 (*|
 Proof Sketch:
@@ -90,7 +109,5 @@ can be executed.  However, this should mostly be a problem in the abstract state
 comparison, because there two abstract states can be equal without one being
 evaluable.
 |*)
-
-Admitted.
 
 End CORRECTNESS.
