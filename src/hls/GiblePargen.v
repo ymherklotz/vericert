@@ -238,7 +238,7 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
                              (f #r (Reg r))
                              (seq_app (pred_ret (Eop op)) (merge (list_translation rl f))));
       Some (pred, f #r (Reg r) <- pruned)
-  | RBload p chunk addr rl r =>
+  | RBload  p chunk addr rl r =>
       do pruned <-
            prune_predicated
              (app_predicated (dfltp p ∧ pred)
@@ -275,6 +275,16 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
            prune_predicated
              (app_predicated (dfltp p ∧ pred) (f.(forest_exit)) (pred_ret (EEexit c)));
       Some (new_p, f <-e pruned)
+  end.
+
+Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
+  match i with
+  | RBnop => lst
+  | RBop p op rl r => (f #r (Reg r)) :: lst
+  | RBload  p chunk addr rl r => (f #r (Reg r)) :: lst
+  | RBstore p chunk addr rl r => (f #r Mem) :: lst
+  | RBsetpred p' c args p => lst
+  | RBexit p c => lst
   end.
 
 (*|
