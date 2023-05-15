@@ -287,6 +287,17 @@ Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pr
   | RBexit p c => lst
   end.
 
+(*Compute match update (T, mk_forest (PTree.empty _) (PTree.empty _) (NE.singleton (T, EEbase)))
+  (RBop None Op.Odiv (1::2::nil) 3) with
+  | Some x =>
+    match update x (RBop None (Op.Ointconst (Int.repr 10)) nil 3) with
+    | Some y =>
+      RTree.get (Reg 3) (forest_regs (snd y))
+    | None => None
+    end
+  | None => None
+  end.*)
+
 (*|
 Implementing which are necessary to show the correctness of the translation
 validation by showing that there aren't any more effects in the resultant RTLPar
