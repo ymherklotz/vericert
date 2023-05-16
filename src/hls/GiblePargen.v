@@ -40,6 +40,8 @@ Require Import vericert.hls.GiblePargenproofEquiv.
 
 Import NE.NonEmptyNotation.
 
+Import ListNotations.
+
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
@@ -308,6 +310,11 @@ Get a sequence from the basic block.
 
 Definition abstract_sequence (b : list instr) : option forest :=
   Option.map snd (mfold_left update b (Some (Ptrue, empty))).
+
+Compute Option.bind (fun x => RTree.get (Reg 3) (forest_regs x))
+  (abstract_sequence
+    [RBop None Op.Odiv [1;2] 3;
+     RBop None (Op.Ointconst (Int.repr 10)) nil 3]).
 
 (*|
 Check equivalence of control flow instructions.  As none of the basic blocks

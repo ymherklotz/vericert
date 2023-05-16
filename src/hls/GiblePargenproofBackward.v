@@ -92,25 +92,122 @@ Definition abstract_sequence' (b : list instr) : option (forest * list pred_expr
   Option.map (fun x => let '(_, y, z) := x in (y, z))
     (mfold_left update' b (Some (Ptrue, empty, nil))).
 
-Lemma abstr_seq_reverse_correct :
-  forall sp x i i' ti cf x' l p p' l' f,
-    mfold_left update' x (Some (p, f, l)) = Some (p', x', l') ->
-    (forall p, In p l -> exists r, sem_pred_expr x'.(forest_preds) sem_value (mk_ctx i sp ge) p r) ->
-    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
-    state_lessdef i ti ->
-   exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
-           /\ state_lessdef i' ti'.
-Proof.
-  induction x; [admit|]; intros.
-  cbn -[update] in H.
-  pose proof H as Y.
-  apply OptionExtra.mfold_left_Some in Y. inv Y.
-  rewrite H3 in H.
-  destruct x0 as ((p_mid & f_mid) & l_mid).
-  exploit IHx; eauto. admit.
-  intros (ti_mid & Hseq & Hstate).
+Definition i_state (s: istate): instr_state :=
+  match s with
+  | Iexec t => t
+  | Iterm t _ => t
+  end.
 
-Lemma abstr_seq_reverse_correct :
+Definition cf_state (s: istate): option cf_instr :=
+  match s with
+  | Iexec _ => None
+  | Iterm _ cf => Some cf
+  end.
+
+Definition evaluable_pred_expr {G} (ctx: @Abstr.ctx G) pr p :=
+  exists r,
+      sem_pred_expr pr sem_value ctx p r.
+
+Definition evaluable_pred_list {G} ctx pr l :=
+  forall p,
+    In p l ->
+    @evaluable_pred_expr G ctx pr p.
+
+Lemma evaluable_pred_expr_exists :
+  forall sp pr f i0 exit_p exit_p' f' cf i ti p op args dst,
+    update (exit_p, f) (RBop p op args dst) = Some (exit_p', f') ->
+    sem (mk_ctx i0 sp ge) f (i, cf) ->
+    evaluable_pred_expr (mk_ctx i0 sp ge) pr (f' #r (Reg dst)) ->
+    state_lessdef i ti ->
+    exists ti', step_instr ge sp (Iexec ti) (RBop p op args dst) (Iexec ti').
+Proof.
+  intros. cbn in H. unfold Option.bind in H. destr. inv H.
+  destruct ti. econstructor. econstructor.
+  unfold evaluable_pred_expr in H1. Admitted.
+
+Lemma remember_expr_in :
+  forall x l f a,
+    In x l -> In x (remember_expr f l a).
+Proof.
+  unfold remember_expr; destruct a; eauto using in_cons.
+Qed.
+
+Lemma in_mfold_left_abstr :
+  forall instrs p f l p' f' l' x,
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    In x l -> In x l'.
+Proof.
+  induction instrs; intros.
+  - cbn in *; now inv H.
+  - cbn -[update] in *.
+    pose proof H as Y.
+    apply OptionExtra.mfold_left_Some in Y. inv Y.
+    rewrite H1 in H. destruct x0 as ((p_int & f_int) & l_int).
+    exploit IHinstrs; eauto.
+    unfold Option.bind2, Option.ret in H1; repeat destr. inv H1.
+    auto using remember_expr_in.
+Qed.
+
+Lemma abstr_seq_reverse_correct_fold :
+  forall sp instrs i0 i i' ti cf f' l p p' l' f,
+    sem (mk_ctx i0 sp ge) f (i, None) ->
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) l' ->
+    sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+    state_lessdef i ti ->
+    exists ti',
+      SeqBB.step ge sp (Iexec ti) instrs (Iterm ti' cf)
+      /\ state_lessdef i' ti'.
+Proof.
+  induction instrs; intros * Y3 Y Y0 Y1 Y2.
+  - cbn in *. inv Y.
+    assert (similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
+                    {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
+      by auto using similar_refl.
+    now eapply sem_det in H; [| eapply Y1 | eapply Y3 ].
+  - cbn -[update] in Y.
+    pose proof Y as YX.
+    apply OptionExtra.mfold_left_Some in YX. inv YX.
+    rewrite H in Y.
+    destruct x as ((p_mid & f_mid) & l_mid).
+    unfold Option.bind2, Option.ret in H. repeat destr.
+    inv H.
+
+    (* Assume we are in RBop for now*)
+    assert (exists pred op args dst, a = RBop pred op args dst)
+      by admit; destruct H as (pred & op & args & dst & EQ); subst a.
+
+    exploit evaluable_pred_expr_exists; eauto.
+    unfold evaluable_pred_list in Y0.
+    instantiate (1 := forest_preds f').
+    apply Y0 in YI. auto.
+    (* provable using evaluability in list *) intros [t step].
+
+    assert (exists ti_mid, sem {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
+                             f_mid (ti_mid, None)) by admit.
+
+    destruct H as (ti_mid & Hsem2).
+    exploit IHinstrs. 2: { eapply Y. }  eauto. auto. eauto. reflexivity.
+    intros (ti_mid' & Hseq & Hstate).
+    assert (state_lessdef ti_mid t) by admit.
+    exists ti_mid'; split; auto.
+    econstructor; eauto.
+Admitted.
+
+Lemma sem_empty :
+  forall G (ctx: @Abstr.ctx G),
+    sem ctx empty (ctx_is ctx, None).
+Proof.
+  intros. destruct ctx. cbn. destruct ctx_is.
+  constructor.
+  constructor. cbn. intros. rewrite get_empty.
+  constructor. cbn. constructor. constructor. constructor. intros.
+  rewrite get_empty_p. constructor. constructor.
+  rewrite get_empty. constructor. cbn. constructor.
+  constructor. constructor. cbn. constructor. constructor.
+Qed.
+
+Lemma abstr_seq_reverse_correct:
   forall sp x i i' ti cf x' l,
     abstract_sequence' x = Some (x', l) ->
     (forall p, In p l -> exists r, sem_pred_expr x'.(forest_preds) sem_value (mk_ctx i sp ge) p r) ->
@@ -122,15 +219,13 @@ Proof.
 (*  intros. exploit sem_exists_execution; eauto; simplify.
   eauto using sem_equiv_execution.
 Qed. *)
-  induction x; [admit|].
-  intros. unfold abstract_sequence' in H. cbn -[update] in H.
+  intros. unfold abstract_sequence' in H.
   unfold Option.map in H. repeat destr. inv H.
-  pose proof Heqm as Y.
-  apply OptionExtra.mfold_left_Some in Y. inv Y.
-  rewrite H in Heqm. exploit IHx.
-  unfold abstract_sequence', Option.map.
-  destruct x0 as ((p' & f') & l').
-  unfold Option.bind2, Option.ret in H. repeat destr.
+  eapply  abstr_seq_reverse_correct_fold.
+  2: {  eauto. }
+  all: eauto.
+  apply sem_empty.
+Qed.
 
 (*|
 Proof Sketch:

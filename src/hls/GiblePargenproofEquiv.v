@@ -735,6 +735,29 @@ Section CORRECT.
     - apply negb_inj. apply sem_pred_det with (e:=p0); auto.
   Qed.
 
+  Lemma sem_pred_expr_det :
+    forall A B p b1 b2 f (s: forall G, @Abstr.ctx G -> A -> B -> Prop),
+      (forall p b1 b2, s _ ictx p b1 -> s _ octx p b2 -> b1 = b2) ->
+      sem_pred_expr f (s _) ictx p b1 -> sem_pred_expr f (s _) octx p b2 -> b1 = b2.
+  Proof.
+    induction p; crush.
+    - inv H0. inv H1. eauto.
+    - inv H0; inv H1; eauto; exploit sem_pexpr_det; eauto; discriminate.
+  Qed.
+
+  Lemma sem_det :
+    forall p i cf i' cf',
+      sem ictx p (i, cf) ->
+      sem octx p (i', cf') ->
+      cf = cf' /\ match_states i i'.
+  Proof.
+    repeat inversion 1; subst; split.
+    - eauto using sem_pred_expr_det, sem_exit_det.
+    - inv H11; inv H12; inv H2; inv H3;
+      constructor; intros;
+      eauto using sem_pexpr_det, sem_pred_expr_det, sem_value_det, sem_mem_det.
+  Qed.
+
   Lemma sem_pexpr_corr :
     forall p b, sem_pexpr ictx p b -> sem_pexpr octx p b.
   Proof.

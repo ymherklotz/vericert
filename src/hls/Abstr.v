@@ -219,6 +219,10 @@ Lemma get_empty:
   forall r, empty#r r = NE.singleton (Ptrue, Ebase r).
 Proof. unfold "#r"; intros. rewrite RTree.gempty. trivial. Qed.
 
+Lemma get_empty_p:
+  forall p, empty#p p = Plit (true, PEbase p).
+Proof. unfold "#p", get_forest_p'; intros. rewrite PTree.gempty. trivial. Qed.
+
 Lemma forest_reg_gso:
   forall (f : forest) w dst dst',
     dst <> dst' ->
