@@ -35,6 +35,7 @@ Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Require Import vericert.common.Monad.
 
+Require Import Optionmonad.
 Module Import OptionExtra := MonadExtra(Option).
 
 #[local] Open Scope positive.
@@ -83,9 +84,36 @@ Lemma sem_exists_execution :
     exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf).
 Proof. Admitted. *)
 
+Definition update' (s: pred_op * forest * list pred_expr) (i: instr): option (pred_op * forest * list pred_expr) :=
+  let '(p, f, l) := s in
+  Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i)) (update (p, f) i).
+
+Definition abstract_sequence' (b : list instr) : option (forest * list pred_expr) :=
+  Option.map (fun x => let '(_, y, z) := x in (y, z))
+    (mfold_left update' b (Some (Ptrue, empty, nil))).
+
 Lemma abstr_seq_reverse_correct :
-  forall sp x i i' ti cf x',
-    abstract_sequence x = Some x' ->
+  forall sp x i i' ti cf x' l p p' l' f,
+    mfold_left update' x (Some (p, f, l)) = Some (p', x', l') ->
+    (forall p, In p l -> exists r, sem_pred_expr x'.(forest_preds) sem_value (mk_ctx i sp ge) p r) ->
+    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
+    state_lessdef i ti ->
+   exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
+           /\ state_lessdef i' ti'.
+Proof.
+  induction x; [admit|]; intros.
+  cbn -[update] in H.
+  pose proof H as Y.
+  apply OptionExtra.mfold_left_Some in Y. inv Y.
+  rewrite H3 in H.
+  destruct x0 as ((p_mid & f_mid) & l_mid).
+  exploit IHx; eauto. admit.
+  intros (ti_mid & Hseq & Hstate).
+
+Lemma abstr_seq_reverse_correct :
+  forall sp x i i' ti cf x' l,
+    abstract_sequence' x = Some (x', l) ->
+    (forall p, In p l -> exists r, sem_pred_expr x'.(forest_preds) sem_value (mk_ctx i sp ge) p r) ->
     sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
     state_lessdef i ti ->
    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
@@ -94,7 +122,15 @@ Proof.
 (*  intros. exploit sem_exists_execution; eauto; simplify.
   eauto using sem_equiv_execution.
 Qed. *)
-  intros.
+  induction x; [admit|].
+  intros. unfold abstract_sequence' in H. cbn -[update] in H.
+  unfold Option.map in H. repeat destr. inv H.
+  pose proof Heqm as Y.
+  apply OptionExtra.mfold_left_Some in Y. inv Y.
+  rewrite H in Heqm. exploit IHx.
+  unfold abstract_sequence', Option.map.
+  destruct x0 as ((p' & f') & l').
+  unfold Option.bind2, Option.ret in H. repeat destr.
 
 (*|
 Proof Sketch:
