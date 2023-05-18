@@ -24,6 +24,8 @@ Require Export Coq.Classes.SetoidClass.
 Require Export Coq.Classes.SetoidDec.
 Require Import Coq.Logic.Decidable.
 
+Require Import Vericertlib.
+
 Inductive non_empty (A: Type) :=
 | singleton : A -> non_empty A
 | cons : A -> non_empty A -> non_empty A
@@ -214,7 +216,7 @@ Inductive norepet {A : Type} : non_empty A -> Prop :=
 | list_norepet_cons hd tl :
   ~ In hd tl -> norepet tl -> norepet (hd ::| tl).
 
-Lemma NEin_NEapp5 :
+Lemma in_NEapp5 :
   forall A (a: A) x y,
     In a (app x y) ->
     In a x \/ In a y.
@@ -223,4 +225,70 @@ Proof.
   - inv H. inv H1. left. constructor. tauto.
   - inv H. inv H1. left. constructor; tauto.
     apply IHx in H. inv H; intuition (constructor; auto).
+Qed.
+
+Lemma app_NEmap :
+  forall A B (f: A -> B) a b,
+    map f (app a b) = app (map f a) (map f b).
+Proof. induction a; auto; intros; cbn in *; now rewrite IHa. Qed.
+
+Lemma of_list_some :
+  forall A a a' (e: A),
+    of_list a = Some a' ->
+    of_list (e :: a) = Some (cons e a').
+Proof.
+  induction a; [crush|].
+  intros.
+  cbn in H. destruct a0. inv H. auto.
+  destruct_match; [|discriminate].
+  inv H. specialize (IHa n a ltac:(trivial)).
+  cbn. destruct_match. unfold of_list in IHa.
+  fold (@of_list A) in IHa. rewrite IHa in Heqo0. inv Heqo0. auto.
+  unfold of_list in IHa. fold (@of_list A) in IHa. rewrite IHa in Heqo0. inv Heqo0.
+Qed.
+
+Lemma of_list_contra :
+  forall A b (a: A),
+    ~ of_list (a :: b) = None.
+Proof.
+  induction b; try solve [crush].
+  intros.
+  specialize (IHb a).
+  enough (X: exists x, of_list (a :: b) = Some x).
+  inversion_clear X as [x X'].
+  erewrite of_list_some; eauto; discriminate.
+  destruct (of_list (a :: b)) eqn:?; [eauto|contradiction].
+Qed.
+
+Lemma of_list_exists :
+  forall A b (a: A),
+    exists x, of_list (a :: b) = Some x.
+Proof.
+  intros. pose proof (of_list_contra _ b a).
+  destruct (of_list (a :: b)); try contradiction.
+  eauto.
+Qed.
+
+Lemma of_list_exists2 :
+  forall A b (a c: A),
+    exists x,
+      of_list (c :: a :: b) = Some (cons c x)
+      /\ of_list (a :: b) = Some x.
+Proof.
+  intros. pose proof (of_list_exists _ b a).
+  inversion_clear H as [x B].
+  econstructor; split; eauto.
+  eapply of_list_some; eauto.
+Qed.
+
+Lemma of_list_to_list :
+  forall A (x: list A) y,
+    of_list x = Some y ->
+    to_list y = x.
+Proof.
+  induction x; [crush|].
+  intros. destruct x; [crush|].
+  pose proof (of_list_exists2 _ x a0 a).
+  inversion_clear H0 as [x0 [HN1 HN2]]. rewrite HN1 in H. inv H.
+  cbn. f_equal. eauto.
 Qed.

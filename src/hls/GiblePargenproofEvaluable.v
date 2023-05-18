@@ -269,7 +269,7 @@ Lemma all_evaluable_non_empty_prod :
 Proof.
   induction a; intros.
   - cbn in *. eapply all_evaluable_map_add; eauto. destruct a; cbn in *. eapply H; constructor.
-  - cbn in *. eapply NE.NEin_NEapp5 in H1. inv H1. eapply all_evaluable_map_add; eauto.
+  - cbn in *. eapply NE.in_NEapp5 in H1. inv H1. eapply all_evaluable_map_add; eauto.
     destruct a; cbn in *. eapply all_evaluable_cons2; eauto.
     eapply all_evaluable_cons in H. eauto.
 Qed.
@@ -326,70 +326,70 @@ Qed.
     eapply H. eauto.
   Qed.
 
-  Lemma evaluable_impl :
-    forall A (ctx: @ctx A) a b,
-      p_evaluable ctx a ->
-      p_evaluable ctx b ->
-      p_evaluable ctx (a → b).
-  Proof.
-    unfold evaluable.
-    inversion_clear 1 as [b1 SEM1].
-    inversion_clear 1 as [b2 SEM2].
-    unfold Pimplies.
-    econstructor. apply sem_pexpr_Por;
-    eauto using sem_pexpr_negate.
-  Qed.
+Lemma evaluable_impl :
+  forall A (ctx: @ctx A) a b,
+    p_evaluable ctx a ->
+    p_evaluable ctx b ->
+    p_evaluable ctx (a → b).
+Proof.
+  unfold evaluable.
+  inversion_clear 1 as [b1 SEM1].
+  inversion_clear 1 as [b2 SEM2].
+  unfold Pimplies.
+  econstructor. apply sem_pexpr_Por;
+  eauto using sem_pexpr_negate.
+Qed.
 
-  Lemma parts_evaluable :
-    forall A (ctx: @ctx A) b p0,
-      evaluable sem_pred ctx p0 ->
-      evaluable sem_pexpr ctx (Plit (b, p0)).
-  Proof.
-    intros. unfold evaluable in *. inv H.
-    destruct b. do 2 econstructor. eauto.
-    exists (negb x). constructor. rewrite negb_involutive. auto.
-  Qed.
+Lemma parts_evaluable :
+  forall A (ctx: @ctx A) b p0,
+    evaluable sem_pred ctx p0 ->
+    evaluable sem_pexpr ctx (Plit (b, p0)).
+Proof.
+  intros. unfold evaluable in *. inv H.
+  destruct b. do 2 econstructor. eauto.
+  exists (negb x). constructor. rewrite negb_involutive. auto.
+Qed.
 
-  Lemma p_evaluable_Pand :
-    forall A (ctx: @ctx A) a b,
-      p_evaluable ctx a ->
-      p_evaluable ctx b ->
-      p_evaluable ctx (a ∧ b).
-  Proof.
-    intros. inv H. inv H0.
-    econstructor. apply sem_pexpr_Pand; eauto.
-  Qed.
+Lemma p_evaluable_Pand :
+  forall A (ctx: @ctx A) a b,
+    p_evaluable ctx a ->
+    p_evaluable ctx b ->
+    p_evaluable ctx (a ∧ b).
+Proof.
+  intros. inv H. inv H0.
+  econstructor. apply sem_pexpr_Pand; eauto.
+Qed.
 
-  Lemma from_predicated_evaluable :
-    forall A (ctx: @ctx A) f b a,
-      pred_forest_evaluable ctx f ->
-      all_evaluable2 ctx sem_pred a ->
-      p_evaluable ctx (from_predicated b f a).
-  Proof.
-    induction a.
-    cbn. destruct_match; intros.
-    eapply evaluable_impl.
-    eauto using predicated_evaluable.
-    unfold all_evaluable2 in H0. unfold p_evaluable.
-    eapply parts_evaluable. eapply H0. econstructor.
+Lemma from_predicated_evaluable :
+  forall A (ctx: @ctx A) f b a,
+    pred_forest_evaluable ctx f ->
+    all_evaluable2 ctx sem_pred a ->
+    p_evaluable ctx (from_predicated b f a).
+Proof.
+  induction a.
+  cbn. destruct_match; intros.
+  eapply evaluable_impl.
+  eauto using predicated_evaluable.
+  unfold all_evaluable2 in H0. unfold p_evaluable.
+  eapply parts_evaluable. eapply H0. econstructor.
 
-    intros. cbn. destruct_match.
-    eapply p_evaluable_Pand.
-    eapply all_evaluable2_cons2 in H0.
-    eapply evaluable_impl.
-    eauto using predicated_evaluable.
-    unfold all_evaluable2 in H0. unfold p_evaluable.
-    eapply parts_evaluable. eapply H0.
-    eapply all_evaluable2_cons in H0. eauto.
-  Qed.
+  intros. cbn. destruct_match.
+  eapply p_evaluable_Pand.
+  eapply all_evaluable2_cons2 in H0.
+  eapply evaluable_impl.
+  eauto using predicated_evaluable.
+  unfold all_evaluable2 in H0. unfold p_evaluable.
+  eapply parts_evaluable. eapply H0.
+  eapply all_evaluable2_cons in H0. eauto.
+Qed.
 
-  Lemma p_evaluable_imp :
-    forall A (ctx: @ctx A) a b,
-      sem_pexpr ctx a false ->
-      p_evaluable ctx (a → b).
-  Proof.
-    intros. unfold "→".
-    unfold p_evaluable, evaluable. exists true.
-    constructor. replace true with (negb false) by trivial. left.
-    now apply sem_pexpr_negate.
-  Qed.
+Lemma p_evaluable_imp :
+  forall A (ctx: @ctx A) a b,
+    sem_pexpr ctx a false ->
+    p_evaluable ctx (a → b).
+Proof.
+  intros. unfold "→".
+  unfold p_evaluable, evaluable. exists true.
+  constructor. replace true with (negb false) by trivial. left.
+  now apply sem_pexpr_negate.
+Qed.

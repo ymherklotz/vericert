@@ -33,6 +33,7 @@ Require Import vericert.hls.GiblePargenproofEquiv.
 Require Import vericert.hls.GiblePargen.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
+Require Import vericert.hls.AbstrSemIdent.
 Require Import vericert.common.Monad.
 
 Require Import Optionmonad.
@@ -48,6 +49,8 @@ Module Import OptionExtra := MonadExtra(Option).
 #[local] Ltac destr := destruct_match; try discriminate; [].
 
 Definition state_lessdef := GiblePargenproofEquiv.match_states.
+
+(* Set Nested Proofs Allowed. *)
 
 (*|
 ===================================
@@ -113,17 +116,46 @@ Definition evaluable_pred_list {G} ctx pr l :=
     In p l ->
     @evaluable_pred_expr G ctx pr p.
 
+(* Lemma evaluable_pred_expr_exists : *)
+(*   forall sp pr f i0 exit_p exit_p' f' cf i ti p op args dst, *)
+(*     update (exit_p, f) (RBop p op args dst) = Some (exit_p', f') -> *)
+(*     sem (mk_ctx i0 sp ge) f (i, cf) -> *)
+(*     evaluable_pred_expr (mk_ctx i0 sp ge) pr (f' #r (Reg dst)) -> *)
+(*     state_lessdef i ti -> *)
+(*     exists i', sem (mk_ctx i0 sp ge) f' (i', cf). *)
+(* Proof. *)
+(*   intros. cbn in H. unfold Option.bind in H. destr. inv H. *)
+(*   destruct ti. econstructor. econstructor. *)
+(*   unfold evaluable_pred_expr in H1. Admitted. *)
+
 Lemma evaluable_pred_expr_exists :
-  forall sp pr f i0 exit_p exit_p' f' cf i ti p op args dst,
+  forall sp pr f i0 exit_p exit_p' f' i ti p op args dst,
+    (forall x, sem_pexpr (mk_ctx i0 sp ge) (get_forest_p' x f'.(forest_preds)) (pr !! x)) ->
+    eval_predf pr exit_p = true ->
     update (exit_p, f) (RBop p op args dst) = Some (exit_p', f') ->
-    sem (mk_ctx i0 sp ge) f (i, cf) ->
-    evaluable_pred_expr (mk_ctx i0 sp ge) pr (f' #r (Reg dst)) ->
+    sem (mk_ctx i0 sp ge) f (i, None) ->
+    evaluable_pred_expr (mk_ctx i0 sp ge) f'.(forest_preds) (f' #r (Reg dst)) ->
     state_lessdef i ti ->
     exists ti', step_instr ge sp (Iexec ti) (RBop p op args dst) (Iexec ti').
 Proof.
-  intros. cbn in H. unfold Option.bind in H. destr. inv H.
-  destruct ti. econstructor. econstructor.
-  unfold evaluable_pred_expr in H1. Admitted.
+  intros * HPRED HEVAL **. cbn -[seq_app] in H. unfold Option.bind in H. destr. inv H.
+  destruct ti.
+  unfold evaluable_pred_expr in H1. destruct H1 as (r & Heval).
+  rewrite forest_reg_gss in Heval.
+  exploit sem_pred_expr_prune_predicated2; eauto; intros.
+  assert (eval_predf pr (dfltp p ∧ exit_p') = true) by admit.
+  exploit sem_pred_expr_app_predicated2; eauto; intros.
+  exploit sem_pred_expr_seq_app_val2; eauto; simplify.
+  unfold pred_ret in *. inv H4. inv H12.
+  destruct i. exploit sem_merge_list; eauto; intros.
+  instantiate (1 := args) in H4.
+  eapply sem_pred_expr_ident2 in H4. simplify.
+  exploit sem_pred_expr_ident_det. eapply H5. eapply H4.
+  intros. subst. exploit sem_pred_expr_ident. eapply H5. eapply H8.
+  intros.
+
+  econstructor. econstructor.
+  Admitted.
 
 Lemma remember_expr_in :
   forall x l f a,
@@ -148,6 +180,100 @@ Proof.
     auto using remember_expr_in.
 Qed.
 
+Lemma not_remembered_in_forest :
+  forall a p f p_mid f_mid l x,
+    update (p, f) a = Some (p_mid, f_mid) ->
+    ~ In f #r (Reg x) (remember_expr f l a) ->
+    f #r (Reg x) = f_mid #r (Reg x).
+Proof.
+  intros; destruct a; cbn in *;
+    unfold Option.bind in H; repeat destr; inv H; try easy.
+  - assert (~ (f #r (Reg r) = f #r (Reg x)) /\ ~ (In f #r (Reg x) l)) by tauto.
+    inv H. destruct (resource_eq (Reg r) (Reg x));
+      try (rewrite e in *; contradiction).
+    now rewrite forest_reg_gso by auto.
+  - assert (~ (f #r (Reg r) = f #r (Reg x)) /\ ~ (In f #r (Reg x) l)) by tauto.
+    inv H. destruct (resource_eq (Reg r) (Reg x));
+      try (rewrite e in *; contradiction).
+    now rewrite forest_reg_gso by auto.
+  - destruct (resource_eq Mem (Reg x)); try discriminate.
+    now rewrite forest_reg_gso by auto.
+Qed.
+
+Lemma in_forest_or_remembered :
+  forall instrs p f l p' f' l',
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    forall x, In (f #r (Reg x)) l' \/ f #r (Reg x) = f' #r (Reg x).
+Proof.
+  induction instrs; try solve [crush]; []; intros.
+  cbn -[update] in H.
+  pose proof H as YX.
+  apply OptionExtra.mfold_left_Some in YX. inv YX.
+  rewrite H0 in H.
+  destruct x0 as ((p_mid & f_mid) & l_mid).
+  pose proof (IHinstrs _ _ _ _ _ _ H).
+  unfold Option.bind2, Option.ret in H0; cbn -[update] in H0; repeat destr.
+  inv H0. specialize (H1 x).
+  pose proof H as Y.
+  destruct (in_dec pred_expr_eqb (f #r (Reg x)) (remember_expr f l a));
+    eauto using in_mfold_left_abstr.
+  inv H1; eapply not_remembered_in_forest with (f_mid := f_mid) in n; eauto;
+    rewrite n in *; tauto.
+Qed.
+
+Lemma in_forest_evaluable :
+  forall G sp ge i' cf instrs p f l p' f' l' x i0,
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    sem (mk_ctx i0 sp ge) f' (i', cf) ->
+    @evaluable_pred_list G (mk_ctx i0 sp ge) f'.(forest_preds) l' ->
+    evaluable_pred_expr (mk_ctx i0 sp ge) f'.(forest_preds) (f #r (Reg x)).
+Proof.
+  intros.
+  pose proof H as Y. apply in_forest_or_remembered with (x := x) in Y.
+  inv Y; eauto.
+  inv H0. inv H5. rewrite H2. 
+  unfold evaluable_pred_expr. eauto.
+Qed.
+
+Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t unit) :=
+  match i with
+  | RBop (Some p) _ _ _
+  | RBload (Some p) _ _ _ _
+  | RBstore (Some p) _ _ _ _
+  | RBexit (Some p) _ =>
+    Some (fold_right (fun x => PTree.set x tt) preds (predicate_use p))
+  | RBsetpred p' c args p =>
+    let preds' := match p' with
+                  | Some p'' => fold_right (fun x => PTree.set x tt) preds (predicate_use p'')
+                  | None => preds
+                  end
+    in
+    match preds' ! p with
+    | Some _ => None
+    | None => Some preds'
+    end
+  | _ => Some preds
+  end.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr :
+  forall instrs p f l p' f' l' preds preds',
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
+    forall pred, preds ! pred = Some tt ->
+      f #p pred = f' #p pred.
+Proof. Admitted.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
+  forall G instrs p f l p' f' l' i0 sp ge ps preds preds' ps',
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
+    forall pred, preds ! pred = Some tt ->
+      sem_predset (mk_ctx i0 sp ge) f ps ->
+      sem_predset (@mk_ctx G i0 sp ge) f' ps' ->
+      ps !! pred = ps' !! pred.
+Proof. Admitted.
+
+(* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
   forall sp instrs i0 i i' ti cf f' l p p' l' f,
     sem (mk_ctx i0 sp ge) f (i, None) ->
@@ -178,15 +304,13 @@ Proof.
       by admit; destruct H as (pred & op & args & dst & EQ); subst a.
 
     exploit evaluable_pred_expr_exists; eauto.
-    unfold evaluable_pred_list in Y0.
-    instantiate (1 := forest_preds f').
-    apply Y0 in YI. auto.
-    (* provable using evaluability in list *) intros [t step].
+    (* I have the pred already from sem. *)
+    admit. admit. admit. intros [t step].
+    (* unfold evaluable_pred_list in Y0. *)
+    (* instantiate (1 := forest_preds f'). *)
+    (* eapply in_forest_evaluable; eauto. *)
+    (* (* provable using evaluability in list *) intros [t step]. *)
 
-    assert (exists ti_mid, sem {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
-                             f_mid (ti_mid, None)) by admit.
-
-    destruct H as (ti_mid & Hsem2).
     exploit IHinstrs. 2: { eapply Y. }  eauto. auto. eauto. reflexivity.
     intros (ti_mid' & Hseq & Hstate).
     assert (state_lessdef ti_mid t) by admit.

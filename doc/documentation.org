@@ -189,6 +189,47 @@ If-conversion is an optimisation which can turn code with simple control flow in
 Functions are currently only inlined in Vericert, however, we are working on a proper interface to
 integrate function calls into the hardware.
 
+* Scheduling proof
+
+** Semantic identity properties
+
+This section corresponds to the proofs found in =src/hls/AbstrSemIdent.v=.
+
+*** =sem_merge_list=
+:PROPERTIES:
+:ID:       f307d227-d0e9-49a0-823f-2d7e0db76972
+:END:
+
+This lemma proves that given a forest =f= that executes from an initial context
+=ctx= to a state composed of =rs=, =ps= and =m=, that the evaluation of the
+merged arguments from the forest is equivalent to retrieving the arguments
+dynamically from the new state of the registers.  This proves the correctness of
+the combination of =merge= and =list_translation= to encode the list of
+arguments.
+
+One interesting note about this lemma is that it passes the latest state of the
+predicates from =f= into the function, i.e. =forest_preds f=.  This allows one
+to prove the theorem, however, using it later on is more problematic, as one
+cannot easily reuse it in the middle of an induction.  Instead, one would have
+to prove that the future changes to the forest will not change the result of the
+current evaluation of the register arguments.
+
+It does make sense that this has to be proven somewhere, however, it's not clear
+if this results in the simplest proofs.  However, one benefit is that this
+function already has to be used for the forward translation proof, so it can
+easily be reused for the backward execution proof.
+
+** Backward proof
+
+This corresponds to the proof found in =src/hls/GiblePargenproofBackward.v=.
+
+*** =abstr_seq_reverse_correct_fold=
+:PROPERTIES:
+:ID:       5e6486bb-fda2-4558-aed8-243a9698de85
+:END:
+
+This proof is mainly tricky because one needs to infer
+
 * Coq Style Guide
   :PROPERTIES:
   :CUSTOM_ID: coq-style-guide
