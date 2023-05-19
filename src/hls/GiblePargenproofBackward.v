@@ -302,6 +302,41 @@ Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
       ps !! pred = ps' !! pred.
 Proof. Admitted.
 
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3 :
+  forall A B G a_sem instrs p f l p' f' l' i0 sp ge preds preds' pe pe_val,
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
+    @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+    NE.Forall (fun x => forall pred, PredIn pred (fst x)
+                 -> PTree.get pred preds = Some tt) pe ->
+    sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
+Proof.
+  induction instrs; try solve [crush]; intros.
+  cbn -[update] in *.
+  exploit OptionExtra.mfold_left_Some. eapply H.
+  intros [[[p_mid f_mid] l_mid] HBind]. rewrite HBind in H.
+  exploit OptionExtra.mfold_left_Some. eapply H0.
+  intros [preds_mid HGather]. rewrite HGather in H0.
+  exploit IHinstrs. eassumption. eassumption. eassumption. admit.
+  intros.
+  Admitted.
+(* exploit exists_sem_pred. exact H1. *)
+(*   intros [[p_val e_val] [HIN HSEM]]. *)
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval2 :
+  forall G instrs p f l p' f' l' i0 sp ge preds preds' pe,
+    mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
+    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
+    @evaluable_pred_expr G (mk_ctx i0 sp ge) f'.(forest_preds) pe ->
+    NE.Forall (fun x => forall pred, PredIn pred (fst x)
+                 -> PTree.get pred preds = Some tt) pe ->
+    evaluable_pred_expr (mk_ctx i0 sp ge) f.(forest_preds) pe.
+Proof.
+  unfold evaluable_pred_expr in *.
+  intros. inv H1. exists x.
+  eapply abstr_seq_revers_correct_fold_sem_pexpr_eval3; eauto.
+Qed.
+
 (* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
   forall sp instrs i0 i i' ti cf f' l p p' l' f,
@@ -335,6 +370,8 @@ Proof.
       by admit; destruct H as (pred & op & args & dst & EQ); subst a.
 
     exploit evaluable_pred_expr_exists; eauto.
+    eapply abstr_seq_revers_correct_fold_sem_pexpr_eval2; eauto. admit. admit.
+    admit.
     
     (* I have the pred already from sem. *)
     intros [ti_mid HSTEP].
