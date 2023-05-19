@@ -265,18 +265,6 @@ Inductive eval_pred:
 | eval_pred_none:
   forall i i', eval_pred None i i' i'.
 
-Section RELABSTR.
-
-  Context {A B : Type} (ge : Genv.t A B).
-
-(*|
-.. index::
-   triple: semantics; RTLBlockInstr; instruction
-
-Step Instruction
-=============================
-|*)
-
 Definition truthyb (ps: predset) (p: option pred_op) :=
   match p with
   | None => true
@@ -312,6 +300,77 @@ Variant instr_falsy (ps: predset): instr -> Prop :=
       eval_predf ps p = false ->
       instr_falsy ps (RBexit (Some p) cf)
   .
+
+Inductive state_equiv : instr_state -> instr_state -> Prop :=
+| match_states_intro:
+  forall ps ps' rs rs' m m',
+    (forall x, rs !! x = rs' !! x) ->
+    (forall x, ps !! x = ps' !! x) ->
+    m = m' ->
+    state_equiv (mk_instr_state rs ps  m) (mk_instr_state rs' ps' m').
+
+Lemma state_equiv_refl x : state_equiv x x.
+Proof. destruct x; constructor; crush. Qed.
+
+Lemma state_equiv_commut x y : state_equiv x y -> state_equiv y x.
+Proof. inversion 1; constructor; crush. Qed.
+
+Lemma state_equiv_trans x y z :
+  state_equiv x y -> state_equiv y z -> state_equiv x z.
+Proof. repeat inversion 1; constructor; crush. Qed.
+
+#[global] Instance state_equiv_Equivalence : Equivalence state_equiv :=
+  { Equivalence_Reflexive := state_equiv_refl ;
+    Equivalence_Symmetric := state_equiv_commut ;
+    Equivalence_Transitive := state_equiv_trans ; }.
+
+Lemma match_states_list :
+  forall A (rs: Regmap.t A) rs',
+  (forall r, rs !! r = rs' !! r) ->
+  forall l, rs ## l = rs' ## l.
+Proof. induction l; crush. Qed.
+
+Lemma truthy_match_state :
+  forall ps ps' p,
+    (forall x, ps !! x = ps' !! x) ->
+    truthy ps p ->
+    truthy ps' p.
+Proof.
+  intros; destruct p; inv H0; constructor; auto.
+  erewrite eval_predf_pr_equiv; eauto.
+Qed.
+
+Lemma falsy_match_state :
+  forall ps ps' p,
+    (forall x, ps !! x = ps' !! x) ->
+    falsy ps p ->
+    falsy ps' p.
+Proof.
+  intros; destruct p; inv H0; constructor; auto.
+  erewrite eval_predf_pr_equiv; eauto.
+Qed.
+
+Lemma PTree_matches :
+  forall A (v: A) res rs rs',
+  (forall r, rs !! r = rs' !! r) ->
+  forall x, (Regmap.set res v rs) !! x = (Regmap.set res v rs') !! x.
+Proof.
+  intros; destruct (Pos.eq_dec x res); subst;
+  [ repeat rewrite Regmap.gss by auto
+  | repeat rewrite Regmap.gso by auto ]; auto.
+Qed.
+
+Section RELABSTR.
+
+  Context {A B : Type} (ge : Genv.t A B).
+
+(*|
+.. index::
+   triple: semantics; RTLBlockInstr; instruction
+
+Step Instruction
+=============================
+|*)
 
 Variant step_instr: val -> istate -> instr -> istate -> Prop :=
   | exec_RBnop:
@@ -352,6 +411,34 @@ Variant step_instr: val -> istate -> instr -> istate -> Prop :=
       instr_falsy (is_ps st) i ->
       step_instr sp (Iexec st) i (Iexec st)
 .
+
+Lemma step_exists:
+  forall sp i instr i' ti,
+    step_instr sp (Iexec i) instr (Iexec i') ->
+    state_equiv i ti ->
+    exists ti',
+      step_instr sp (Iexec ti) instr (Iexec ti')
+      /\ state_equiv i' ti'.
+Proof.
+  inversion_clear 1; subst; intros.
+  - econstructor; split; eauto. constructor.
+  - destruct ti; cbn in *. inv H. econstructor. split.
+    econstructor. erewrite match_states_list; eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+    eapply PTree_matches; auto.
+  - inv H; cbn in *. eexists; split. econstructor.
+    erewrite match_states_list; eauto. eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+    eapply PTree_matches; auto.
+  - inv H; cbn in *. eexists; split. econstructor.
+    erewrite match_states_list; eauto. rewrite <- H6. eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+  - inv H. econstructor. split. econstructor. erewrite match_states_list; eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+    eapply PTree_matches; auto.
+  - inv H0; exists ti; split; auto;
+      repeat constructor; inv H; erewrite eval_predf_pr_equiv; eauto.
+Qed.
 
 End RELABSTR.
 

@@ -221,44 +221,8 @@ Proof.
   unfold predicated_not_inP; intros. eapply H. econstructor. right; eauto.
 Qed.
 
-Lemma match_states_list :
-  forall A (rs: Regmap.t A) rs',
-  (forall r, rs !! r = rs' !! r) ->
-  forall l, rs ## l = rs' ## l.
-Proof. induction l; crush. Qed.
-
-Lemma PTree_matches :
-  forall A (v: A) res rs rs',
-  (forall r, rs !! r = rs' !! r) ->
-  forall x, (Regmap.set res v rs) !! x = (Regmap.set res v rs') !! x.
-Proof.
-  intros; destruct (Pos.eq_dec x res); subst;
-  [ repeat rewrite Regmap.gss by auto
-  | repeat rewrite Regmap.gso by auto ]; auto.
-Qed.
-
 Lemma truthy_dec:
   forall ps a, truthy ps a \/ falsy ps a.
 Proof.
   destruct a; try case_eq (eval_predf ps p); intuition (constructor; auto).
-Qed.
-
-Lemma truthy_match_state :
-  forall ps ps' p,
-    (forall x, ps !! x = ps' !! x) ->
-    truthy ps p ->
-    truthy ps' p.
-Proof.
-  intros; destruct p; inv H0; constructor; auto.
-  erewrite eval_predf_pr_equiv; eauto.
-Qed.
-
-Lemma falsy_match_state :
-  forall ps ps' p,
-    (forall x, ps !! x = ps' !! x) ->
-    falsy ps p ->
-    falsy ps' p.
-Proof.
-  intros; destruct p; inv H0; constructor; auto.
-  erewrite eval_predf_pr_equiv; eauto.
 Qed.

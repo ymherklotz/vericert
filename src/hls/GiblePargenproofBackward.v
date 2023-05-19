@@ -31,6 +31,7 @@ Require Import vericert.hls.GiblePar.
 Require Import vericert.hls.Gible.
 Require Import vericert.hls.GiblePargenproofEquiv.
 Require Import vericert.hls.GiblePargenproofCommon.
+Require Import vericert.hls.GiblePargenproofForward.
 Require Import vericert.hls.GiblePargen.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
@@ -130,9 +131,8 @@ Definition evaluable_pred_list {G} ctx pr l :=
 (*   unfold evaluable_pred_expr in H1. Admitted. *)
 
 Lemma evaluable_pred_expr_exists :
-  forall sp pr f i0 exit_p exit_p' f' i ti p op args dst,
-    (forall x, sem_pexpr (mk_ctx i0 sp ge) (get_forest_p' x f'.(forest_preds)) (pr !! x)) ->
-    eval_predf pr exit_p = true ->
+  forall sp f i0 exit_p exit_p' f' i ti p op args dst,
+    eval_predf (is_ps i) exit_p = true ->
     valid_mem (is_mem i0) (is_mem i) ->
     update (exit_p, f) (RBop p op args dst) = Some (exit_p', f') ->
     sem (mk_ctx i0 sp ge) f (i, None) ->
@@ -141,19 +141,22 @@ Lemma evaluable_pred_expr_exists :
     exists ti',
       step_instr ge sp (Iexec ti) (RBop p op args dst) (Iexec ti').
 Proof.
-  intros * HPRED HEVAL VALID_MEM **. cbn -[seq_app] in H. unfold Option.bind in H. destr. inv H.
-  destruct ti.
+  intros * HEVAL VALID_MEM **. cbn -[seq_app] in H. unfold Option.bind in H. destr. inv H.
+  assert (HPRED': sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f (is_ps i))
+    by now inv H0.
+  inversion_clear HPRED' as [? ? ? HPRED].
+  destruct ti as [is_trs is_tps is_tm].
   unfold evaluable_pred_expr in H1. destruct H1 as (r & Heval).
   rewrite forest_reg_gss in Heval.
-  exploit sem_pred_expr_prune_predicated2; eauto; intros. cbn in HPRED.
-  pose proof (truthy_dec pr p) as YH. inversion_clear YH as [YH'|YH'].
-  - assert (eval_predf pr (dfltp p ∧ exit_p') = true).
+  exploit sem_pred_expr_prune_predicated2; eauto; intros.
+  pose proof (truthy_dec (is_ps i) p) as YH. inversion_clear YH as [YH'|YH'].
+  - assert (eval_predf (is_ps i) (dfltp p ∧ exit_p') = true).
     { pose proof (truthy_dflt _ _ YH'). rewrite eval_predf_Pand.
       rewrite H1. now rewrite HEVAL. }
     exploit sem_pred_expr_app_predicated2; eauto; intros.
     exploit sem_pred_expr_seq_app_val2; eauto; simplify.
     unfold pred_ret in *. inv H4. inv H12.
-    destruct i. exploit sem_merge_list; eauto; intros.
+    destruct i as [is_rs_1 is_ps_1 is_m_1]. exploit sem_merge_list; eauto; intros.
     instantiate (1 := args) in H4.
     eapply sem_pred_expr_ident2 in H4. simplify.
     exploit sem_pred_expr_ident_det. eapply H5. eapply H4.
@@ -164,18 +167,18 @@ Proof.
     + cbn in *. eapply eval_operation_valid_pointer. symmetry; eauto.
       unfold ctx_mem in H14. cbn in H14. erewrite <- match_states_list; eauto.
     + inv H0.
-      assert (sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f pr)
+      assert (sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f (is_ps_1))
         by (now constructor).
       pose proof (sem_predset_det _ _ ltac:(reflexivity) _ _ _ H0 H17).
-      assert (truthy is_ps0 p).
+      assert (truthy is_ps_1 p).
       { eapply truthy_match_state; eassumption. }
       eapply truthy_match_state; eassumption.
   - inv YH'. cbn -[seq_app] in H.
-    assert (eval_predf pr (p0 ∧ exit_p') = false).
+    assert (eval_predf (is_ps i) (p0 ∧ exit_p') = false).
     { rewrite eval_predf_Pand. now rewrite H1. }
     eapply sem_pred_expr_app_predicated_false2 in H; eauto.
     eexists. eapply exec_RB_falsy. constructor. auto. cbn.
-    assert (sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f pr)
+    assert (sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f (is_ps i))
         by (now constructor).
     inv H0. pose proof (sem_predset_det _ _ ltac:(reflexivity) _ _ _ H4 H8).
     inv H2.
@@ -302,6 +305,8 @@ Proof. Admitted.
 (* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
   forall sp instrs i0 i i' ti cf f' l p p' l' f,
+    valid_mem (is_mem i0) (is_mem i) ->
+    eval_predf (is_ps i) p = true ->
     sem (mk_ctx i0 sp ge) f (i, None) ->
     mfold_left update' instrs (Some (p, f, l)) = Some (p', f', l') ->
     evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) l' ->
@@ -311,12 +316,12 @@ Lemma abstr_seq_reverse_correct_fold :
       SeqBB.step ge sp (Iexec ti) instrs (Iterm ti' cf)
       /\ state_lessdef i' ti'.
 Proof.
-  induction instrs; intros * Y3 Y Y0 Y1 Y2.
+  induction instrs; intros * YVALID YEVAL Y3 Y Y0 Y1 Y2.
   - cbn in *. inv Y.
-    assert (similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
-                    {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
+    assert (X: similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
+                       {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
       by reflexivity.
-    now eapply sem_det in H; [| eapply Y1 | eapply Y3 ].
+    now eapply sem_det in X; [| exact Y1 | exact Y3 ].
   - cbn -[update] in Y.
     pose proof Y as YX.
     apply OptionExtra.mfold_left_Some in YX. inv YX.
@@ -330,18 +335,24 @@ Proof.
       by admit; destruct H as (pred & op & args & dst & EQ); subst a.
 
     exploit evaluable_pred_expr_exists; eauto.
+    
     (* I have the pred already from sem. *)
-    admit. admit. admit. intros [t step].
+    intros [ti_mid HSTEP].
     (* unfold evaluable_pred_list in Y0. *)
     (* instantiate (1 := forest_preds f'). *)
     (* eapply in_forest_evaluable; eauto. *)
     (* (* provable using evaluability in list *) intros [t step]. *)
 
-    exploit IHinstrs. 2: { eapply Y. }  eauto. auto. eauto. reflexivity.
-    intros (ti_mid' & Hseq & Hstate).
-    assert (state_lessdef ti_mid t) by admit.
-    exists ti_mid'; split; auto.
-    econstructor; eauto.
+    pose proof Y3 as YH.
+    pose proof HSTEP as YHSTEP.
+    pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
+    eapply step_exists in YHSTEP.
+    2: { symmetry. econstructor; try eassumption; auto. }
+    inv YHSTEP. inv H1.
+    exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
+    exploit IHinstrs. 3: { eauto. } admit. admit. eauto. admit. eauto. symmetry.
+    instantiate (1:=ti_mid). admit. intros [ti' [YHH HLD]].
+    exists ti'; split; eauto. econstructor; eauto.
 Admitted.
 
 Lemma sem_empty :
