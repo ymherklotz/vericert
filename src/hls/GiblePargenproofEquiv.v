@@ -342,6 +342,11 @@ Proof.
   - transitivity ist'; auto.
 Qed.
 
+#[global] Instance similar_Equivalence {A} : Equivalence (@similar A A) :=
+  { Equivalence_Reflexive := similar_refl A ;
+    Equivalence_Symmetric := similar_commut A A ;
+    Equivalence_Transitive := @similar_trans A A A ; }.
+
 Module HashExpr' <: MiniDecidableType.
   Definition t := expression.
   Definition eq_dec := expression_dec.
@@ -743,6 +748,27 @@ Section CORRECT.
     induction p; crush.
     - inv H0. inv H1. eauto.
     - inv H0; inv H1; eauto; exploit sem_pexpr_det; eauto; discriminate.
+  Qed.
+
+  Lemma sem_predset_det:
+    forall f ps ps',
+      sem_predset ictx f ps ->
+      sem_predset octx f ps' ->
+      forall x, ps !! x = ps' !! x.
+  Proof.
+    intros. inv H. inv H0. eauto using sem_pexpr_det.
+  Qed.
+
+  Lemma sem_regset_det:
+    forall f rs rs',
+      sem_regset ictx f rs ->
+      sem_regset octx f rs' ->
+      forall x, rs !! x = rs' !! x.
+  Proof.
+    intros. inv H. inv H0.
+    specialize (H1 x). specialize (H x).
+    eapply sem_pred_expr_det in H1; eauto.
+    exact sem_value_det.
   Qed.
 
   Lemma sem_det :

@@ -96,10 +96,10 @@ Proof.
 
 Lemma sem_pred_expr_app_predicated_false2 :
   forall f_p y x v p ps,
-    sem_pred_expr f_p sem ctx (app_predicated p y x) v ->
+    sem_pred_expr f_p a_sem ctx (app_predicated p y x) v ->
     (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
     eval_predf ps p = false ->
-    sem_pred_expr f_p sem ctx y v.
+    sem_pred_expr f_p a_sem ctx y v.
 Admitted.
 
 Lemma sem_pred_expr_pred_ret :
@@ -601,7 +601,8 @@ Proof.
     rewrite Eapp_right_nil. auto.
 Qed.
 
-Lemma sem_merge_list :          (* [[id:f307d227-d0e9-49a0-823f-2d7e0db76972]] *)
+(* [[id:f307d227-d0e9-49a0-823f-2d7e0db76972]] *)
+Lemma sem_merge_list :
   forall f rs ps m args,
     sem ctx f ((mk_instr_state rs ps m), None) ->
     sem_pred_expr (forest_preds f) sem_val_list ctx

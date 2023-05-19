@@ -30,6 +30,7 @@ Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.GiblePar.
 Require Import vericert.hls.Gible.
 Require Import vericert.hls.GiblePargenproofEquiv.
+Require Import vericert.hls.GiblePargenproofCommon.
 Require Import vericert.hls.GiblePargen.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
@@ -132,30 +133,55 @@ Lemma evaluable_pred_expr_exists :
   forall sp pr f i0 exit_p exit_p' f' i ti p op args dst,
     (forall x, sem_pexpr (mk_ctx i0 sp ge) (get_forest_p' x f'.(forest_preds)) (pr !! x)) ->
     eval_predf pr exit_p = true ->
+    valid_mem (is_mem i0) (is_mem i) ->
     update (exit_p, f) (RBop p op args dst) = Some (exit_p', f') ->
     sem (mk_ctx i0 sp ge) f (i, None) ->
     evaluable_pred_expr (mk_ctx i0 sp ge) f'.(forest_preds) (f' #r (Reg dst)) ->
     state_lessdef i ti ->
-    exists ti', step_instr ge sp (Iexec ti) (RBop p op args dst) (Iexec ti').
+    exists ti',
+      step_instr ge sp (Iexec ti) (RBop p op args dst) (Iexec ti').
 Proof.
-  intros * HPRED HEVAL **. cbn -[seq_app] in H. unfold Option.bind in H. destr. inv H.
+  intros * HPRED HEVAL VALID_MEM **. cbn -[seq_app] in H. unfold Option.bind in H. destr. inv H.
   destruct ti.
   unfold evaluable_pred_expr in H1. destruct H1 as (r & Heval).
   rewrite forest_reg_gss in Heval.
-  exploit sem_pred_expr_prune_predicated2; eauto; intros.
-  assert (eval_predf pr (dfltp p ∧ exit_p') = true) by admit.
-  exploit sem_pred_expr_app_predicated2; eauto; intros.
-  exploit sem_pred_expr_seq_app_val2; eauto; simplify.
-  unfold pred_ret in *. inv H4. inv H12.
-  destruct i. exploit sem_merge_list; eauto; intros.
-  instantiate (1 := args) in H4.
-  eapply sem_pred_expr_ident2 in H4. simplify.
-  exploit sem_pred_expr_ident_det. eapply H5. eapply H4.
-  intros. subst. exploit sem_pred_expr_ident. eapply H5. eapply H8.
-  intros.
-
-  econstructor. econstructor.
-  Admitted.
+  exploit sem_pred_expr_prune_predicated2; eauto; intros. cbn in HPRED.
+  pose proof (truthy_dec pr p) as YH. inversion_clear YH as [YH'|YH'].
+  - assert (eval_predf pr (dfltp p ∧ exit_p') = true).
+    { pose proof (truthy_dflt _ _ YH'). rewrite eval_predf_Pand.
+      rewrite H1. now rewrite HEVAL. }
+    exploit sem_pred_expr_app_predicated2; eauto; intros.
+    exploit sem_pred_expr_seq_app_val2; eauto; simplify.
+    unfold pred_ret in *. inv H4. inv H12.
+    destruct i. exploit sem_merge_list; eauto; intros.
+    instantiate (1 := args) in H4.
+    eapply sem_pred_expr_ident2 in H4. simplify.
+    exploit sem_pred_expr_ident_det. eapply H5. eapply H4.
+    intros. subst. inv H7.
+    eapply sem_val_list_det in H8; eauto; [|reflexivity]. subst.
+    inv H2.
+    econstructor. constructor.
+    + cbn in *. eapply eval_operation_valid_pointer. symmetry; eauto.
+      unfold ctx_mem in H14. cbn in H14. erewrite <- match_states_list; eauto.
+    + inv H0.
+      assert (sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f pr)
+        by (now constructor).
+      pose proof (sem_predset_det _ _ ltac:(reflexivity) _ _ _ H0 H17).
+      assert (truthy is_ps0 p).
+      { eapply truthy_match_state; eassumption. }
+      eapply truthy_match_state; eassumption.
+  - inv YH'. cbn -[seq_app] in H.
+    assert (eval_predf pr (p0 ∧ exit_p') = false).
+    { rewrite eval_predf_Pand. now rewrite H1. }
+    eapply sem_pred_expr_app_predicated_false2 in H; eauto.
+    eexists. eapply exec_RB_falsy. constructor. auto. cbn.
+    assert (sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f pr)
+        by (now constructor).
+    inv H0. pose proof (sem_predset_det _ _ ltac:(reflexivity) _ _ _ H4 H8).
+    inv H2.
+    erewrite <- eval_predf_pr_equiv by exact H16.
+    now erewrite <- eval_predf_pr_equiv by exact H0.
+Qed.
 
 Lemma remember_expr_in :
   forall x l f a,
@@ -289,7 +315,7 @@ Proof.
   - cbn in *. inv Y.
     assert (similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
                     {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
-      by auto using similar_refl.
+      by reflexivity.
     now eapply sem_det in H; [| eapply Y1 | eapply Y3 ].
   - cbn -[update] in Y.
     pose proof Y as YX.

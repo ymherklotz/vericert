@@ -228,7 +228,16 @@ This corresponds to the proof found in =src/hls/GiblePargenproofBackward.v=.
 :ID:       5e6486bb-fda2-4558-aed8-243a9698de85
 :END:
 
-This proof is mainly tricky because one needs to infer
+This proof is mainly tricky because one needs to infer concrete execution from
+the forest execution.  There are also different forests that are each used for
+evaluation, for example, the final forest is used for predicate evaluation,
+whereas each individual forest is itself evaluated.
+
+However, the proof itself follows a very similar structure to the forward proof,
+with the addition of the assumption that the update produces an instruction that
+is evaluable.  This assumption comes from the fact that the expression will
+still be in the forest at the end, or that it will be placed into the list of
+expressions that is checked for evaluation against the input instructions.
 
 * Coq Style Guide
   :PROPERTIES:
