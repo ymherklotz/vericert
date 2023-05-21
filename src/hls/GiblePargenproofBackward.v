@@ -438,6 +438,27 @@ Proof.
          easy.
 Qed.
 
+Lemma evaluable_pred_expr_exists_RBexit :
+  forall sp i ti p cf,
+    eval_predf (is_ps i) (dfltp p) = false ->
+    state_lessdef i ti ->
+    step_instr ge sp (Iexec ti) (RBexit p cf) (Iexec ti).
+Proof.
+  intros. constructor. destruct p; [|now cbn in *].
+  inv H0. constructor. erewrite <- eval_predf_pr_equiv; eauto.
+Qed.
+
+Lemma evaluable_pred_expr_exists_RBexit2 :
+  forall sp i ti p cf,
+    eval_predf (is_ps i) (dfltp p) = true ->
+    state_lessdef i ti ->
+    step_instr ge sp (Iexec ti) (RBexit p cf) (Iterm ti cf).
+Proof.
+  intros. econstructor.
+  inv H0. cbn. destruct p; try constructor.
+  erewrite <- eval_predf_pr_equiv; eauto.
+Qed.
+
 Lemma remember_expr_in :
   forall x l f a,
     In x l -> In x (remember_expr f l a).
@@ -784,8 +805,48 @@ Proof.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
-    + admit.
-    + admit.
+    + exploit evaluable_pred_expr_exists_RBsetpred; eauto. admit.
+      intros [ti_mid HSTEP].
+      
+      pose proof Y3 as YH.
+      pose proof HSTEP as YHSTEP.
+      pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
+      eapply step_exists in YHSTEP.
+      2: { symmetry. econstructor; try eassumption; auto. }
+      inv YHSTEP. inv H1.
+      exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
+      exploit IHinstrs. 4: { eauto. }
+      cbn in YVALID. transitivity m'; auto.
+      replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
+      eapply sem_update_valid_mem; eauto.
+      eapply gather_predicates_in_forest; eauto.
+      eapply eval_predf_update_true; eauto.
+      eauto. eauto. eauto. eauto. eauto. symmetry.
+      eapply state_lessdef_state_equiv; eauto.
+      intros [ti' [YHH HLD]].
+      exists ti'; split; eauto. econstructor; eauto.
+    + case_eq (eval_predf (is_ps i) (dfltp o)); intros.
+      * admit.
+      * exploit evaluable_pred_expr_exists_RBexit; eauto; intros HSTEP.
+        instantiate (1:=cf) in HSTEP. instantiate (1:=sp) in HSTEP.
+        pose proof Y3 as YH.
+      pose proof HSTEP as YHSTEP.
+      pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
+      eapply step_exists in YHSTEP.
+      2: { symmetry. econstructor; try eassumption; auto. }
+      inv YHSTEP. inv H2.
+      exploit sem_update_instr. auto. eauto. eauto. eauto. eapply Heqo. eauto. auto. intros.
+      exploit IHinstrs. 4: { eauto. }
+      cbn in YVALID. transitivity m'; auto.
+      replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
+      reflexivity. eauto. eauto.
+      eapply gather_predicates_in_forest; eauto.
+      eapply eval_predf_update_true; eauto.
+      eauto. eauto. eauto. eauto. eauto. symmetry.
+      eapply state_lessdef_state_equiv; eauto.
+      intros [ti' [YHH HLD]].
+      exists ti'; split; eauto. econstructor; eauto.
+        
 Admitted.
 
 Lemma sem_empty :
