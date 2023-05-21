@@ -314,3 +314,21 @@ Lemma step_instr_unchanged_state :
   forall A (ge: Genv.t A unit) sp r st st' cf,
     step_instr ge sp (Iexec st) r (Iterm st' cf) -> st = st'.
 Proof. intros. inv H; auto. Qed.
+
+Lemma step_exists:
+  forall A (ge: Genv.t A unit) sp instrs i i' ti cf,
+    SeqBB.step ge sp (Iexec i) instrs (Iterm i' cf) ->
+    state_equiv i ti ->
+    exists ti',
+      SeqBB.step ge sp (Iexec ti) instrs (Iterm ti' cf)
+      /\ state_equiv i' ti'.
+Proof.
+  induction instrs.
+  - intros. inv H.
+  - intros. inv H.
+    + exploit (@step_exists A); eauto; simplify.
+      exploit IHinstrs; eauto; simplify.
+      eexists; split. econstructor; eauto. auto.
+    + inversion H4; subst. eexists. constructor.
+      constructor. eapply step_exists_Iterm; eauto. auto.
+Qed.

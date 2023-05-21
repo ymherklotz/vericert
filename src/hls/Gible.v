@@ -440,6 +440,17 @@ Proof.
       repeat constructor; inv H; erewrite eval_predf_pr_equiv; eauto.
 Qed.
 
+Lemma step_exists_Iterm:
+  forall sp i instr ti cf,
+    step_instr sp (Iexec i) instr (Iterm i cf) ->
+    state_equiv i ti ->
+    step_instr sp (Iexec ti) instr (Iterm ti cf).
+Proof.
+  inversion_clear 1; subst; intros.
+  econstructor.
+  inv H. eapply truthy_match_state; eauto.
+Qed.
+
 End RELABSTR.
 
 (*|

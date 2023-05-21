@@ -113,6 +113,19 @@ Definition update' (s: pred_op * forest * list pred_expr * list pred_expr) (i: i
   let '(p, f, l, lm) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
 
+Lemma equiv_update:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update' i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update i (Some (p, f)) = Some (p', f').
+Proof.
+  induction i; cbn -[update] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    unfold Option.bind2, Option.ret in HB; repeat destr. inv Heqp1.
+    eapply IHi; eauto.
+Qed.
+
 Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t unit) :=
   match i with
   | RBop (Some p) _ _ _
@@ -459,6 +472,17 @@ Proof.
   erewrite <- eval_predf_pr_equiv; eauto.
 Qed.
 
+Lemma evaluable_pred_expr_exists_RBexit3 :
+  forall i p cf f p_exit p_exit' f',
+    eval_predf (is_ps i) (dfltp p) = true ->
+    update (p_exit, f) (RBexit p cf) = Some (p_exit', f') ->
+    eval_predf (is_ps i) p_exit' = false.
+Proof.
+  intros. cbn in *. unfold Option.bind in *. destr. inv H0.
+  rewrite eval_predf_simplify. rewrite eval_predf_Pand.
+  rewrite eval_predf_negate. rewrite H. auto.
+Qed.
+
 Lemma remember_expr_in :
   forall x l f a,
     In x l -> In x (remember_expr f l a).
@@ -618,13 +642,11 @@ Lemma abstr_seq_revers_correct_fold_sem_pexpr :
 Proof. Admitted.
 
 Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
-  forall G instrs p f l p' f' l' i0 sp ge ps preds preds' ps' lm lm',
+  forall G instrs p f l p' f' l' i0 sp ge preds preds' ps' lm lm',
     mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
     mfold_left gather_predicates instrs (Some preds) = Some preds' ->
-    forall pred, preds ! pred = Some tt ->
-      sem_predset (mk_ctx i0 sp ge) f ps ->
-      sem_predset (@mk_ctx G i0 sp ge) f' ps' ->
-      ps !! pred = ps' !! pred.
+    sem_predset (@mk_ctx G i0 sp ge) f' ps' ->
+    exists ps, sem_predset (mk_ctx i0 sp ge) f ps.
 Proof. Admitted.
 
 Definition all_preds_in f preds :=
@@ -694,9 +716,19 @@ Lemma state_lessdef_state_equiv :
   forall x y, state_lessdef x y <-> state_equiv x y.
 Proof. split; intros; inv H; constructor; auto. Qed.
 
+Lemma abstr_seq_reverse_correct_fold_false :
+  forall sp instrs i0 i ti cf f' l p p' l' f lm lm',
+    eval_predf (is_ps i) p = false ->
+    sem (mk_ctx i0 sp ge) f (i, Some cf) ->
+    mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    sem (mk_ctx i0 sp ge) f' (i, Some cf) ->
+    state_lessdef i ti ->
+    SeqBB.step ge sp (Iexec ti) instrs (Iterm ti cf).
+Proof. Admitted.
+
 (* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
-  forall sp instrs i0 i i' ti cf f' l p p' l' f preds preds' lm lm',
+  forall sp instrs i0 i i' ti cf f' l p p' l' f preds preds' lm lm' ps',
     valid_mem (is_mem i0) (is_mem i) ->
     all_preds_in f preds ->
     eval_predf (is_ps i) p = true ->
@@ -705,13 +737,14 @@ Lemma abstr_seq_reverse_correct_fold :
     mfold_left gather_predicates instrs (Some preds) = Some preds' ->
     evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) l' ->
     evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) lm' ->
+    sem_predset (mk_ctx i0 sp ge) f' ps' ->
     sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
     state_lessdef i ti ->
     exists ti',
       SeqBB.step ge sp (Iexec ti) instrs (Iterm ti' cf)
       /\ state_lessdef i' ti'.
 Proof.
-  induction instrs; intros * YVALID YALL YEVAL Y3 Y YGATHER Y0 YEVALUABLE Y1 Y2.
+  induction instrs; intros * YVALID YALL YEVAL Y3 Y YGATHER Y0 YEVALUABLE YSEM_FINAL Y1 Y2.
   - cbn in *. inv Y.
     assert (X: similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
                        {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
@@ -753,7 +786,7 @@ Proof.
       eapply sem_update_valid_mem; eauto.
       eapply gather_predicates_in_forest; eauto.
       eapply eval_predf_update_true; eauto.
-      eauto. eauto. eauto. eauto. eauto. symmetry.
+      eauto. eauto. eauto. eauto. eauto. eauto. symmetry.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
@@ -777,7 +810,7 @@ Proof.
       eapply sem_update_valid_mem; eauto.
       eapply gather_predicates_in_forest; eauto.
       eapply eval_predf_update_true; eauto.
-      eauto. eauto. eauto. eauto. eauto. symmetry.
+      eauto. eauto. eauto. eauto. eauto. eauto. symmetry.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
@@ -787,7 +820,7 @@ Proof.
       eapply gather_predicates_in_forest in YALL; eauto.
       unfold all_preds_in in YALL. inv YALL. eauto.
       intros [ti_mid HSTEP].
-      
+
       pose proof Y3 as YH.
       pose proof HSTEP as YHSTEP.
       pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
@@ -801,13 +834,14 @@ Proof.
       eapply sem_update_valid_mem; eauto.
       eapply gather_predicates_in_forest; eauto.
       eapply eval_predf_update_true; eauto.
-      eauto. eauto. eauto. eauto. eauto. symmetry.
+      eauto. eauto. eauto. eauto. eauto. eauto. symmetry.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
-    + exploit evaluable_pred_expr_exists_RBsetpred; eauto. admit.
+    + exploit abstr_seq_revers_correct_fold_sem_pexpr_eval; eauto; intros [ps_mid HPRED2].
+      exploit evaluable_pred_expr_exists_RBsetpred; eauto.
       intros [ti_mid HSTEP].
-      
+
       pose proof Y3 as YH.
       pose proof HSTEP as YHSTEP.
       pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
@@ -821,33 +855,50 @@ Proof.
       eapply sem_update_valid_mem; eauto.
       eapply gather_predicates_in_forest; eauto.
       eapply eval_predf_update_true; eauto.
-      eauto. eauto. eauto. eauto. eauto. symmetry.
+      eauto. eauto. eauto. eauto. eauto. eauto. symmetry.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
     + case_eq (eval_predf (is_ps i) (dfltp o)); intros.
-      * admit.
+      * exploit evaluable_pred_expr_exists_RBexit2; eauto; intros HSTEP.
+        instantiate (1:=c) in HSTEP.
+        instantiate (1:=sp) in HSTEP.
+        exploit evaluable_pred_expr_exists_RBexit3. eauto. eauto. intros.
+        pose proof (state_lessdef_state_equiv i ti). inv H1.
+        specialize (H2 Y2).
+        pose proof (step_exists_Iterm ge sp ti _ i _ HSTEP
+                      ltac:(symmetry; assumption)).
+        exploit sem_update_instr_term; eauto; intros. inv H4.
+        exploit abstr_fold_falsy; auto. eauto. eapply equiv_update; eauto. cbn. auto.
+        intros. eapply sem_det in Y1; eauto. inv Y1. inv H7.
+        exploit abstr_seq_reverse_correct_fold_false.
+        eapply H6. eapply H5. eauto. eauto. eauto. intros.
+        2: { reflexivity. }
+        exploit GibleSeq.step_exists. eapply H7. transitivity i. symmetry.
+        eapply state_lessdef_state_equiv; auto. eauto. simplify.
+        exists ti; split; auto. constructor. auto. transitivity i. symmetry; auto.
+        auto.
       * exploit evaluable_pred_expr_exists_RBexit; eauto; intros HSTEP.
-        instantiate (1:=cf) in HSTEP. instantiate (1:=sp) in HSTEP.
+        instantiate (1:=c) in HSTEP. instantiate (1:=sp) in HSTEP.
         pose proof Y3 as YH.
-      pose proof HSTEP as YHSTEP.
-      pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
-      eapply step_exists in YHSTEP.
-      2: { symmetry. econstructor; try eassumption; auto. }
-      inv YHSTEP. inv H2.
-      exploit sem_update_instr. auto. eauto. eauto. eauto. eapply Heqo. eauto. auto. intros.
-      exploit IHinstrs. 4: { eauto. }
-      cbn in YVALID. transitivity m'; auto.
-      replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
-      reflexivity. eauto. eauto.
-      eapply gather_predicates_in_forest; eauto.
-      eapply eval_predf_update_true; eauto.
-      eauto. eauto. eauto. eauto. eauto. symmetry.
-      eapply state_lessdef_state_equiv; eauto.
-      intros [ti' [YHH HLD]].
-      exists ti'; split; eauto. econstructor; eauto.
-        
-Admitted.
+        pose proof HSTEP as YHSTEP.
+        pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
+        eapply step_exists in YHSTEP.
+        2: { symmetry. econstructor; try eassumption; auto. }
+        inv YHSTEP. inv H2.
+        exploit sem_update_instr. auto. eauto. eauto. eauto. eapply Heqo. eauto. auto. intros.
+        exploit IHinstrs. 4: { eauto. }
+        cbn in YVALID. transitivity m'; auto.
+        replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
+        cbn. inv H4.
+        reflexivity.
+        eapply gather_predicates_in_forest; eauto.
+        eapply eval_predf_update_true; eauto.
+        eauto. eauto. eauto. eauto. eauto. eauto. symmetry.
+        eapply state_lessdef_state_equiv; eauto.
+        intros [ti' [YHH HLD]].
+        exists ti'; split; eauto. econstructor; eauto.
+Qed.
 
 Lemma sem_empty :
   forall G (ctx: @Abstr.ctx G),
@@ -871,10 +922,11 @@ Proof.
 Qed.
 
 Lemma abstr_seq_reverse_correct:
-  forall sp x i i' ti cf x' l lm,
+  forall sp x i i' ti cf x' l lm ps',
     abstract_sequence' x = Some (x', l, lm) ->
     evaluable_pred_list (mk_ctx i sp ge) x'.(forest_preds) l ->
     evaluable_pred_list_m (mk_ctx i sp ge) x'.(forest_preds) lm ->
+    sem_predset {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} x' ps' ->
     sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
     state_lessdef i ti ->
    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
