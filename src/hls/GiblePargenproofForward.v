@@ -332,12 +332,6 @@ all be evaluable.
       predicated_not_inP pred (forest_exit f).
   Proof. Admitted.
 
-  Lemma from_predicated_sem_pred_expr :
-    forall A (ctx: @ctx A) preds pe b,
-      sem_pred_expr preds sem_pred ctx pe b ->
-      sem_pexpr ctx (from_predicated true preds pe) b.
-  Proof. Admitted.
-
   Lemma sem_update_Isetpred:
     forall A (ctx: @ctx A) f pr p0 c args b rs m,
       valid_mem (ctx_mem ctx) m ->

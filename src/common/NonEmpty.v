@@ -292,3 +292,16 @@ Proof.
   inversion_clear H0 as [x0 [HN1 HN2]]. rewrite HN1 in H. inv H.
   cbn. f_equal. eauto.
 Qed.
+
+Lemma Forall_forall:
+  forall (A : Type) (P : A -> Prop) (l : non_empty A), Forall P l <-> (forall x : A, In x l -> P x).
+Proof.
+  induction l.
+  - split; intros.
+    + inv H. inv H0. auto.
+    + constructor. specialize (H a). apply H. constructor.
+  - split; intros.
+    + inv H. inv H0. inv H1; eauto. eapply IHl in H4; eauto.
+    + constructor. eapply H. constructor; tauto. eapply IHl.
+      intros. eapply H. constructor; tauto.
+Qed.

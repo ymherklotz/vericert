@@ -279,16 +279,6 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
       Some (new_p, f <-e pruned)
   end.
 
-Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
-  match i with
-  | RBnop => lst
-  | RBop p op rl r => (f #r (Reg r)) :: lst
-  | RBload  p chunk addr rl r => (f #r (Reg r)) :: lst
-  | RBstore p chunk addr rl r => (f #r Mem) :: lst
-  | RBsetpred p' c args p => lst
-  | RBexit p c => lst
-  end.
-
 (*Compute match update (T, mk_forest (PTree.empty _) (PTree.empty _) (NE.singleton (T, EEbase)))
   (RBop None Op.Odiv (1::2::nil) 3) with
   | Some x =>

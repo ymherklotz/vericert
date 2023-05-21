@@ -482,7 +482,7 @@ Lemma sem_pred_expr_flap :
     sem_pred_expr ps sem_ident ctx f f_ ->
     sem_pred_expr ps sem_ident ctx (flap f l) (f_ l).
 Proof.
-  induction f. unfold flap2; intros. inv H. inv H3.
+  induction f. unfold flap; intros. inv H. inv H3.
   constructor; eauto. constructor.
   intros. inv H. cbn.
   constructor; eauto. inv H5. constructor.
@@ -500,6 +500,12 @@ Proof.
   constructor; eauto. inv H5. constructor.
   eapply sem_pred_expr_cons_false; eauto.
 Qed.
+
+Lemma sem_pred_expr_flap2_2 :
+  forall A B C (f: predicated (A -> B -> C)) ps l1 l2 x,
+    sem_pred_expr ps sem_ident ctx (flap2 f l1 l2) x ->
+    exists f_, sem_pred_expr ps sem_ident ctx f f_ /\ f_ l1 l2 = x.
+Proof. Admitted.
 
 Lemma sem_pred_expr_seq_app_val :
   forall A B V (s: @Abstr.ctx G -> B -> V -> Prop)
@@ -662,5 +668,17 @@ Proof.
     exists (l_ :: l). split. constructor; auto.
     cbn; constructor; auto.
 Qed.
+
+Lemma from_predicated_sem_pred_expr :
+  forall preds pe b,
+    sem_pred_expr preds sem_pred ctx pe b ->
+    sem_pexpr ctx (from_predicated true preds pe) b.
+Proof. Admitted.
+
+Lemma from_predicated_sem_pred_expr2 :
+  forall preds pe b,
+    sem_pexpr ctx (from_predicated true preds pe) b ->
+    sem_pred_expr preds sem_pred ctx pe b.
+Proof. Admitted.
 
 End PROOF.
