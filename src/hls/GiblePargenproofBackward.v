@@ -862,10 +862,19 @@ Proof.
   constructor. constructor. cbn. constructor. constructor.
 Qed.
 
+Lemma all_preds_in_empty:
+  all_preds_in empty (PTree.empty unit).
+Proof.
+  unfold all_preds_in; split; intros; apply NE.Forall_forall; intros.
+  - rewrite get_empty in H. inv H. inv H0.
+  - cbn in *. inv H. inv H0.
+Qed.
+
 Lemma abstr_seq_reverse_correct:
-  forall sp x i i' ti cf x' l,
-    abstract_sequence' x = Some (x', l) ->
+  forall sp x i i' ti cf x' l lm,
+    abstract_sequence' x = Some (x', l, lm) ->
     evaluable_pred_list (mk_ctx i sp ge) x'.(forest_preds) l ->
+    evaluable_pred_list_m (mk_ctx i sp ge) x'.(forest_preds) lm ->
     sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
     state_lessdef i ti ->
    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
@@ -874,7 +883,7 @@ Proof.
   intros. unfold abstract_sequence' in H.
   unfold Option.map, Option.bind in H. repeat destr. inv H. inv Heqo.
   eapply abstr_seq_reverse_correct_fold;
-    try eassumption; try reflexivity; apply sem_empty.
+    try eassumption; try reflexivity; auto using sem_empty, all_preds_in_empty.
 Qed.
 
 (*|
