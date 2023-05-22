@@ -73,22 +73,6 @@ Context (prog: GibleSeq.program) (tprog : GiblePar.program).
 Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
 Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
 
-(*Lemma sem_equiv_execution :
-  forall sp x i i' ti cf x' ti',
-    abstract_sequence x = Some x' ->
-    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
-    SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf) ->
-    state_lessdef i ti ->
-    state_lessdef i' ti'.
-Proof. Admitted.
-
-Lemma sem_exists_execution :
-  forall sp x i i' ti cf x',
-    abstract_sequence x = Some x' ->
-    sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
-    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf).
-Proof. Admitted. *)
-
 Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
   match i with
   | RBnop => lst
@@ -663,26 +647,96 @@ Lemma gather_predicates_in_forest :
     all_preds_in f' preds'.
 Proof. Admitted.
 
+Lemma gather_predicates_fold:
+  forall l preds x,
+    preds ! x = Some tt ->
+    (fold_right (fun x0 : positive => PTree.set x0 tt) preds l) ! x = Some tt.
+Proof.
+  induction l; crush.
+  destruct (peq x a); subst.
+  { rewrite PTree.gss; auto. }
+  rewrite PTree.gso; eauto.
+Qed.
+
+Lemma gather_predicates_in :
+  forall i preds preds' x,
+    gather_predicates preds i = Some preds' ->
+    preds ! x = Some tt ->
+    preds' ! x = Some tt.
+Proof.
+  destruct i; crush; try (destruct_match; inv H; auto);
+    try (apply gather_predicates_fold; auto).
+  destruct o; auto.
+  apply gather_predicates_fold; auto.
+Qed.
+
+(* Lemma update_pred_constant: *)
+(*   forall A p f a p_mid f_mid preds preds_mid x i0 sp ge0 b, *)
+(*     update (p, f) a = Some (p_mid, f_mid) -> *)
+(*     gather_predicates preds a = Some preds_mid -> *)
+(*     preds ! x = Some tt -> *)
+(*     @sem_pexpr A {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f #p x b -> *)
+(*     sem_pexpr {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f_mid #p x b. *)
+(* Proof. *)
+(*   intros. Admitted. *)
+
+(* Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3 : *)
+(*   forall A B G a_sem instrs p f l p' f' l' i0 sp ge preds preds' pe pe_val lm lm', *)
+(*     mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') -> *)
+(*     (forall x b, preds ! x = Some tt -> sem_pexpr (mk_ctx i0 sp ge) (f' #p x) b -> *)
+(*       sem_pexpr (mk_ctx i0 sp ge) (f #p x) b) -> *)
+(*     mfold_left gather_predicates instrs (Some preds) = Some preds' -> *)
+(*     @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val -> *)
+(*     NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe -> *)
+(*     sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val. *)
+(* Proof. *)
+(*   induction instrs; try solve [crush]; intros * ? YHFORALL **. *)
+(*   cbn -[update] in *. *)
+(*   exploit OptionExtra.mfold_left_Some. eapply H. *)
+(*   intros [[[[p_mid f_mid] l_mid] lm_mid] HBind]. rewrite HBind in H. *)
+(*   exploit OptionExtra.mfold_left_Some. eapply H0. *)
+(*   intros [preds_mid HGather]. rewrite HGather in H0. *)
+(*   exploit IHinstrs. eassumption. instantiate (7:=preds_mid). *)
+(*   intros. eapply YHFORALL in H4. unfold Option.bind2, Option.ret in *. repeat destr. *)
+(*   inv Heqp1. inv HBind. eapply update_pred_constant; eauto. *)
+(*   eassumption. eassumption. *)
+(*   { apply NE.Forall_forall. intros. apply NE.Forall_forall with (x:=x) in H2; auto. *)
+(*     eapply gather_predicates_in; eauto. } *)
+(*   intros. *)
+(*   unfold Option.bind2, Option.ret in *. repeat destr. inv Heqp1. inv HBind. *)
+
+Lemma update_pred_constant:
+  forall A p f a p_mid f_mid preds preds_mid x i0 sp ge0 b,
+    update (p, f) a = Some (p_mid, f_mid) ->
+    gather_predicates preds a = Some preds_mid ->
+    preds ! x = Some tt ->
+    @sem_pexpr A {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f #p x b <->
+    sem_pexpr {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f_mid #p x b.
+Proof.
+  intros. Admitted.
+
 Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3 :
-  forall A B G a_sem instrs p f l p' f' l' i0 sp ge preds preds' pe pe_val lm lm',
+  forall A instrs p f l p' f' l' i0 sp ge preds preds' pe_val lm lm' r,
+    all_preds_in f preds ->
     mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
     mfold_left gather_predicates instrs (Some preds) = Some preds' ->
-    @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
-    NE.Forall (fun x => forall pred, PredIn pred (fst x)
-                 -> PTree.get pred preds = Some tt) pe ->
-    sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
+    @sem_pred_expr A _ _ f'.(forest_preds) sem_value (mk_ctx i0 sp ge) (f' #r (Reg r)) pe_val ->
+    sem_pred_expr f.(forest_preds) sem_value (mk_ctx i0 sp ge) (f #r (Reg r)) pe_val.
 Proof.
-  induction instrs; try solve [crush]; intros.
-  cbn -[update] in *.
-  exploit OptionExtra.mfold_left_Some. eapply H.
-  intros [[[[p_mid f_mid] l_mid] lm_mid] HBind]. rewrite HBind in H.
-  exploit OptionExtra.mfold_left_Some. eapply H0.
-  intros [preds_mid HGather]. rewrite HGather in H0.
-  exploit IHinstrs. eassumption. eassumption. eassumption. admit.
-  intros.
-  Admitted.
-(* exploit exists_sem_pred. exact H1. *)
-(*   intros [[p_val e_val] [HIN HSEM]]. *)
+  induction instrs.
+  - intros. cbn in *. inv H1. inv H0. auto.
+  - intros. cbn -[update] in *.
+    exploit OptionExtra.mfold_left_Some. eapply H0. intros [[[[p_mid f_mid] l_mid] lm_mid] HBind].
+    rewrite HBind in H0.
+    exploit OptionExtra.mfold_left_Some. eapply H1. intros [preds_mid HGATHER].
+    rewrite HGATHER in H1.
+    unfold Option.bind2, Option.ret in *. repeat destr. inv Heqp1. inv HBind.
+    exploit IHinstrs.
+    { eapply gather_predicates_in_forest; eauto. }
+    { eassumption. }
+    { eassumption. }
+    { eassumption. }
+    intros HSEM_PRED.
 
 Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval2 :
   forall G instrs p f l p' f' l' i0 sp ge preds preds' pe lm lm',
@@ -715,16 +769,6 @@ Qed.
 Lemma state_lessdef_state_equiv :
   forall x y, state_lessdef x y <-> state_equiv x y.
 Proof. split; intros; inv H; constructor; auto. Qed.
-
-Lemma abstr_seq_reverse_correct_fold_false :
-  forall sp instrs i0 i ti cf f' l p p' l' f lm lm',
-    eval_predf (is_ps i) p = false ->
-    sem (mk_ctx i0 sp ge) f (i, Some cf) ->
-    mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
-    sem (mk_ctx i0 sp ge) f' (i, Some cf) ->
-    state_lessdef i ti ->
-    SeqBB.step ge sp (Iexec ti) instrs (Iterm ti cf).
-Proof. Admitted.
 
 (* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
@@ -871,13 +915,8 @@ Proof.
         exploit sem_update_instr_term; eauto; intros. inv H4.
         exploit abstr_fold_falsy; auto. eauto. eapply equiv_update; eauto. cbn. auto.
         intros. eapply sem_det in Y1; eauto. inv Y1. inv H7.
-        exploit abstr_seq_reverse_correct_fold_false.
-        eapply H6. eapply H5. eauto. eauto. eauto. intros.
-        2: { reflexivity. }
-        exploit GibleSeq.step_exists. eapply H7. transitivity i. symmetry.
-        eapply state_lessdef_state_equiv; auto. eauto. simplify.
-        exists ti; split; auto. constructor. auto. transitivity i. symmetry; auto.
-        auto.
+        eexists. split. constructor. eauto. transitivity i.
+        symmetry; auto. auto. reflexivity.
       * exploit evaluable_pred_expr_exists_RBexit; eauto; intros HSTEP.
         instantiate (1:=c) in HSTEP. instantiate (1:=sp) in HSTEP.
         pose proof Y3 as YH.
