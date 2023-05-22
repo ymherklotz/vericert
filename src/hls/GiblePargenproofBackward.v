@@ -670,73 +670,138 @@ Proof.
   apply gather_predicates_fold; auto.
 Qed.
 
-(* Lemma update_pred_constant: *)
-(*   forall A p f a p_mid f_mid preds preds_mid x i0 sp ge0 b, *)
-(*     update (p, f) a = Some (p_mid, f_mid) -> *)
-(*     gather_predicates preds a = Some preds_mid -> *)
-(*     preds ! x = Some tt -> *)
-(*     @sem_pexpr A {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f #p x b -> *)
-(*     sem_pexpr {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f_mid #p x b. *)
-(* Proof. *)
-(*   intros. Admitted. *)
-
-(* Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3 : *)
-(*   forall A B G a_sem instrs p f l p' f' l' i0 sp ge preds preds' pe pe_val lm lm', *)
-(*     mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') -> *)
-(*     (forall x b, preds ! x = Some tt -> sem_pexpr (mk_ctx i0 sp ge) (f' #p x) b -> *)
-(*       sem_pexpr (mk_ctx i0 sp ge) (f #p x) b) -> *)
-(*     mfold_left gather_predicates instrs (Some preds) = Some preds' -> *)
-(*     @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val -> *)
-(*     NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe -> *)
-(*     sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val. *)
-(* Proof. *)
-(*   induction instrs; try solve [crush]; intros * ? YHFORALL **. *)
-(*   cbn -[update] in *. *)
-(*   exploit OptionExtra.mfold_left_Some. eapply H. *)
-(*   intros [[[[p_mid f_mid] l_mid] lm_mid] HBind]. rewrite HBind in H. *)
-(*   exploit OptionExtra.mfold_left_Some. eapply H0. *)
-(*   intros [preds_mid HGather]. rewrite HGather in H0. *)
-(*   exploit IHinstrs. eassumption. instantiate (7:=preds_mid). *)
-(*   intros. eapply YHFORALL in H4. unfold Option.bind2, Option.ret in *. repeat destr. *)
-(*   inv Heqp1. inv HBind. eapply update_pred_constant; eauto. *)
-(*   eassumption. eassumption. *)
-(*   { apply NE.Forall_forall. intros. apply NE.Forall_forall with (x:=x) in H2; auto. *)
-(*     eapply gather_predicates_in; eauto. } *)
-(*   intros. *)
-(*   unfold Option.bind2, Option.ret in *. repeat destr. inv Heqp1. inv HBind. *)
-
-Lemma update_pred_constant:
-  forall A p f a p_mid f_mid preds preds_mid x i0 sp ge0 b,
-    update (p, f) a = Some (p_mid, f_mid) ->
-    gather_predicates preds a = Some preds_mid ->
-    preds ! x = Some tt ->
-    @sem_pexpr A {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f #p x b <->
-    sem_pexpr {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge0 |} f_mid #p x b.
+Lemma sem_pexpr_eval_predin:
+  forall G pr ps ps' (ctx: @Abstr.ctx G) b,
+    (forall pred, PredIn pred pr -> ps' ! pred = ps ! pred) ->
+    sem_pexpr ctx (from_pred_op ps' pr) b ->
+    sem_pexpr ctx (from_pred_op ps pr) b.
 Proof.
-  intros. Admitted.
+  induction pr; intros.
+  - cbn in *; repeat destr. inv Heqp0.
+    destruct (ps' ! p0) eqn:HPS'.
+    + assert (HPS: ps ! p0 = Some p).
+      { erewrite <- H; auto. constructor. }
+      unfold get_forest_p' in *. rewrite HPS' in *. rewrite HPS in *. assumption.
+    + assert (HPS: ps ! p0 = None).
+      { erewrite <- H; auto. constructor. }
+      unfold get_forest_p' in *. rewrite HPS' in *. rewrite HPS in *. assumption.
+  - inversion H0. constructor.
+  - inversion H0. constructor.
+  - inversion_clear H0; subst; [inversion_clear H1; subst|].
+    + assert (sem_pexpr ctx (from_pred_op ps pr1) false).
+      eapply IHpr1; [|eassumption]. intros. eapply H. constructor; tauto.
+      constructor; tauto.
+    + assert (sem_pexpr ctx (from_pred_op ps pr2) false).
+      eapply IHpr2; [|eassumption]. intros. eapply H. constructor; tauto.
+      constructor; tauto.
+    + apply IHpr1 with (ps:=ps) in H1.
+      apply IHpr2 with (ps:=ps) in H2.
+      constructor; auto.
+      intros. apply H. constructor; auto.
+      intros. apply H. constructor; auto.
+  - inversion_clear H0; subst; [inversion_clear H1; subst|].
+    + assert (sem_pexpr ctx (from_pred_op ps pr1) true).
+      eapply IHpr1; [|eassumption]. intros. eapply H. constructor; tauto.
+      constructor; tauto.
+    + assert (sem_pexpr ctx (from_pred_op ps pr2) true).
+      eapply IHpr2; [|eassumption]. intros. eapply H. constructor; tauto.
+      constructor; tauto.
+    + apply IHpr1 with (ps:=ps) in H1.
+      apply IHpr2 with (ps:=ps) in H2.
+      constructor; auto.
+      intros. apply H. constructor; auto.
+      intros. apply H. constructor; auto.
+Qed.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval_sem :
+  forall A B G a_sem pe ps i0 sp ge pe_val ps',
+    @sem_pred_expr G A B ps' a_sem (mk_ctx i0 sp ge) pe pe_val ->
+    NE.Forall (fun x => forall pred, PredIn pred (fst x) -> ps' ! pred = ps ! pred) pe ->
+    sem_pred_expr ps a_sem (mk_ctx i0 sp ge) pe pe_val.
+Proof.
+  induction pe as [a | a pe Hpe ]; intros * HSEM HFORALL.
+  - inv HSEM. constructor; auto. inversion_clear HFORALL.
+    eapply sem_pexpr_eval_predin; eassumption.
+  - inv HFORALL. destruct a. cbn [fst snd] in *. inversion_clear HSEM; subst.
+    + econstructor; auto. eapply sem_pexpr_eval_predin; eassumption.
+    + apply sem_pred_expr_cons_false; auto. eapply sem_pexpr_eval_predin; eassumption.
+      eauto.
+Qed.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_sem2 :
+  forall x p f i p' f' preds preds',
+    update (p, f) i = Some (p', f') ->
+    gather_predicates preds i = Some preds' ->
+    preds ! x = Some tt ->
+    f.(forest_preds) ! x = f'.(forest_preds) ! x.
+Proof.
+  intros.
+  exploit gather_predicates_in. eauto. eauto. intros HIN.
+  destruct i; intros; cbn in *;
+    unfold Option.bind, Option.ret, Option.bind2 in *; generalize H;
+    repeat destr; cbn in *; inversion_clear 1; subst; cbn in *; auto.
+  inversion_clear H; destruct o; auto.
+  - destruct (peq p0 x); subst.
+    + inversion H0. rewrite <- H2 in HIN. rewrite HIN in Heqo2. discriminate.
+    + rewrite PTree.gso by auto; auto.
+  - destruct (peq p0 x); subst.
+    { rewrite H1 in Heqo2. inversion Heqo2. }
+    rewrite PTree.gso by auto; auto.
+Qed.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3'' :
+  forall A B G a_sem instrs p f p' f' i0 sp ge preds preds' pe pe_val,
+    update (p, f) instrs = Some (p', f') ->
+    gather_predicates preds instrs = Some preds' ->
+    @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+    NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+    sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
+Proof.
+  intros * YFUP YFGATH YSEM YFRL.
+  eapply abstr_seq_revers_correct_fold_sem_pexpr_eval_sem. { eassumption. }
+  apply NE.Forall_forall. intros [pe_op a] YIN pred_tmp YPREDIN.
+  apply NE.Forall_forall with (x:=(pe_op, a)) in YFRL; auto.
+  specialize (YFRL pred_tmp YPREDIN).
+  cbn [fst snd] in *.
+  symmetry. eapply abstr_seq_revers_correct_fold_sem_pexpr_sem2; eauto.
+Qed.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3' :
+  forall A B G a_sem instrs p f p' f' i0 sp ge preds preds' pe pe_val l l' lm lm',
+    update' (p, f, l, lm) instrs = Some (p', f', l', lm') ->
+    gather_predicates preds instrs = Some preds' ->
+    @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+    NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+    sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
+Proof.
+  intros.
+  unfold update', Option.bind2, Option.ret in H; repeat destr.
+  inversion H; subst.
+  eapply abstr_seq_revers_correct_fold_sem_pexpr_eval3''; eauto.
+Qed.
 
 Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval3 :
-  forall A instrs p f l p' f' l' i0 sp ge preds preds' pe_val lm lm' r,
-    all_preds_in f preds ->
+  forall A B G a_sem instrs p f l p' f' l' i0 sp ge preds preds' pe pe_val lm lm',
     mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
     mfold_left gather_predicates instrs (Some preds) = Some preds' ->
-    @sem_pred_expr A _ _ f'.(forest_preds) sem_value (mk_ctx i0 sp ge) (f' #r (Reg r)) pe_val ->
-    sem_pred_expr f.(forest_preds) sem_value (mk_ctx i0 sp ge) (f #r (Reg r)) pe_val.
+    @sem_pred_expr G A B f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+    NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+    sem_pred_expr f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
 Proof.
-  induction instrs.
-  - intros. cbn in *. inv H1. inv H0. auto.
-  - intros. cbn -[update] in *.
-    exploit OptionExtra.mfold_left_Some. eapply H0. intros [[[[p_mid f_mid] l_mid] lm_mid] HBind].
-    rewrite HBind in H0.
-    exploit OptionExtra.mfold_left_Some. eapply H1. intros [preds_mid HGATHER].
-    rewrite HGATHER in H1.
-    unfold Option.bind2, Option.ret in *. repeat destr. inv Heqp1. inv HBind.
-    exploit IHinstrs.
-    { eapply gather_predicates_in_forest; eauto. }
-    { eassumption. }
-    { eassumption. }
-    { eassumption. }
-    intros HSEM_PRED.
+  induction instrs; [crush|].
+  intros. cbn -[update] in H,H0.
+  exploit OptionExtra.mfold_left_Some. eapply H. intros [[[[p_mid f_mid] l_mid] lm_mid] HBind].
+  rewrite HBind in H.
+  exploit OptionExtra.mfold_left_Some. eapply H0. intros [preds_mid HGATHER].
+  rewrite HGATHER in H0.
+  exploit IHinstrs; eauto.
+  apply NE.Forall_forall. intros [p_op aval] YIN ypred YPREDIN.
+  apply NE.Forall_forall with (x:=(p_op, aval)) in H2; auto. cbn [fst snd] in *.
+  specialize (H2 ypred YPREDIN).
+  eapply gather_predicates_in; eassumption.
+  intros HSEM.
+  eapply abstr_seq_revers_correct_fold_sem_pexpr_eval3'; eauto.
+Qed.
 
 Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval2 :
   forall G instrs p f l p' f' l' i0 sp ge preds preds' pe lm lm',
