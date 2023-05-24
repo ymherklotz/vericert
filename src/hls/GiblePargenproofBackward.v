@@ -633,19 +633,13 @@ Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
     exists ps, sem_predset (mk_ctx i0 sp ge) f ps.
 Proof. Admitted.
 
-Definition all_preds_in f preds :=
-  (forall x, NE.Forall (fun x => forall pred, PredIn pred (fst x)
-                       -> PTree.get pred preds = Some tt) (f #r x))
-  /\ NE.Forall (fun x => forall pred, PredIn pred (fst x)
-                 -> PTree.get pred preds = Some tt) f.(forest_exit).
+Definition pe_preds_in {A} (x: predicated A) preds :=
+  NE.Forall (fun x => forall pred, PredIn pred (fst x)
+               -> PTree.get pred preds = Some tt) x.
 
-Lemma gather_predicates_in_forest :
-  forall p i f p' f' preds preds',
-    update (p, f) i = Some (p', f') ->
-    gather_predicates preds i = Some preds' ->
-    all_preds_in f preds ->
-    all_preds_in f' preds'.
-Proof. Admitted.
+Definition all_preds_in f preds :=
+  forall x, NE.Forall (fun x => forall pred, PredIn pred (fst x)
+                       -> PTree.get pred preds = Some tt) (f #r x).
 
 Lemma gather_predicates_fold:
   forall l preds x,
@@ -656,6 +650,18 @@ Proof.
   destruct (peq x a); subst.
   { rewrite PTree.gss; auto. }
   rewrite PTree.gso; eauto.
+Qed.
+
+Lemma gather_predicates_fold2:
+  forall l preds x,
+    In x l ->
+    (fold_right (fun x0 : positive => PTree.set x0 tt) preds l) ! x = Some tt.
+Proof.
+  induction l; crush.
+  destruct (peq x a); subst.
+  { rewrite PTree.gss; auto. }
+  rewrite PTree.gso; eauto.
+  eapply IHl. now inv H.
 Qed.
 
 Lemma gather_predicates_in :
@@ -669,6 +675,486 @@ Proof.
   destruct o; auto.
   apply gather_predicates_fold; auto.
 Qed.
+
+Lemma filter_predicated_in_pred :
+  forall A (x y: predicated A) f preds,
+    NE.filter f x = Some y ->
+    pe_preds_in x preds ->
+    pe_preds_in y preds.
+Proof.
+  induction x; intros.
+  - cbn in *. destr. inv H. auto.
+  - cbn in *. destruct_match; cbn in *. destruct_match.
+    + inv H. inv H0. constructor; auto. eapply IHx; eauto.
+    + inv H. inv H0; constructor; auto.
+    + inv H0. eauto.
+Qed.
+
+Transparent deep_simplify.
+
+Lemma deep_simplify_in :
+  forall pop pred,
+    PredIn pred (deep_simplify peq pop) ->
+    PredIn pred pop.
+Proof.
+  induction pop; intros; cbn in *; auto.
+  - constructor.
+    destruct (PredIn_decidable _ pred (deep_simplify peq pop1) peq); [intuition|].
+    destruct (PredIn_decidable _ pred (deep_simplify peq pop2) peq); [intuition|].
+    repeat destruct_match; try solve [contradiction | inv H; inv H1; contradiction].
+  - constructor.
+    destruct (PredIn_decidable _ pred (deep_simplify peq pop1) peq); [intuition|].
+    destruct (PredIn_decidable _ pred (deep_simplify peq pop2) peq); [intuition|].
+    repeat destruct_match; try solve [contradiction | inv H; inv H1; contradiction].
+Qed.
+
+Lemma map_in_pred :
+  forall A B (x: predicated A) f preds (g: A -> B),
+    pe_preds_in x preds ->
+    (forall pop pred, PredIn pred (f pop) -> PredIn pred pop) ->
+    pe_preds_in (NE.map (fun x0 => (f (fst x0), g (snd x0))) x) preds.
+Proof.
+  induction x.
+  - inversion 1; subst. constructor; intros. specialize (H1 pred). apply H1. eauto.
+  - intros. inv H. constructor; eauto. eapply IHx; eauto.
+Qed.
+
+Lemma map_in_pred2 :
+  forall A B (x: predicated A) f preds (g: A -> B),
+    pe_preds_in x preds ->
+    (forall pop pred, PredIn pred (f pop) -> preds ! pred = Some tt) ->
+    pe_preds_in (NE.map (fun x0 => (f (fst x0), g (snd x0))) x) preds.
+Proof.
+  induction x.
+  - intros. inv H. cbn. constructor. intros. cbn in *. eapply H0; eauto.
+  - intros. inv H. constructor; eauto. eapply IHx; eauto.
+Qed.
+
+Lemma map_in_pred3 :
+  forall A B (x: predicated A) f preds (g: A -> B),
+    pe_preds_in x preds ->
+    (forall pop pred, PredIn pred (f pop) -> PredIn pred pop \/ preds ! pred = Some tt) ->
+    pe_preds_in (NE.map (fun x0 => (f (fst x0), g (snd x0))) x) preds.
+Proof.
+  induction x.
+  - intros. inv H. cbn. constructor; intros. cbn in *. eapply H0 in H. inv H; eauto.
+  - intros. inv H. constructor; eauto. intros. cbn in H. eapply H0 in H. inv H; eauto.
+    eapply IHx; eauto.
+Qed.
+
+Lemma map_in_pred4 :
+  forall A B (x: predicated A) (f: (pred_op * A) -> (pred_op * B)) preds,
+    pe_preds_in x preds ->
+    (forall a pop pred, PredIn pred (fst (f (pop, a))) -> PredIn pred pop
+      \/ preds ! pred = Some tt) ->
+    pe_preds_in (NE.map f x) preds.
+Proof.
+  induction x.
+  - intros. inv H. cbn. constructor; intros. destruct a. apply H0 in H. inv H; auto.
+  - intros. inv H. cbn. constructor; intros. destruct a. apply H0 in H. inv H; auto.
+    eapply IHx; eauto.
+Qed.
+
+Lemma app_in_pred :
+  forall A (a b: predicated A) preds,
+    pe_preds_in a preds ->
+    pe_preds_in b preds ->
+    pe_preds_in (NE.app a b) preds.
+Proof.
+  intros. unfold pe_preds_in in *.
+  apply NE.Forall_forall; intros. eapply NE.in_NEapp5 in H1. inv H1.
+  - eapply NE.Forall_forall in H; eauto.
+  - eapply NE.Forall_forall in H0; eauto.
+Qed.
+
+Lemma prune_predicated_in_pred :
+  forall A (x y: predicated A) preds,
+    prune_predicated x = Some y ->
+    pe_preds_in x preds ->
+    pe_preds_in y preds.
+Proof.
+  intros. unfold prune_predicated in *.
+  eapply filter_predicated_in_pred in H. eauto.
+  eapply map_in_pred with (f := deep_simplify peq) (g := fun x => x); auto.
+  apply deep_simplify_in.
+Qed.
+
+Lemma predin_negate :
+  forall A preds (pred: A),
+    PredIn pred preds ->
+    PredIn pred (negate preds).
+Proof.
+  induction preds.
+  - cbn. repeat destr. inv Heqp0; intros. inv H. constructor.
+  - inversion 1.
+  - inversion 1.
+  - inversion 1; subst. clear H. inv H1. cbn.
+    constructor. eauto. cbn. constructor. eauto.
+  - inversion 1; subst. clear H. inv H1. cbn.
+    constructor. eauto. cbn. constructor. eauto.
+Qed.
+
+Lemma predin_negate2 :
+  forall A preds (pred: A),
+    PredIn pred (negate preds) ->
+    PredIn pred preds.
+Proof.
+  induction preds.
+  - cbn. repeat destr. inv Heqp0; intros. inv H. constructor.
+  - inversion 1.
+  - inversion 1.
+  - inversion 1; subst. clear H. inv H1. cbn.
+    constructor. eauto. cbn. constructor. eauto.
+  - inversion 1; subst. clear H. inv H1. cbn.
+    constructor. eauto. cbn. constructor. eauto.
+Qed.
+
+Lemma app_predicated_in_pred :
+  forall A (a: predicated A) b p preds,
+    pe_preds_in a preds ->
+    pe_preds_in b preds ->
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    pe_preds_in (app_predicated p a b) preds.
+Proof.
+  unfold app_predicated. unfold app_predicated; intros.
+  eapply app_in_pred.
+  apply map_in_pred3 with (f := (fun x => Pand (negate p) x)) (g := (fun x => x)); auto.
+  intros. inv H2. inv H4; auto. right. eapply H1. apply predin_negate2; auto.
+  apply map_in_pred3 with (f := (fun x => Pand p x)) (g := (fun x => x)); auto.
+  intros. inv H2. inv H4; auto.
+Qed.
+
+Lemma predicated_map_in_pred :
+  forall A B (a: predicated A) preds (f: A -> B),
+    pe_preds_in a preds ->
+    pe_preds_in (predicated_map f a) preds.
+Proof.
+  unfold predicated_map; intros.
+  apply map_in_pred with (f := fun x => x) (g := f); auto.
+Qed.
+
+(* Lemma non_empty_prod_cons : *)
+(*   forall A (a: A) r b, *)
+(*     NE.non_empty_prod (NE.cons a r) b = . *)
+
+Lemma map_in_pred5:
+  forall A B p preds,
+    pe_preds_in (NE.map fst p) preds ->
+    pe_preds_in (NE.map snd p) preds ->
+    pe_preds_in (NE.map (fun x : Predicate.pred_op * A * (Predicate.pred_op * B) =>
+      let (y, y0) := x in let (a, b1) := y in let (c, d) := y0 in (a ∧ c, (b1, d))) p) preds.
+Proof.
+  induction p; crush; repeat destr.
+  - inv H. inv H0. constructor; intros. inv H. inv H3; auto.
+  - inv Heqp0. inv H. inv H0. constructor. intros. inv H. inv H1; auto.
+    eapply IHp; eauto.
+Qed.
+
+Lemma predicated_prod_in_pred :
+  forall A B (a: predicated A) (b: predicated B) preds,
+    pe_preds_in a preds ->
+    pe_preds_in b preds ->
+    pe_preds_in (predicated_prod a b) preds.
+Proof.
+  unfold predicated_prod; induction a; induction b; crush; repeat destr.
+  - constructor. cbn. inversion 1; subst. inv H3. inv H. eauto. inv H0; eauto.
+  - inv Heqp0. constructor; cbn; intros. inv H1. inv H3. inv H; auto. inv H0; auto.
+    inv H0; eauto. eapply IHb; eauto.
+  - inv Heqp0. inv H0. inv H. constructor; eauto. cbn; intros. inv H. inv H1; eauto.
+    eapply IHa; eauto. constructor. eauto.
+  - inv H. inv H0. constructor; cbn; intros. inv H. inv H1; eauto.
+    rewrite NE.app_NEmap. apply app_in_pred.
+    eapply map_in_pred5.
+    { clear IHb. clear IHa. clear H4. clear H2. generalize dependent b.
+      induction b; crush.
+      - constructor; auto.
+      - inv H5. constructor; auto. eapply IHb; eauto.
+    }
+    { clear IHb. clear IHa. clear H4. clear H2. generalize dependent b.
+      induction b; crush.
+      inv H5. constructor; auto. eapply IHb; eauto.
+    }
+    eapply IHa; eauto. constructor; eauto.
+Qed.
+
+Lemma seq_app_prod_in_pred :
+  forall A B (a: predicated (A -> B)) (b: predicated A) preds,
+    pe_preds_in a preds ->
+    pe_preds_in b preds ->
+    pe_preds_in (seq_app a b) preds.
+Proof.
+  intros. unfold seq_app. eapply predicated_map_in_pred.
+  eapply predicated_prod_in_pred; auto.
+Qed.
+
+Lemma cons_pred_expr_in :
+  forall a b preds,
+    pe_preds_in a preds ->
+    pe_preds_in b preds ->
+    pe_preds_in (cons_pred_expr a b) preds.
+Proof. Admitted.
+
+Lemma cons_fold_in:
+  forall n s preds,
+    pe_preds_in s preds ->
+    NE.Forall (fun n' => pe_preds_in n' preds) n ->
+    pe_preds_in (GiblePargenproofEquiv.NE.fold_right cons_pred_expr s n) preds.
+Proof.
+  induction n; crush.
+  - inv H0. eapply cons_pred_expr_in; auto.
+  - inv H0. eapply cons_pred_expr_in; auto.
+Qed.
+
+Lemma to_list_in :
+  forall A l n (x: A),
+    NE.of_list l = Some n -> In x l -> NE.In x n.
+Proof.
+  induction l; crush.
+  inv H0. destruct l. inv H. constructor. destr. inv H. constructor; tauto.
+  destruct l. inv H1. destr. inv H. inv H1. econstructor. right.
+  eapply IHl; auto. constructor. auto. constructor. right. eapply IHl; auto.
+  apply in_cons; auto.
+Qed.
+
+Lemma to_list_in2 :
+  forall A l n (x: A),
+    NE.of_list l = Some n -> NE.In x n -> In x l.
+Proof.
+  induction l; crush.
+  inv H0. destruct l. inv H. destr. inv H.
+  inv H1; try tauto. right. eapply IHl; eauto.
+  destruct l. inv H. tauto.
+  destruct_match. inv H. inv H.
+Qed.
+
+Lemma merge_preds_in :
+  forall a preds,
+    Forall (fun x => pe_preds_in x preds) a ->
+    pe_preds_in (merge a) preds.
+Proof.
+  unfold merge; intros. destruct_match; cbn.
+  - eapply cons_fold_in; auto. constructor. inversion 1.
+    apply NE.Forall_forall; intros. eapply Forall_forall in H.
+    2: { eapply to_list_in2; eauto. } auto.
+  - constructor; inversion 1.
+Qed.
+
+Lemma list_translation_in :
+  forall f preds,
+    all_preds_in f preds ->
+    forall args, Forall (fun x : predicated expression => pe_preds_in x preds) (list_translation args f).
+Proof.
+  induction args.
+  - cbn. constructor.
+  - cbn. constructor; auto. unfold all_preds_in in H. eapply H.
+Qed.
+
+Lemma pe_preds_in_fold:
+  forall A l preds x,
+    pe_preds_in x preds ->
+    @pe_preds_in A x (fold_right (fun x0 : positive => PTree.set x0 tt) preds l).
+Proof.
+  unfold pe_preds_in; intros. apply NE.Forall_forall; intros.
+  eapply NE.Forall_forall in H; eauto. apply gather_predicates_fold; eauto.
+Qed.
+
+Lemma pred_in_pred_uses:
+  forall A (p: A) pop,
+    PredIn p pop ->
+    In p (predicate_use pop).
+Proof.
+  induction pop; crush.
+  - destr. inv Heqp1. inv H. now constructor.
+  - inv H.
+  - inv H.
+  - apply in_or_app. inv H. inv H1; intuition.
+  - apply in_or_app. inv H. inv H1; intuition.
+Qed.
+
+Lemma pe_preds_in_flap2:
+  forall A B C f a b preds,
+    pe_preds_in f preds ->
+    pe_preds_in (@flap2 A B C f a b) preds.
+Proof.
+  unfold flap2; intros.
+  eapply map_in_pred4; auto.
+Qed.
+
+#[local] Opaque seq_app.
+Lemma gather_predicates_RBop :
+  forall p f pred op args dst p' f' preds preds',
+    update (p, f) (RBop (Some pred) op args dst) = Some (p', f') ->
+    gather_predicates preds (RBop (Some pred) op args dst) = Some preds' ->
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    all_preds_in f preds ->
+    all_preds_in f' preds'.
+Proof.
+  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  inv H0. unfold all_preds_in in *; intros.
+  apply NE.Forall_forall; intros.
+  destruct (resource_eq (Reg dst) x).
+  { subst. rewrite forest_reg_gss in H.
+    eapply prune_predicated_in_pred in Heqo.
+    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (predicate_use pred))) in Heqo.
+    unfold pe_preds_in in Heqo. eapply NE.Forall_forall in Heqo; eauto.
+    eapply app_predicated_in_pred.
+    eapply pe_preds_in_fold.
+    specialize (H2 (Reg dst)). unfold pe_preds_in.
+    apply NE.Forall_forall; intros. eapply NE.Forall_forall in H2; eauto.
+    eapply seq_app_prod_in_pred. unfold pred_ret. constructor; inversion 1.
+    eapply pe_preds_in_fold.
+    eapply merge_preds_in.
+    apply list_translation_in.
+    eauto.
+    intros. inv H3. inv H5.
+    eapply gather_predicates_fold2; eauto.
+    apply pred_in_pred_uses; auto.
+    eapply gather_predicates_fold; eauto.
+  }
+  rewrite forest_reg_gso in H by auto.
+  apply gather_predicates_fold; auto.
+  specialize (H2 x). eapply NE.Forall_forall in H2; eauto.
+Qed.
+
+Lemma gather_predicates_RBload :
+  forall p f pred chunk addr args dst p' f' preds preds',
+    update (p, f) (RBload (Some pred) chunk addr args dst) = Some (p', f') ->
+    gather_predicates preds (RBload (Some pred) chunk addr args dst) = Some preds' ->
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    all_preds_in f preds ->
+    all_preds_in f' preds'.
+Proof.
+  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  inv H0. unfold all_preds_in in *; intros.
+  apply NE.Forall_forall; intros.
+  destruct (resource_eq (Reg dst) x).
+  { subst. rewrite forest_reg_gss in H.
+    eapply prune_predicated_in_pred in Heqo.
+    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (predicate_use pred))) in Heqo.
+    unfold pe_preds_in in Heqo. eapply NE.Forall_forall in Heqo; eauto.
+    eapply app_predicated_in_pred.
+    eapply pe_preds_in_fold.
+    specialize (H2 (Reg dst)). unfold pe_preds_in.
+    apply NE.Forall_forall; intros. eapply NE.Forall_forall in H2; eauto.
+    eapply seq_app_prod_in_pred.
+    eapply seq_app_prod_in_pred.
+    unfold pred_ret. constructor; inversion 1.
+    eapply pe_preds_in_fold.
+    eapply merge_preds_in.
+    apply list_translation_in. eauto.
+    unfold pe_preds_in; intros. eapply NE.Forall_forall; intros.
+    specialize (H2 Mem). eapply NE.Forall_forall in H2; eauto.
+    eapply gather_predicates_fold; eauto.
+    intros. inv H3. inv H5.
+    eapply gather_predicates_fold2; eauto.
+    apply pred_in_pred_uses; auto.
+    eapply gather_predicates_fold; eauto.
+  }
+  rewrite forest_reg_gso in H by auto.
+  apply gather_predicates_fold; auto.
+  specialize (H2 x). eapply NE.Forall_forall in H2; eauto.
+Qed.
+
+Lemma gather_predicates_RBstore :
+  forall p f pred chunk addr args src p' f' preds preds',
+    update (p, f) (RBstore (Some pred) chunk addr args src) = Some (p', f') ->
+    gather_predicates preds (RBstore (Some pred) chunk addr args src) = Some preds' ->
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    all_preds_in f preds ->
+    all_preds_in f' preds'.
+Proof.
+  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  inv H0. unfold all_preds_in in *; intros.
+  apply NE.Forall_forall; intros.
+  destruct (resource_eq Mem x).
+  { subst. rewrite forest_reg_gss in H.
+    eapply prune_predicated_in_pred in Heqo.
+    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (predicate_use pred))) in Heqo.
+    unfold pe_preds_in in Heqo. eapply NE.Forall_forall in Heqo; eauto.
+    eapply app_predicated_in_pred.
+    eapply pe_preds_in_fold.
+    specialize (H2 Mem). unfold pe_preds_in.
+    apply NE.Forall_forall; intros. eapply NE.Forall_forall in H2; eauto.
+    eapply seq_app_prod_in_pred.
+    eapply seq_app_prod_in_pred.
+    apply pe_preds_in_flap2.
+    eapply seq_app_prod_in_pred.
+    unfold pred_ret. constructor; inversion 1.
+    eapply pe_preds_in_fold. eapply H2.
+    eapply pe_preds_in_fold.
+    eapply merge_preds_in.
+    apply list_translation_in. eauto.
+    eapply pe_preds_in_fold. eapply H2.
+    intros. inv H3. inv H5.
+    eapply gather_predicates_fold2; eauto.
+    apply pred_in_pred_uses; auto.
+    eapply gather_predicates_fold; eauto.
+  }
+  rewrite forest_reg_gso in H by auto.
+  apply gather_predicates_fold; auto.
+  specialize (H2 x). eapply NE.Forall_forall in H2; eauto.
+Qed.
+
+Lemma gather_predicates_RBsetpred :
+  forall p f pred args cond pset p' f' preds preds',
+    update (p, f) (RBsetpred (Some pred) cond args pset) = Some (p', f') ->
+    gather_predicates preds (RBsetpred (Some pred) cond args pset) = Some preds' ->
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    all_preds_in f preds ->
+    all_preds_in f' preds'.
+Proof.
+  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  inv H0. unfold all_preds_in in *; intros.
+  rewrite forest_pred_reg.
+  eapply pe_preds_in_fold. eapply H2.
+Qed.
+
+Lemma forest_exit_regs :
+  forall f n r,
+    (f <-e n) #r r = f #r r.
+Proof.
+  unfold "<-e", "#r"; intros.
+  repeat destruct_match; crush.
+Qed.
+
+Lemma gather_predicates_RBexit :
+  forall p f pred cf p' f' preds preds',
+    update (p, f) (RBexit (Some pred) cf) = Some (p', f') ->
+    gather_predicates preds (RBexit (Some pred) cf) = Some preds' ->
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    all_preds_in f preds ->
+    all_preds_in f' preds'.
+Proof.
+  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  inv H0. unfold all_preds_in in *; intros.
+  rewrite forest_exit_regs.
+  eapply pe_preds_in_fold. eapply H2.
+Qed.
+
+Transparent seq_app.
+
+Lemma gather_predicates_in_forest :
+  forall p i f p' f' preds preds',
+    update (p, f) i = Some (p', f') ->
+    gather_predicates preds i = Some preds' ->
+    all_preds_in f preds ->
+    all_preds_in f' preds'.
+Proof.
+  intros.
+  destruct i; intros; cbn in *;
+    unfold Option.bind, Option.ret, Option.bind2 in *;
+    generalize H; repeat destr; inversion 1; subst; clear H.
+  - inv H0; auto.
+  - clear H2. destruct o.
+    + unfold all_preds_in in *; intros.
+      apply NE.Forall_forall; intros.
+      destruct (resource_eq (Reg r) x).
+      { subst. rewrite forest_reg_gss in H.
+        inv H0. }
+      rewrite forest_reg_gso in H by auto. inv H0.
+      eapply NE.Forall_forall in H1; eauto.
+      specialize (H1 _ H2). apply gather_predicates_fold; auto.
+    + inversion H0; subst; auto.
 
 Lemma sem_pexpr_eval_predin:
   forall G pr ps ps' (ctx: @Abstr.ctx G) b,
@@ -879,7 +1365,7 @@ Proof.
       eapply abstr_seq_revers_correct_fold_sem_pexpr_eval2; eauto.
       unfold evaluable_pred_list in Y0. eapply in_forest_evaluable; eauto.
       eapply gather_predicates_in_forest in YALL; eauto.
-      unfold all_preds_in in YALL. inv YALL. eauto.
+      unfold all_preds_in in YALL. eauto.
       intros [ti_mid HSTEP].
       
       pose proof Y3 as YH.
@@ -903,7 +1389,7 @@ Proof.
       eapply abstr_seq_revers_correct_fold_sem_pexpr_eval2; eauto.
       unfold evaluable_pred_list in Y0. eapply in_forest_evaluable; eauto.
       eapply gather_predicates_in_forest in YALL; eauto.
-      unfold all_preds_in in YALL. inv YALL. eauto.
+      unfold all_preds_in in YALL. eauto.
       intros [ti_mid HSTEP].
       
       pose proof Y3 as YH.
@@ -927,7 +1413,7 @@ Proof.
       eapply abstr_seq_revers_correct_fold_sem_pexpr_eval4; eauto.
       unfold evaluable_pred_list in Y0. eapply in_forest_evaluable_m; eauto.
       eapply gather_predicates_in_forest in YALL; eauto.
-      unfold all_preds_in in YALL. inv YALL. eauto.
+      unfold all_preds_in in YALL. eauto.
       intros [ti_mid HSTEP].
 
       pose proof Y3 as YH.
@@ -1020,9 +1506,8 @@ Qed.
 Lemma all_preds_in_empty:
   all_preds_in empty (PTree.empty unit).
 Proof.
-  unfold all_preds_in; split; intros; apply NE.Forall_forall; intros.
+  unfold all_preds_in; intros; apply NE.Forall_forall; intros.
   - rewrite get_empty in H. inv H. inv H0.
-  - cbn in *. inv H. inv H0.
 Qed.
 
 Lemma abstr_seq_reverse_correct:
