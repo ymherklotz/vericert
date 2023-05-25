@@ -690,8 +690,7 @@ Proof.
     + inv H0. eauto.
 Qed.
 
-Transparent deep_simplify.
-
+#[local] Transparent deep_simplify.
 Lemma deep_simplify_in :
   forall pop pred,
     PredIn pred (deep_simplify peq pop) ->
@@ -707,6 +706,25 @@ Proof.
     destruct (PredIn_decidable _ pred (deep_simplify peq pop2) peq); [intuition|].
     repeat destruct_match; try solve [contradiction | inv H; inv H1; contradiction].
 Qed.
+Opaque deep_simplify.
+
+#[local] Transparent simplify.
+Lemma simplify_in :
+  forall pop (pred: positive),
+    PredIn pred (simplify pop) ->
+    PredIn pred pop.
+Proof.
+  induction pop; intros; cbn in *; auto.
+  - constructor.
+    destruct (PredIn_decidable _ pred (simplify pop1) peq); [intuition|].
+    destruct (PredIn_decidable _ pred (simplify pop2) peq); [intuition|].
+    repeat destruct_match; try solve [contradiction | inv H; inv H1; contradiction].
+  - constructor.
+    destruct (PredIn_decidable _ pred (simplify pop1) peq); [intuition|].
+    destruct (PredIn_decidable _ pred (simplify pop2) peq); [intuition|].
+    repeat destruct_match; try solve [contradiction | inv H; inv H1; contradiction].
+Qed.
+Opaque simplify.
 
 Lemma map_in_pred :
   forall A B (x: predicated A) f preds (g: A -> B),
@@ -980,22 +998,32 @@ Proof.
   eapply map_in_pred4; auto.
 Qed.
 
+Definition option_predicate_use (p: option pred_op) :=
+  match p with
+  | Some p' => predicate_use p'
+  | None => nil
+  end.
+
 #[local] Opaque seq_app.
 Lemma gather_predicates_RBop :
   forall p f pred op args dst p' f' preds preds',
-    update (p, f) (RBop (Some pred) op args dst) = Some (p', f') ->
-    gather_predicates preds (RBop (Some pred) op args dst) = Some preds' ->
+    update (p, f) (RBop pred op args dst) = Some (p', f') ->
+    gather_predicates preds (RBop pred op args dst) = Some preds' ->
     (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     all_preds_in f preds ->
     all_preds_in f' preds'.
 Proof.
-  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  intros. cbn in *. unfold Option.bind in *; generalize dependent H;
+  repeat destr; intros H. inv H.
   inv H0. unfold all_preds_in in *; intros.
   apply NE.Forall_forall; intros.
+  assert (YX: (fold_right (fun x : positive => PTree.set x tt) preds (option_predicate_use pred)) = preds').
+  { destruct pred. cbn. inv H3; auto. cbn. inv H3. auto. } subst.
+  clear H3.
   destruct (resource_eq (Reg dst) x).
   { subst. rewrite forest_reg_gss in H.
     eapply prune_predicated_in_pred in Heqo.
-    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (predicate_use pred))) in Heqo.
+    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (option_predicate_use pred))) in Heqo.
     unfold pe_preds_in in Heqo. eapply NE.Forall_forall in Heqo; eauto.
     eapply app_predicated_in_pred.
     eapply pe_preds_in_fold.
@@ -1008,7 +1036,7 @@ Proof.
     eauto.
     intros. inv H3. inv H5.
     eapply gather_predicates_fold2; eauto.
-    apply pred_in_pred_uses; auto.
+    destruct pred; cbn in *. apply pred_in_pred_uses; auto. inv H3.
     eapply gather_predicates_fold; eauto.
   }
   rewrite forest_reg_gso in H by auto.
@@ -1018,19 +1046,23 @@ Qed.
 
 Lemma gather_predicates_RBload :
   forall p f pred chunk addr args dst p' f' preds preds',
-    update (p, f) (RBload (Some pred) chunk addr args dst) = Some (p', f') ->
-    gather_predicates preds (RBload (Some pred) chunk addr args dst) = Some preds' ->
+    update (p, f) (RBload pred chunk addr args dst) = Some (p', f') ->
+    gather_predicates preds (RBload pred chunk addr args dst) = Some preds' ->
     (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     all_preds_in f preds ->
     all_preds_in f' preds'.
 Proof.
-  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  intros. cbn in *. unfold Option.bind in *; generalize dependent H;
+  repeat destr; intros H. inv H.
   inv H0. unfold all_preds_in in *; intros.
   apply NE.Forall_forall; intros.
+  assert (YX: (fold_right (fun x : positive => PTree.set x tt) preds (option_predicate_use pred)) = preds').
+  { destruct pred. cbn. inv H3; auto. cbn. inv H3. auto. } subst.
+  clear H3.
   destruct (resource_eq (Reg dst) x).
   { subst. rewrite forest_reg_gss in H.
     eapply prune_predicated_in_pred in Heqo.
-    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (predicate_use pred))) in Heqo.
+    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (option_predicate_use pred))) in Heqo.
     unfold pe_preds_in in Heqo. eapply NE.Forall_forall in Heqo; eauto.
     eapply app_predicated_in_pred.
     eapply pe_preds_in_fold.
@@ -1047,7 +1079,7 @@ Proof.
     eapply gather_predicates_fold; eauto.
     intros. inv H3. inv H5.
     eapply gather_predicates_fold2; eauto.
-    apply pred_in_pred_uses; auto.
+    destruct pred; cbn in *; [apply pred_in_pred_uses; auto | inversion H3].
     eapply gather_predicates_fold; eauto.
   }
   rewrite forest_reg_gso in H by auto.
@@ -1057,19 +1089,23 @@ Qed.
 
 Lemma gather_predicates_RBstore :
   forall p f pred chunk addr args src p' f' preds preds',
-    update (p, f) (RBstore (Some pred) chunk addr args src) = Some (p', f') ->
-    gather_predicates preds (RBstore (Some pred) chunk addr args src) = Some preds' ->
+    update (p, f) (RBstore pred chunk addr args src) = Some (p', f') ->
+    gather_predicates preds (RBstore pred chunk addr args src) = Some preds' ->
     (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     all_preds_in f preds ->
     all_preds_in f' preds'.
 Proof.
-  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
+  intros. cbn in *. unfold Option.bind in *; generalize dependent H;
+  repeat destr; intros H. inv H.
   inv H0. unfold all_preds_in in *; intros.
   apply NE.Forall_forall; intros.
+  assert (YX: (fold_right (fun x : positive => PTree.set x tt) preds (option_predicate_use pred)) = preds').
+  { destruct pred. cbn. inv H3; auto. cbn. inv H3. auto. } subst.
+  clear H3.
   destruct (resource_eq Mem x).
   { subst. rewrite forest_reg_gss in H.
     eapply prune_predicated_in_pred in Heqo.
-    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (predicate_use pred))) in Heqo.
+    instantiate (1:=(fold_right (fun x : positive => PTree.set x tt) preds (option_predicate_use pred))) in Heqo.
     unfold pe_preds_in in Heqo. eapply NE.Forall_forall in Heqo; eauto.
     eapply app_predicated_in_pred.
     eapply pe_preds_in_fold.
@@ -1087,7 +1123,7 @@ Proof.
     eapply pe_preds_in_fold. eapply H2.
     intros. inv H3. inv H5.
     eapply gather_predicates_fold2; eauto.
-    apply pred_in_pred_uses; auto.
+    destruct pred; cbn in *; [apply pred_in_pred_uses; auto | inversion H3].
     eapply gather_predicates_fold; eauto.
   }
   rewrite forest_reg_gso in H by auto.
@@ -1097,15 +1133,16 @@ Qed.
 
 Lemma gather_predicates_RBsetpred :
   forall p f pred args cond pset p' f' preds preds',
-    update (p, f) (RBsetpred (Some pred) cond args pset) = Some (p', f') ->
-    gather_predicates preds (RBsetpred (Some pred) cond args pset) = Some preds' ->
+    update (p, f) (RBsetpred pred cond args pset) = Some (p', f') ->
+    gather_predicates preds (RBsetpred pred cond args pset) = Some preds' ->
     (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     all_preds_in f preds ->
     all_preds_in f' preds'.
 Proof.
-  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
-  inv H0. unfold all_preds_in in *; intros.
-  rewrite forest_pred_reg.
+  intros. cbn in *. unfold Option.bind in *; generalize dependent H;
+  repeat destr; inversion 1; subst; clear H.
+  inv H0. unfold all_preds_in in *; intros. destruct pred; cbn in *;
+  rewrite forest_pred_reg; auto.
   eapply pe_preds_in_fold. eapply H2.
 Qed.
 
@@ -1119,42 +1156,54 @@ Qed.
 
 Lemma gather_predicates_RBexit :
   forall p f pred cf p' f' preds preds',
-    update (p, f) (RBexit (Some pred) cf) = Some (p', f') ->
-    gather_predicates preds (RBexit (Some pred) cf) = Some preds' ->
+    update (p, f) (RBexit pred cf) = Some (p', f') ->
+    gather_predicates preds (RBexit pred cf) = Some preds' ->
     (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     all_preds_in f preds ->
     all_preds_in f' preds'.
 Proof.
-  intros. cbn in *. unfold Option.bind in *; repeat destr. inv H.
-  inv H0. unfold all_preds_in in *; intros.
-  rewrite forest_exit_regs.
+  intros. cbn in *. unfold Option.bind in *; generalize dependent H;
+  repeat destr; inversion 1; subst; clear H.
+  inv H0. unfold all_preds_in in *; intros. destruct pred; cbn in *. inv H3.
+  rewrite forest_exit_regs; auto.
   eapply pe_preds_in_fold. eapply H2.
+  inv H3. rewrite forest_exit_regs. auto.
 Qed.
 
 Transparent seq_app.
 
 Lemma gather_predicates_in_forest :
   forall p i f p' f' preds preds',
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     update (p, f) i = Some (p', f') ->
     gather_predicates preds i = Some preds' ->
     all_preds_in f preds ->
     all_preds_in f' preds'.
 Proof.
-  intros.
-  destruct i; intros; cbn in *;
-    unfold Option.bind, Option.ret, Option.bind2 in *;
-    generalize H; repeat destr; inversion 1; subst; clear H.
-  - inv H0; auto.
-  - clear H2. destruct o.
-    + unfold all_preds_in in *; intros.
-      apply NE.Forall_forall; intros.
-      destruct (resource_eq (Reg r) x).
-      { subst. rewrite forest_reg_gss in H.
-        inv H0. }
-      rewrite forest_reg_gso in H by auto. inv H0.
-      eapply NE.Forall_forall in H1; eauto.
-      specialize (H1 _ H2). apply gather_predicates_fold; auto.
-    + inversion H0; subst; auto.
+  intros. destruct i.
+  - inv H0; inv H1; auto.
+  - eapply gather_predicates_RBop; eauto.
+  - eapply gather_predicates_RBload; eauto.
+  - eapply gather_predicates_RBstore; eauto.
+  - eapply gather_predicates_RBsetpred; eauto.
+  - eapply gather_predicates_RBexit; eauto.
+Qed.
+
+Lemma gather_predicates_update_constant :
+  forall p f i p' f' preds preds',
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    gather_predicates preds i = Some preds' ->
+    update (p, f) i = Some (p', f') ->
+    (forall in_pred, PredIn in_pred p' -> preds' ! in_pred = Some tt).
+Proof.
+  intros. destruct i; try solve [exploit gather_predicates_in; eauto; cbn in *;
+  unfold Option.bind in *; repeat destr; inv H0; inv H1; try (eapply H; eauto)].
+  cbn in *; unfold Option.bind in *; repeat destr. inv H1. apply simplify_in in H2.
+  inv H2. inv H3.
+  - destruct o; cbn in *; [|inv H1]. inv H0. apply predin_negate2 in H1.
+    eapply gather_predicates_fold2. now apply pred_in_pred_uses.
+  - exploit gather_predicates_in; eauto. instantiate (1:=RBexit o c); auto.
+Qed.
 
 Lemma sem_pexpr_eval_predin:
   forall G pr ps ps' (ctx: @Abstr.ctx G) b,
@@ -1324,6 +1373,7 @@ Proof. split; intros; inv H; constructor; auto. Qed.
 (* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
   forall sp instrs i0 i i' ti cf f' l p p' l' f preds preds' lm lm' ps',
+    (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
     valid_mem (is_mem i0) (is_mem i) ->
     all_preds_in f preds ->
     eval_predf (is_ps i) p = true ->
@@ -1339,7 +1389,7 @@ Lemma abstr_seq_reverse_correct_fold :
       SeqBB.step ge sp (Iexec ti) instrs (Iterm ti' cf)
       /\ state_lessdef i' ti'.
 Proof.
-  induction instrs; intros * YVALID YALL YEVAL Y3 Y YGATHER Y0 YEVALUABLE YSEM_FINAL Y1 Y2.
+  induction instrs; intros * YPREDSIN YVALID YALL YEVAL Y3 Y YGATHER Y0 YEVALUABLE YSEM_FINAL Y1 Y2.
   - cbn in *. inv Y.
     assert (X: similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
                        {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
@@ -1375,7 +1425,7 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 4: { eauto. }
+      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1399,7 +1449,7 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 4: { eauto. }
+      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1423,7 +1473,7 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 4: { eauto. }
+      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1444,7 +1494,7 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 4: { eauto. }
+      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1477,7 +1527,7 @@ Proof.
         2: { symmetry. econstructor; try eassumption; auto. }
         inv YHSTEP. inv H2.
         exploit sem_update_instr. auto. eauto. eauto. eauto. eapply Heqo. eauto. auto. intros.
-        exploit IHinstrs. 4: { eauto. }
+        exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
         cbn in YVALID. transitivity m'; auto.
         replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
         cbn. inv H4.
@@ -1525,6 +1575,7 @@ Proof.
   unfold Option.map, Option.bind in H. repeat destr. inv H. inv Heqo.
   eapply abstr_seq_reverse_correct_fold;
     try eassumption; try reflexivity; auto using sem_empty, all_preds_in_empty.
+  inversion 1.
 Qed.
 
 (*|
