@@ -125,7 +125,7 @@ Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t
     in
     match preds' ! p with
     | Some _ => None
-    | None => Some preds'
+    | None => Some (PTree.set p tt preds')
     end
   | _ => Some preds
   end.
@@ -599,7 +599,7 @@ Proof.
   intros.
   pose proof H as Y. apply in_forest_or_remembered with (x := x) in Y.
   inv Y; eauto.
-  inv H0. inv H5. rewrite H2. 
+  inv H0. inv H5. rewrite H2.
   unfold evaluable_pred_expr. eauto.
 Qed.
 
@@ -613,25 +613,9 @@ Proof.
   intros.
   pose proof H as Y. apply in_forest_or_remembered_m in Y.
   inv Y; eauto.
-  inv H0. inv H5. rewrite H2. 
+  inv H0. inv H5. rewrite H2.
   unfold evaluable_pred_expr_m. eauto.
 Qed.
-
-Lemma abstr_seq_revers_correct_fold_sem_pexpr :
-  forall instrs p f l p' f' l' preds preds' lm lm',
-    mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
-    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
-    forall pred, preds ! pred = Some tt ->
-      f #p pred = f' #p pred.
-Proof. Admitted.
-
-Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
-  forall G instrs p f l p' f' l' i0 sp ge preds preds' ps' lm lm',
-    mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
-    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
-    sem_predset (@mk_ctx G i0 sp ge) f' ps' ->
-    exists ps, sem_predset (mk_ctx i0 sp ge) f ps.
-Proof. Admitted.
 
 Definition pe_preds_in {A} (x: predicated A) preds :=
   NE.Forall (fun x => forall pred, PredIn pred (fst x)
@@ -664,6 +648,28 @@ Proof.
   eapply IHl. now inv H.
 Qed.
 
+Lemma gather_predicates_fold3:
+  forall l preds x,
+    (fold_right (fun x0 : positive => PTree.set x0 tt) preds l) ! x = None ->
+    preds ! x = None.
+Proof.
+  induction l; crush.
+  destruct (peq x a); subst.
+  { rewrite PTree.gss in H; discriminate. }
+  rewrite PTree.gso in H; eauto.
+Qed.
+
+Lemma gather_predicates_fold4:
+  forall l preds x,
+    (fold_right (fun x0 : positive => PTree.set x0 tt) preds l) ! x = None ->
+    ~ In x l.
+Proof.
+  induction l; crush.
+  destruct (peq x a); subst.
+  { rewrite PTree.gss in H; discriminate. }
+  rewrite PTree.gso in H; eauto. intuition. eapply IHl; eauto.
+Qed.
+
 Lemma gather_predicates_in :
   forall i preds preds' x,
     gather_predicates preds i = Some preds' ->
@@ -673,7 +679,9 @@ Proof.
   destruct i; crush; try (destruct_match; inv H; auto);
     try (apply gather_predicates_fold; auto).
   destruct o; auto.
+  destruct (peq x p); subst; [rewrite PTree.gss | rewrite PTree.gso by auto]; auto.
   apply gather_predicates_fold; auto.
+  destruct (peq x p); subst; [rewrite PTree.gss | rewrite PTree.gso by auto]; auto.
 Qed.
 
 Lemma filter_predicated_in_pred :
@@ -910,7 +918,10 @@ Lemma cons_pred_expr_in :
     pe_preds_in a preds ->
     pe_preds_in b preds ->
     pe_preds_in (cons_pred_expr a b) preds.
-Proof. Admitted.
+Proof.
+  intros. unfold cons_pred_expr. eapply predicated_map_in_pred.
+  eapply predicated_prod_in_pred; auto.
+Qed.
 
 Lemma cons_fold_in:
   forall n s preds,
@@ -974,6 +985,27 @@ Lemma pe_preds_in_fold:
 Proof.
   unfold pe_preds_in; intros. apply NE.Forall_forall; intros.
   eapply NE.Forall_forall in H; eauto. apply gather_predicates_fold; eauto.
+Qed.
+
+Lemma pe_preds_in_fold2:
+  forall A l preds x y,
+    pe_preds_in x preds ->
+    @pe_preds_in A x (PTree.set y tt (fold_right (fun x0 : positive => PTree.set x0 tt) preds l)).
+Proof.
+  unfold pe_preds_in; intros. apply NE.Forall_forall; intros.
+  eapply NE.Forall_forall in H; eauto.
+  destruct (peq pred y); subst; [rewrite PTree.gss; auto | rewrite PTree.gso by auto].
+  apply gather_predicates_fold; eauto.
+Qed.
+
+Lemma pe_preds_in3:
+  forall A preds x y,
+    pe_preds_in x preds ->
+    @pe_preds_in A x (PTree.set y tt preds).
+Proof.
+  unfold pe_preds_in; intros. apply NE.Forall_forall; intros.
+  destruct (peq pred y); subst; [rewrite PTree.gss; auto | rewrite PTree.gso by auto].
+  eapply NE.Forall_forall in H; eauto.
 Qed.
 
 Lemma pred_in_pred_uses:
@@ -1143,7 +1175,8 @@ Proof.
   repeat destr; inversion 1; subst; clear H.
   inv H0. unfold all_preds_in in *; intros. destruct pred; cbn in *;
   rewrite forest_pred_reg; auto.
-  eapply pe_preds_in_fold. eapply H2.
+  eapply pe_preds_in_fold2. eapply H2.
+  eapply pe_preds_in3. eapply H2.
 Qed.
 
 Lemma forest_exit_regs :
@@ -1277,7 +1310,7 @@ Proof.
     repeat destr; cbn in *; inversion_clear 1; subst; cbn in *; auto.
   inversion_clear H; destruct o; auto.
   - destruct (peq p0 x); subst.
-    + inversion H0. rewrite <- H2 in HIN. rewrite HIN in Heqo2. discriminate.
+    + inv H0. eapply gather_predicates_fold in H1. rewrite H1 in Heqo2. discriminate.
     + rewrite PTree.gso by auto; auto.
   - destruct (peq p0 x); subst.
     { rewrite H1 in Heqo2. inversion Heqo2. }
@@ -1370,6 +1403,144 @@ Lemma state_lessdef_state_equiv :
   forall x y, state_lessdef x y <-> state_equiv x y.
 Proof. split; intros; inv H; constructor; auto. Qed.
 
+Lemma abstr_seq_revers_correct_fold_sem_pexpr :
+  forall instrs p f l p' f' l' preds preds' lm lm',
+    mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
+    forall pred, preds ! pred = Some tt ->
+      f #p pred = f' #p pred.
+Proof.
+  induction instrs; try solve [crush].
+  intros. cbn -[update] in *.
+  exploit OptionExtra.mfold_left_Some. apply H. intros [[[[p_mid f_mid] l_mid] lm_mid] HBIND].
+  exploit OptionExtra.mfold_left_Some. apply H0. intros [ptree_mid HGATHER].
+  rewrite HBIND in H. rewrite HGATHER in H0.
+  exploit IHinstrs; eauto. eapply gather_predicates_in; eauto.
+  intros. rewrite <- H2.
+  unfold "#p". unfold get_forest_p'. erewrite abstr_seq_revers_correct_fold_sem_pexpr_sem2; eauto.
+  unfold Option.bind2, Option.ret in *. repeat destr. inv Heqp1. inv HBIND. eauto.
+Qed.
+
+(*|
+This lemma states that predicates are always evaluable, given that the output
+forest is also evaluable.  This is true because gather_predicates ensures that
+all predicates are encountered are never assigned again.  Therefore, throughout
+the evaluation of the forest, one knows that syntactically the predicate will
+stay the same.  This further means that the symbol representation stays the
+same, and that the evaluation therefore has to be the same.
+|*)
+
+Lemma update_rev_gather_constant:
+  forall G i preds i0 sp ge f p l lm p' f' l' lm' preds' ps,
+    (forall p, preds ! p = None -> @sem_pexpr G (mk_ctx i0 sp ge) (f #p p) (ps !! p)) ->
+    update' (p, f, l, lm) i = Some (p', f', l', lm') ->
+    gather_predicates preds i = Some preds' ->
+    (forall p, preds' ! p = None -> sem_pexpr (mk_ctx i0 sp ge) (f' #p p) (ps !! p)).
+Proof.
+  unfold update', gather_predicates; destruct i; intros; unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr.
+  - inv H0. inv H1. inv Heqo. eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. destruct o. inv H1. eapply gather_predicates_fold3 in H2. eauto. inv H1; eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. inv Heqo0. destruct o. inv H1. eapply gather_predicates_fold3 in H2.
+    eauto. inv H1; eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. inv Heqo0. destruct o. inv H1. eapply gather_predicates_fold3 in H2.
+    eauto. inv H1; eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *. repeat destr. inv Heqo1. inv H4.
+    destruct (peq p1 p); subst. inv H1. rewrite PTree.gss in H2. discriminate.
+    rewrite forest_pred_gso by auto. inv H1. rewrite PTree.gso in H2 by auto.
+    destruct o. eapply gather_predicates_fold3 in H2. eauto. eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. inv Heqo0. destruct o. inv H1. eapply gather_predicates_fold3 in H2.
+    eauto. inv H1; eauto.
+Qed.
+
+Lemma update_rev_gather_constant2:
+  forall G i preds i0 sp ge f p l lm p' f' l' lm' preds' ps,
+    (forall p, preds ! p = None -> @sem_pexpr G (mk_ctx i0 sp ge) (f #p p) ps) ->
+    update' (p, f, l, lm) i = Some (p', f', l', lm') ->
+    gather_predicates preds i = Some preds' ->
+    (forall p, preds' ! p = None -> sem_pexpr (mk_ctx i0 sp ge) (f' #p p) ps).
+Proof.
+  unfold update', gather_predicates; destruct i; intros; unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr.
+  - inv H0. inv H1. inv Heqo. eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. destruct o. inv H1. eapply gather_predicates_fold3 in H2. eauto. inv H1; eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. inv Heqo0. destruct o. inv H1. eapply gather_predicates_fold3 in H2.
+    eauto. inv H1; eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. inv Heqo0. destruct o. inv H1. eapply gather_predicates_fold3 in H2.
+    eauto. inv H1; eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *. repeat destr. inv Heqo1. inv H4.
+    destruct (peq p1 p); subst. inv H1. rewrite PTree.gss in H2. discriminate.
+    rewrite forest_pred_gso by auto. inv H1. rewrite PTree.gso in H2 by auto.
+    destruct o. eapply gather_predicates_fold3 in H2. eauto. eauto.
+  - inv H0. cbn in *. unfold Option.bind, Option.bind2, Option.ret in *;
+    repeat destr; inv Heqo1; inv H4. inv Heqo0. destruct o. inv H1. eapply gather_predicates_fold3 in H2.
+    eauto. inv H1; eauto.
+Qed.
+
+Definition PMapmap {A} (f: positive -> A -> A) (m: PMap.t A): PMap.t A :=
+  (fst m, PTree.map f (snd m)).
+
+Definition mask_pred_map (preds: PTree.t unit) (initial_map after_map: PMap.t bool): PMap.t bool :=
+  PMapmap (fun i a =>
+    match preds ! i with
+    | Some _ => a
+    | None => initial_map !! i
+    end) after_map.
+
+Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
+  forall G instrs p f l p' f' l' i0 sp ge preds preds' ps' lm lm',
+    (forall p, preds ! p = None -> sem_pexpr (mk_ctx i0 sp ge) (f #p p) ((is_ps i0) !! p)) ->
+    mfold_left update' instrs (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left gather_predicates instrs (Some preds) = Some preds' ->
+    sem_predset (@mk_ctx G i0 sp ge) f' ps' ->
+    exists ps, sem_predset (mk_ctx i0 sp ge) f ps.
+Proof.
+  induction instrs.
+  - intros * YH **. cbn in *. inv H. inv H0. eauto.
+  - intros * YH **. cbn -[update] in *.
+    exploit OptionExtra.mfold_left_Some. apply H. intros [[[[p_mid f_mid] l_mid] lm_mid] HBIND].
+    exploit OptionExtra.mfold_left_Some. apply H0. intros [ptree_mid HGATHER].
+    rewrite HBIND in H. rewrite HGATHER in H0.
+    exploit IHinstrs. 2: { eauto. } 2: { eauto. } eapply update_rev_gather_constant; eauto.
+    eauto.
+    intros [ps_mid HSEM_MID].
+    (* destruct (preds ! p0) eqn:?. destruct u. eapply gather_predicates_in in HGATHER; eauto. *)
+    (* rewrite HGATHER in H2. discriminate. *)
+    unfold Option.bind2, Option.bind, Option.ret in *; repeat destr. inv HBIND.
+    destruct a; cbn in *.
+    + inv Heqo. inv HGATHER. eauto.
+    + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
+      generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
+      inv HSEM_MID.
+      econstructor. constructor; eauto.
+    + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
+      generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
+      inv HSEM_MID.
+      econstructor. constructor; eauto.
+    + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
+      generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
+      inv HSEM_MID.
+      econstructor. constructor; eauto.
+    + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr. inv HGATHER.
+      generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
+      exists (mask_pred_map preds (is_ps i0) ps_mid).
+      econstructor; intros.
+      destruct (peq x p0); subst.
+      * admit.
+      * inv HSEM_MID. specialize (H2 x). rewrite forest_pred_gso in H2 by auto.
+    + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
+      generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
+      inv HSEM_MID.
+      econstructor. constructor; eauto.
+Qed.
+
 (* [[id:5e6486bb-fda2-4558-aed8-243a9698de85]] *)
 Lemma abstr_seq_reverse_correct_fold :
   forall sp instrs i0 i i' ti cf f' l p p' l' f preds preds' lm lm' ps',
@@ -1417,7 +1588,7 @@ Proof.
       eapply gather_predicates_in_forest in YALL; eauto.
       unfold all_preds_in in YALL. eauto.
       intros [ti_mid HSTEP].
-      
+
       pose proof Y3 as YH.
       pose proof HSTEP as YHSTEP.
       pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
@@ -1441,7 +1612,7 @@ Proof.
       eapply gather_predicates_in_forest in YALL; eauto.
       unfold all_preds_in in YALL. eauto.
       intros [ti_mid HSTEP].
-      
+
       pose proof Y3 as YH.
       pose proof HSTEP as YHSTEP.
       pose proof Y2 as Y2SPLIT; inv Y2SPLIT.
@@ -1483,7 +1654,7 @@ Proof.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
-    + exploit abstr_seq_revers_correct_fold_sem_pexpr_eval; eauto; intros [ps_mid HPRED2].
+    + exploit abstr_seq_revers_correct_fold_sem_pexpr_eval; eauto. admit. intros [ps_mid HPRED2].
       exploit evaluable_pred_expr_exists_RBsetpred; eauto.
       intros [ti_mid HSTEP].
 
