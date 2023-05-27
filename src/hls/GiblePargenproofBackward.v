@@ -164,18 +164,6 @@ Definition evaluable_pred_list_m {G} ctx pr l :=
     In p l ->
     @evaluable_pred_expr_m G ctx pr p.
 
-(* Lemma evaluable_pred_expr_exists : *)
-(*   forall sp pr f i0 exit_p exit_p' f' cf i ti p op args dst, *)
-(*     update (exit_p, f) (RBop p op args dst) = Some (exit_p', f') -> *)
-(*     sem (mk_ctx i0 sp ge) f (i, cf) -> *)
-(*     evaluable_pred_expr (mk_ctx i0 sp ge) pr (f' #r (Reg dst)) -> *)
-(*     state_lessdef i ti -> *)
-(*     exists i', sem (mk_ctx i0 sp ge) f' (i', cf). *)
-(* Proof. *)
-(*   intros. cbn in H. unfold Option.bind in H. destr. inv H. *)
-(*   destruct ti. econstructor. econstructor. *)
-(*   unfold evaluable_pred_expr in H1. Admitted. *)
-
 Lemma evaluable_pred_expr_exists_RBop :
   forall sp f i0 exit_p exit_p' f' i ti p op args dst,
     eval_predf (is_ps i) exit_p = true ->
@@ -1487,12 +1475,76 @@ Qed.
 Definition PMapmap {A} (f: positive -> A -> A) (m: PMap.t A): PMap.t A :=
   (fst m, PTree.map f (snd m)).
 
-Definition mask_pred_map (preds: PTree.t unit) (initial_map after_map: PMap.t bool): PMap.t bool :=
-  PMapmap (fun i a =>
+Definition mask_pred_map' (preds: PTree.t unit) (initial_map after_map: PMap.t bool): PMap.t bool :=
+  (fst after_map, PTree.map (fun i a =>
     match preds ! i with
-    | Some _ => a
+    | Some _ => after_map !! i
     | None => initial_map !! i
-    end) after_map.
+    end) (PTree.combine
+            (fun i a =>
+               match a with
+               | Some x => Some x
+               | None => i
+               end) (snd initial_map) (snd after_map))).
+
+Definition mask_pred_map (preds: PTree.t unit) (initial_map after_map: PMap.t bool): PMap.t bool :=
+  (fst initial_map,
+    PTree.combine
+      (fun l r =>
+         match r with
+         | Some _ => r
+         | None => l
+         end)
+      (snd initial_map) (PTree.map (fun i a => after_map !! i) preds)).
+
+(* Lemma mask_pred_map_in_pred : *)
+(*   forall preds initial_map after_map x, *)
+(*     preds ! x = Some tt -> *)
+(*     (mask_pred_map preds initial_map after_map) !! x = after_map !! x. *)
+(* Proof. *)
+(*   intros. unfold mask_pred_map, PMapmap. *)
+(*   destruct ((snd after_map) ! x) eqn:?. *)
+(*   - unfold "!!"; cbn. rewrite PTree.gmap. rewrite PTree.gcombine by auto. *)
+(*     rewrite Heqo. now rewrite H. *)
+(*   - unfold "!!"; cbn. rewrite PTree.gmap. rewrite PTree.gcombine by auto. *)
+(*     rewrite Heqo. rewrite H. now destruct ((snd initial_map) ! x). *)
+(* Qed. *)
+
+(* Lemma mask_pred_map_not_in_pred : *)
+(*   forall preds initial_map after_map x, *)
+(*     preds ! x = None -> *)
+(*     fst initial_map = fst after_map -> *)
+(*     (mask_pred_map preds initial_map after_map) !! x = initial_map !! x. *)
+(* Proof. *)
+(*   intros. unfold mask_pred_map, PMapmap. *)
+(*   destruct ((snd after_map) ! x) eqn:?. *)
+(*   - unfold "!!"; cbn. rewrite PTree.gmap. rewrite PTree.gcombine by auto. *)
+(*     rewrite Heqo. now rewrite H. *)
+(*   - unfold "!!"; cbn. rewrite PTree.gmap. rewrite PTree.gcombine by auto. *)
+(*     rewrite Heqo. rewrite H. now destruct ((snd initial_map) ! x). *)
+(* Qed. *)
+
+Lemma mask_pred_map_in_pred :
+  forall preds initial_map after_map x,
+    preds ! x = Some tt ->
+    (mask_pred_map preds initial_map after_map) !! x = after_map !! x.
+Proof.
+  intros. unfold mask_pred_map, PMapmap, "!!"; cbn.
+  rewrite PTree.gcombine by auto.
+  rewrite PTree.gmap.
+  rewrite H; auto.
+Qed.
+
+Lemma mask_pred_map_not_in_pred :
+  forall preds initial_map after_map x,
+    preds ! x = None ->
+    (mask_pred_map preds initial_map after_map) !! x = initial_map !! x.
+Proof.
+  intros. unfold mask_pred_map, PMapmap, "!!"; cbn.
+  rewrite PTree.gcombine by auto.
+  rewrite PTree.gmap.
+  rewrite H; auto.
+Qed.
 
 Lemma abstr_seq_revers_correct_fold_sem_pexpr_eval :
   forall G instrs p f l p' f' l' i0 sp ge preds preds' ps' lm lm',
@@ -1508,8 +1560,8 @@ Proof.
     exploit OptionExtra.mfold_left_Some. apply H. intros [[[[p_mid f_mid] l_mid] lm_mid] HBIND].
     exploit OptionExtra.mfold_left_Some. apply H0. intros [ptree_mid HGATHER].
     rewrite HBIND in H. rewrite HGATHER in H0.
-    exploit IHinstrs. 2: { eauto. } 2: { eauto. } eapply update_rev_gather_constant; eauto.
-    eauto.
+    exploit IHinstrs. 3: { eauto. } 3: { eauto. } eapply update_rev_gather_constant; eauto.
+    eauto. eauto.
     intros [ps_mid HSEM_MID].
     (* destruct (preds ! p0) eqn:?. destruct u. eapply gather_predicates_in in HGATHER; eauto. *)
     (* rewrite HGATHER in H2. discriminate. *)
@@ -1533,8 +1585,12 @@ Proof.
       exists (mask_pred_map preds (is_ps i0) ps_mid).
       econstructor; intros.
       destruct (peq x p0); subst.
-      * admit.
+      * destruct o; [assert (YX: preds ! p0 = None) by (eapply gather_predicates_fold3; eauto)|];
+          rewrite mask_pred_map_not_in_pred; auto.
       * inv HSEM_MID. specialize (H2 x). rewrite forest_pred_gso in H2 by auto.
+        destruct (preds ! x) eqn:HDESTR.
+        -- destruct u1. now rewrite mask_pred_map_in_pred.
+        -- rewrite mask_pred_map_not_in_pred; auto.
     + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
       generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
       inv HSEM_MID.
@@ -1545,6 +1601,7 @@ Qed.
 Lemma abstr_seq_reverse_correct_fold :
   forall sp instrs i0 i i' ti cf f' l p p' l' f preds preds' lm lm' ps',
     (forall in_pred, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+    (forall p : positive, preds ! p = None -> sem_pexpr (mk_ctx i0 sp ge) f #p p (is_ps i0) !! p) ->
     valid_mem (is_mem i0) (is_mem i) ->
     all_preds_in f preds ->
     eval_predf (is_ps i) p = true ->
@@ -1560,7 +1617,7 @@ Lemma abstr_seq_reverse_correct_fold :
       SeqBB.step ge sp (Iexec ti) instrs (Iterm ti' cf)
       /\ state_lessdef i' ti'.
 Proof.
-  induction instrs; intros * YPREDSIN YVALID YALL YEVAL Y3 Y YGATHER Y0 YEVALUABLE YSEM_FINAL Y1 Y2.
+  induction instrs; intros * YPREDSIN YPREDNONE YVALID YALL YEVAL Y3 Y YGATHER Y0 YEVALUABLE YSEM_FINAL Y1 Y2.
   - cbn in *. inv Y.
     assert (X: similar {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |}
                        {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |})
@@ -1596,7 +1653,9 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
+      exploit IHinstrs. 6: { eauto. } eapply gather_predicates_update_constant; eauto.
+      eapply update_rev_gather_constant; eauto.
+      unfold update', Option.bind2, Option.ret. rewrite Heqo; auto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1620,7 +1679,9 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
+      exploit IHinstrs. 6: { eauto. } eapply gather_predicates_update_constant; eauto.
+      eapply update_rev_gather_constant; eauto.
+      unfold update', Option.bind2, Option.ret. rewrite Heqo; auto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1644,7 +1705,9 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
+      exploit IHinstrs. 6: { eauto. } eapply gather_predicates_update_constant; eauto.
+      eapply update_rev_gather_constant; eauto.
+      unfold update', Option.bind2, Option.ret. rewrite Heqo; auto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1654,7 +1717,13 @@ Proof.
       eapply state_lessdef_state_equiv; eauto.
       intros [ti' [YHH HLD]].
       exists ti'; split; eauto. econstructor; eauto.
-    + exploit abstr_seq_revers_correct_fold_sem_pexpr_eval; eauto. admit. intros [ps_mid HPRED2].
+    + exploit abstr_seq_revers_correct_fold_sem_pexpr_eval.
+      2: { eauto. }
+      eapply update_rev_gather_constant; eauto.
+      unfold update', Option.bind2, Option.ret. rewrite Heqo; auto.
+      eauto.
+      eauto.
+      intros [ps_mid HPRED2].
       exploit evaluable_pred_expr_exists_RBsetpred; eauto.
       intros [ti_mid HSTEP].
 
@@ -1665,7 +1734,9 @@ Proof.
       2: { symmetry. econstructor; try eassumption; auto. }
       inv YHSTEP. inv H1.
       exploit sem_update_instr. auto. eauto. eauto. eauto. eauto. auto. intros.
-      exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
+      exploit IHinstrs. 6: { eauto. } eapply gather_predicates_update_constant; eauto.
+      eapply update_rev_gather_constant; eauto.
+      unfold update', Option.bind2, Option.ret. rewrite Heqo; auto.
       cbn in YVALID. transitivity m'; auto.
       replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
       eapply sem_update_valid_mem; eauto.
@@ -1698,7 +1769,9 @@ Proof.
         2: { symmetry. econstructor; try eassumption; auto. }
         inv YHSTEP. inv H2.
         exploit sem_update_instr. auto. eauto. eauto. eauto. eapply Heqo. eauto. auto. intros.
-        exploit IHinstrs. 5: { eauto. } eapply gather_predicates_update_constant; eauto.
+        exploit IHinstrs. 6: { eauto. } eapply gather_predicates_update_constant; eauto.
+        eapply update_rev_gather_constant; eauto.
+        unfold update', Option.bind2, Option.ret. rewrite Heqo; auto.
         cbn in YVALID. transitivity m'; auto.
         replace m' with (is_mem {| is_rs := rs; Gible.is_ps := ps; Gible.is_mem := m' |}) by auto.
         cbn. inv H4.
@@ -1709,6 +1782,7 @@ Proof.
         eapply state_lessdef_state_equiv; eauto.
         intros [ti' [YHH HLD]].
         exists ti'; split; eauto. econstructor; eauto.
+        Unshelve. all: exact nil.
 Qed.
 
 Lemma sem_empty :
@@ -1747,6 +1821,7 @@ Proof.
   eapply abstr_seq_reverse_correct_fold;
     try eassumption; try reflexivity; auto using sem_empty, all_preds_in_empty.
   inversion 1.
+  intros; repeat constructor.
 Qed.
 
 (*|
