@@ -1738,12 +1738,14 @@ Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
 
 Lemma abstr_check_correct :
   forall i' a b cf,
-    (exists ps, forall x, sem_pexpr ictx (get_forest_p' x (forest_preds a)) ps !! x) ->
     check a b = true ->
     sem ictx a (i', cf) ->
     exists ti', sem octx b (ti', cf) /\ match_states i' ti'.
 Proof.
-  intros * EVALUABLE **. unfold check in H. simplify.
+  intros.
+  assert (EVALUABLE: (exists ps, forall x, sem_pexpr ictx (get_forest_p' x (forest_preds a)) ps !! x)).
+  { inv H0. inv H4. eauto. }
+  unfold check in H. simplify.
   inv H0. inv H10. inv H11.
   eexists; split; constructor; auto.
   - constructor. intros.

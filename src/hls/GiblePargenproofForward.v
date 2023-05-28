@@ -320,19 +320,57 @@ all be evaluable.
       eapply IHl. eauto. eapply predicated_not_inP_cons; eauto.
   Qed.
 
+  Lemma pred_fold_true' :
+    forall A l pred y,
+      fold_left (fun a (p : positive * predicated A) => a && predicated_not_in pred (snd p)) l y = true ->
+      y = true.
+  Proof.
+    induction l; crush.
+    exploit IHl; try eassumption; intros.
+    eapply andb_prop in H0; tauto.
+  Qed.
+
+  Lemma pred_fold_true :
+    forall A pred l p y,
+      fold_left (fun (a : bool) (p : positive * predicated A) => a && predicated_not_in pred (snd p)) l y = true ->
+      y = true ->
+      list_norepet (map fst l) ->
+      In p l ->
+      predicated_not_in pred (snd p) = true.
+  Proof.
+    induction l; crush.
+    inv H1. inv H2.
+    - cbn in *. now eapply pred_fold_true' in H.
+    - cbn in *; eapply IHl; try eassumption.
+      eapply pred_fold_true'; eauto.
+  Qed.
+
   Lemma pred_not_in_forestP :
     forall pred f,
       predicated_not_in_forest pred f = true ->
       forall x, predicated_not_inP pred (f #r x).
   Proof.
     unfold predicated_not_in_forest, predicated_not_in_pred_expr; intros.
-    eapply andb_prop in H. inv H.
+    destruct (RTree.get x (forest_regs f)) eqn:?.
+    - eapply andb_prop in H. inv H. rewrite PTree.fold_spec in H0.
+      unfold RTree.get in Heqo.
+      exploit pred_fold_true. eauto. auto. apply PTree.elements_keys_norepet.
+      apply PTree.elements_correct; eauto.
+      intros. eapply predicated_not_inP_equiv. unfold "#r".
+      unfold RTree.get. rewrite Heqo. auto.
+    - unfold "#r". rewrite Heqo. unfold predicated_not_inP; intros.
+    inv H0. inversion 1.
+  Qed.
 
   Lemma pred_not_in_forest_exitP :
     forall pred f,
       predicated_not_in_forest pred f = true ->
       predicated_not_inP pred (forest_exit f).
-  Proof. Admitted.
+  Proof.
+    intros.
+    eapply predicated_not_inP_equiv. unfold predicated_not_in_forest in H.
+    eapply andb_prop in H; tauto.
+  Qed.
 
   Lemma sem_update_Isetpred:
     forall A (ctx: @ctx A) f pr p0 c args b rs m,
@@ -671,7 +709,11 @@ all be evaluable.
       sem (mk_ctx i sp ge) f (i', cf) ->
       state_lessdef i ti ->
       exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
-  Proof. Admitted. (* This needs a bit more in Abstr.v *)
+  Proof.
+    intros.
+    eapply sem_correct in H. exists i'; split; eauto. reflexivity.
+    constructor; eauto. unfold ge_preserved; auto.
+  Qed.
 
   Lemma mfold_left_update_Some :
     forall xs x v,
