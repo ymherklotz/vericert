@@ -74,7 +74,55 @@ Lemma sem_pred_expr_app_predicated_false :
     eval_predf ps p = false ->
     sem_pred_expr f_p a_sem ctx (app_predicated p y x) v.
 Proof.
-Admitted.
+  unfold app_predicated.
+  induction y.
+  - intros. cbn. inv H. constructor; auto. cbn. constructor; auto.
+    eapply sem_pexpr_eval; eauto. rewrite eval_predf_negate. now rewrite H1.
+  - intros. inv H.
+    + cbn. constructor; auto. cbn. constructor; auto.
+      eapply sem_pexpr_eval; eauto. rewrite eval_predf_negate; now rewrite H1.
+    + cbn. eapply sem_pred_expr_cons_false. cbn. constructor. tauto.
+      eauto.
+Qed.
+
+Lemma sem_pred_expr_app_prediceted_false2' :
+  forall f_p ps x p v,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+    sem_pexpr ctx (from_pred_op f_p p) false ->
+    ~ sem_pred_expr f_p a_sem ctx (GiblePargenproofEquiv.NE.map (fun x : Predicate.pred_op * A => (p ∧ fst x, snd x)) x) v.
+Proof.
+  induction x; crush.
+  - unfold not; intros. inv H1. inv H5.
+    eapply sem_pexpr_eval_inv in H0; auto.
+    eapply sem_pexpr_eval_inv in H3; auto.
+    now rewrite H3 in H0.
+  - unfold not; intros. eapply IHx; eauto.
+    inv H1; eauto.
+    inv H7.
+    eapply sem_pexpr_eval_inv in H0; auto.
+    eapply sem_pexpr_eval_inv in H3; auto.
+    now rewrite H3 in H0.
+Qed.
+
+Lemma sem_pred_expr_app_predicated_false2 :
+  forall f_p y x v p ps,
+    sem_pred_expr f_p a_sem ctx (app_predicated p y x) v ->
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+    eval_predf ps p = false ->
+    sem_pred_expr f_p a_sem ctx y v.
+Proof.
+  induction y.
+  - intros. cbn in *. inv H.
+    + destruct a. constructor; auto. now inv H7.
+    + cbn in *. exploit sem_pred_expr_app_prediceted_false2'; eauto.
+      eapply sem_pexpr_eval; eauto. contradiction.
+  - intros. cbn in *. inv H.
+    + inv H7. destruct a. constructor; auto.
+    + cbn in *. destruct a. eapply sem_pred_expr_cons_false; eauto.
+      inv H7. inv H2; auto.
+      eapply sem_pexpr_eval_inv in H; eauto. rewrite eval_predf_negate in H.
+      now rewrite H1 in H.
+Qed.
 
 Lemma sem_pred_expr_prune_predicated :
   forall f_p y x v,
@@ -82,8 +130,7 @@ Lemma sem_pred_expr_prune_predicated :
     prune_predicated x = Some y ->
     sem_pred_expr f_p a_sem ctx y v.
 Proof.
-  intros * SEM PRUNE. unfold prune_predicated in *.
-Admitted.
+  intros * SEM PRUNE. unfold prune_predicated in *. Admitted.
 
 Lemma sem_pred_expr_prune_predicated2 :
   forall f_p y x v,
@@ -93,14 +140,6 @@ Lemma sem_pred_expr_prune_predicated2 :
 Proof.
   intros * SEM PRUNE. unfold prune_predicated in *.
   Admitted.
-
-Lemma sem_pred_expr_app_predicated_false2 :
-  forall f_p y x v p ps,
-    sem_pred_expr f_p a_sem ctx (app_predicated p y x) v ->
-    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
-    eval_predf ps p = false ->
-    sem_pred_expr f_p a_sem ctx y v.
-Admitted.
 
 Lemma sem_pred_expr_pred_ret :
   forall (i: A) ps,
