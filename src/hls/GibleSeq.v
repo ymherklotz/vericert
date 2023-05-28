@@ -149,13 +149,90 @@ Qed.
 
 #[local] Open Scope positive.
 
+Lemma max_pred_instr_lt :
+  forall y a,
+    y <= max_pred_instr y a.
+Proof.
+  unfold max_pred_instr; intros.
+  destruct a; try destruct o; lia.
+Qed.
+
+Lemma max_pred_instr_fold_lt :
+  forall b y,
+    y <= fold_left max_pred_instr b y.
+Proof.
+  induction b; crush.
+  transitivity (max_pred_instr y a); auto.
+  apply max_pred_instr_lt.
+Qed.
+
+Lemma max_pred_block_lt :
+  forall y a b,
+    y <= max_pred_block y a b.
+Proof.
+  unfold max_pred_block, SeqBB.foldl; intros.
+  apply max_pred_instr_fold_lt.
+Qed.
+
+Lemma max_fold_left_initial :
+  forall l y,
+    y <= fold_left (fun (a : positive) (p0 : positive * SeqBB.t) => max_pred_block a (fst p0) (snd p0)) l y.
+Proof.
+  induction l; crush.
+  transitivity (max_pred_block y (fst a) (snd a)); eauto.
+  apply max_pred_block_lt.
+Qed.
+
+Lemma max_pred_in_max :
+  forall y p i,
+    In p (pred_uses i) ->
+    p <= max_pred_instr y i.
+Proof.
+  intros. unfold max_pred_instr. destruct i; try destruct o; cbn in *; try easy.
+  - eapply predicate_lt in H; lia.
+  - eapply predicate_lt in H; lia.
+  - eapply predicate_lt in H; lia.
+  - inv H; try lia. eapply predicate_lt in H0; lia.
+  - eapply predicate_lt in H; lia.
+Qed.
+
+Lemma fold_left_in_max :
+  forall bb p y i,
+    In i bb ->
+    In p (pred_uses i) ->
+    p <= fold_left max_pred_instr bb y.
+Proof.
+  induction bb; crush. inv H; eauto.
+  transitivity (max_pred_instr y i); [|eapply max_pred_instr_fold_lt].
+  apply max_pred_in_max; auto.
+Qed.
+
+Lemma max_pred_function_use' :
+  forall l pc bb p i y,
+    In (pc, bb) l ->
+    In i bb ->
+    In p (pred_uses i) ->
+    p <= fold_left (fun (a : positive) (p0 : positive * SeqBB.t) => max_pred_block a (fst p0) (snd p0)) l y.
+Proof.
+  induction l; crush. inv H; eauto.
+  transitivity (max_pred_block y (fst (pc, bb)) (snd (pc, bb))); eauto;
+    [|eapply max_fold_left_initial].
+  cbn. unfold SeqBB.foldl.
+  eapply fold_left_in_max; eauto.
+Qed.
+
 Lemma max_pred_function_use :
   forall f pc bb i p,
     f.(fn_code) ! pc = Some bb ->
     In i bb ->
     In p (pred_uses i) ->
     p <= max_pred_function f.
-Proof. Admitted.
+Proof.
+  unfold max_pred_function; intros.
+  rewrite PTree.fold_spec.
+  eapply max_pred_function_use'; eauto.
+  eapply PTree.elements_correct; eauto.
+Qed.
 
 Ltac truthy_falsy :=
   match goal with
