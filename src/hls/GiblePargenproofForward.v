@@ -324,7 +324,9 @@ all be evaluable.
     forall pred f,
       predicated_not_in_forest pred f = true ->
       forall x, predicated_not_inP pred (f #r x).
-  Proof. Admitted.
+  Proof.
+    unfold predicated_not_in_forest, predicated_not_in_pred_expr; intros.
+    eapply andb_prop in H. inv H.
 
   Lemma pred_not_in_forest_exitP :
     forall pred f,
