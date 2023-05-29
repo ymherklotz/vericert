@@ -177,7 +177,7 @@ all be evaluable.
         destruct f as [fr fp fe]. cbn [forest_preds set_forest] in *.
         destruct (peq x res); subst.
         * rewrite forest_reg_gss in *. rewrite Regmap.gss in *.
-          eapply sem_pred_expr_prune_predicated; eauto.
+          eapply sem_pred_expr_prune_predicated; eauto. inv PRED; eassumption.
           eapply sem_pred_expr_app_predicated; [| |eauto].
           replace fp with (forest_preds {| forest_regs := fr; forest_preds := fp; forest_exit := fe |}) by auto.
           eapply sem_update_Iop; eauto. cbn in *.
@@ -215,7 +215,7 @@ all be evaluable.
         destruct f as [fr fp fe]. cbn [forest_preds set_forest] in *.
         destruct (peq x res); subst.
         * rewrite forest_reg_gss in *. rewrite Regmap.gss in *.
-          eapply sem_pred_expr_prune_predicated; eauto.
+          eapply sem_pred_expr_prune_predicated; eauto. inv PRED; eassumption.
           eapply sem_pred_expr_app_predicated; [| |eauto].
           replace fp with (forest_preds {| forest_regs := fr; forest_preds := fp; forest_exit := fe |}) by auto.
           eapply sem_update_Iload; eauto.
@@ -260,7 +260,7 @@ all be evaluable.
       apply exists_sem_pred in H. inversion_clear H as [r' [HNE HVAL]].
       exploit sem_merge_list. eapply SEM2. instantiate (2 := args). intro HSPE. eapply sem_pred_expr_ident2 in HSPE.
       inversion_clear HSPE as [l_ [HSPE1 HSPE2]].
-      eapply sem_pred_expr_prune_predicated; eauto.
+      eapply sem_pred_expr_prune_predicated; eauto. inv PRED; eassumption.
       eapply sem_pred_expr_app_predicated.
       eapply sem_pred_expr_seq_app_val; [solve [eauto]| |].
       eapply sem_pred_expr_seq_app; [solve [eauto]|].
@@ -473,7 +473,7 @@ all be evaluable.
       constructor.
       * constructor. intros. destruct (peq x res); subst.
         rewrite forest_reg_gss. cbn.
-        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_prune_predicated; eauto. inv H3; inv H9; eassumption.
         eapply sem_pred_expr_app_predicated_false. inv H3. inv H8. auto.
         inv H3. inv H9. eauto. rewrite eval_predf_Pand. cbn -[eval_predf].
         rewrite H0. auto. 
@@ -486,7 +486,7 @@ all be evaluable.
       constructor.
       * constructor. intros. destruct (peq x dst); subst.
         rewrite forest_reg_gss. cbn.
-        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_prune_predicated; eauto. inv H3; inv H9; eassumption.
         eapply sem_pred_expr_app_predicated_false. inv H3. inv H8. auto.
         inv H3. inv H9. eauto. rewrite eval_predf_Pand. cbn -[eval_predf].
         rewrite H0. auto. 
@@ -499,7 +499,7 @@ all be evaluable.
       constructor.
       * constructor. intros. rewrite forest_reg_gso by discriminate. inv H3. inv H8. auto.
       * constructor; intros. rewrite forest_reg_pred. inv H3. inv H9. auto.
-      * rewrite forest_reg_gss. cbn. eapply sem_pred_expr_prune_predicated; eauto.
+      * rewrite forest_reg_gss. cbn. eapply sem_pred_expr_prune_predicated; eauto. inv H3; inv H9; eassumption.
         eapply sem_pred_expr_app_predicated_false. inv H3. auto. inv H3. inv H9. eauto.
         rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H0. auto.
       * inv H3. auto.
@@ -528,7 +528,7 @@ all be evaluable.
       * constructor. inv H8. auto.
       * constructor. intros. inv H9. eauto.
       * auto.
-      * cbn. eapply sem_pred_expr_prune_predicated; [|eauto].
+      * cbn. eapply sem_pred_expr_prune_predicated; [| |eauto]. inv H9; eassumption.
         eapply sem_pred_expr_app_predicated_false; auto.
         inv H9. eauto.
         rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H0. auto.
@@ -548,7 +548,7 @@ all be evaluable.
       constructor.
       * constructor. intros. destruct (peq x r); subst.
         rewrite forest_reg_gss. cbn.
-        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_prune_predicated; eauto. inv H1; inv H8; eassumption.
         eapply sem_pred_expr_app_predicated_false. inv H1. inv H7. auto.
         inv H1. inv H8. eauto. rewrite eval_predf_Pand.
         rewrite H. eauto with bool.
@@ -561,7 +561,7 @@ all be evaluable.
       constructor.
       * constructor. intros. destruct (peq x r); subst.
         rewrite forest_reg_gss. cbn.
-        eapply sem_pred_expr_prune_predicated; eauto.
+        eapply sem_pred_expr_prune_predicated; eauto. inv H1; inv H8; eassumption.
         eapply sem_pred_expr_app_predicated_false. inv H1. inv H7. auto.
         inv H1. inv H8. eauto. rewrite eval_predf_Pand. cbn -[eval_predf].
         rewrite H. eauto with bool.
@@ -574,7 +574,7 @@ all be evaluable.
       constructor.
       * constructor. intros. rewrite forest_reg_gso by discriminate. inv H1. inv H7. auto.
       * constructor; intros. rewrite forest_reg_pred. inv H1. inv H8. auto.
-      * rewrite forest_reg_gss. cbn. eapply sem_pred_expr_prune_predicated; eauto.
+      * rewrite forest_reg_gss. cbn. eapply sem_pred_expr_prune_predicated; eauto. inv H1; inv H8; eassumption.
         eapply sem_pred_expr_app_predicated_false. inv H1. auto. inv H1. inv H8. eauto.
         rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H. eauto with bool.
       * inv H1. auto.
@@ -604,7 +604,7 @@ all be evaluable.
          * constructor. inv H7. auto.
          * constructor. intros. inv H8. eauto.
          * auto.
-         * cbn. eapply sem_pred_expr_prune_predicated; [|eauto].
+         * cbn. eapply sem_pred_expr_prune_predicated; [| |eauto]. inv H8; eassumption.
            eapply sem_pred_expr_app_predicated_false; auto.
            inv H8. eauto.
            rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H. eauto with bool.
@@ -675,7 +675,7 @@ all be evaluable.
     constructor. inv H9. intros. cbn. eauto.
     inv H10. constructor; intros. eauto.
     cbn.
-    eapply sem_pred_expr_prune_predicated; eauto.
+    eapply sem_pred_expr_prune_predicated; eauto. inv H10; eassumption.
     eapply sem_pred_expr_app_predicated.
     constructor. constructor. constructor.
     inv H10. eauto. cbn -[eval_predf] in *.

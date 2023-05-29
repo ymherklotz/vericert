@@ -125,21 +125,74 @@ Proof.
 Qed.
 
 Lemma sem_pred_expr_prune_predicated :
-  forall f_p y x v,
+  forall f_p ps x y v,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
     sem_pred_expr f_p a_sem ctx x v ->
     prune_predicated x = Some y ->
     sem_pred_expr f_p a_sem ctx y v.
 Proof.
-  intros * SEM PRUNE. unfold prune_predicated in *. Admitted.
+  induction x.
+  - cbn in *; intros * HPREDSEM **. repeat destr.
+    inv H0. inv H. constructor; auto; cbn in *.
+    eapply sem_pexpr_eval; [eassumption|].
+    eapply sem_pexpr_eval_inv in H1; [|eassumption].
+    now rewrite eval_predf_deep_simplify.
+  - cbn in *; intros * HPREDSEM **. destruct_match; repeat destr.
+    2: { clear Heqb. inv H; cbn in *.
+         eapply sem_pexpr_eval_inv in H4; [|eassumption].
+         rewrite <- 2 eval_predf_deep_simplify with (peq:=peq) in H4.
+         setoid_rewrite Heqp in H4. now cbn in H4.
+         eauto. }
+    destruct_match.
+    + inv H0. inv H.
+      * constructor; auto. eapply sem_pexpr_eval; [eassumption|].
+        eapply sem_pexpr_eval_inv in H3; [|eassumption].
+        now rewrite eval_predf_deep_simplify.
+      * eapply sem_pred_expr_cons_false; eauto.
+        eapply sem_pexpr_eval; [eassumption|].
+        eapply sem_pexpr_eval_inv in H3; [|eassumption].
+        now rewrite eval_predf_deep_simplify.
+    + inv H0. inv H.
+      * constructor; auto.
+        eapply sem_pexpr_eval; [eassumption|].
+        eapply sem_pexpr_eval_inv in H3; [|eassumption].
+        now rewrite eval_predf_deep_simplify.
+      * cbn in *. exploit NE.filter_None. eapply Heqo. cbn. intros.
+        exploit sem_pred_expr_in_true. eapply H5. intros [p_true [e_true [HIN [HSEMP HASEM]]]].
+        pose proof (NE.In_map _ _ (fun x : Predicate.pred_op * A => (deep_simplify peq (fst x), snd x)) _ _ HIN).
+        cbn in *. eapply NE.Forall_forall in H; [|eassumption].
+        destr. clear H. cbn in *.
+        eapply sem_pexpr_eval_inv in HSEMP; [|eassumption].
+        rewrite <- 2 eval_predf_deep_simplify with (peq:=peq) in HSEMP.
+        setoid_rewrite Heqp in HSEMP. now cbn in HSEMP.
+Qed.
 
 Lemma sem_pred_expr_prune_predicated2 :
-  forall f_p y x v,
+  forall f_p ps x y v,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
     sem_pred_expr f_p a_sem ctx y v ->
     prune_predicated x = Some y ->
     sem_pred_expr f_p a_sem ctx x v.
 Proof.
-  intros * SEM PRUNE. unfold prune_predicated in *.
-  Admitted.
+  induction x; intros * SEMPRED SEM PRUNE. unfold prune_predicated in *.
+  - cbn in *. destr. inv PRUNE. inv SEM.
+    destruct a; constructor; auto.
+    eapply sem_pexpr_eval_inv in H2; eauto.
+    eapply sem_pexpr_eval; eauto.
+    rewrite eval_predf_deep_simplify in H2; auto.
+  - cbn in *. destruct_match.
+    2: { destr. destruct a. eapply sem_pred_expr_cons_false; eauto.
+         eapply sem_pexpr_eval; eauto.
+         rewrite <- 2 eval_predf_deep_simplify with (peq:=peq). now setoid_rewrite Heqp.
+    }
+    destruct_match.
+    + inv PRUNE. destruct a; inv SEM; [constructor|eapply sem_pred_expr_cons_false]; eauto;
+      eapply sem_pexpr_eval; eauto; rewrite <- eval_predf_deep_simplify with (peq:=peq);
+      eapply sem_pexpr_eval_inv in H4; eauto.
+    + inv PRUNE. inv SEM. destruct a. constructor; auto.
+      eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H2; eauto.
+      now rewrite <- eval_predf_deep_simplify with (peq:=peq).
+Qed.
 
 Lemma sem_pred_expr_pred_ret :
   forall (i: A) ps,
@@ -179,6 +232,23 @@ Proof.
     eapply sem_pred_expr_cons_false.
     eapply sem_pexpr_eval; eauto. eapply IHa; eauto.
     intros. eapply H0. constructor; tauto.
+Qed.
+
+Lemma sem_pred_expr_NEapp6 :
+  forall f_p a b v ps,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+    (forall x, NE.In x a -> eval_predf ps (fst x) = false) ->
+    sem_pred_expr f_p a_sem ctx (NE.app a b) v ->
+    sem_pred_expr f_p a_sem ctx b v.
+Proof.
+  induction a; crush.
+  - assert (IN: NE.In a (NE.singleton a)) by constructor.
+    inv H1; auto. eapply H0 in IN. eapply sem_pexpr_eval_inv in H5; eauto.
+    now setoid_rewrite H5 in IN.
+  - assert (NE.In a (NE.cons a a0)) by (constructor; tauto).
+    eapply H0 in H2. destruct a. inv H1.
+    + eapply sem_pexpr_eval_inv in H8; eauto. now setoid_rewrite H8 in H2.
+    + eapply IHa; eauto. intros. eapply H0. constructor; tauto.
 Qed.
 
 Lemma sem_pred_expr_NEapp3 :
@@ -283,6 +353,29 @@ Proof.
   eapply sem_pexpr_eval; eauto. eauto.
 Qed.
 
+Lemma sem_pred_expr_map_Pand2 :
+  forall f_p ps x v p,
+    (forall x : positive, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->
+    eval_predf ps p = true ->
+    sem_pred_expr f_p a_sem ctx
+      (NE.map (fun x0 => (p ∧ fst x0, snd x0)) x) v ->
+    sem_pred_expr f_p a_sem ctx x v.
+Proof.
+  induction x; crush.
+  - inv H1. destruct a; constructor; auto. eapply sem_pexpr_eval; eauto.
+    eapply sem_pexpr_eval_inv in H5; eauto. rewrite eval_predf_Pand in H5.
+    now rewrite H0 in H5.
+  - inv H1.
+    + destruct a; constructor; auto. eapply sem_pexpr_eval; eauto.
+      eapply sem_pexpr_eval_inv in H7; eauto. rewrite eval_predf_Pand in H7.
+      now rewrite H0 in H7.
+    + destruct a; eapply sem_pred_expr_cons_false; eauto.
+      eapply sem_pexpr_eval; eauto.
+      eapply sem_pexpr_eval_inv in H7; eauto.
+      rewrite eval_predf_Pand in H7.
+      now rewrite H0 in H7.
+Qed.
+
 Lemma sem_pred_expr_app_predicated :
   forall f_p y x v p ps,
     sem_pred_expr f_p a_sem ctx x v ->
@@ -303,7 +396,13 @@ Lemma sem_pred_expr_app_predicated2 :
     (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
     eval_predf ps p = true ->
     sem_pred_expr f_p a_sem ctx x v.
-Proof. Admitted.
+Proof.
+  intros * SEM PS EVAL. unfold app_predicated in *.
+  eapply sem_pred_expr_NEapp6 in SEM; eauto.
+  - eapply sem_pred_expr_map_Pand2; eauto.
+  - intros. eapply sem_pred_expr_map_not; [|eassumption].
+    rewrite eval_predf_negate. now rewrite EVAL.
+Qed.
 
 Lemma sem_pred_expr_ident :
   forall ps l l_,
@@ -465,18 +564,9 @@ Proof.
         inv H3. inv H1. eapply sem_pexpr_det in H0; try eassumption. discriminate.
         apply similar_refl. split; auto.
         apply sem_pred_expr_cons_false; auto.
-  - destruct x in *; cbn in *.
-    rewrite NE.app_NEmap in H0.
-    generalize dependent b; induction b; intros.
-    + cbn in *; repeat destr. inv Heqp0. inv H0.
-      * inv H6. inv H7. solve [repeat constructor; auto].
-      * inv H6. inv H1.
-        -- exploit IHa; eauto; intros. inv H1. split; auto.
-           apply sem_pred_expr_cons_false; eauto.
-        -- exploit IHa; eauto; intros. inv H1. inv H3.
-           eapply sem_pexpr_det in H0; try eassumption. discriminate.
-           apply similar_refl.
-    + Admitted.
+  - destruct x; cbn [fst snd] in *.
+    unfold predicated_prod in H0. cbn in H0.
+    rewrite NE.app_NEmap in H0. 
 
 Lemma sem_pred_expr_seq_app :
   forall A B (f: predicated (A -> B)) ps l f_ l_,

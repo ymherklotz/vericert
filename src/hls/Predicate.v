@@ -386,11 +386,11 @@ Proof.
   solve [rewrite andb_true_r; auto | rewrite orb_false_r; auto].
 Qed.
 
+Local Opaque simplify'.
 Lemma simplify_correct :
   forall h a,
     sat_predicate (simplify h) a = sat_predicate h a.
 Proof.
-  Local Opaque simplify'.
   induction h; crush.
   - replace (sat_predicate h1 a && sat_predicate h2 a)
       with (sat_predicate (simplify h1) a && sat_predicate (simplify h2) a)
@@ -400,7 +400,29 @@ Proof.
       with (sat_predicate (simplify h1) a || sat_predicate (simplify h2) a)
       by crush.
     rewrite simplify'_correct. crush.
-    Local Transparent simplify'.
+Qed.
+Local Transparent simplify'.
+
+Lemma Plit_inj :
+  forall A (a b: bool * A), Plit a = Plit b -> a = b.
+Proof. now inversion 1. Qed.
+
+Lemma deep_simplify'_correct :
+  forall peq h a,
+    sat_predicate (deep_simplify' peq h) a = sat_predicate h a.
+Proof.
+  destruct h; auto; cbn in *;
+    destruct h1; destruct h2; intuition auto with *; destruct_match; auto;
+    clear Heqs; inv e; solve [now rewrite andb_diag | now rewrite orb_diag].
+Qed.
+
+Lemma deep_simplify_correct :
+  forall peq h a,
+    sat_predicate (deep_simplify peq h) a = sat_predicate h a.
+Proof.
+  induction h; auto;
+    intros; cbn -[deep_simplify']; rewrite deep_simplify'_correct;
+    cbn; rewrite IHh1; now rewrite IHh2.
 Qed.
 
 Fixpoint mult {A: Type} (a b: list (list A)) : list (list A) :=

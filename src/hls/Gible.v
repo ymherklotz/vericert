@@ -192,6 +192,16 @@ Lemma eval_predf_Por :
     eval_predf ps (p ∨ p') = eval_predf ps p || eval_predf ps p'.
 Proof. unfold eval_predf; split; simplify; auto with bool. Qed.
 
+Lemma eval_predf_simplify :
+  forall ps p,
+    eval_predf ps (simplify p) = eval_predf ps p.
+Proof. unfold eval_predf; intros. now rewrite simplify_correct. Qed.
+
+Lemma eval_predf_deep_simplify :
+  forall peq ps p,
+    eval_predf ps (deep_simplify peq p) = eval_predf ps p.
+Proof. unfold eval_predf; intros. now rewrite deep_simplify_correct. Qed.
+
 Lemma eval_predf_pr_equiv :
   forall p ps ps',
     (forall x, ps !! x = ps' !! x) ->

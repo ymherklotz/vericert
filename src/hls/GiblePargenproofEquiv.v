@@ -1023,6 +1023,21 @@ Section SEM_PRED_EXEC.
     eapply sem_pexpr_eval; eauto.
   Qed.
 
+  Lemma sem_pred_expr_in_true :
+    forall pe v,
+      sem_pred_expr f a_sem ctx pe v ->
+      exists p e, NE.In (p, e) pe
+                  /\ sem_pexpr ctx (from_pred_op f p) true
+                  /\ a_sem ctx e v.
+  Proof.
+    induction pe; crush.
+    - inv H. do 2 eexists; split; try split; eauto. constructor.
+    - inv H.
+      + do 2 eexists; split; try split; eauto. constructor; tauto.
+      + exploit IHpe; eauto. simplify.
+        do 2 eexists; split; try split; eauto. constructor; tauto.
+  Qed.
+
 End SEM_PRED_EXEC.
 
 Module HashExprNorm(HS: Hashable).
@@ -1219,21 +1234,6 @@ Module HashExprNorm(HS: Hashable).
         eapply H.wf_hash_table_distr; eauto. eauto.
       + inv H0. eapply IHpe.
         eapply H.wf_hash_table_distr; eauto. eauto.
-  Qed.
-
-  Lemma sem_pred_expr_in_true :
-    forall pe v,
-      sem_pred_expr f a_sem ctx pe v ->
-      exists p e, NE.In (p, e) pe
-                  /\ sem_pexpr ctx (from_pred_op f p) true
-                  /\ a_sem ctx e v.
-  Proof.
-    induction pe; crush.
-    - inv H. do 2 eexists; split; try split; eauto. constructor.
-    - inv H.
-      + do 2 eexists; split; try split; eauto. constructor; tauto.
-      + exploit IHpe; eauto. simplify.
-        do 2 eexists; split; try split; eauto. constructor; tauto.
   Qed.
 
   Definition pred_Ht_dec :

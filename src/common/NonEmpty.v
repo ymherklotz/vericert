@@ -305,3 +305,24 @@ Proof.
     + constructor. eapply H. constructor; tauto. eapply IHl.
       intros. eapply H. constructor; tauto.
 Qed.
+
+Lemma filter_None :
+  forall A f (x: non_empty A),
+    filter f x = None ->
+    Forall (fun x => f x = false) x.
+Proof.
+  induction x; cbn; intros.
+  - constructor. destruct_match; now auto.
+  - constructor. destruct_match; auto. destruct_match; try discriminate.
+    destruct_match; eauto. now destruct_match.
+Qed.
+
+Lemma In_map :
+  forall A B (f: A -> B) n (x: A),
+    In x n ->
+    In (f x) (map f n).
+Proof.
+  induction n; inversion 1; subst; cbn in *.
+  - constructor.
+  - clear H. inv H1; intuition (constructor; auto).
+Qed.
