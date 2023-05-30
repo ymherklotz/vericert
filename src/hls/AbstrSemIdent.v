@@ -923,31 +923,36 @@ Proof.
 Qed.
 
 Lemma sem_pred_expr_merge2 :
-  forall pr l l',
+  forall pr ps l l',
+    (forall x, sem_pexpr ctx (get_forest_p' x pr) (ps !! x)) ->
     sem_pred_expr pr sem_ident ctx (merge l) l' ->
     Forall2 (sem_pred_expr pr sem_ident ctx) l (of_elist l').
 Proof.
-  induction l; crush.
+  induction l; intros * HPEXPR **; crush.
   - unfold merge in *; cbn in *.
     inv H. inv H5. constructor.
   - unfold merge in H.
     pose proof (NE.of_list_exists _ l a) as Y.
     inversion_clear Y as [x HNE]. rewrite HNE in H.
     erewrite <- (NE.of_list_to_list _ (a :: l)) by eassumption.
-    apply sem_pred_expr_fold_right2 with (s := (NE.singleton (T, Enil))) (s' := Enil).
+    apply sem_pred_expr_fold_right2 with
+      (s := (NE.singleton (T, Enil)))
+      (s' := Enil)
+      (ps := ps); auto.
     repeat constructor.
     rewrite Eapp_right_nil. auto.
 Qed.
 
 (* [[id:f307d227-d0e9-49a0-823f-2d7e0db76972]] *)
 Lemma sem_merge_list :
-  forall f rs ps m args,
+  forall f rs pr ps m args,
+    (forall x, sem_pexpr ctx (get_forest_p' x pr) (ps !! x)) ->
     sem ctx f ((mk_instr_state rs ps m), None) ->
     sem_pred_expr (forest_preds f) sem_val_list ctx
       (merge (list_translation args f)) (rs ## args).
 Proof.
-  induction args; crush. cbn. constructor; constructor.
-  unfold merge. specialize (IHargs H).
+  induction args; intros * HPRED **; crush. cbn. constructor; constructor.
+  unfold merge. specialize (IHargs HPRED H).
   eapply sem_pred_expr_ident2 in IHargs.
   inversion_clear IHargs as [l_ [HSEM HVAL]].
   destruct_match; [|exfalso; eapply NE.of_list_contra; eauto].
@@ -978,6 +983,7 @@ Proof.
     constructor; eauto.
     erewrite NE.of_list_to_list; eauto.
     eapply sem_pred_expr_merge2; auto.
+    eauto.
 Qed.
 
 Lemma sem_pred_expr_list_translation :
@@ -1001,11 +1007,24 @@ Proof.
     cbn; constructor; auto.
 Qed.
 
+(*|
+This is currently not provable as it needs mutual exclusion of the predicate
+expression.
+|*)
+
 Lemma from_predicated_sem_pred_expr :
   forall preds pe b,
     sem_pred_expr preds sem_pred ctx pe b ->
     sem_pexpr ctx (from_predicated true preds pe) b.
-Proof. Admitted.
+Proof.
+  induction pe.
+  - intros. inv H. cbn. unfold "→".
+    destruct b; cbn. constructor. right. constructor. auto.
+    constructor. replace false with (negb true) by auto. now apply sem_pexpr_negate.
+    constructor; auto.
+  - destruct b.
+    + intros; cbn; unfold "→"; repeat destr. inv Heqp. inv H.
+      * constructor. Admitted.
 
 Lemma from_predicated_sem_pred_expr2 :
   forall preds pe b,
