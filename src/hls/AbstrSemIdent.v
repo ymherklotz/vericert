@@ -745,7 +745,15 @@ Lemma sem_pred_expr_flap2_2 :
   forall A B C (f: predicated (A -> B -> C)) ps l1 l2 x,
     sem_pred_expr ps sem_ident ctx (flap2 f l1 l2) x ->
     exists f_, sem_pred_expr ps sem_ident ctx f f_ /\ f_ l1 l2 = x.
-Proof. Admitted.
+Proof.
+  induction f; cbn; intros.
+  - inv H; destruct a; cbn in *. inv H5. eexists; split; eauto.
+    constructor; auto. constructor.
+  - destruct a. cbn [fst snd] in *. inv H.
+    + inv H6. eexists; split; eauto. constructor; auto. constructor.
+    + exploit IHf; eauto; simplify.
+      eexists; split; eauto. eapply sem_pred_expr_cons_false; eauto.
+Qed.
 
 Lemma sem_pred_expr_seq_app_val :
   forall A B V (s: @Abstr.ctx G -> B -> V -> Prop)
