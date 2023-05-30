@@ -112,7 +112,7 @@ Proof.
     apply IHl in X2. inv X2.
     left. constructor; tauto.
     right. unfold not in *; intros. apply H0. inv H1. now inv H3. }
-Qed.
+Defined.
 
 Fixpoint filter {A: Type} (f: A -> bool) (l: non_empty A) : option (non_empty A) :=
   match l with
@@ -176,7 +176,7 @@ Proof.
   - assert (n1 <> n2); unfold not; intros.
     apply Bool.not_true_iff_false in H. apply H.
     apply eqb_complete; auto. tauto.
-Qed.
+Defined.
 
 Inductive Forall {A : Type} (P : A -> Prop) : non_empty A -> Prop :=
 | Forall_singleton a : P a -> Forall P (singleton a)

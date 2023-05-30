@@ -1433,11 +1433,14 @@ Module EHN := HashExprNorm(EHashExpr).
 
 Definition check_mutexcl {A} (pe: predicated A) :=
   let preds := map fst (NE.to_list pe) in
-  let pairs := map (fun x => x → or_list (remove (Predicate.eq_dec peq) x preds)) preds in
+  let pairs := map (fun x => x → negate (or_list (remove (Predicate.eq_dec peq) x preds))) preds in
   match sat_pred_simple (simplify (negate (and_list pairs))) with
   | None => true
   | _ => false
   end.
+
+(* Import ListNotations. *)
+(* Compute deep_simplify peq (and_list (map (fun x => x → negate (or_list (remove (Predicate.eq_dec peq) x [Plit (true, 2)]))) [Plit (true, 2)])). *)
 
 Lemma check_mutexcl_correct:
   forall A (pe: predicated A),
@@ -1447,7 +1450,7 @@ Proof. Admitted.
 
 Lemma check_mutexcl_singleton :
   check_mutexcl (NE.singleton (T, EEbase)) = true.
-Proof. Admitted.
+Proof. crush. Qed.
 
 Definition check_mutexcl_tree {A} (f: PTree.t (predicated A)) :=
   forall_ptree (fun _ => check_mutexcl) f.

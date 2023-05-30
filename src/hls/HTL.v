@@ -341,7 +341,7 @@ Definition max_list_dec (l: list reg) (st: reg) : {Forall (Pos.gt st) l} + {True
       end
     ); auto.
   apply max_list_correct. apply Pos.ltb_lt in e. lia.
-Qed.
+Defined.
 
 Variant wf_htl_fundef: fundef -> Prop :=
   | wf_htl_fundef_external: forall ef,

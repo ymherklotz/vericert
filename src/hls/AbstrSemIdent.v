@@ -252,7 +252,7 @@ Proof.
 Qed.
 
 Lemma sem_pred_expr_NEapp3 :
-  forall f_p ctx a b v,
+  forall f_p a b v,
     (forall x, NE.In x a -> sem_pexpr ctx (from_pred_op f_p (fst x)) false) ->
     sem_pred_expr f_p a_sem ctx b v ->
     sem_pred_expr f_p a_sem ctx (NE.app a b) v.
@@ -270,7 +270,7 @@ Proof.
 Qed.
 
 Lemma sem_pred_expr_NEapp4 :
-  forall f_p ctx a b v,
+  forall f_p a b v,
     (forall x, NE.In x a -> sem_pexpr ctx (from_pred_op f_p (fst x)) false) ->
     sem_pred_expr f_p a_sem ctx (NE.app a b) v ->
     sem_pred_expr f_p a_sem ctx b v.
@@ -286,7 +286,7 @@ Proof.
 Qed.
 
 Lemma sem_pred_expr_NEapp5 :
-  forall f_p ctx a b v,
+  forall f_p a b v,
     (exists x, NE.In x a /\ sem_pexpr ctx (from_pred_op f_p (fst x)) true) ->
     sem_pred_expr f_p a_sem ctx (NE.app a b) v ->
     sem_pred_expr f_p a_sem ctx a v.
@@ -297,6 +297,39 @@ Proof.
   - inv H. inv H3. inv H0. constructor; auto.
     eapply sem_pexpr_det in H2; eauto; now try apply similar_refl. inv H0.
     constructor; auto. apply sem_pred_expr_cons_false; auto. eauto.
+Qed.
+
+Lemma sem_pred_expr_in_or_false :
+  forall f_p ps a,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+    (exists (x: pred_op * A), NE.In x a /\ sem_pexpr ctx (from_pred_op f_p (fst x)) true)
+    \/ (forall x, NE.In x a -> sem_pexpr ctx (from_pred_op f_p (fst x)) false).
+Proof.
+  induction a; intros.
+  - case_eq (eval_predf ps (fst a)); intros.
+    + left. exists a. split; [constructor; auto|]. eapply sem_pexpr_eval; eauto.
+    + right; intros. inv H1. eapply sem_pexpr_eval; eauto.
+  - case_eq (eval_predf ps (fst a)); intros.
+    + left. exists a. split; [constructor; auto|]. eapply sem_pexpr_eval; eauto.
+    + pose proof H as X. eapply IHa in H. inv H; simplify.
+      * left. exists x. split; [constructor; tauto|auto].
+      * right; intros. inv H. inv H3; auto.
+        eapply sem_pexpr_eval; eauto.
+Qed.
+
+Lemma sem_pred_expr_NEapp7 :
+  forall f_p ps a b v,
+    (forall x, sem_pexpr ctx (get_forest_p' x f_p) (ps !! x)) ->
+    sem_pred_expr f_p a_sem ctx (NE.app a b) v ->
+    sem_pred_expr f_p a_sem ctx a v
+    \/ ((forall x, NE.In x a -> sem_pexpr ctx (from_pred_op f_p (fst x)) false)
+         /\ sem_pred_expr f_p a_sem ctx b v).
+Proof.
+  intros.
+  pose proof (sem_pred_expr_in_or_false _ _ a H) as YX.
+  inv YX.
+  - left. eapply sem_pred_expr_NEapp5; eauto.
+  - right; split; auto. eapply sem_pred_expr_NEapp4; eauto.
 Qed.
 
 Lemma In_pexpr_eval :
@@ -545,6 +578,70 @@ Proof.
         constructor; tauto. eauto. } }
 Qed.
 
+Lemma sem_pred_expr_predicated_pair :
+  forall A B f a b a1 b0,
+    sem_pred_expr f sem_ident ctx
+         (NE.map
+            (fun x : Predicate.pred_op * A * (Predicate.pred_op * B) =>
+             let (y, y0) := x in let (a, b) := y in let (c, d) := y0 in (a ∧ c, (b, d)))
+            (GiblePargenproofEquiv.NE.map (fun x : pred_op * B => (a, x)) b)) (a1, b0) ->
+    sem_pred_expr f sem_ident ctx (NE.singleton a) a1.
+Proof.
+  induction b.
+  - cbn; intros. inv H. repeat destr. inv Heqp. inv H0. inv H3. constructor.
+    inv H1; auto. constructor.
+  - cbn in *; intros. inv H; repeat destr; inv H0. inv H5. inv H3.
+    repeat (constructor; auto).
+    eapply IHb; eauto.
+Qed.
+
+Lemma sem_pred_expr_predicated_pair2 :
+  forall A B f ps a b a1 b0,
+    (forall x, sem_pexpr ctx (get_forest_p' x f) (ps !! x)) ->
+    sem_pred_expr f sem_ident ctx
+         (NE.map
+            (fun x : Predicate.pred_op * A * (Predicate.pred_op * B) =>
+             let (y, y0) := x in let (a, b) := y in let (c, d) := y0 in (a ∧ c, (b, d)))
+            (GiblePargenproofEquiv.NE.map (fun x : pred_op * B => (a, x)) b)) (a1, b0) ->
+    sem_pred_expr f sem_ident ctx b b0.
+Proof.
+  induction b.
+  - cbn; intros * HFOREST **. inv H. repeat destr. inv Heqp. inv H0. inv H3. constructor.
+    inv H1; auto. constructor.
+  - cbn in *; intros * HFOREST **. inv H; repeat destr; inv H0. inv H5. inv H3.
+    repeat (constructor; auto).
+    inv H3. inv H0.
+    + exploit sem_pred_expr_predicated_pair; eauto; intros. inv H0.
+      eapply sem_pexpr_eval_inv in H; eauto.
+      eapply sem_pexpr_eval_inv in H4; eauto. now rewrite H in H4.
+    + eapply sem_pred_expr_cons_false; eauto. 
+Qed.
+
+Lemma sem_pred_expr_predicated_false :
+  forall A B f ps a b b0,
+    (forall x, sem_pexpr ctx (get_forest_p' x f) (ps !! x)) ->
+    (forall x, NE.In x (NE.map
+      (fun x : Predicate.pred_op * A * (Predicate.pred_op * B) =>
+        let (y, y0) := x in let (a, b) := y in let (c, d) := y0 in (a ∧ c, (b, d)))
+          (GiblePargenproofEquiv.NE.map (fun x : pred_op * B => (a, x)) b)) -> eval_predf ps (fst x) = false) ->
+    sem_pred_expr f sem_ident ctx b b0 ->
+    eval_predf ps (fst a) = false.
+Proof.
+  induction b; cbn; intros.
+  - inv H1. eapply sem_pexpr_eval_inv in H3; eauto.
+    repeat destr. inv Heqp. exploit H0. constructor. intros.
+    cbn [fst snd] in *. rewrite eval_predf_Pand in H1.
+    eapply andb_false_iff in H1. inv H1; auto. now rewrite H3 in H2.
+  - inv H1.
+    * exploit H0. constructor. left. eauto. intros.
+      repeat destr. cbn [fst snd] in *. rewrite eval_predf_Pand in H1.
+      eapply andb_false_iff in H1. inv H1; auto.
+      eapply sem_pexpr_eval_inv in H5; [|eassumption].
+      now rewrite H2 in H5.
+    * eapply IHb; eauto. intros.
+      exploit H0; eauto. constructor; tauto.
+Qed.
+
 Lemma sem_pred_expr_predicated_prod2 :
   forall A B f ps (a: predicated A) (b: predicated B) x,
     (forall x, sem_pexpr ctx (get_forest_p' x f) (ps !! x)) ->
@@ -566,7 +663,21 @@ Proof.
         apply sem_pred_expr_cons_false; auto.
   - destruct x; cbn [fst snd] in *.
     unfold predicated_prod in H0. cbn in H0.
-    rewrite NE.app_NEmap in H0. 
+    rewrite NE.app_NEmap in H0.
+    eapply sem_pred_expr_NEapp7 in H0; [|eassumption]. inv H0.
+    + exploit sem_pred_expr_predicated_pair; eauto.
+      exploit sem_pred_expr_predicated_pair2; eauto.
+      intros. split; auto. inv H2. constructor; auto.
+    + inv H1.
+      assert (sem_pred_expr f sem_ident ctx a0 a1 /\ sem_pred_expr f sem_ident ctx b b0).
+      { replace a1 with (fst (a1, b0)) by auto. replace b0 with (snd (a1, b0)) by auto.
+        eapply IHa; eauto. } inv H1.
+      split; auto.
+      exploit sem_pred_expr_predicated_false; eauto. intros.
+      exploit H0; eauto. intros. eapply sem_pexpr_eval_inv in H5; eauto.
+      intros. destruct a. apply sem_pred_expr_cons_false; auto.
+      eapply sem_pexpr_eval; eauto.
+Qed.
 
 Lemma sem_pred_expr_seq_app :
   forall A B (f: predicated (A -> B)) ps l f_ l_,
