@@ -898,15 +898,29 @@ Proof.
   simplify. eapply Eapp_Econs_eq in H2; subst; auto.
 Qed.
 
+Lemma of_to_list :
+  forall x, of_elist (to_elist x) = x.
+Proof.
+  induction x; auto.
+  cbn. rewrite IHx; auto.
+Qed.
+
 Lemma sem_pred_expr_merge :
-  forall G (ctx: @Abstr.ctx G) ps l args,
+  forall ps l args,
     Forall2 (sem_pred_expr ps sem_ident ctx) args l ->
     sem_pred_expr ps sem_ident ctx (merge args) (to_elist l).
 Proof.
   induction l; intros.
   - inv H. cbn; repeat constructor.
   - inv H. cbn. unfold merge.
-  Admitted.
+    exploit NE.of_list_exists. intros [x0 HOFLIST]. rewrite HOFLIST.
+    replace (Econs a (to_elist l)) with (Eapp (Econs a (to_elist l)) Enil)
+      by apply Eapp_right_nil.
+    eapply sem_pred_expr_fold_right. constructor; auto. constructor. constructor.
+    cbn. apply NE.of_list_to_list in HOFLIST.
+    setoid_rewrite HOFLIST. constructor; eauto.
+    rewrite of_to_list. auto.
+Qed.
 
 Lemma sem_pred_expr_merge2 :
   forall pr l l',
