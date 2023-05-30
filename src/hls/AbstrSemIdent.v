@@ -945,14 +945,13 @@ Qed.
 
 (* [[id:f307d227-d0e9-49a0-823f-2d7e0db76972]] *)
 Lemma sem_merge_list :
-  forall f rs pr ps m args,
-    (forall x, sem_pexpr ctx (get_forest_p' x pr) (ps !! x)) ->
+  forall f rs ps m args,
     sem ctx f ((mk_instr_state rs ps m), None) ->
     sem_pred_expr (forest_preds f) sem_val_list ctx
       (merge (list_translation args f)) (rs ## args).
 Proof.
-  induction args; intros * HPRED **; crush. cbn. constructor; constructor.
-  unfold merge. specialize (IHargs HPRED H).
+  induction args; intros * **; crush. cbn. constructor; constructor.
+  unfold merge. specialize (IHargs H).
   eapply sem_pred_expr_ident2 in IHargs.
   inversion_clear IHargs as [l_ [HSEM HVAL]].
   destruct_match; [|exfalso; eapply NE.of_list_contra; eauto].
