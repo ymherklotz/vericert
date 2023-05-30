@@ -809,6 +809,21 @@ Proof.
   eapply sem_pred_expr_predicated_prod; eauto.
 Qed.
 
+Lemma sem_pred_expr_cons_pred_expr2 :
+  forall ps pr s a x,
+    (forall x, sem_pexpr ctx (get_forest_p' x pr) (ps !! x)) ->
+    sem_pred_expr pr sem_ident ctx (cons_pred_expr a s) x ->
+    exists s' e, sem_pred_expr pr sem_ident ctx s s'
+      /\ sem_pred_expr pr sem_ident ctx a e
+      /\ x = Econs e s'.
+Proof.
+  intros * HPRED **. unfold cons_pred_expr in *.
+  exploit sem_pred_expr_predicated_map2; eauto; simplify.
+  exploit sem_pred_expr_predicated_prod2; eauto; simplify.
+  destruct x0; cbn in *.
+  eexists; simplify; eauto.
+Qed.
+
 Lemma sem_pred_expr_fold_right :
   forall pr s a a' s',
     sem_pred_expr pr sem_ident ctx s s' ->
@@ -821,13 +836,67 @@ Proof.
   eapply sem_pred_expr_cons_pred_expr; eauto.
 Qed.
 
-Lemma sem_pred_expr_fold_right2 :
-  forall A pr ctx s a a' s',
+Lemma Eapp_Econs :
+  forall x y z,
+    Eapp x (Econs y z) = Eapp (Eapp x (Econs y Enil)) z.
+Proof.
+  induction x; cbn; intros.
+  - auto.
+  - f_equal. auto.
+Qed.
+
+Lemma Eapp_Econs_eq' :
+  forall b' a' x,
+    Eapp b' (Econs x Enil) = Eapp a' (Econs x Enil) -> b' = a'.
+Proof.
+  induction b'; cbn; intros.
+  - destruct a'; auto. cbn in *.
+    inv H. destruct a'; eauto. cbn in *. discriminate.
+  - cbn in *. destruct a'. cbn in *. inv H.
+    { exfalso. destruct b'; cbn in *; discriminate. }
+    cbn in *. inv H. eauto. eapply IHb' in H2. subst. auto.
+Qed.
+
+Lemma Eapp_Econs_eq :
+  forall s' a' b',
+    Eapp a' s' = Eapp b' s' ->
+    a' = b'.
+Proof.
+  induction s'; cbn; intros.
+  - rewrite ! Eapp_right_nil in H; auto.
+  - rewrite Eapp_Econs in H. symmetry in H.
+    rewrite Eapp_Econs in H. eapply IHs' in H.
+    eapply Eapp_Econs_eq'; eauto.
+Qed.
+
+Lemma sem_pred_expr_fold_right2' :
+  forall ps pr s a x s',
+    (forall x, sem_pexpr ctx (get_forest_p' x pr) (ps !! x)) ->
     sem_pred_expr pr sem_ident ctx s s' ->
-    @sem_pred_expr A _ _ pr sem_ident ctx (NE.fold_right cons_pred_expr s a) (Eapp a' s') ->
+    sem_pred_expr pr sem_ident ctx (NE.fold_right cons_pred_expr s a) x ->
+    exists a', x = (Eapp a' s') /\ Forall2 (sem_pred_expr pr sem_ident ctx) (NE.to_list a) (of_elist a').
+Proof.
+  induction a; cbn; intros.
+  - exploit sem_pred_expr_cons_pred_expr2; eauto; simplify.
+    eapply sem_pred_expr_ident_det in H0; eauto; subst.
+    exists (Econs x1 Enil); split; auto.
+    constructor; [auto|constructor].
+  - exploit sem_pred_expr_cons_pred_expr2; eauto; simplify.
+    exploit IHa; eauto; simplify.
+    exists (Econs x1 x); split; auto.
+    constructor; auto.
+Qed.
+
+Lemma sem_pred_expr_fold_right2 :
+  forall ps pr s a a' s',
+    (forall x, sem_pexpr ctx (get_forest_p' x pr) (ps !! x)) ->
+    sem_pred_expr pr sem_ident ctx s s' ->
+    sem_pred_expr pr sem_ident ctx (NE.fold_right cons_pred_expr s a) (Eapp a' s') ->
     Forall2 (sem_pred_expr pr sem_ident ctx) (NE.to_list a) (of_elist a').
 Proof.
-  induction a. Admitted.
+  intros. exploit sem_pred_expr_fold_right2'. eauto. eapply H0. eauto.
+  simplify. eapply Eapp_Econs_eq in H2; subst; auto.
+Qed.
 
 Lemma sem_pred_expr_merge :
   forall G (ctx: @Abstr.ctx G) ps l args,
@@ -836,7 +905,8 @@ Lemma sem_pred_expr_merge :
 Proof.
   induction l; intros.
   - inv H. cbn; repeat constructor.
-  - inv H. cbn. unfold merge. Admitted.
+  - inv H. cbn. unfold merge.
+  Admitted.
 
 Lemma sem_pred_expr_merge2 :
   forall pr l l',
