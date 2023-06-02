@@ -11,7 +11,7 @@
           in
             pkgs.mkShell {
               buildInputs = with pkgs;
-                [ ncoq ncoq.ocaml ncoqPackages.serapi dune_3 gcc python3 ]
+                [ ncoq ncoq.ocaml ncoqPackages.serapi dune_3 gcc python3 lp_solve ]
                 ++ (with ncoq.ocamlPackages; [ findlib menhir menhirLib ocamlgraph ocp-indent utop merlin ])
                 ++ (with python3Packages; [ alectryon sphinx_rtd_theme ]);
             };
