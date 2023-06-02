@@ -193,6 +193,12 @@ Fixpoint from_predicated (b: bool) (f: PTree.t pred_pexpr) (a: predicated pred_e
            (from_predicated b f r)
   end.
 
+Fixpoint from_predicated_inv (a: predicated pred_expression): pred_op :=
+  match a with
+  | NE.singleton (p, e) => p
+  | (p, e) ::| r => Por p (from_predicated_inv r)
+  end.
+
 #[local] Open Scope monad_scope.
 
 Definition simpl_combine {A: Type} (a b: option (@Predicate.pred_op A)) :=
@@ -262,12 +268,15 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
                                    (merge (list_translation rl f))) (f #r Mem)));
       Some (pred, f #r Mem <- pruned)
   | RBsetpred p' c args p =>
+      let predicated := seq_app
+        (pred_ret (PEsetpred c))
+        (merge (list_translation args f)) in
       let new_pred :=
         (from_pred_op f.(forest_preds) (dfltp p' ∧ pred)
-           → from_predicated true f.(forest_preds) (seq_app (pred_ret (PEsetpred c))
-                                                  (merge (list_translation args f))))
+           → from_predicated true f.(forest_preds) predicated)
         ∧ (from_pred_op f.(forest_preds) (¬ (dfltp p') ∨ ¬ pred) → (f #p p))
       in
+      do _ <- assert_ (check_mutexcl predicated);
       do _ <- assert_ (predicated_not_in_forest p f);
       do _ <- assert_ (is_initial_pred_and_notin f p pred);
       Some (pred, f #p p <- new_pred)

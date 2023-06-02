@@ -1065,16 +1065,14 @@ Proof.
         eapply H3; eauto.
       * constructor; eauto. constructor. left.
         replace true with (negb false) by auto. now apply sem_pexpr_negate.
-        eapply IHpe; auto. eapply predicated_cons; eauto.
+        eauto using predicated_cons.
     + intros * HPREDS **; cbn in *; unfold "→"; repeat destr. inv Heqp. inv H0.
       * constructor. left. constructor. replace false with (negb true) by auto. now apply sem_pexpr_negate.
         constructor; auto.
-      * constructor. right.
-        eapply IHpe; eauto.
-        eapply predicated_cons; eauto.
+      * constructor. right. eauto using predicated_cons.
 Qed.
 
-Lemma from_predicated_sem_pred_expr2:
+Lemma from_predicated_sem_pred_expr2':
   forall preds ps pe b b',
     (forall x, sem_pexpr ctx (get_forest_p' x preds) (ps !! x)) ->
     predicated_mutexcl pe ->
@@ -1095,29 +1093,105 @@ Proof.
       * eapply sem_pred_det; eauto. reflexivity.
       * replace false with (negb true) in H4 by auto. apply sem_pexpr_negate2 in H4.
         eapply sem_pexpr_det in H4; eauto; [discriminate|reflexivity].
-    + inv H1.
-      * exploit from_predicated_sem_pred_expr_true.
-        instantiate (2 := pe). instantiate (1 := preds).
-        intros.
-        assert (NE.In x (NE.cons (p, p0) pe)) by (constructor; tauto).
-        inv H.
-        assert ((p, p0) <> x).
-        { unfold not; intros. subst. inv H4. contradiction. }
-        specialize (H3 _ _ ltac:(constructor; left; auto) H2 H).
-        destruct x; cbn in *.
-        eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H7; eauto.
-        apply negb_inj; cbn.
-        rewrite <- eval_predf_negate.
-        eapply H3; eauto.
-        intros. eapply sem_pexpr_det in H0; now try eapply H1.
-      * eapply IHpe; auto. eapply predicated_cons; eauto.
-    + inv H4. inv H2; inv H1.
+    + inv H1; eauto using predicated_cons.
+      exploit from_predicated_sem_pred_expr_true.
+      instantiate (2 := pe). instantiate (1 := preds).
+      intros.
+      assert (NE.In x (NE.cons (p, p0) pe)) by (constructor; tauto).
+      inv H.
+      assert ((p, p0) <> x).
+      { unfold not; intros. subst. inv H4. contradiction. }
+      specialize (H3 _ _ ltac:(constructor; left; auto) H2 H).
+      destruct x; cbn in *.
+      eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H7; eauto.
+      apply negb_inj; cbn.
+      rewrite <- eval_predf_negate.
+      eapply H3; eauto.
+      intros. eapply sem_pexpr_det in H0; now try eapply H1.      
+    + inv H4. inv H2; inv H1; eauto using predicated_cons.
       * replace true with (negb false) in H0 by auto.
         apply sem_pexpr_negate2 in H0.
         eapply sem_pexpr_det in H0; now try apply H8.
-      * eapply IHpe; eauto. eapply predicated_cons; eauto.
       * inv H0. eapply sem_pred_det in H9; now eauto.
-      * eapply IHpe; eauto. eapply predicated_cons; eauto.
+Qed.
+
+Lemma from_predicated_inv_exists_true :
+  forall ps pe,
+    eval_predf ps (from_predicated_inv pe) = true ->
+    exists y, NE.In y pe /\ (eval_predf ps (fst y) = true).
+Proof.
+  induction pe; cbn -[eval_predf]; intros; repeat destr; inv Heqp.
+  - exists (p, p0); intuition constructor.
+  - rewrite eval_predf_Por in H. apply orb_prop in H. inv H.
+    + exists (p, p0); intuition constructor; tauto.
+    + exploit IHpe; auto; simplify.
+      exists x; intuition constructor; tauto.
+Qed.
+
+Lemma from_predicated_sem_pred_expr2:
+  forall preds ps pe b,
+    (forall x, sem_pexpr ctx (get_forest_p' x preds) (ps !! x)) ->
+    predicated_mutexcl pe ->
+    sem_pexpr ctx (from_predicated true preds pe) b ->
+    eval_predf ps (from_predicated_inv pe) = true ->
+    sem_pred_expr preds sem_pred ctx pe b.
+Proof.
+  induction pe.
+  - cbn -[eval_predf]; intros; repeat destr. inv Heqp. inv H1. inv H6.
+    + replace true with (negb false) in H1 by auto.
+      apply sem_pexpr_negate2 in H1.
+      eapply sem_pexpr_eval_inv in H1; eauto.
+      now rewrite H1 in H2.
+    + inv H1. constructor; auto. eapply sem_pexpr_eval; eauto.
+    + inv H7. constructor; auto. eapply sem_pexpr_eval; eauto.
+  - cbn -[eval_predf]; intros; repeat destr. inv Heqp.
+    rewrite eval_predf_Por in H2. apply orb_prop in H2. inv H2.
+    + inv H1. inv H6.
+      * inv H1. inv H6. constructor; eauto using sem_pexpr_eval.
+      * (* contradiction, because eval_predf p true means that all other
+        implications in H1 are false, therefore sem_pexpr will evaluate to
+        true. *)
+        exploit from_predicated_sem_pred_expr_true.
+        -- instantiate (2 := pe). instantiate (1 := preds).
+           intros. destruct x.
+           assert (HIN1: NE.In (p, p0) (NE.cons (p, p0) pe))
+             by (intuition constructor; tauto).
+           assert (HIN2: NE.In (p1, p2) (NE.cons (p, p0) pe))
+             by (intuition constructor; tauto).
+           assert (HNEQ: (p, p0) <> (p1, p2)).
+           { unfold not; inversion 1; subst. clear H4. inv H0. inv H5. contradiction. }
+           cbn. eapply sem_pexpr_eval; eauto.
+           symmetry. rewrite <- negb_involutive. symmetry.
+           rewrite <- eval_predf_negate. rewrite <- negb_involutive.
+           f_equal; cbn.
+           inv H0. specialize (H4 _ _ HIN1 HIN2 HNEQ). cbn in H4.
+           eapply H4; auto.
+        -- intros. eapply sem_pexpr_det in H1; now eauto.
+      * inv H5. inv H2.
+        -- eapply sem_pexpr_negate2' in H1. eapply sem_pexpr_eval_inv in H; eauto.
+           now rewrite H in H3.
+        -- inv H1. constructor; eauto using sem_pexpr_eval.
+    + assert (eval_predf ps p = false).
+      { case_eq (eval_predf ps p); auto; intros HCASE; exfalso.
+        exploit from_predicated_inv_exists_true; eauto; simplify.
+        destruct x; cbn -[eval_predf] in *.
+        assert (HNEQ: (p, p0) <> (p1, p2)).
+        { unfold not; intros. inv H4. inv H0. inv H6. contradiction. }
+        assert (HIN2: NE.In (p1, p2) (NE.cons (p, p0) pe))
+          by (intuition constructor; tauto).
+        assert (HIN1: NE.In (p, p0) (NE.cons (p, p0) pe))
+          by (intuition constructor; tauto).
+        inv H0. specialize (H4 _ _ HIN1 HIN2 HNEQ). eapply H4 in HCASE. cbn in HCASE.
+        rewrite negate_correct in HCASE. now setoid_rewrite H5 in HCASE.
+      }
+      inv H1. inv H7.
+      * inv H1.
+        apply sem_pexpr_negate2' in H6. eapply sem_pexpr_eval_inv in H6; eauto.
+        now rewrite H2 in H6.
+      * eapply sem_pred_expr_cons_false;
+          eauto using sem_pexpr_eval, predicated_cons.
+      * inv H6. inv H4; eapply sem_pred_expr_cons_false;
+          eauto using sem_pexpr_eval, predicated_cons.
 Qed.
 
 End PROOF.

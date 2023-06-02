@@ -93,9 +93,24 @@ Definition remember_expr_m (f : forest) (lst: list pred_expr) (i : instr): list 
   | RBexit p c => lst
   end.
 
+Definition remember_expr_p (f : forest) (lst: list (option pred_op * predicated pred_expression)) (i : instr):
+    list (option pred_op * predicated pred_expression) :=
+  match i with
+  | RBnop => lst
+  | RBop p op rl r => lst
+  | RBload  p chunk addr rl r => lst
+  | RBstore p chunk addr rl r => lst
+  | RBsetpred p' c args p => (p', seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))) :: lst
+  | RBexit p c => lst
+  end.
+
 Definition update' (s: pred_op * forest * list pred_expr * list pred_expr) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr) :=
   let '(p, f, l, lm) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
+
+Definition update'' (s: pred_op * forest * list pred_expr * list pred_expr * list (option pred_op * predicated pred_expression)) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr * list (option pred_op * predicated pred_expression)) :=
+  let '(p, f, l, lm, lp) := s in
+  Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i, remember_expr_p f lp i)) (update (p, f) i).
 
 Lemma equiv_update:
   forall i p f l lm p' f' l' lm',
@@ -357,14 +372,16 @@ Proof.
   assert (HPRED': sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f (is_ps i))
     by now inv H0.
   inversion_clear HPRED' as [? ? ? HPRED].
-  destruct ti as [is_trs is_tps is_tm]. destr. inv H4. inv H1.
+  destruct ti as [is_trs is_tps is_tm]. do 2 destr. inv H4. inv H1.
   pose proof H as YH. specialize (YH src). rewrite forest_pred_gss in YH.
   inv YH; try inv H3.
   + inv H1. inv H6. replace false with (negb true) in H4 by auto.
     replace false with (negb true) in H8 by auto.
     eapply sem_pexpr_negate2 in H4. eapply sem_pexpr_negate2 in H8.
     destruct i.
-    exploit from_predicated_sem_pred_expr2; eauto; intros.
+    exploit from_predicated_sem_pred_expr2.
+    3: { eauto. }
+    3: {  }
     exploit sem_pred_expr_seq_app_val2. eapply HPRED. eauto. simplify.
     inv H3. inv H15. clear H13.
     exploit sem_merge_list; eauto; intros. instantiate (1:=args) in H3.

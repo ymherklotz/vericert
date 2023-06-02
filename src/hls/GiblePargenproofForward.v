@@ -374,6 +374,7 @@ all be evaluable.
 
   Lemma sem_update_Isetpred:
     forall A (ctx: @ctx A) f pr p0 c args b rs m,
+      predicated_mutexcl (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))) ->
       valid_mem (ctx_mem ctx) m ->
       sem ctx f (mk_instr_state rs pr m, None) ->
       Op.eval_condition c rs ## args m = Some b ->
@@ -381,7 +382,9 @@ all be evaluable.
       sem_pexpr ctx
       (from_predicated true (forest_preds f) (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f)))) b.
   Proof.
-    intros. eapply from_predicated_sem_pred_expr.
+    intros * HPREDMUT **. eapply from_predicated_sem_pred_expr.
+    { inv H0. inv H10. eassumption. }
+    { auto. }
     pose proof (sem_merge_list _ ctx f rs pr m args H0).
     apply sem_pred_expr_ident2 in H3; simplify.
     eapply sem_pred_expr_seq_app_val; [eauto| |].
@@ -402,7 +405,7 @@ all be evaluable.
   Proof.
     intros * EVAL_OP TRUTHY VALID SEM UPD EVAL_PRED.
     pose proof SEM as SEM2.
-    inversion UPD as [PRUNE]. unfold Option.bind in PRUNE. destr. destr.
+    inversion UPD as [PRUNE]. unfold Option.bind in PRUNE. repeat destr.
     inversion_clear PRUNE.
     rename Heqo into PRUNE.
     inversion_clear SEM as [? ? ? ? ? ? REG PRED MEM EXIT].
@@ -413,11 +416,12 @@ all be evaluable.
     + constructor; intros. destruct (peq x pred); subst.
       * rewrite Regmap.gss.
         rewrite forest_pred_gss.
-        cbn [update] in *. unfold Option.bind in *. destr. destr. inv UPD.
+        cbn [update] in *. unfold Option.bind in *. repeat destr. inv UPD.
         replace b with (b && true) by eauto with bool.
         apply sem_pexpr_Pand.
         destruct b. constructor. right.
         eapply sem_update_Isetpred; eauto.
+        { unfold assert_ in Heqo. destr. auto using check_mutexcl_correct. }
         constructor. constructor. replace false with (negb true) by auto.
         apply sem_pexpr_negate. inv TRUTHY. constructor.
         cbn. eapply sem_pexpr_eval. inv PRED. eauto. auto.
@@ -425,6 +429,7 @@ all be evaluable.
         apply sem_pexpr_negate.
         eapply sem_pexpr_eval. inv PRED. eauto. auto.
         eapply sem_update_Isetpred; eauto.
+        { unfold assert_ in Heqo. destr. auto using check_mutexcl_correct. }
         constructor. constructor. constructor.
         replace true with (negb false) by auto. apply sem_pexpr_negate.
         eapply sem_pexpr_eval. inv PRED. eauto. inv TRUTHY. auto. cbn -[eval_predf].
@@ -503,10 +508,10 @@ all be evaluable.
         eapply sem_pred_expr_app_predicated_false. inv H3. auto. inv H3. inv H9. eauto.
         rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H0. auto.
       * inv H3. auto.
-    - unfold Option.bind in *. destr. destr. inv H2.
+    - unfold Option.bind in *. repeat destr. inv H2.
       constructor.
       * constructor; intros. rewrite forest_pred_reg. apply sem_pred_not_in.
-        inv H3. inv H8. auto. apply pred_not_in_forestP. unfold assert_ in Heqo. now destr.
+        inv H3. inv H8. auto. apply pred_not_in_forestP. unfold assert_ in Heqo0. now destr.
       * constructor. intros. destruct (peq x pred); subst.
         rewrite forest_pred_gss. replace (ps !! pred) with (true && ps !! pred) by auto.
         assert (sem_pexpr state0 (¬ (from_pred_op (forest_preds f) p0 ∧ from_pred_op (forest_preds f) p')) true).
@@ -521,9 +526,9 @@ all be evaluable.
         }
         rewrite forest_pred_gso by auto. inv H3. inv H9. auto.
       * rewrite forest_pred_reg. apply sem_pred_not_in. inv H3. auto.
-        apply pred_not_in_forestP. unfold assert_ in Heqo. now destr.
+        apply pred_not_in_forestP. unfold assert_ in Heqo0. now destr.
       * apply sem_pred_not_in. inv H3; auto. cbn.
-        apply pred_not_in_forest_exitP. unfold assert_ in Heqo. now destr.
+        apply pred_not_in_forest_exitP. unfold assert_ in Heqo0. now destr.
     - unfold Option.bind in *. destr. inv H2. inv H3. constructor.
       * constructor. inv H8. auto.
       * constructor. intros. inv H9. eauto.
@@ -578,10 +583,10 @@ all be evaluable.
         eapply sem_pred_expr_app_predicated_false. inv H1. auto. inv H1. inv H8. eauto.
         rewrite eval_predf_Pand. cbn -[eval_predf]. rewrite H. eauto with bool.
       * inv H1. auto.
-    - unfold Option.bind in *. destr. destr. inv H0. split; [|solve [auto]].
+    - unfold Option.bind in *. repeat destr. inv H0. split; [|solve [auto]].
       constructor.
       * constructor; intros. rewrite forest_pred_reg. apply sem_pred_not_in.
-        inv H1. inv H7. auto. apply pred_not_in_forestP. unfold assert_ in Heqo0. now destr.
+        inv H1. inv H7. auto. apply pred_not_in_forestP. unfold assert_ in Heqo1. now destr.
       * constructor. intros. destruct (peq x p0); subst.
         rewrite forest_pred_gss. replace (ps !! p0) with (true && ps !! p0) by auto.
         assert (sem_pexpr state0 (¬ (from_pred_op (forest_preds f) (dfltp o) ∧ from_pred_op (forest_preds f) p')) true).
@@ -596,9 +601,9 @@ all be evaluable.
         }
         rewrite forest_pred_gso by auto. inv H1. inv H8. auto.
       * rewrite forest_pred_reg. apply sem_pred_not_in. inv H1. auto.
-        apply pred_not_in_forestP. unfold assert_ in Heqo0. now destr.
+        apply pred_not_in_forestP. unfold assert_ in Heqo1. now destr.
       * apply sem_pred_not_in. inv H1; auto. cbn.
-        apply pred_not_in_forest_exitP. unfold assert_ in Heqo0. now destr.
+        apply pred_not_in_forest_exitP. unfold assert_ in Heqo1. now destr.
     - unfold Option.bind in *. destr. inv H0. inv H1. split.
       -- constructor.
          * constructor. inv H7. auto.
@@ -742,9 +747,9 @@ all be evaluable.
   Proof.
     intros * UPD STEP EVAL. destruct instr; cbn [update] in UPD;
       try solve [unfold Option.bind in *; try destr; inv UPD; inv STEP; auto].
-    - unfold Option.bind in *. destr. destr. inv UPD. inv STEP; auto. cbn [is_ps] in *.
-      unfold is_initial_pred_and_notin in Heqo1. unfold assert_ in Heqo1. destr. destr.
-      destr. destr. destr. destr. subst. assert (~ PredIn p2 next_p).
+    - unfold Option.bind in *. repeat destr. inv UPD. inv STEP; auto. cbn [is_ps] in *.
+      unfold is_initial_pred_and_notin in Heqo2. unfold assert_ in Heqo2. repeat destr.
+      subst. assert (~ PredIn p2 next_p).
       unfold not; intros. apply negb_true_iff in Heqb0. apply not_true_iff_false in Heqb0.
       apply Heqb0. now apply predin_PredIn. rewrite eval_predf_not_PredIn; auto.
     - unfold Option.bind in *. destr. inv UPD. inv STEP. inv H3. cbn.

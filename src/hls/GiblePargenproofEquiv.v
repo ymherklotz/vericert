@@ -890,6 +890,24 @@ Section SEM_PRED_EXEC.
       + destruct b; try discriminate. constructor; eauto.
   Qed.
 
+  Lemma sem_pexpr_negate2' :
+    forall p b,
+      sem_pexpr ctx (¬ p) b ->
+      sem_pexpr ctx p (negb b).
+  Proof.
+    intros. rewrite <- negb_involutive in H.
+    auto using sem_pexpr_negate2.
+  Qed.
+
+  Lemma sem_pexpr_negate' :
+    forall p b,
+      sem_pexpr ctx p (negb b) ->
+      sem_pexpr ctx (¬ p) b.
+  Proof.
+    intros. rewrite <- negb_involutive.
+    auto using sem_pexpr_negate.
+  Qed.
+
   Lemma sem_pexpr_evaluable :
     forall f_p ps,
       (forall x, sem_pexpr ctx (get_forest_p' x f_p) ps !! x) ->

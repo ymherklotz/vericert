@@ -326,3 +326,15 @@ Proof.
   - constructor.
   - clear H. inv H1; intuition (constructor; auto).
 Qed.
+
+Lemma In_map2 :
+  forall A B (f: A -> B) n (x: B),
+    In x (map f n) ->
+    exists y, In y n /\ x = f y.
+Proof.
+  induction n; inversion 1; subst; cbn in *.
+  - inv H. exists a; split; auto. constructor.
+  - clear H. inv H1.
+    + exists a; split; auto; constructor; tauto.
+    + exploit IHn; eauto; simplify. exists x0; split; auto; constructor; tauto.
+Qed.

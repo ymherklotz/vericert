@@ -233,11 +233,148 @@ Proof.
   - intros. cbn in H. eapply andb_prop in H. inv H. eapply IHa in H0.
     unfold predicated_not_inP in *; intros. inv H. inv H3; cbn in *; eauto.
     unfold not; intros. eapply predin_PredIn in H. now rewrite H in H1.
-Qed.
-    
+Qed.    
 
 Lemma truthy_dec:
   forall ps a, truthy ps a \/ falsy ps a.
 Proof.
   destruct a; try case_eq (eval_predf ps p); intuition (constructor; auto).
+Qed.
+
+Definition all_mutexcl (f: forest) : Prop :=
+  forall x, predicated_mutexcl (f #r x).
+
+(* Lemma map_mutexcl' : *)
+(*   forall A B (x: predicated A) (f: (pred_op * A) -> (pred_op * B)), *)
+(*     predicated_mutexcl x -> *)
+(*     (forall a pop, fst (f (pop, a)) ⇒ pop) -> *)
+(*     (forall a b, f a = f b -> a = b) -> *)
+(*     predicated_mutexcl (NE.map f x). *)
+(* Proof. *)
+(*   induction x; cbn; intros. *)
+(*   - cbn. repeat constructor; intros. inv H2. inv H3. contradiction. *)
+(*   - constructor. intros. *)
+(*     assert (exists x0', x0 = f x0') by admit. *)
+(*     assert (exists y', y = f y') by admit. *)
+(*     simplify. unfold "⇒" in *; intros. *)
+(*     destruct x2, x1. *)
+(*     eapply H0 in H5. *)
+(*     inv H. *)
+(*     specialize (H6 (p, a0) (p0, a1)). *)
+(*     assert ((fst (p, a0)) ⇒ ¬ (fst (p0, a1))) by admit. *)
+(*     unfold "⇒" in H; simplify. *)
+(*     apply H in H5. *)
+
+Lemma map_deep_simplify :
+  forall A x (eqd: forall a b: pred_op * A, {a = b} + {a <> b}),
+    predicated_mutexcl x ->
+    predicated_mutexcl
+      (GiblePargenproofEquiv.NE.map (fun x : Predicate.pred_op * A => (deep_simplify peq (fst x), snd x)) x).
+Proof.
+  intros. inv H.
+  assert (forall x0 y : pred_op * A,
+  GiblePargenproofEquiv.NE.In x0
+    (GiblePargenproofEquiv.NE.map (fun x1 : Predicate.pred_op * A => (deep_simplify peq (fst x1), snd x1)) x) ->
+  GiblePargenproofEquiv.NE.In y
+    (GiblePargenproofEquiv.NE.map (fun x1 : Predicate.pred_op * A => (deep_simplify peq (fst x1), snd x1)) x) ->
+  x0 <> y -> fst x0 ⇒ ¬ fst y).
+  { intros. exploit NE.In_map2. eapply H. simplify.
+    exploit NE.In_map2. eapply H2. simplify.
+    specialize (H0 _ _ H4 H5).
+    destruct (eqd x1 x0); subst; try contradiction.
+    apply H0 in n.
+    unfold "⇒" in *; intros. rewrite negate_correct.
+    rewrite deep_simplify_correct. rewrite <- negate_correct. apply n.
+    erewrite <- deep_simplify_correct; eassumption. }
+  constructor; auto.
+  generalize dependent x. induction x; crush; [constructor|].
+  inv H1.
+  assert (forall x0 y, GiblePargenproofEquiv.NE.In x0 x -> GiblePargenproofEquiv.NE.In y x -> x0 <> y -> fst x0 ⇒ ¬ fst y).
+  { intros. eapply H0; auto; constructor; tauto. }
+  assert (forall x0 y : pred_op * A,
+    GiblePargenproofEquiv.NE.In x0
+      (GiblePargenproofEquiv.NE.map (fun x1 : Predicate.pred_op * A => (deep_simplify peq (fst x1), snd x1)) x) ->
+    GiblePargenproofEquiv.NE.In y
+      (GiblePargenproofEquiv.NE.map (fun x1 : Predicate.pred_op * A => (deep_simplify peq (fst x1), snd x1)) x) ->
+    x0 <> y -> fst x0 ⇒ ¬ fst y).
+  { intros. eapply H; auto; constructor; tauto. }
+  constructor; eauto.
+  unfold not; intros.
+  Abort.
+
+Lemma prune_predicated_mutexcl :
+  forall A (x: predicated A) y,
+    predicated_mutexcl x ->
+    prune_predicated x = Some y ->
+    predicated_mutexcl y.
+Proof.
+  unfold prune_predicated; intros.
+  Admitted.
+#[local] Hint Resolve prune_predicated_mutexcl : mte.
+
+Lemma app_predicated_mutexcl :
+  forall A p (x: predicated A) y,
+    predicated_mutexcl x ->
+    predicated_mutexcl y ->
+    predicated_mutexcl (app_predicated p x y).
+Proof. Admitted.
+#[local] Hint Resolve app_predicated_mutexcl : mte.
+
+Lemma seq_app_predicated_mutexcl :
+  forall A B (f: predicated (A -> B)) y,
+    predicated_mutexcl f ->
+    predicated_mutexcl y ->
+    predicated_mutexcl (seq_app f y).
+Proof. Admitted.
+#[local] Hint Resolve seq_app_predicated_mutexcl : mte.
+
+Lemma all_predicated_mutexcl:
+  forall f l,
+    all_mutexcl f ->
+    predicated_mutexcl (merge (list_translation l f)).
+Proof. Admitted.
+#[local] Hint Resolve all_predicated_mutexcl : mte.
+
+Lemma flap2_predicated_mutexcl :
+  forall A B C (f: predicated (A -> B -> C)) x y,
+    predicated_mutexcl f ->
+    predicated_mutexcl (flap2 f x y).
+Proof. Admitted.
+#[local] Hint Resolve flap2_predicated_mutexcl : mte.
+
+Lemma all_mutexcl_set :
+  forall f n r,
+    all_mutexcl f ->
+    predicated_mutexcl n ->
+    all_mutexcl f #r r <- n.
+Proof.
+  unfold all_mutexcl; intros.
+  destruct (resource_eq x r); subst.
+  { now rewrite forest_reg_gss. }
+  now rewrite forest_reg_gso by auto.
+Qed.
+#[local] Hint Resolve all_mutexcl_set : mte.
+
+Lemma pred_ret_mutexcl :
+  forall A (a: A), predicated_mutexcl (pred_ret a).
+Proof.
+  unfold pred_ret. repeat constructor; intros. inv H. inv H0. contradiction.
+Qed.
+#[local] Hint Resolve pred_ret_mutexcl : mte.
+
+Lemma all_mutexcl_maintained :
+  forall f p p' f' i,
+    all_mutexcl f ->
+    update (p, f) i = Some (p', f') ->
+    all_mutexcl f'.
+Proof.
+  destruct i; cbn -[seq_app]; intros; unfold Option.bind in *; repeat destr; inv H0.
+  - trivial.
+  - apply prune_predicated_mutexcl in Heqo1; auto with mte.
+  - apply prune_predicated_mutexcl in Heqo0; auto with mte.
+  - apply prune_predicated_mutexcl in Heqo0; auto with mte.
+    apply app_predicated_mutexcl; auto with mte.
+  - unfold all_mutexcl; intros; rewrite forest_pred_reg; auto.
+  - unfold all_mutexcl; intros. unfold "<-e". unfold "#r". cbn.
+    fold (get_forest x f). auto.
 Qed.
