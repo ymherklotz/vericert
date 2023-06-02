@@ -279,6 +279,7 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
       do _ <- assert_ (check_mutexcl predicated);
       do _ <- assert_ (predicated_not_in_forest p f);
       do _ <- assert_ (is_initial_pred_and_notin f p pred);
+      do _ <- assert_ (match sat_pred_simple (¬ from_predicated_inv predicated) with None => true | Some _ => false end);
       Some (pred, f #p p <- new_pred)
   | RBexit p c =>
       let new_p := simplify (negate (dfltp p) ∧ pred) in

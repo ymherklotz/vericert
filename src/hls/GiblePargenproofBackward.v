@@ -417,14 +417,22 @@ Proof.
   assert (HPRED': sem_predset {| ctx_is := i0; ctx_sp := sp; ctx_ge := ge |} f (is_ps i))
     by now inv H0.
   inversion_clear HPRED' as [? ? ? HPRED].
-  destruct ti as [is_trs is_tps is_tm]. do 2 destr. inv H4. inv H1.
+  destruct ti as [is_trs is_tps is_tm]. do 3 destr. inv H4. inv H1.
   pose proof H as YH. specialize (YH src). rewrite forest_pred_gss in YH.
   inv YH; try inv H3.
   + inv H1. inv H6. replace false with (negb true) in H4 by auto.
     replace false with (negb true) in H8 by auto.
     eapply sem_pexpr_negate2 in H4. eapply sem_pexpr_negate2 in H8.
     destruct i.
-    exploit from_predicated_sem_pred_expr2. admit. admit. eauto. admit. intros.
+    exploit from_predicated_sem_pred_expr2.
+      3: eauto.
+      { eauto. }
+      { unfold assert_ in Heqo. clear Heqo2. destr. now eapply check_mutexcl_correct. } 
+      { unfold assert_ in Heqo2. repeat destr. unfold sat_pred_simple in Heqo3.
+        destruct (sat_pred_tseytin (¬ from_predicated_inv (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))))); [destruct s; discriminate|]. rewrite <- negb_involutive. symmetry.
+        rewrite <- negb_involutive. rewrite <- eval_predf_negate. f_equal. eauto.
+      }
+      intros.
     exploit sem_pred_expr_seq_app_val2. eapply HPRED. eauto. simplify.
     inv H3. inv H15. clear H13.
     exploit sem_merge_list; eauto; intros. instantiate (1:=args) in H3.
@@ -461,7 +469,15 @@ Proof.
     * case_eq (eval_predf (is_ps i) (dfltp p)); intros.
       -- eapply sem_pexpr_eval in H3; eauto.
          destruct i.
-         exploit from_predicated_sem_pred_expr2. admit. admit. eauto. admit. intros.
+         exploit from_predicated_sem_pred_expr2.
+           3: eauto.
+           { eauto. }
+           { unfold assert_ in Heqo. clear Heqo2. destr. now apply check_mutexcl_correct. }
+           { unfold assert_ in Heqo2. repeat destr. unfold sat_pred_simple in Heqo3.
+        destruct (sat_pred_tseytin (¬ from_predicated_inv (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))))); [destruct s; discriminate|]. rewrite <- negb_involutive. symmetry.
+        rewrite <- negb_involutive. rewrite <- eval_predf_negate. f_equal. eauto.
+      }
+           intros.
          exploit sem_pred_expr_seq_app_val2. eapply HPRED. eauto. simplify.
          inv H7. inv H15. clear H13.
          exploit sem_merge_list; eauto; intros. instantiate (1:=args) in H7.
@@ -481,7 +497,7 @@ Proof.
       -- econstructor. apply exec_RB_falsy.
          destruct p. constructor. inv H2. erewrite <- eval_predf_pr_equiv; eauto.
          easy.
-Admitted.
+Qed.
 
 Lemma evaluable_pred_expr_exists_RBexit :
   forall sp i ti p cf,
@@ -1358,10 +1374,10 @@ Proof.
     repeat destr; cbn in *; inversion_clear 1; subst; cbn in *; auto.
   inversion_clear H; destruct o; auto.
   - destruct (peq p0 x); subst.
-    + inv H0. eapply gather_predicates_fold in H1. rewrite H1 in Heqo3. discriminate.
+    + inv H0. eapply gather_predicates_fold in H1. rewrite H1 in Heqo4. discriminate.
     + rewrite PTree.gso by auto; auto.
   - destruct (peq p0 x); subst.
-    { rewrite H1 in Heqo3. inversion Heqo3. }
+    { rewrite H1 in Heqo4. inversion Heqo4. }
     rewrite PTree.gso by auto; auto.
 Qed.
 
@@ -1649,7 +1665,7 @@ Proof.
           rewrite mask_pred_map_not_in_pred; auto.
       * inv HSEM_MID. specialize (H2 x). rewrite forest_pred_gso in H2 by auto.
         destruct (preds ! x) eqn:HDESTR.
-        -- destruct u2. now rewrite mask_pred_map_in_pred.
+        -- destruct u3. now rewrite mask_pred_map_in_pred.
         -- rewrite mask_pred_map_not_in_pred; auto.
     + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
       generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
