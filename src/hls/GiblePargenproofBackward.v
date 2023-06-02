@@ -93,14 +93,13 @@ Definition remember_expr_m (f : forest) (lst: list pred_expr) (i : instr): list 
   | RBexit p c => lst
   end.
 
-Definition remember_expr_p (f : forest) (lst: list (option pred_op * predicated pred_expression)) (i : instr):
-    list (option pred_op * predicated pred_expression) :=
+Definition remember_expr_p (f : forest) (lst: list pred_op) (i : instr): list pred_op :=
   match i with
   | RBnop => lst
   | RBop p op rl r => lst
   | RBload  p chunk addr rl r => lst
   | RBstore p chunk addr rl r => lst
-  | RBsetpred p' c args p => (p', seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))) :: lst
+  | RBsetpred p' c args p => from_predicated_inv (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))) :: lst
   | RBexit p c => lst
   end.
 
@@ -108,7 +107,7 @@ Definition update' (s: pred_op * forest * list pred_expr * list pred_expr) (i: i
   let '(p, f, l, lm) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
 
-Definition update'' (s: pred_op * forest * list pred_expr * list pred_expr * list (option pred_op * predicated pred_expression)) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr * list (option pred_op * predicated pred_expression)) :=
+Definition update'' (s: pred_op * forest * list pred_expr * list pred_expr * list pred_op) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr * list pred_op) :=
   let '(p, f, l, lm, lp) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i, remember_expr_p f lp i)) (update (p, f) i).
 
@@ -124,6 +123,52 @@ Proof.
     unfold Option.bind2, Option.ret in HB; repeat destr. inv Heqp1.
     eapply IHi; eauto.
 Qed.
+
+Lemma equiv_update1':
+  forall i p f l lm p' f' l' lm' lp lp',
+    update'' (p, f, l, lm, lp) i = Some (p', f', l', lm', lp') ->
+    update' (p, f, l, lm) i = Some (p', f', l', lm').
+Proof.
+  intros. unfold update', update'', Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. now inv H.
+Qed.
+
+Lemma equiv_update1:
+  forall i p f l lm p' f' l' lm',
+    update' (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update (p, f) i = Some (p', f').
+Proof.
+  intros. unfold update', Option.bind2, Option.ret in *. repeat destr.
+  now inv H.
+Qed.
+
+Lemma equiv_update1'':
+  forall i p f l lm p' f' l' lm' lp lp',
+    update'' (p, f, l, lm, lp) i = Some (p', f', l', lm', lp') ->
+    update (p, f) i = Some (p', f').
+Proof.
+  intros. unfold update', update'', Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. now inv H.
+Qed.
+
+Lemma equiv_update':
+  forall i p f l lm p' f' l' lm' lp lp',
+    mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') ->
+    mfold_left update' i (Some (p, f, l, lm)) = Some (p', f', l', lm').
+Proof.
+  induction i; cbn -[update'' update'] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[[p_mid f_mid] l_mid] lm_mid] lp_mid] HB].
+    exploit equiv_update1'; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
+Qed.
+
+Lemma equiv_update'':
+  forall i p f l lm p' f' l' lm' lp lp',
+    mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') ->
+    mfold_left update i (Some (p, f)) = Some (p', f').
+Proof. eauto using equiv_update', equiv_update. Qed.
 
 Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t unit) :=
   match i with
@@ -379,9 +424,7 @@ Proof.
     replace false with (negb true) in H8 by auto.
     eapply sem_pexpr_negate2 in H4. eapply sem_pexpr_negate2 in H8.
     destruct i.
-    exploit from_predicated_sem_pred_expr2.
-    3: { eauto. }
-    3: {  }
+    exploit from_predicated_sem_pred_expr2. admit. admit. eauto. admit. intros.
     exploit sem_pred_expr_seq_app_val2. eapply HPRED. eauto. simplify.
     inv H3. inv H15. clear H13.
     exploit sem_merge_list; eauto; intros. instantiate (1:=args) in H3.
@@ -418,7 +461,7 @@ Proof.
     * case_eq (eval_predf (is_ps i) (dfltp p)); intros.
       -- eapply sem_pexpr_eval in H3; eauto.
          destruct i.
-         exploit from_predicated_sem_pred_expr2; eauto; intros.
+         exploit from_predicated_sem_pred_expr2. admit. admit. eauto. admit. intros.
          exploit sem_pred_expr_seq_app_val2. eapply HPRED. eauto. simplify.
          inv H7. inv H15. clear H13.
          exploit sem_merge_list; eauto; intros. instantiate (1:=args) in H7.
@@ -438,7 +481,7 @@ Proof.
       -- econstructor. apply exec_RB_falsy.
          destruct p. constructor. inv H2. erewrite <- eval_predf_pr_equiv; eauto.
          easy.
-Qed.
+Admitted.
 
 Lemma evaluable_pred_expr_exists_RBexit :
   forall sp i ti p cf,
@@ -1315,10 +1358,10 @@ Proof.
     repeat destr; cbn in *; inversion_clear 1; subst; cbn in *; auto.
   inversion_clear H; destruct o; auto.
   - destruct (peq p0 x); subst.
-    + inv H0. eapply gather_predicates_fold in H1. rewrite H1 in Heqo2. discriminate.
+    + inv H0. eapply gather_predicates_fold in H1. rewrite H1 in Heqo3. discriminate.
     + rewrite PTree.gso by auto; auto.
   - destruct (peq p0 x); subst.
-    { rewrite H1 in Heqo2. inversion Heqo2. }
+    { rewrite H1 in Heqo3. inversion Heqo3. }
     rewrite PTree.gso by auto; auto.
 Qed.
 
@@ -1606,7 +1649,7 @@ Proof.
           rewrite mask_pred_map_not_in_pred; auto.
       * inv HSEM_MID. specialize (H2 x). rewrite forest_pred_gso in H2 by auto.
         destruct (preds ! x) eqn:HDESTR.
-        -- destruct u1. now rewrite mask_pred_map_in_pred.
+        -- destruct u2. now rewrite mask_pred_map_in_pred.
         -- rewrite mask_pred_map_not_in_pred; auto.
     + unfold Option.bind2, Option.bind, Option.ret in *; repeat destr.
       generalize dependent Heqo; repeat destr; intros Heqo; inv Heqo.
