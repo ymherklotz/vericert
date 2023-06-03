@@ -73,44 +73,6 @@ Context (prog: GibleSeq.program) (tprog : GiblePar.program).
 Let ge : GibleSeq.genv := Globalenvs.Genv.globalenv prog.
 Let tge : GiblePar.genv := Globalenvs.Genv.globalenv tprog.
 
-Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
-  match i with
-  | RBnop => lst
-  | RBop p op rl r => (f #r (Reg r)) :: lst
-  | RBload  p chunk addr rl r => (f #r (Reg r)) :: lst
-  | RBstore p chunk addr rl r => lst
-  | RBsetpred p' c args p => lst
-  | RBexit p c => lst
-  end.
-
-Definition remember_expr_m (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
-  match i with
-  | RBnop => lst
-  | RBop p op rl r => lst
-  | RBload  p chunk addr rl r => lst
-  | RBstore p chunk addr rl r => (f #r Mem) :: lst
-  | RBsetpred p' c args p => lst
-  | RBexit p c => lst
-  end.
-
-Definition remember_expr_p (f : forest) (lst: list pred_op) (i : instr): list pred_op :=
-  match i with
-  | RBnop => lst
-  | RBop p op rl r => lst
-  | RBload  p chunk addr rl r => lst
-  | RBstore p chunk addr rl r => lst
-  | RBsetpred p' c args p => from_predicated_inv (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))) :: lst
-  | RBexit p c => lst
-  end.
-
-Definition update' (s: pred_op * forest * list pred_expr * list pred_expr) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr) :=
-  let '(p, f, l, lm) := s in
-  Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
-
-Definition update'' (s: pred_op * forest * list pred_expr * list pred_expr * list pred_op) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr * list pred_op) :=
-  let '(p, f, l, lm, lp) := s in
-  Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i, remember_expr_p f lp i)) (update (p, f) i).
-
 Lemma equiv_update:
   forall i p f l lm p' f' l' lm',
     mfold_left update' i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
@@ -169,32 +131,6 @@ Lemma equiv_update'':
     mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') ->
     mfold_left update i (Some (p, f)) = Some (p', f').
 Proof. eauto using equiv_update', equiv_update. Qed.
-
-Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t unit) :=
-  match i with
-  | RBop (Some p) _ _ _
-  | RBload (Some p) _ _ _ _
-  | RBstore (Some p) _ _ _ _
-  | RBexit (Some p) _ =>
-    Some (fold_right (fun x => PTree.set x tt) preds (predicate_use p))
-  | RBsetpred p' c args p =>
-    let preds' := match p' with
-                  | Some p'' => fold_right (fun x => PTree.set x tt) preds (predicate_use p'')
-                  | None => preds
-                  end
-    in
-    match preds' ! p with
-    | Some _ => None
-    | None => Some (PTree.set p tt preds')
-    end
-  | _ => Some preds
-  end.
-
-Definition abstract_sequence' (b : list instr) : option (forest * list pred_expr * list pred_expr) :=
-  Option.bind (fun x => Option.bind (fun _ => Some x)
-    (mfold_left gather_predicates b (Some (PTree.empty _))))
-      (Option.map (fun x => let '(_, y, z, zm) := x in (y, z, zm))
-        (mfold_left update' b (Some (Ptrue, empty, nil, nil)))).
 
 Definition i_state (s: istate): instr_state :=
   match s with
