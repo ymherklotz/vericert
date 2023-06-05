@@ -289,11 +289,11 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
       Some (new_p, f <-e pruned)
   end.
 
-Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
+Definition remember_expr (f : forest) (lst: list (resource * pred_expr)) (i : instr): list (resource * pred_expr) :=
   match i with
   | RBnop => lst
-  | RBop p op rl r => (f #r (Reg r)) :: lst
-  | RBload  p chunk addr rl r => (f #r (Reg r)) :: lst
+  | RBop p op rl r => (Reg r, f #r (Reg r)) :: lst
+  | RBload  p chunk addr rl r => (Reg r, f #r (Reg r)) :: lst
   | RBstore p chunk addr rl r => lst
   | RBsetpred p' c args p => lst
   | RBexit p c => lst
@@ -309,6 +309,11 @@ Definition remember_expr_m (f : forest) (lst: list pred_expr) (i : instr): list 
   | RBexit p c => lst
   end.
 
+(*|
+Not actually needed, because there is a better way to show that a predicate is
+evaluable.
+|*)
+
 Definition remember_expr_p (f : forest) (lst: list pred_op) (i : instr): list pred_op :=
   match i with
   | RBnop => lst
@@ -319,11 +324,11 @@ Definition remember_expr_p (f : forest) (lst: list pred_op) (i : instr): list pr
   | RBexit p c => lst
   end.
 
-Definition update' (s: pred_op * forest * list pred_expr * list pred_expr) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr) :=
+Definition update_top (s: pred_op * forest * list (resource * pred_expr) * list pred_expr) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr) :=
   let '(p, f, l, lm) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
 
-Definition update'' (s: pred_op * forest * list pred_expr * list pred_expr * list pred_op) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr * list pred_op) :=
+Definition update'' (s: pred_op * forest * list (resource * pred_expr) * list pred_expr * list pred_op) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr * list pred_op) :=
   let '(p, f, l, lm, lp) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i, remember_expr_p f lp i)) (update (p, f) i).
 
@@ -347,11 +352,11 @@ Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t
   | _ => Some preds
   end.
 
-Definition abstract_sequence' (b : list instr) : option (forest * list pred_expr * list pred_expr) :=
+Definition abstract_sequence_top (b : list instr) : option (forest * list (resource * pred_expr) * list pred_expr) :=
   Option.bind (fun x => Option.bind (fun _ => Some x)
     (mfold_left gather_predicates b (Some (PTree.empty _))))
       (Option.map (fun x => let '(_, y, z, zm) := x in (y, z, zm))
-        (mfold_left update' b (Some (Ptrue, empty, nil, nil)))).
+        (mfold_left update_top b (Some (Ptrue, empty, nil, nil)))).
 
 (*Compute match update (T, mk_forest (PTree.empty _) (PTree.empty _) (NE.singleton (T, EEbase)))
   (RBop None Op.Odiv (1::2::nil) 3) with
@@ -404,10 +409,23 @@ Definition empty_trees (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   | _ => true
   end.
 
+Definition check_evaluability1 a b :=
+  forallb (fun be =>
+    existsb (fun ae =>
+      resource_eq (fst ae) (fst be) 
+      && HN.beq_pred_expr (snd ae) (snd be)
+    ) a
+  ) b.
+
+Definition check_evaluability2 a b :=
+  forallb (fun be => existsb (fun ae => HN.beq_pred_expr ae be) a) b.
+
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
-  match abstract_sequence bb, abstract_sequence (concat (concat bbt)) with
-  | Some bb', Some bbt' =>
+  match abstract_sequence_top bb, abstract_sequence_top (concat (concat bbt)) with
+  | Some (bb', reg_expr, m_expr), Some (bbt', reg_expr_t, m_expr_t) =>
       check bb' bbt' && empty_trees bb bbt
+      && check_evaluability1 reg_expr reg_expr_t
+      && check_evaluability2 m_expr m_expr_t
   | _, _ => false
   end.
 

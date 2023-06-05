@@ -48,6 +48,91 @@ Module Import OptionExtra := MonadExtra(Option).
 
 Ltac destr := destruct_match; try discriminate; [].
 
+Lemma equiv_update_top:
+  forall i p f l lm p' f' l' lm',
+    update_top (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update (p, f) i = Some (p', f').
+Proof.
+  intros. unfold update_top, Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. now inv H.
+Qed.
+
+Lemma remember_expr_eq :
+  forall l i f,
+    remember_expr f (map snd l) i = map snd (GiblePargen.remember_expr f l i).
+Proof.
+  induction l; destruct i; auto.
+Qed.
+
+Lemma equiv_update'_top:
+  forall i p f l lm p' f' l' lm',
+    update_top (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update' (p, f, map snd l, lm) i = Some (p', f', map snd l', lm').
+Proof.
+  intros. unfold update', update_top, Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. inv H. repeat f_equal. apply remember_expr_eq.
+Qed.
+
+Lemma equiv_fold_update'_top:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update_top i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update' i (Some (p, f, map snd l, lm)) = Some (p', f', map snd l', lm').
+Proof.
+  induction i; cbn -[update_top update'] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    exploit equiv_update'_top; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
+Qed.
+
+Lemma equiv_fold_update_top:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update_top i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update i (Some (p, f)) = Some (p', f').
+Proof.
+  induction i; cbn -[update_top update] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    exploit equiv_update_top; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
+Qed.
+
+Lemma spec_abstract_sequence_top :
+  mfold_left
+  fun (s : pred_op * forest * list pred_expr * list pred_expr) (i : instr) =>
+    let
+    '(p, f, l, lm) := s in
+     Option.bind2 (fun (p' : pred_op) (f' : forest) => Option.ret (p', f', , remember_expr_m f lm i))
+       (update (p, f) i)
+         : pred_op * forest * list pred_expr * list pred_expr -> instr -> option (pred_op * forest * list pred_expr * list pred_expr).
+
+Lemma top_implies_abstract_sequence :
+  forall y f l1 l2,
+    abstract_sequence_top y = Some (f, l1, l2) ->
+    abstract_sequence y = Some f.
+Proof.
+  unfold abstract_sequence, abstract_sequence_top; intros.
+  unfold Option.bind in *. repeat destr.
+  inv H.
+  unfold Option.map in *|-. repeat destr. subst. inv Heqo.
+  erewrite equiv_fold_update_top by eauto. auto.
+Qed.
+
+Lemma top_implies_abstract_sequence' :
+  forall y f l1 l2,
+    abstract_sequence_top y = Some (f, l1, l2) ->
+    abstract_sequence' y = Some (f, map snd l1, l2).
+Proof.
+  unfold abstract_sequence', abstract_sequence_top; intros.
+  unfold Option.bind in *|-. repeat destr.
+  inv H.
+  unfold Option.map in *|-. repeat destr. subst. inv Heqo.
+  exploit equiv_fold_update'_top; eauto; intros.
+  setoid_rewrite H. cbn. setoid_rewrite Heqm. auto.
+Qed.
+
 Definition state_lessdef := GiblePargenproofEquiv.match_states.
 
 Definition match_prog (prog : GibleSeq.program) (tprog : GiblePar.program) :=
@@ -415,6 +500,31 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     eapply IHx; eauto.
   Qed.
 
+  Lemma abstract_sequence_evaluable :
+    forall sp x i i' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      abstract_sequence_top x = Some (f, l0, l) ->
+      evaluable_pred_list (mk_ctx i sp ge) f.(forest_preds) (map snd l0).
+  Proof.
+    induction x; cbn; intros.
+    - inv H0. inv H.
+    - exploit top_implies_abstract_sequence; eauto; intros. inv H. inv H7; eauto.
+      + unfold abstract_sequence_top, Option.bind, Option.map in *.
+        repeat destr; subst. inv H0. inv Heqo.
+        unfold evaluable_pred_list; intros.
+        unfold evaluable_pred_expr.
+        exploit OptionExtra.mfold_left_Some. eapply Heqm1.
+        intros [[[[p_mid f_mid] l_mid] lm_mid] HB]. inv HB.
+
+  Lemma abstract_sequence_evaluable_m :
+    forall sp x i i' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      abstract_sequence_top x = Some (f, l0, l) ->
+      evaluable_pred_list_m (mk_ctx i sp ge) f.(forest_preds) l.
+  Proof. Admitted.
+
+(* abstract_sequence_top x = Some (f, l0, l) -> *)
+
   Lemma schedule_oracle_correct :
     forall x y sp i i' ti cf,
       schedule_oracle x y = true ->
@@ -424,12 +534,15 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
              /\ state_lessdef i' ti'.
   Proof.
     unfold schedule_oracle; intros. repeat (destruct_match; try discriminate). simplify.
+    exploit top_implies_abstract_sequence; [eapply Heqo|]; intros.
+    exploit top_implies_abstract_sequence'; eauto; intros.
     exploit abstr_sequence_correct; eauto; simplify.
     exploit local_abstr_check_correct2; eauto.
     { constructor. eapply ge_preserved_refl. reflexivity. }
 (*    { inv H. inv H8. exists pr'. intros x0. specialize (H x0). auto. } *)
     simplify.
-    exploit abstr_seq_reverse_correct; eauto. admit. admit. admit. admit. reflexivity. simplify.
+    exploit abstr_seq_reverse_correct; eauto.
+    admit. reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.
     econstructor; split; eauto.
     etransitivity; eauto.

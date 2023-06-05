@@ -66,6 +66,26 @@ the translation goes from GiblePar to Abstr, whereas the correctness proof is
 needed from Abstr to GiblePar to get the proper direction of the proof.
 |*)
 
+Definition remember_expr (f : forest) (lst: list pred_expr) (i : instr): list pred_expr :=
+  match i with
+  | RBnop => lst
+  | RBop p op rl r => (f #r (Reg r)) :: lst
+  | RBload  p chunk addr rl r => (f #r (Reg r)) :: lst
+  | RBstore p chunk addr rl r => lst
+  | RBsetpred p' c args p => lst
+  | RBexit p c => lst
+  end.
+
+Definition update' (s: pred_op * forest * list pred_expr * list pred_expr) (i: instr): option (pred_op * forest * list pred_expr * list pred_expr) :=
+  let '(p, f, l, lm) := s in
+  Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
+
+Definition abstract_sequence' (b : list instr) : option (forest * list pred_expr * list pred_expr) :=
+  Option.bind (fun x => Option.bind (fun _ => Some x)
+    (mfold_left gather_predicates b (Some (PTree.empty _))))
+      (Option.map (fun x => let '(_, y, z, zm) := x in (y, z, zm))
+        (mfold_left update' b (Some (Ptrue, empty, nil, nil)))).
+
 Section CORRECTNESS.
 
 Context (prog: GibleSeq.program) (tprog : GiblePar.program).
@@ -86,15 +106,6 @@ Proof.
     eapply IHi; eauto.
 Qed.
 
-Lemma equiv_update1':
-  forall i p f l lm p' f' l' lm' lp lp',
-    update'' (p, f, l, lm, lp) i = Some (p', f', l', lm', lp') ->
-    update' (p, f, l, lm) i = Some (p', f', l', lm').
-Proof.
-  intros. unfold update', update'', Option.bind2, Option.ret in *. repeat destr.
-  inv Heqp1. now inv H.
-Qed.
-
 Lemma equiv_update1:
   forall i p f l lm p' f' l' lm',
     update' (p, f, l, lm) i = Some (p', f', l', lm') ->
@@ -113,24 +124,13 @@ Proof.
   inv Heqp1. now inv H.
 Qed.
 
-Lemma equiv_update':
-  forall i p f l lm p' f' l' lm' lp lp',
-    mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') ->
-    mfold_left update' i (Some (p, f, l, lm)) = Some (p', f', l', lm').
-Proof.
-  induction i; cbn -[update'' update'] in *; intros.
-  - inv H; auto.
-  - exploit OptionExtra.mfold_left_Some; eauto;
-      intros [[[[[p_mid f_mid] l_mid] lm_mid] lp_mid] HB].
-    exploit equiv_update1'; try eassumption.
-    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
-Qed.
 
-Lemma equiv_update'':
-  forall i p f l lm p' f' l' lm' lp lp',
-    mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') ->
-    mfold_left update i (Some (p, f)) = Some (p', f').
-Proof. eauto using equiv_update', equiv_update. Qed.
+
+(* Lemma equiv_update'': *)
+(*   forall i p f l lm p' f' l' lm' lp lp', *)
+(*     mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') -> *)
+(*     mfold_left update i (Some (p, f)) = Some (p', f'). *)
+(* Proof. eauto using equiv_update', equiv_update. Qed. *)
 
 Definition i_state (s: istate): instr_state :=
   match s with
@@ -1818,11 +1818,10 @@ Proof.
 Qed.
 
 Lemma abstr_seq_reverse_correct:
-  forall sp x i i' ti cf x' l lm ps',
+  forall sp x i i' ti cf x' l lm,
     abstract_sequence' x = Some (x', l, lm) ->
     evaluable_pred_list (mk_ctx i sp ge) x'.(forest_preds) l ->
     evaluable_pred_list_m (mk_ctx i sp ge) x'.(forest_preds) lm ->
-    sem_predset {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} x' ps' ->
     sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
     state_lessdef i ti ->
    exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
@@ -1830,6 +1829,7 @@ Lemma abstr_seq_reverse_correct:
 Proof.
   intros. unfold abstract_sequence' in H.
   unfold Option.map, Option.bind in H. repeat destr. inv H. inv Heqo.
+  pose proof H2 as X. inv X.
   eapply abstr_seq_reverse_correct_fold;
     try eassumption; try reflexivity; auto using sem_empty, all_preds_in_empty.
   inversion 1.
