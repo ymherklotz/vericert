@@ -124,8 +124,6 @@ Proof.
   inv Heqp1. now inv H.
 Qed.
 
-
-
 (* Lemma equiv_update'': *)
 (*   forall i p f l lm p' f' l' lm' lp lp', *)
 (*     mfold_left update'' i (Some (p, f, l, lm, lp)) = Some (p', f', l', lm', lp') -> *)

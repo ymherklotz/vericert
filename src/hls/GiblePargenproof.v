@@ -99,15 +99,6 @@ Proof.
     intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
 Qed.
 
-Lemma spec_abstract_sequence_top :
-  mfold_left
-  fun (s : pred_op * forest * list pred_expr * list pred_expr) (i : instr) =>
-    let
-    '(p, f, l, lm) := s in
-     Option.bind2 (fun (p' : pred_op) (f' : forest) => Option.ret (p', f', , remember_expr_m f lm i))
-       (update (p, f) i)
-         : pred_op * forest * list pred_expr * list pred_expr -> instr -> option (pred_op * forest * list pred_expr * list pred_expr).
-
 Lemma top_implies_abstract_sequence :
   forall y f l1 l2,
     abstract_sequence_top y = Some (f, l1, l2) ->
@@ -500,21 +491,56 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     eapply IHx; eauto.
   Qed.
 
+(*|
+Proof sketch: This should follow directly from the correctness property, because
+it states that we can execute the forest.
+|*)
+
+  Lemma abstract_sequence_evaluable_fold :
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m',
+      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      sem (mk_ctx i0 sp ge) f (i, None) ->
+      sem (mk_ctx i0 sp ge) f' (i', None) ->
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
+  Proof.
+    induction x; cbn -[update]; intros * ? HSEM HSEM2 **.
+    - inv H0. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      inv H.
+      + unfold evaluable_pred_list; intros. exploit IHx. eauto. eapply sem_update_instr; eauto. admit. admit. eauto.
+        eauto. admit. eauto. auto.
+      + unfold evaluable_pred_list in *; intros. inv H5.
+        cbn in *. unfold Option.bind in *. destr. inv Heqo.
+Admitted.
+
+(*|
+Proof sketch: If I can execute the list of instructions, then every single
+forest element that is added to the forest will be evaluable too.  This then
+means that if we gather these in a list, that everything in the list should also
+have been evaluable.
+|*)
+
   Lemma abstract_sequence_evaluable :
     forall sp x i i' cf f l0 l,
       SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
       abstract_sequence_top x = Some (f, l0, l) ->
       evaluable_pred_list (mk_ctx i sp ge) f.(forest_preds) (map snd l0).
   Proof.
-    induction x; cbn; intros.
-    - inv H0. inv H.
-    - exploit top_implies_abstract_sequence; eauto; intros. inv H. inv H7; eauto.
-      + unfold abstract_sequence_top, Option.bind, Option.map in *.
-        repeat destr; subst. inv H0. inv Heqo.
-        unfold evaluable_pred_list; intros.
-        unfold evaluable_pred_expr.
-        exploit OptionExtra.mfold_left_Some. eapply Heqm1.
-        intros [[[[p_mid f_mid] l_mid] lm_mid] HB]. inv HB.
+    (* induction x; cbn; intros. *)
+    (* - inv H0. inv H. *)
+    (* - exploit top_implies_abstract_sequence; eauto; intros. inv H. inv H7; eauto. *)
+    (*   + unfold abstract_sequence_top, Option.bind, Option.map in *. *)
+    (*     repeat destr; subst. inv H0. inv Heqo. *)
+    (*     unfold evaluable_pred_list; intros. *)
+    (*     unfold evaluable_pred_expr. *)
+    (*     exploit OptionExtra.mfold_left_Some. eapply Heqm1. *)
+    (*     intros [[[[p_mid f_mid] l_mid] lm_mid] HB]. inv HB. *)
+    intros.
 
   Lemma abstract_sequence_evaluable_m :
     forall sp x i i' cf f l0 l,
