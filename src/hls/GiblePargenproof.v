@@ -496,26 +496,62 @@ Proof sketch: This should follow directly from the correctness property, because
 it states that we can execute the forest.
 |*)
 
-  Lemma abstract_sequence_evaluable_fold :
+  Lemma abstract_sequence_evaluable_fold2 :
     forall x sp i i' i0 cf p f l l_m p' f' l' l_m',
-      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
-      sem (mk_ctx i0 sp ge) f (i, None) ->
-      sem (mk_ctx i0 sp ge) f' (i', None) ->
+      sem (mk_ctx i0 sp ge) f (i, Some cf) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = false ->
       OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
   Proof.
-    induction x; cbn -[update]; intros * ? HSEM HSEM2 **.
+    induction x; cbn -[update]; intros * HSEM HSEM2 HPRED **.
+    - inv H. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+  Admitted.
+
+  Lemma abstract_sequence_evaluable_fold :
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m',
+      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      sem (mk_ctx i0 sp ge) f (i, None) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = true ->
+      GiblePargenproofCommon.valid_mem (is_mem i0) (is_mem i) ->
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
+  Proof.
+    induction x; cbn -[update]; intros * ? HSEM HSEM2 HPRED HVALID_MEM **.
     - inv H0. auto.
     - exploit OptionExtra.mfold_left_Some. eassumption.
       intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
       rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
-      inv HBIND.
-      inv H.
-      + unfold evaluable_pred_list; intros. exploit IHx. eauto. eapply sem_update_instr; eauto. admit. admit. eauto.
-        eauto. admit. eauto. auto.
-      + unfold evaluable_pred_list in *; intros. inv H5.
-        cbn in *. unfold Option.bind in *. destr. inv Heqo.
+      inv HBIND. inv H.
+      + unfold evaluable_pred_list; intros. exploit IHx.
+        eauto. eapply sem_update_instr; eauto.
+        eauto. eapply eval_predf_update_true; eauto.
+        transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
+        eauto. unfold evaluable_pred_list in *; intros.
+        { destruct a; cbn in *; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            admit.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            admit.
+        }
+        eauto. auto.
+      + unfold evaluable_pred_list in *; intros.
+        eapply abstract_sequence_evaluable_fold2.
+        4: { eauto. }
+        admit.
+        eauto.
+        admit.
 Admitted.
 
 (*|
@@ -528,19 +564,18 @@ have been evaluable.
   Lemma abstract_sequence_evaluable :
     forall sp x i i' cf f l0 l,
       SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
       abstract_sequence_top x = Some (f, l0, l) ->
       evaluable_pred_list (mk_ctx i sp ge) f.(forest_preds) (map snd l0).
   Proof.
-    (* induction x; cbn; intros. *)
-    (* - inv H0. inv H. *)
-    (* - exploit top_implies_abstract_sequence; eauto; intros. inv H. inv H7; eauto. *)
-    (*   + unfold abstract_sequence_top, Option.bind, Option.map in *. *)
-    (*     repeat destr; subst. inv H0. inv Heqo. *)
-    (*     unfold evaluable_pred_list; intros. *)
-    (*     unfold evaluable_pred_expr. *)
-    (*     exploit OptionExtra.mfold_left_Some. eapply Heqm1. *)
-    (*     intros [[[[p_mid f_mid] l_mid] lm_mid] HB]. inv HB. *)
-    intros.
+    intros. unfold abstract_sequence_top in *.
+    unfold Option.bind, Option.map in H1; repeat destr.
+    inv H1. inv Heqo.
+    eapply abstract_sequence_evaluable_fold; eauto; auto.
+    - apply sem_empty.
+    - reflexivity.
+    - cbn; unfold evaluable_pred_list; inversion 1.
+  Qed.
 
   Lemma abstract_sequence_evaluable_m :
     forall sp x i i' cf f l0 l,
@@ -568,7 +603,7 @@ have been evaluable.
 (*    { inv H. inv H8. exists pr'. intros x0. specialize (H x0). auto. } *)
     simplify.
     exploit abstr_seq_reverse_correct; eauto.
-    admit. reflexivity. simplify.
+    admit. admit. reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.
     econstructor; split; eauto.
     etransitivity; eauto.
