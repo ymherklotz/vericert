@@ -667,6 +667,8 @@ have been evaluable.
     eapply abstract_sequence_evaluable_fold; eauto; auto.
     - apply sem_empty.
     - reflexivity.
+    - apply all_preds_in_empty.
+    - inversion 1.
     - cbn; unfold evaluable_pred_list; inversion 1.
   Qed.
 
