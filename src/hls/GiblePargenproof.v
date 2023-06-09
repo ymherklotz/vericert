@@ -538,21 +538,57 @@ it states that we can execute the forest.
   Qed.
 
   Lemma abstract_sequence_evaluable_fold2 :
-    forall x sp i i' i0 cf p f l l_m p' f' l' l_m',
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
       sem (mk_ctx i0 sp ge) f (i, Some cf) ->
       sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
       eval_predf (is_ps i) p = false ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
       OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
   Proof.
-    induction x; cbn -[update]; intros * HSEM HSEM2 HPRED **.
+    induction x; cbn -[update]; intros * HSEM HSEM2 HPRED HGATHER HALL HPIN **.
     - inv H. auto.
     - exploit OptionExtra.mfold_left_Some. eassumption.
       intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
       rewrite HBIND in H. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
       inv HBIND.
-  Admitted.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      unfold evaluable_pred_list in *; intros.
+      eapply IHx. 7: { eauto. }
+      + eapply abstr_fold_falsy. eapply HSEM. instantiate (3 := (a :: nil)).
+        cbn -[update]. eauto. auto.
+      + eauto.
+      + destruct i. eapply sem_update_falsy_input; eauto.
+      + eauto.
+      + eapply gather_predicates_in_forest; eauto.
+      + eapply gather_predicates_update_constant; eauto.
+      + intros.
+        { destruct a; cbn -[gather_predicates update] in *; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
+        }
+      + eauto.
+  Qed.
 
   Lemma abstract_sequence_evaluable_fold :
     forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
@@ -573,7 +609,7 @@ it states that we can execute the forest.
     - exploit OptionExtra.mfold_left_Some. eassumption.
       intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
       rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
-      inv HBIND. 
+      inv HBIND.
       exploit OptionExtra.mfold_left_Some. eapply HGATHER.
       intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
       inv H.
@@ -607,7 +643,8 @@ it states that we can execute the forest.
       + unfold evaluable_pred_list in *; intros.
         inversion H5; subst.
         exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
-        eapply abstract_sequence_evaluable_fold2; eauto.
+        eapply abstract_sequence_evaluable_fold2; eauto using
+          gather_predicates_in_forest, gather_predicates_update_constant.
 Qed.
 
 (*|
