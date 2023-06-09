@@ -496,6 +496,47 @@ Proof sketch: This should follow directly from the correctness property, because
 it states that we can execute the forest.
 |*)
 
+  Lemma eval_forest_gather_predicates :
+    forall G A B a_sem i0 sp ge x p f p' f' pe pe_val preds preds',
+      update (p, f) x = Some (p', f') ->
+      gather_predicates preds x = Some preds' ->
+      @sem_pred_expr G A B f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+      NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+      sem_pred_expr f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
+  Proof.
+    intros.
+    eapply abstr_seq_revers_correct_fold_sem_pexpr_eval_sem; eauto.
+    apply NE.Forall_forall. intros [pe_op a] YIN pred_tmp YPREDIN.
+    apply NE.Forall_forall with (x:=(pe_op, a)) in H2; auto.
+    specialize (H2 pred_tmp YPREDIN).
+    cbn [fst snd] in *.
+    eapply abstr_seq_revers_correct_fold_sem_pexpr_sem2; eauto.
+  Qed.
+
+  Lemma eval_forest_gather_predicates_fold :
+    forall G A B a_sem i0 sp ge x p f p' f' pe pe_val preds preds' l l_m l' l_m',
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      OptionExtra.mfold_left gather_predicates x (Some preds) = Some preds' ->
+      @sem_pred_expr G A B f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+      NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+      sem_pred_expr f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
+  Proof.
+    induction x.
+    - intros * HF; cbn in *. now inv HF.
+    - intros * HFOLD1 HFOLD2 HSEM HFRL.
+      cbn -[update] in *.
+      exploit OptionExtra.mfold_left_Some. eapply HFOLD1.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HSTATE].
+      rewrite HSTATE in HFOLD1.
+      exploit OptionExtra.mfold_left_Some. eapply HFOLD2.
+      intros [preds_mid HPRED]. rewrite HPRED in HFOLD2.
+      unfold Option.bind2, Option.ret in HSTATE; repeat destr; subst. inv HSTATE.
+      eapply IHx; eauto using eval_forest_gather_predicates.
+      eapply NE.Forall_forall; intros.
+      eapply gather_predicates_in; eauto.
+      eapply NE.Forall_forall in HFRL; eauto.
+  Qed.
+
   Lemma abstract_sequence_evaluable_fold2 :
     forall x sp i i' i0 cf p f l l_m p' f' l' l_m',
       sem (mk_ctx i0 sp ge) f (i, Some cf) ->
@@ -514,45 +555,60 @@ it states that we can execute the forest.
   Admitted.
 
   Lemma abstract_sequence_evaluable_fold :
-    forall x sp i i' i0 cf p f l l_m p' f' l' l_m',
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
       SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
       sem (mk_ctx i0 sp ge) f (i, None) ->
       sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
       eval_predf (is_ps i) p = true ->
       GiblePargenproofCommon.valid_mem (is_mem i0) (is_mem i) ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
       OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
   Proof.
-    induction x; cbn -[update]; intros * ? HSEM HSEM2 HPRED HVALID_MEM **.
+    induction x; cbn -[update]; intros * ? HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
     - inv H0. auto.
     - exploit OptionExtra.mfold_left_Some. eassumption.
       intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
       rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
-      inv HBIND. inv H.
+      inv HBIND. 
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      inv H.
       + unfold evaluable_pred_list; intros. exploit IHx.
         eauto. eapply sem_update_instr; eauto.
         eauto. eapply eval_predf_update_true; eauto.
         transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
+        eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
         eauto. unfold evaluable_pred_list in *; intros.
-        { destruct a; cbn in *; eauto.
+        { destruct a; cbn -[gather_predicates update] in *; eauto.
           - inv H2; eauto.
             inv HSEM. inv H4.
             unfold evaluable_pred_expr. exists (rs' !! r).
-            admit.
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
           - inv H2; eauto.
             inv HSEM. inv H4.
             unfold evaluable_pred_expr. exists (rs' !! r).
-            admit.
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
         }
         eauto. auto.
       + unfold evaluable_pred_list in *; intros.
-        eapply abstract_sequence_evaluable_fold2.
-        4: { eauto. }
-        admit.
-        eauto.
-        admit.
-Admitted.
+        inversion H5; subst.
+        exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
+        eapply abstract_sequence_evaluable_fold2; eauto.
+Qed.
 
 (*|
 Proof sketch: If I can execute the list of instructions, then every single
