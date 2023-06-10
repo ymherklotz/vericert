@@ -591,8 +591,9 @@ it states that we can execute the forest.
   Qed.
 
   Lemma abstract_sequence_evaluable_fold :
-    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
-      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+    forall x sp i i' ti' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
       sem (mk_ctx i0 sp ge) f (i, None) ->
       sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
       eval_predf (is_ps i) p = true ->
@@ -604,7 +605,7 @@ it states that we can execute the forest.
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
       evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
   Proof.
-    induction x; cbn -[update]; intros * ? HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
+    induction x; cbn -[update]; intros * ? HLESSDEF HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
     - inv H0. auto.
     - exploit OptionExtra.mfold_left_Some. eassumption.
       intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
@@ -614,7 +615,7 @@ it states that we can execute the forest.
       intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
       inv H.
       + unfold evaluable_pred_list; intros. exploit IHx.
-        eauto. eapply sem_update_instr; eauto.
+        eauto. eauto. eapply sem_update_instr; eauto.
         eauto. eapply eval_predf_update_true; eauto.
         transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
         eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
@@ -645,7 +646,7 @@ it states that we can execute the forest.
         exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
         eapply abstract_sequence_evaluable_fold2; eauto using
           gather_predicates_in_forest, gather_predicates_update_constant.
-Qed.
+  Qed.
 
   Lemma abstract_sequence_evaluable_fold2_m :
     forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
@@ -692,8 +693,9 @@ Qed.
   Qed.
 
   Lemma abstract_sequence_evaluable_fold_m :
-    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
-      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+    forall x sp i i' ti' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
       sem (mk_ctx i0 sp ge) f (i, None) ->
       sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
       eval_predf (is_ps i) p = true ->
@@ -705,7 +707,7 @@ Qed.
       evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m ->
       evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m'.
   Proof.
-    induction x; cbn -[update]; intros * ? HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
+    induction x; cbn -[update]; intros * ? HLESSDEF HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
     - inv H0. auto.
     - exploit OptionExtra.mfold_left_Some. eassumption.
       intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
@@ -715,7 +717,7 @@ Qed.
       intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
       inv H.
       + unfold evaluable_pred_list_m; intros. exploit IHx.
-        eauto. eapply sem_update_instr; eauto.
+        eauto. eauto. eapply sem_update_instr; eauto.
         eauto. eapply eval_predf_update_true; eauto.
         transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
         eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
@@ -747,13 +749,14 @@ have been evaluable.
 |*)
 
   Lemma abstract_sequence_evaluable :
-    forall sp x i i' cf f l0 l,
-      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+    forall sp x i i' ti' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
       sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
       abstract_sequence_top x = Some (f, l0, l) ->
       evaluable_pred_list (mk_ctx i sp ge) f.(forest_preds) (map snd l0).
   Proof.
-    intros. unfold abstract_sequence_top in *.
+    intros * ? HLESSDEF **. unfold abstract_sequence_top in *.
     unfold Option.bind, Option.map in H1; repeat destr.
     inv H1. inv Heqo.
     eapply abstract_sequence_evaluable_fold; eauto; auto.
@@ -765,13 +768,14 @@ have been evaluable.
   Qed.
 
   Lemma abstract_sequence_evaluable_m :
-    forall sp x i i' cf f l0 l,
-      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+    forall sp x i i' ti' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
       sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
       abstract_sequence_top x = Some (f, l0, l) ->
       evaluable_pred_list_m (mk_ctx i sp ge) f.(forest_preds) l.
   Proof.
-    intros. unfold abstract_sequence_top in *.
+    intros * ? HLESSDEF **. unfold abstract_sequence_top in *.
     unfold Option.bind, Option.map in H1; repeat destr.
     inv H1. inv Heqo.
     eapply abstract_sequence_evaluable_fold_m; eauto; auto.
@@ -834,6 +838,56 @@ have been evaluable.
     eauto using check_mutexcl_correct.
   Qed.
 
+  Lemma evaluable_same_preds :
+    forall G (ctx: @Abstr.ctx G) f f' l1,
+      PTree.beq beq_pred_pexpr f f' = true ->
+      evaluable_pred_list ctx f l1 ->
+      evaluable_pred_list ctx f' l1.
+  Proof.
+    unfold evaluable_pred_list, evaluable_pred_expr in *; intros.
+    apply H0 in H1; simplify. exists x.
+    eapply sem_pred_exec_beq_correct; eauto.
+  Qed.
+
+  Lemma evaluable_same_state :
+    forall G i i' sp (ge: Genv.t G unit) f l1,
+      state_lessdef i i' ->
+      evaluable_pred_list (mk_ctx i sp ge) f l1 ->
+      evaluable_pred_list (mk_ctx i' sp ge) f l1.
+  Proof.
+    unfold evaluable_pred_list, evaluable_pred_expr in *; intros.
+    apply H0 in H1. simplify. exists x.
+    eapply sem_pred_expr_corr. 3: { eauto. }
+    constructor; auto. unfold ge_preserved; auto.
+    apply sem_value_corr.
+    constructor; auto. unfold ge_preserved; auto.
+  Qed.
+
+  Lemma evaluable_same_preds_m :
+    forall G (ctx: @Abstr.ctx G) f f' l1,
+      PTree.beq beq_pred_pexpr f f' = true ->
+      evaluable_pred_list_m ctx f l1 ->
+      evaluable_pred_list_m ctx f' l1.
+  Proof.
+    unfold evaluable_pred_list_m, evaluable_pred_expr_m in *; intros.
+    apply H0 in H1; simplify. exists x.
+    eapply sem_pred_exec_beq_correct; eauto.
+  Qed.
+
+  Lemma evaluable_same_state_m :
+    forall G i i' sp (ge: Genv.t G unit) f l1,
+      state_lessdef i i' ->
+      evaluable_pred_list_m (mk_ctx i sp ge) f l1 ->
+      evaluable_pred_list_m (mk_ctx i' sp ge) f l1.
+  Proof.
+    unfold evaluable_pred_list_m, evaluable_pred_expr_m in *; intros.
+    apply H0 in H1. simplify. exists x.
+    eapply sem_pred_expr_corr. 3: { eauto. }
+    constructor; auto. unfold ge_preserved; auto.
+    apply sem_mem_corr.
+    constructor; auto. unfold ge_preserved; auto.
+  Qed.
+
 (* abstract_sequence_top x = Some (f, l0, l) -> *)
 
   Lemma schedule_oracle_correct :
@@ -856,14 +910,29 @@ have been evaluable.
     { inv H8. inv H14.
       eapply check_evaluability1_evaluable.
       eauto. eauto.
-      eapply abstract_sequence_evaluable.
-      }
-    admit. admit. reflexivity. simplify.
+      eapply evaluable_same_preds. unfold check in *. simplify. eauto.
+      eapply evaluable_same_state; eauto.
+      eapply abstract_sequence_evaluable. eauto. symmetry; eauto.
+      eapply sem_correct; eauto.
+      { constructor. constructor; auto. symmetry; auto. }
+      eauto.
+    }
+    { inv H8. inv H14.
+      eapply check_evaluability2_evaluable.
+      eauto. eauto.
+      eapply evaluable_same_preds_m. unfold check in *. simplify. eauto.
+      eapply evaluable_same_state_m; eauto.
+      eapply abstract_sequence_evaluable_m. eauto. symmetry; eauto.
+      eapply sem_correct; eauto.
+      { constructor. constructor; auto. symmetry; auto. }
+      eauto.
+    }
+    reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.
     econstructor; split; eauto.
     etransitivity; eauto.
     etransitivity; eauto.
-  Admitted.
+  Qed.
 
   Lemma step_cf_correct :
     forall cf ts s s' t,
