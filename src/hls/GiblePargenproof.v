@@ -853,6 +853,11 @@ have been evaluable.
 (*    { inv H. inv H8. exists pr'. intros x0. specialize (H x0). auto. } *)
     simplify.
     exploit abstr_seq_reverse_correct; eauto.
+    { inv H8. inv H14.
+      eapply check_evaluability1_evaluable.
+      eauto. eauto.
+      eapply abstract_sequence_evaluable.
+      }
     admit. admit. reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.
     econstructor; split; eauto.
