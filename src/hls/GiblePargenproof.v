@@ -782,6 +782,58 @@ have been evaluable.
     - cbn; unfold evaluable_pred_list; inversion 1.
   Qed.
 
+  Lemma check_evaluability1_evaluable :
+    forall G (ctx: @Abstr.ctx G) l1 l2 f ps,
+      (forall x : positive, sem_pexpr ctx (get_forest_p' x f) ps !! x) ->
+      check_evaluability1 l1 l2 = true ->
+      evaluable_pred_list ctx f (map snd l1) ->
+      evaluable_pred_list ctx f (map snd l2).
+  Proof.
+    unfold check_evaluability1; intros * HPREDS H H0.
+    unfold evaluable_pred_list, evaluable_pred_expr in *; intros p H1.
+    exploit list_in_map_inv; eauto.
+    intros [[res expr] [HTEMP HIN]]; subst; cbn in *.
+    eapply forallb_forall in H; eauto.
+    apply existsb_exists in H.
+    inversion_clear H as [[res' expr'] [HIN' HRES']].
+    simplify.
+    pose proof H2 as HCHECKEXPR.
+    pose proof H4 as HCHECKEXPR'.
+    pose proof H as HRESEQ.
+    pose proof H5 as HBEQ.
+    clear H2 H4 H H5.
+    destruct (resource_eq res' res); subst; [|discriminate].
+    assert (XX: In expr' (map snd l1)).
+    { replace expr' with (snd (res, expr')) by auto. now apply in_map. }
+    apply H0 in XX.
+    inversion_clear XX as [v HSEM].
+    exists v. eapply HN.beq_pred_expr_correct_top;
+    eauto using check_mutexcl_correct.
+  Qed.
+
+  Lemma check_evaluability2_evaluable :
+    forall G (ctx: @Abstr.ctx G) l1 l2 f ps,
+      (forall x : positive, sem_pexpr ctx (get_forest_p' x f) ps !! x) ->
+      check_evaluability2 l1 l2 = true ->
+      evaluable_pred_list_m ctx f l1 ->
+      evaluable_pred_list_m ctx f l2.
+  Proof.
+    unfold check_evaluability1; intros * HPREDS H H0.
+    unfold evaluable_pred_list_m, evaluable_pred_expr_m in *; intros p H1.
+    eapply forallb_forall in H; eauto.
+    apply existsb_exists in H.
+    inversion_clear H as [expr' [HIN' HRES']].
+    simplify.
+    pose proof H2 as HCHECKEXPR.
+    pose proof H4 as HCHECKEXPR'.
+    pose proof H3 as HBEQ.
+    clear H2 H4 H3.
+    apply H0 in HIN'.
+    inversion_clear HIN' as [v HSEM].
+    exists v. eapply HN.beq_pred_expr_correct_top;
+    eauto using check_mutexcl_correct.
+  Qed.
+
 (* abstract_sequence_top x = Some (f, l0, l) -> *)
 
   Lemma schedule_oracle_correct :

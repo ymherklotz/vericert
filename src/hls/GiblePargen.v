@@ -414,11 +414,15 @@ Definition check_evaluability1 a b :=
     existsb (fun ae =>
       resource_eq (fst ae) (fst be) 
       && HN.beq_pred_expr (snd ae) (snd be)
+      && check_mutexcl (snd ae)
+      && check_mutexcl (snd be)
     ) a
   ) b.
 
 Definition check_evaluability2 a b :=
-  forallb (fun be => existsb (fun ae => HN.beq_pred_expr ae be) a) b.
+  forallb (fun be => existsb (fun ae => HN.beq_pred_expr ae be
+                                     && check_mutexcl ae
+                                     && check_mutexcl be) a) b.
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   match abstract_sequence_top bb, abstract_sequence_top (concat (concat bbt)) with
