@@ -3,4 +3,4 @@
 	url = https://github.com/ymherklotz/CompCert.git
 [submodule "lib/cohpred"]
 	path = lib/cohpred
-	url = https://git.sr.ht/~ymherklotz/cohpred
+	url = https://gitlab.inria.fr/pred-tv/cohpred
