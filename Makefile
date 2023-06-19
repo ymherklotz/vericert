@@ -16,7 +16,7 @@ COQINCLUDES := -R src vericert \
                -R lib/CompCert/flocq Flocq \
                -R lib/CompCert/MenhirLib MenhirLib \
                -R src TVSMT \
-               -R lib/cohpred/lib/smtcoq/src SMTCoq \
+               -R lib/cohpred/smtcoq/src SMTCoq \
                -I lib/smtcoq/src \
                -I lib/smtcoq/src/bva \
                -I lib/smtcoq/src/classes \
@@ -46,7 +46,7 @@ PREFIX ?= .
 
 .PHONY: all install proof clean extraction test force
 
-all: lib/COMPCERTSTAMP
+all: lib/COMPCERTSTAMP lib/COHPREDSTAMP
 	$(MAKE) proof
 	$(MAKE) compile
 
@@ -56,6 +56,10 @@ lib/CompCert/Makefile.config: lib/CompCert/configure
 lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
+
+lib/COHPREDSTAMP:
+	$(MAKE) -C lib/cohpred
+	touch lib/COHPREDSTAMP
 
 install: # doc/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
