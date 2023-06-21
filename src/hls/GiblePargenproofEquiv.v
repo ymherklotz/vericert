@@ -41,6 +41,9 @@ Require vericert.common.NonEmpty.
 Module NE := NonEmpty.
 Import NE.NonEmptyNotation.
 
+Module OE := MonadExtra(Option).
+Import OE.MonadNotation.
+
 #[local] Open Scope non_empty_scope.
 #[local] Open Scope positive.
 #[local] Open Scope pred_op.
@@ -482,11 +485,49 @@ Proof.
   apply X.
 Defined.
 
-Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
+Require cohpred_theory.Predicate.
+Require cohpred_theory.Smtpredicate.
+Module TV := cohpred_theory.Predicate.
+Module STV := cohpred_theory.Smtpredicate.
+
+Module TVL := TV.ThreeValued(PHashExpr).
+
+Fixpoint transf_pred_op {A} (p: @Predicate.pred_op A): @TV.pred A :=
+  match p with
+  | Ptrue => TV.Ptrue
+  | Pfalse => TV.Pfalse
+  | Plit (b, p) =>
+    if b then TV.Pbase p else TV.Pnot (TV.Pbase p)
+  | Pand p1 p2 =>
+    TV.Pand (transf_pred_op p1) (transf_pred_op p2)
+  | Por p1 p2 =>
+    TV.Por (transf_pred_op p1) (transf_pred_op p2)
+  end.
+
+(*|
+This following equivalence checker takes two pred_pexpr, hashes them, and then
+proves them equivalent.  However, it's not quite clear whether this actually
+proves that, given that ``pe1`` results in a value, then ``pe2`` will also
+result in a value.  The issue is that even though this proves that both hashed
+predicates will result in the same value, how do we then show that the initial
+predicates will also be correct and equivalent.
+|*)
+
+Definition beq_pred_pexpr' (pe1 pe2: pred_pexpr): bool :=
   if pred_pexpr_eqb pe1 pe2 then true else
   let (np1, h) := hash_predicate 1 pe1 (PTree.empty _) in
   let (np2, h') := hash_predicate 1 pe2 h in
   equiv_check np1 np2.
+
+(*|
+Given two predicated expressions, prove that they are equivalent.
+|*)
+
+Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
+  if pred_pexpr_eqb pe1 pe2 then true else
+  let (np1, h) := TVL.hash_predicate (transf_pred_op pe1) (Maps.PTree.empty _) in
+  let (np2, h') := TVL.hash_predicate (transf_pred_op pe2) h in
+  STV.check_smt_total (TV.equiv np1 np2).
 
 Lemma inj_asgn_eg : forall a b, (a =? b)%positive = (a =? a)%positive -> a = b.
 Proof.
@@ -815,7 +856,7 @@ Section CORRECT.
         apply sem_pred_expr_cons_false; auto.
         now apply sem_pexpr_corr.
   Qed.
-  
+
   Lemma sem_pred_expr_corr :
     forall A B (sem: forall G, @Abstr.ctx G -> A -> B -> Prop) a p r,
       (forall x y, sem _ ictx x y -> sem _ octx x y) ->
@@ -870,7 +911,7 @@ Section SEM_PRED_EXEC.
       + apply IHp2 in H. solve [constructor; auto].
       + apply IHp1 in H2. apply IHp2 in H4. solve [constructor; auto].
   Qed.
-  
+
   Lemma sem_pexpr_negate2 :
     forall p b,
       sem_pexpr ctx (¬ p) (negb b) ->
@@ -1127,7 +1168,7 @@ Module HashExprNorm(HS: Hashable).
     | Some p' => equiv_check p p'
     | None => equiv_check p ⟂
     end.
-  
+
   Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
     match np2 ! n with
     | Some p' => true
@@ -1230,7 +1271,7 @@ Module HashExprNorm(HS: Hashable).
       + rewrite PTree.gso in H2 by auto. now rewrite PTree.gempty in H2.
     - assert (H.wf_hash_table h1) by eauto using H.wf_hash_table_distr.
       destruct_match; inv H0.
-      + destruct (peq h0 x); subst; eauto. 
+      + destruct (peq h0 x); subst; eauto.
         rewrite PTree.gso in H1 by auto. eauto.
       + destruct (peq h0 x); subst; eauto.
         * pose proof Heqp0 as X.
@@ -1660,15 +1701,138 @@ Proof.
     specialize (H1 h br).
 Abort.
 
-Lemma sem_pexpr_beq_correct :
-  forall p1 p2 b,
-    beq_pred_pexpr p1 p2 = true ->
-    sem_pexpr ctx p1 b ->
-    sem_pexpr ctx p2 b.
+Local Open Scope monad_scope.
+Fixpoint sem_valueF (e: expression) : option val :=
+  match e with
+  | Ebase (Reg r) => Some ((ctx_rs ctx) !! r)
+  | Eop op args =>
+    do lv <- sem_val_listF args;
+    Op.eval_operation (ctx_ge ctx) (ctx_sp ctx) op lv (ctx_mem ctx)
+  | Eload chunk addr args mexp =>
+    do m' <- sem_memF mexp;
+    do lv <- sem_val_listF args;
+    do a <- Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr lv;
+    Mem.loadv chunk m' a
+  | _ => None
+  end
+with sem_memF (e: expression) : option mem :=
+  match e with
+  | Ebase Mem => Some (ctx_mem ctx)
+  | Estore vexp chunk addr args mexp =>
+    do m' <- sem_memF mexp;
+    do v <- sem_valueF vexp;
+    do lv <- sem_val_listF args;
+    do a <- Op.eval_addressing (ctx_ge ctx) (ctx_sp ctx) addr lv;
+    Mem.storev chunk m' a v
+  | _ => None
+  end
+with sem_val_listF (e: expression_list) : option (list val) :=
+  match e with
+  | Enil => Some nil
+  | Econs e l =>
+    do v <- sem_valueF e;
+    do lv <- sem_val_listF l;
+    Some (v :: lv)
+  end.
+
+Definition sem_predF (e: pred_expression): option bool :=
+  match e with
+  | PEbase p => Some ((ctx_ps ctx) !! p)
+  | PEsetpred c args =>
+    do lv <- sem_val_listF args;
+    Op.eval_condition c lv (ctx_mem ctx)
+  end.
+Local Close Scope monad_scope.
+
+Definition sem_pexprF := TVL.eval_predicate sem_predF.
+
+Lemma sem_valueF_correct :
+  forall e v m,
+    (sem_valueF e = Some v -> sem_value ctx e v)
+    /\ (sem_memF e = Some m -> sem_mem ctx e m).
 Proof.
-  unfold beq_pred_pexpr.
-  induction p1; intros; destruct_match; crush.
-  Admitted.
+  induction e using expression_ind2 with
+    (P0 := fun p => forall l, sem_val_listF p = Some l -> sem_val_list ctx p l); intros.
+  - split; intros; destruct r; try discriminate; cbn in *; inv H; constructor.
+  - split; intros.
+    + cbn in *; unfold Option.bind in *; destruct_match; try discriminate.
+      econstructor; eauto.
+    + cbn in *. discriminate.
+  - split; intros; cbn in *; try discriminate; unfold Option.bind in *;
+      repeat (destruct_match; try discriminate; []).
+    econstructor; eauto. eapply IHe0; auto.
+  - split; intros; cbn in *; try discriminate; unfold Option.bind in *;
+      repeat (destruct_match; try discriminate; []).
+    econstructor; eauto. eapply IHe3; eauto. eapply IHe1; eauto.
+  - cbn in *. inv H. constructor.
+  - cbn in *; unfold Option.bind in *;
+      repeat (destruct_match; try discriminate; []). inv H. constructor; eauto.
+      eapply IHe; auto. apply (ctx_mem ctx).
+Qed.
+
+Lemma sem_val_listF_correct :
+  forall l vl,
+    sem_val_listF l = Some vl ->
+    sem_val_list ctx l vl.
+Proof.
+  induction l.
+  - intros. cbn in *. inv H. constructor.
+  - cbn; intros. unfold Option.bind in *;
+      repeat (destruct_match; try discriminate; []). inv H. constructor; eauto.
+    eapply sem_valueF_correct; eauto. apply (ctx_mem ctx).
+Qed.
+
+Lemma sem_valueF_correct2 :
+  forall e v m,
+    (sem_value ctx e v -> sem_valueF e = Some v)
+    /\ (sem_mem ctx e m -> sem_memF e = Some m).
+Proof.
+  induction e using expression_ind2 with
+    (P0 := fun p => forall l, sem_val_list ctx p l -> sem_val_listF p = Some l); intros.
+  - split; inversion 1; cbn; auto.
+  - split; inversion 1; subst; clear H. cbn; unfold Option.bind.
+    erewrite IHe; eauto.
+  - split; inversion 1; subst; clear H. cbn; unfold Option.bind.
+    specialize (IHe0 v m'). inv IHe0.
+    erewrite H0; eauto. erewrite IHe; eauto. rewrite H8; auto.
+  - split; inversion 1; subst; clear H. cbn; unfold Option.bind.
+    specialize (IHe3 v0 m'); inv IHe3.
+    specialize (IHe1 v0 m'); inv IHe1.
+    erewrite H0; eauto.
+    erewrite H1; eauto.
+    erewrite IHe2; eauto.
+    rewrite H10; auto.
+  - inv H. auto.
+  - inv H. cbn; unfold Option.bind.
+    specialize (IHe v (ctx_mem ctx)). inv IHe.
+    erewrite H; eauto.
+    erewrite IHe0; eauto.
+Qed.
+
+Lemma sem_val_listF_correct2 :
+  forall l vl,
+    sem_val_list ctx l vl ->
+    sem_val_listF l = Some vl.
+Proof.
+  induction l.
+  - inversion 1; subst; auto.
+  - inversion 1; subst; clear H.
+    specialize (sem_valueF_correct2 e v (ctx_mem ctx)); inversion 1; clear H.
+    cbn; unfold Option.bind. erewrite H0; eauto. erewrite IHl; eauto.
+Qed.
+
+(* Definition eval_pexpr_atom {G} (ctx: @Abstr.ctx G)  (p: pred_expression) := *)
+
+Lemma sem_pexpr_beq_correct :
+  forall p1 p2,
+    beq_pred_pexpr p1 p2 = true ->
+    sem_pexprF (transf_pred_op p1) = sem_pexprF (transf_pred_op p2).
+Proof.
+  unfold beq_pred_pexpr; intros.
+  destruct_match; subst; auto.
+  repeat destruct_match.
+  pose proof STV.valid_check_smt_total.
+  unfold sem_pexprF.
 
 (*|
 This should only require a proof of sem_pexpr_beq_correct, the rest is

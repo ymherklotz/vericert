@@ -127,7 +127,7 @@ Qed.
 Definition state_lessdef := GiblePargenproofEquiv.match_states.
 
 Definition match_prog (prog : GibleSeq.program) (tprog : GiblePar.program) :=
-  match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq prog tprog.
+  match_program (fun cu f tf => transl_fundef f = OK tf) eq prog tprog.
 
 (* TODO: Fix the `bb` and add matches for them. *)
 Inductive match_stackframes: GibleSeq.stackframe -> GiblePar.stackframe -> Prop :=
@@ -177,7 +177,7 @@ Section CORRECTNESS.
     forall (b: Values.block) (f: GibleSeq.fundef),
       Genv.find_funct_ptr ge b = Some f ->
       exists tf,
-        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = OK tf.
   Proof using TRANSL.
     intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
@@ -187,7 +187,7 @@ Section CORRECTNESS.
     forall (v: Values.val) (f: GibleSeq.fundef),
       Genv.find_funct ge v = Some f ->
       exists tf,
-        Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
+        Genv.find_funct tge v = Some tf /\ transl_fundef f = OK tf.
   Proof using TRANSL.
     intros. exploit (Genv.find_funct_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.

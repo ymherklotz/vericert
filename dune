@@ -1,11 +1,8 @@
-(dirs :standard \ "./lib/CompCert/x86_32" "./lib/CompCert/cfrontend" "./lib/CompCert/powerpc" "./lib/CompCert/riscV"
-      "./lib/CompCert/arm" "./lib/CompCert/aarch64" "./lib/CompCert/extraction"
-      "./lib/CompCert/x86" "./lib/CompCert/x86_64")
-
 (include_subdirs unqualified)
 
 (library
  (public_name vericert)
  (modules_without_implementation c debugTypes dwarfTypes)
- (libraries menhirLib str unix ocamlgraph)
+ (modules (:standard \ driver gCC deLexer))
+ (libraries menhirLib str unix ocamlgraph coq-smtcoq)
  (flags (:standard -warn-error -A -w -8-9-16-20-26-27-32..36-39-41-44..45-50-60-67)))

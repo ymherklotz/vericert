@@ -3,30 +3,32 @@ both that the transformation ensures that generated functions are
 satisfying the predicate [wf_dfs_function] and that the transformation
 preserves the semantics. *)
 
-Require Recdef.
-Require Import FSets.
-Require Import Coqlib.
-Require Import Ordered.
-Require Import Errors.
-Require Import Maps.
-Require Import AST.
-Require Import Integers.
-Require Import Values.
-Require Import Globalenvs.
-Require Import Op.
-Require Import Registers.
-Require Import Smallstep.
-Require Import DeadBlocks.
-Require Import Kildall.
-Require Import Conventions.
-Require Import Integers.
-Require Import Floats.
-Require Import Utils.
-Require Import Events.
-Require Import Gible.
-Require Import GibleSeq.
-Require Import Relation_Operators.
-Require Import Vericertlib.
+From Coq Require funind.Recdef.
+From Coq Require Import FSets.FSets.
+From Coq Require Import Program.Utils.
+From Coq Require Import Relation_Operators.
+
+From compcert Require Import Errors.
+From compcert Require Import Maps.
+From compcert Require Import AST.
+From compcert Require Import Integers.
+From compcert Require Import Values.
+From compcert Require Import Globalenvs.
+From compcert Require Import Op.
+From compcert Require Import Registers.
+From compcert Require Import Smallstep.
+From compcert Require Import Kildall.
+From compcert Require Import Conventions.
+From compcert Require Import Integers.
+From compcert Require Import Floats.
+From compcert Require Import Events.
+From compcert Require Import Ordered.
+From compcert Require Import Coqlib.
+
+From vericert Require Import DeadBlocks.
+From vericert Require Import Gible.
+From vericert Require Import GibleSeq.
+From vericert Require Import Vericertlib.
 
 Unset Allow StrictProp.
 

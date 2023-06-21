@@ -55,6 +55,7 @@ Require Import compcert.common.Errors.
 Require Import compcert.common.Linking.
 Require Import compcert.common.Smallstep.
 Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Maps.
 
 Require vericert.hls.Verilog.
 Require vericert.hls.Veriloggen.
@@ -279,7 +280,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GibleSeq 0)
    @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
    @@ print (print_GibleSeq 1)
-   @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (Maps.PTree.empty _ :: Maps.PTree.empty _ :: nil))
+   @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil))
    @@ print (print_GibleSeq 2)
   @@@ DeadBlocks.transf_program
    @@ print (print_GibleSeq 3)

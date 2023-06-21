@@ -55,9 +55,13 @@ From compcert Require
     Parser
     Initializers.
 
+From cohpred_theory Require
+    Smtpredicate.
+
 (* Standard lib *)
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlString.
+Require Import ExtrOCamlInt63.
 
 (* Coqlib *)
 Extract Inlined Constant Coqlib.proj_sumbool => "(fun x -> x)".
@@ -172,7 +176,7 @@ Extract Constant Cabs.char_code => "int64".
 Load extractionMachdep.
 
 (* Avoid name clashes *)
-Extraction Blacklist List String Int.
+Extraction Blacklist List String Int Uint63.
 
 (* Cutting the dependency to R. *)
 Extract Inlined Constant Defs.F2R => "fun _ -> assert false".
@@ -184,6 +188,8 @@ Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 Extract Constant GibleSeqgen.partition => "Partition.partition".
 Extract Constant GiblePargen.schedule => "Schedule.schedule_fn".
 Extract Constant Abstr.print_forest => "(PrintAbstr.print_forest stdout)".
+
+Extract Constant Smtpredicate.pred_verit_unsat => "Cohpred.smt_certificate".
 
 (* Loop normalization *)
 Extract Constant IfConversion.build_bourdoncle => "BourdoncleAux.build_bourdoncle".
@@ -201,6 +207,8 @@ Separate Extraction
          Predicate.sat_pred_simple
          Verilog.stmnt_to_list
          Bourdoncle.bourdoncle
+
+   Smtpredicate.check_smt_total
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state

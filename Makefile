@@ -15,22 +15,8 @@ COQINCLUDES := -R src vericert \
                $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d)) \
                -R lib/CompCert/flocq Flocq \
                -R lib/CompCert/MenhirLib MenhirLib \
-               -R src TVSMT \
-               -R lib/cohpred/smtcoq/src SMTCoq \
-               -I lib/smtcoq/src \
-               -I lib/smtcoq/src/bva \
-               -I lib/smtcoq/src/classes \
-               -I lib/smtcoq/src/array \
-               -I lib/smtcoq/src/cnf \
-               -I lib/smtcoq/src/euf \
-               -I lib/smtcoq/src/lfsc \
-               -I lib/smtcoq/src/lia \
-               -I lib/smtcoq/src/smtlib2 \
-               -I lib/smtcoq/src/trace \
-               -I lib/smtcoq/src/verit \
-               -I lib/smtcoq/src/zchaff \
-               -I lib/smtcoq/src/PArray \
-               -I lib/smtcoq/src/../3rdparty/alt-ergo
+               -R lib/cohpred/theory cohpred_theory \
+               -R lib/cohpred/smtcoq/src SMTCoq
 
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source

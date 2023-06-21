@@ -29,8 +29,8 @@ Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
 Require Import vericert.hls.FunctionalUnits.
-Require Import Predicate.
-Require Import Vericertlib.
+Require Import vericert.hls.Predicate.
+Require Import vericert.common.Vericertlib.
 
 Definition node := positive.
 Definition predicate := positive.

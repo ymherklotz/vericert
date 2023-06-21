@@ -26,7 +26,10 @@ Require Import compcert.common.Values.
 Require Import compcert.lib.Floats.
 Require Import compcert.lib.Integers.
 Require Import compcert.lib.Maps.
+Require compcert.common.Errors.
 Require compcert.verilog.Op.
+
+Module Err := compcert.common.Errors.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.common.Monad.
@@ -464,19 +467,19 @@ Top-level Functions
 Parameter schedule : GibleSeq.function -> GiblePar.function.
 
 Definition transl_function (f: GibleSeq.function)
-  : Errors.res GiblePar.function :=
+  : Err.res GiblePar.function :=
   let tfcode := fn_code (schedule f) in
   if check_scheduled_trees f.(GibleSeq.fn_code) tfcode then
-    Errors.OK (mkfunction f.(GibleSeq.fn_sig)
+    Err.OK (mkfunction f.(GibleSeq.fn_sig)
                           f.(GibleSeq.fn_params)
                           f.(GibleSeq.fn_stacksize)
                           tfcode
                           f.(GibleSeq.fn_entrypoint))
   else
-    Errors.Error
-      (Errors.msg "GiblePargen: Could not prove the blocks equivalent.").
+    Err.Error
+      (Err.msg "GiblePargen: Could not prove the blocks equivalent.").
 
 Definition transl_fundef := transf_partial_fundef transl_function.
 
-Definition transl_program (p : GibleSeq.program) : Errors.res GiblePar.program :=
+Definition transl_program (p : GibleSeq.program) : Err.res GiblePar.program :=
   transform_partial_program transl_fundef p.
