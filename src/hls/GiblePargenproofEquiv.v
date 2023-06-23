@@ -527,7 +527,12 @@ Definition beq_pred_pexpr (pe1 pe2: pred_pexpr): bool :=
   if pred_pexpr_eqb pe1 pe2 then true else
   let (np1, h) := TVL.hash_predicate (transf_pred_op pe1) (Maps.PTree.empty _) in
   let (np2, h') := TVL.hash_predicate (transf_pred_op pe2) h in
-  STV.check_smt_total (TV.equiv np1 np2).
+  (* The following should probably be removed, it needs an additional proof that
+  evaluation with gen_assc_map with a hashmap that is generated later gives the
+  same result. *)
+  if ((Maps.PTree_Properties.cardinal h) =? (Maps.PTree_Properties.cardinal h'))%nat
+  then STV.check_smt_total (TV.equiv np1 np2)
+  else false.
 
 Lemma inj_asgn_eg : forall a b, (a =? b)%positive = (a =? a)%positive -> a = b.
 Proof.
@@ -1821,18 +1826,110 @@ Proof.
     cbn; unfold Option.bind. erewrite H0; eauto. erewrite IHl; eauto.
 Qed.
 
+Lemma sem_predF_correct2 :
+  forall p vp,
+    sem_pred ctx p vp ->
+    sem_predF p = Some vp.
+Proof.
+  destruct p; cbn; inversion 1; subst; auto; [].
+  unfold Option.bind; intros.
+  erewrite sem_val_listF_correct2; eauto.
+Qed.
+
+Lemma sem_predF_correct :
+  forall p vp,
+    sem_predF p = Some vp ->
+    sem_pred ctx p vp.
+Proof.
+  destruct p; cbn; inversion 1; try constructor; [].
+  unfold Option.bind in *; destruct_match; try discriminate; [].
+  econstructor; eauto.
+  now apply sem_val_listF_correct.
+Qed.
+
 (* Definition eval_pexpr_atom {G} (ctx: @Abstr.ctx G)  (p: pred_expression) := *)
 
-Lemma sem_pexpr_beq_correct :
+Lemma sem_pexpr_beq_correct' :
   forall p1 p2,
     beq_pred_pexpr p1 p2 = true ->
     sem_pexprF (transf_pred_op p1) = sem_pexprF (transf_pred_op p2).
 Proof.
   unfold beq_pred_pexpr; intros.
   destruct_match; subst; auto.
-  repeat destruct_match.
+  repeat destruct_match; try discriminate; [].
   pose proof STV.valid_check_smt_total.
   unfold sem_pexprF.
+  assert (TVL.AH.wf_hash_table (Maps.PTree.empty TVL.A)).
+  { unfold TVL.AH.wf_hash_table; intros.
+    now rewrite Maps.PTree.gempty in H1. }
+  assert (TVL.AH.wf_hash_table t) by (eapply TVL.wf_hash_table_distr; eauto).
+  erewrite <- ! TVL.gen_hash_assoc_map_corr; [ | eauto | eauto | | eauto ]; eauto.
+  (* without cardinality: erewrite TVL.gen_hash_assoc_map_corr''. *)
+  exploit TVL.hash_predicate_hash_len.
+  apply Heqp0. apply EqNat.beq_nat_true_stt; auto.
+  intros; subst.
+  eapply Predicate.eval_equiv.
+  apply H0; auto.
+Qed.
+
+Lemma sem_pexprF_correct :
+  forall p b,
+    sem_pexprF (transf_pred_op p) = Some b ->
+    sem_pexpr ctx p b.
+Proof.
+  induction p; cbn; intros.
+  - repeat destruct_match; constructor; cbn in *.
+    destruct_match; [|discriminate]; inv H.
+    apply sem_predF_correct; auto.
+    repeat (destruct_match; try discriminate; []). inv H. inv Heqo.
+    rewrite negb_involutive.
+    apply sem_predF_correct; auto.
+  - inv H. constructor.
+  - inv H. constructor.
+  - repeat destruct_match; try discriminate; inv H; try destruct b; 
+      constructor; eauto.
+  - repeat destruct_match; try discriminate; inv H; try destruct b; 
+      constructor; eauto.
+Qed.
+
+Lemma sem_pexprF_correct2 :
+  forall p b,
+    sem_pexpr ctx p b ->
+    sem_pexprF (transf_pred_op p) = Some b.
+Proof.
+  induction p; cbn; intros.
+  - inv H. destruct b0; cbn.
+    + erewrite sem_predF_correct2; eauto.
+    + erewrite sem_predF_correct2; eauto; now rewrite negb_involutive.
+  - now inv H.
+  - now inv H.
+  - inv H. inv H3.
+    + erewrite IHp1; eauto. cbn. destruct_match; auto.
+    + erewrite IHp2; eauto. cbn. destruct_match; auto.
+      destruct b; auto.
+    + erewrite IHp1; eauto.
+      now erewrite IHp2.
+  - inv H. inv H3.
+    + erewrite IHp1; eauto. cbn. destruct_match; auto.
+    + erewrite IHp2; eauto. cbn. destruct_match; auto.
+      destruct b; auto.
+    + erewrite IHp1; eauto.
+      now erewrite IHp2.
+Qed.
+
+Lemma sem_pexpr_beq_correct :
+  forall p1 p2 b,
+    beq_pred_pexpr p1 p2 = true ->
+    sem_pexpr ctx p1 b ->
+    sem_pexpr ctx p2 b.
+Proof.
+  intros.
+  apply sem_pexprF_correct2 in H0.
+  apply sem_pexprF_correct.
+  rewrite <- H0.
+  symmetry.
+  now apply sem_pexpr_beq_correct'.
+Qed.
 
 (*|
 This should only require a proof of sem_pexpr_beq_correct, the rest is
