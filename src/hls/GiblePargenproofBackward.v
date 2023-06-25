@@ -361,7 +361,7 @@ Proof.
     exploit from_predicated_sem_pred_expr2.
       3: eauto.
       { eauto. }
-      { unfold assert_ in Heqo. clear Heqo2. destr. now eapply check_mutexcl_correct. } 
+      { unfold assert_ in Heqo. clear Heqo2. destr. eauto using check_mutexcl_correct. }
       { unfold assert_ in Heqo2. repeat destr. unfold sat_pred_simple in Heqo3.
         destruct (sat_pred_tseytin (¬ from_predicated_inv (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))))); [destruct s; discriminate|]. rewrite <- negb_involutive. symmetry.
         rewrite <- negb_involutive. rewrite <- eval_predf_negate. f_equal. eauto.
@@ -406,7 +406,7 @@ Proof.
          exploit from_predicated_sem_pred_expr2.
            3: eauto.
            { eauto. }
-           { unfold assert_ in Heqo. clear Heqo2. destr. now apply check_mutexcl_correct. }
+           { unfold assert_ in Heqo. clear Heqo2. destr. eauto using check_mutexcl_correct. }
            { unfold assert_ in Heqo2. repeat destr. unfold sat_pred_simple in Heqo3.
         destruct (sat_pred_tseytin (¬ from_predicated_inv (seq_app (pred_ret (PEsetpred c)) (merge (list_translation args f))))); [destruct s; discriminate|]. rewrite <- negb_involutive. symmetry.
         rewrite <- negb_involutive. rewrite <- eval_predf_negate. f_equal. eauto.

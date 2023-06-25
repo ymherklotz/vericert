@@ -234,6 +234,15 @@ Proof.
   eauto using beq_pred_expression_correct2.
 Defined.
 
+Lemma pred_pexpression_dec:
+  forall (e1 e2: pred_expression) (p1 p2: pred_op),
+    {(p1, e1) = (p2, e2)} + {(p1, e1) <> (p2, e2)}.
+Proof.
+  pose proof (Predicate.eq_dec peq).
+  pose proof (pred_expression_dec).
+  decide equality.
+Defined.
+
 Lemma exit_expression_refl:
   forall e, beq_exit_expression e e = true.
 Proof. destruct e; crush; destruct_match; crush. Qed.
@@ -437,7 +446,7 @@ Lemma existsh :
   forall ap1,
   exists h p1,
     hash_predicate 1 ap1 h = (p1, h).
-Proof. Admitted.
+Proof. Abort.
 
 Lemma aequiv_refl : forall a, sat_aequiv a a.
 Proof.
@@ -1495,33 +1504,109 @@ End HashExprNorm.
 Module HN := HashExprNorm(HashExpr).
 Module EHN := HashExprNorm(EHashExpr).
 
-Definition check_mutexcl {A} (pe: predicated A) :=
-  let preds := map fst (NE.to_list pe) in
-  let pairs := map (fun x => x → negate (or_list (remove (Predicate.eq_dec peq) x preds))) preds in
-  match sat_pred_simple (simplify (negate (and_list pairs))) with
-  | None => true
-  | _ => false
-  end.
+Definition check_mutexcl {A} eq_dec (pe: predicated A) :=
+  if NE.norepet_check eq_dec pe then
+    let lpe := NE.to_list pe in
+    let pairs := map (fun x => fst x → negate (or_list (map fst (remove eq_dec x lpe)))) lpe in
+    match sat_pred_simple (simplify (negate (and_list pairs))) with
+    | None => true
+    | _ => false
+    end
+  else false.
 
 (* Import ListNotations. *)
 (* Compute deep_simplify peq (and_list (map (fun x => x → negate (or_list (remove (Predicate.eq_dec peq) x [Plit (true, 2)]))) [Plit (true, 2)])). *)
 
+Lemma and_list_correct':
+  forall l a t,
+    sat_predicate (fold_left Pand l t) a = true ->
+    Forall (fun p => sat_predicate p a = true) l /\ sat_predicate t a = true.
+Proof.
+  induction l.
+  - cbn; intros. split; auto.
+  - cbn; intros.
+    exploit IHl; eauto. simplify; auto.
+Qed.
+
+Lemma and_list_correct:
+  forall l a,
+    sat_predicate (and_list l) a = true ->
+    Forall (fun p => sat_predicate p a = true) l.
+Proof. intros. eapply and_list_correct'; eauto. Qed.
+
+Lemma or_list_correct':
+  forall l a t,
+    sat_predicate (fold_left Por l t) a = false ->
+    Forall (fun p => sat_predicate p a = false) l /\ sat_predicate t a = false.
+Proof.
+  induction l.
+  - cbn; intros. split; auto.
+  - cbn; intros.
+    exploit IHl; eauto. simplify; auto.
+Qed.
+
+Lemma or_list_correct:
+  forall a l,
+    sat_predicate (or_list l) a = false ->
+    Forall (fun p => sat_predicate p a = false) l.
+Proof. intros. eapply or_list_correct'; eauto. Qed.
+
 Lemma check_mutexcl_correct:
-  forall A (pe: predicated A),
-    check_mutexcl pe = true ->
+  forall A eq_dec (pe: predicated A),
+    check_mutexcl eq_dec pe = true ->
     predicated_mutexcl pe.
-Proof. Admitted.
+Proof.
+  unfold predicated_mutexcl, check_mutexcl; intros.
+  repeat (destruct_match; try discriminate; []); subst.
+  unfold sat_pred_simple in Heqo.
+  destruct_match; [destruct s; discriminate|].
+  clear H Heqo Heqs.
+  unfold "⇒"; split; intros.
+  specialize (e c).
+  rewrite simplify_correct in e.
+  rewrite negate_correct in e.
+  replace false with (negb true) in e by auto.
+  apply negb_inj in e.
+  apply and_list_correct in e.
+  eapply Forall_forall in e.
+  2: {
+    instantiate (1 := (fun x0 : Predicate.pred_op * A =>
+      fst x0 → ¬ or_list (map fst (remove eq_dec x0 (NE.to_list pe)))) x);
+      auto using in_map, NE.to_list_in.
+  }
+  unfold "→" in e. cbn in e.
+  rewrite negate_correct in e. setoid_rewrite H2 in e. cbn in e.
+  rewrite negate_correct in e.
+  replace true with (negb false) in e by auto.
+  apply negb_inj in e.
+  rewrite negate_correct. replace true with (negb false) by auto.
+  f_equal. apply or_list_correct in e.
+  eapply Forall_forall in e.
+  2: {
+    instantiate (1 := fst y); auto using in_map, in_in_remove, NE.to_list_in.
+  }
+  auto.
+  eauto using NE.norepet_check_correct.
+Qed.
 
 Lemma check_mutexcl_singleton :
-  check_mutexcl (NE.singleton (T, EEbase)) = true.
-Proof. crush. Qed.
+  forall A eq_dec (a: A), check_mutexcl eq_dec (NE.singleton (T, a)) = true.
+Proof.
+  unfold check_mutexcl; cbn -[simplify]; intros.
+  destruct_match; auto.
+  unfold sat_pred_simple in Heqo. destruct_match; try discriminate.
+  destruct s. inv Heqo. clear Heqs.
+  rewrite simplify_correct in e. cbn in e.
+  rewrite ! negate_correct in e. rewrite negb_involutive in e.
+  destruct_match; auto.
+Qed.
 
-Definition check_mutexcl_tree {A} (f: PTree.t (predicated A)) :=
-  forall_ptree (fun _ => check_mutexcl) f.
+Definition check_mutexcl_tree {A} eq_dec (f: PTree.t (predicated A)) :=
+  forall_ptree (fun _ => check_mutexcl eq_dec) f.
 
 Lemma check_mutexcl_tree_correct:
-  forall A (f: PTree.t (predicated A)) i pe,
-    check_mutexcl_tree f = true ->
+  forall A eq_dec (f: PTree.t (predicated A)) i pe,
+    check_mutexcl_tree eq_dec f = true ->
     f ! i = Some pe ->
     predicated_mutexcl pe.
 Proof.
@@ -1533,10 +1618,10 @@ Definition check f1 f2 :=
   RTree.beq HN.beq_pred_expr f1.(forest_regs) f2.(forest_regs)
   && PTree.beq beq_pred_pexpr f1.(forest_preds) f2.(forest_preds)
   && EHN.beq_pred_expr f1.(forest_exit) f2.(forest_exit)
-  && check_mutexcl_tree f1.(forest_regs)
-  && check_mutexcl_tree f2.(forest_regs)
-  && check_mutexcl f1.(forest_exit)
-  && check_mutexcl f2.(forest_exit).
+  && check_mutexcl_tree HN.pred_Ht_dec f1.(forest_regs)
+  && check_mutexcl_tree HN.pred_Ht_dec f2.(forest_regs)
+  && check_mutexcl EHN.pred_Ht_dec f1.(forest_exit)
+  && check_mutexcl EHN.pred_Ht_dec f2.(forest_exit).
 
 Lemma sem_pexpr_forward_eval1 :
   forall A ctx f_p ps,

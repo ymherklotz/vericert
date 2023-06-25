@@ -421,7 +421,7 @@ all be evaluable.
         apply sem_pexpr_Pand.
         destruct b. constructor. right.
         eapply sem_update_Isetpred; eauto.
-        { unfold assert_ in Heqo. destr. auto using check_mutexcl_correct. }
+        { unfold assert_ in Heqo. destr. eauto using check_mutexcl_correct. }
         constructor. constructor. replace false with (negb true) by auto.
         apply sem_pexpr_negate. inv TRUTHY. constructor.
         cbn. eapply sem_pexpr_eval. inv PRED. eauto. auto.
@@ -429,7 +429,7 @@ all be evaluable.
         apply sem_pexpr_negate.
         eapply sem_pexpr_eval. inv PRED. eauto. auto.
         eapply sem_update_Isetpred; eauto.
-        { unfold assert_ in Heqo. destr. auto using check_mutexcl_correct. }
+        { unfold assert_ in Heqo. destr. eauto using check_mutexcl_correct. }
         constructor. constructor. constructor.
         replace true with (negb false) by auto. apply sem_pexpr_negate.
         eapply sem_pexpr_eval. inv PRED. eauto. inv TRUTHY. auto. cbn -[eval_predf].

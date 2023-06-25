@@ -238,6 +238,12 @@ Definition predicated_not_in_forest (p: Gible.predicate) (f: forest) :=
   predicated_not_in_pred_expr p f.(forest_regs)
   && predicated_not_in p f.(forest_exit).
 
+Definition pred_expr_dec: forall a b: pred_op * pred_expression, {a = b} + {a <> b}.
+Proof.
+  intros. destruct a, b.
+  apply pred_pexpression_dec.
+Defined.
+
 Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest) :=
   let (pred, f) := fop in
   match i with
@@ -279,7 +285,7 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
            → from_predicated true f.(forest_preds) predicated)
         ∧ (from_pred_op f.(forest_preds) (¬ (dfltp p') ∨ ¬ pred) → (f #p p))
       in
-      do _ <- assert_ (check_mutexcl predicated);
+      do _ <- assert_ (check_mutexcl pred_expr_dec predicated);
       do _ <- assert_ (predicated_not_in_forest p f);
       do _ <- assert_ (is_initial_pred_and_notin f p pred);
       do _ <- assert_ (match sat_pred_simple (¬ from_predicated_inv predicated) with None => true | Some _ => false end);
@@ -417,15 +423,15 @@ Definition check_evaluability1 a b :=
     existsb (fun ae =>
       resource_eq (fst ae) (fst be) 
       && HN.beq_pred_expr (snd ae) (snd be)
-      && check_mutexcl (snd ae)
-      && check_mutexcl (snd be)
+      && check_mutexcl HN.pred_Ht_dec (snd ae)
+      && check_mutexcl HN.pred_Ht_dec (snd be)
     ) a
   ) b.
 
 Definition check_evaluability2 a b :=
   forallb (fun be => existsb (fun ae => HN.beq_pred_expr ae be
-                                     && check_mutexcl ae
-                                     && check_mutexcl be) a) b.
+                                     && check_mutexcl HN.pred_Ht_dec ae
+                                     && check_mutexcl HN.pred_Ht_dec be) a) b.
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   match abstract_sequence_top bb, abstract_sequence_top (concat (concat bbt)) with

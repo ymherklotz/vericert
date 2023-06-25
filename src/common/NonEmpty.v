@@ -97,7 +97,7 @@ Inductive In {A: Type} (x: A) : non_empty A -> Prop :=
 
 Ltac inv X := inversion X; clear X; subst.
 
-Lemma in_dec:
+Definition in_dec:
   forall A (a: A) (l: non_empty A),
     (forall a b: A, {a = b} + {a <> b}) ->
     {In a l} + {~ In a l}.
@@ -337,4 +337,32 @@ Proof.
   - clear H. inv H1.
     + exists a; split; auto; constructor; tauto.
     + exploit IHn; eauto; simplify. exists x0; split; auto; constructor; tauto.
+Qed.
+
+Fixpoint norepet_check {A} eq_dec (ne: non_empty A) :=
+  match ne with
+  | singleton a => true
+  | a ::| b =>
+    if in_dec A a b eq_dec then false
+    else norepet_check eq_dec b
+  end.
+
+Lemma norepet_check_correct :
+  forall A eq_dec ne,
+    @norepet_check A eq_dec ne = true ->
+    norepet ne.
+Proof.
+  induction ne; intros; [constructor|].
+  cbn in H. destruct_match; [discriminate|].
+  constructor; auto.
+Qed.
+
+Lemma to_list_in :
+  forall A ne (x: A),
+    In x ne ->
+    List.In x (to_list ne).
+Proof.
+  induction ne.
+  - intros. inv H. cbn; tauto.
+  - intros; cbn. inv H. inv H1; eauto.
 Qed.
