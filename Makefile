@@ -47,7 +47,7 @@ lib/COHPREDSTAMP:
 	$(MAKE) -C lib/cohpred
 	touch lib/COHPREDSTAMP
 
-install: # doc/vericert.1
+install: doc/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
 	install -d $(PREFIX)/bin
 	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin
@@ -95,8 +95,8 @@ Makefile.coq _CoqProject: force
 
 force:
 
-docs/vericert.1:
-	$(MAKE) -C docs vericert.1
+doc/vericert.1:
+	$(MAKE) -C doc -f Makefile.extr vericert.1
 
 detangle-all:
 	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)\
