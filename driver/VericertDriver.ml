@@ -99,8 +99,9 @@ let compile_c_file sourcename ifile ofile =
       in
       match translation csyntax with
       | Vericert.Errors.OK v ->
-        v
+        if !Vericert.Cohpred.cohpred_counter > 0 then Printf.fprintf stderr "OK\n"; v
       | Vericert.Errors.Error msg ->
+        if !Vericert.Cohpred.cohpred_counter > 0 then Printf.fprintf stderr "OK\n";
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     let oc = open_out ofile in

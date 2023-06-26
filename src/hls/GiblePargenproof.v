@@ -941,12 +941,54 @@ have been evaluable.
       exists ts', step_cf_instr tge ts cf t ts'
              /\ match_states s' ts'.
   Proof.
-
 (*|
 Proof Sketch:  Trivial because of structural equality.
 |*)
-
-  Admitted.
+    inversion 1; subst; clear H; inversion 1; subst; clear H.
+    - exploit find_function_translated; eauto; simplify.
+      econstructor; split.
+      + constructor; eauto using sig_transl_function.
+      + replace (rs' ## args) with (rs ## args).
+        now (repeat (constructor; auto)).
+        erewrite map_ext; auto.
+    - exploit find_function_translated; eauto; simplify.
+      econstructor; split.
+      + constructor; eauto using sig_transl_function.
+        unfold transl_function in TRANSL0. destruct_match; try discriminate.
+        inv TRANSL0. eauto.
+      + replace (rs' ## args) with (rs ## args).
+        now (repeat (constructor; auto)).
+        erewrite map_ext; auto.
+    - econstructor; split.
+      + econstructor; eauto using sig_transl_function.
+        eapply Events.eval_builtin_args_preserved; eauto.
+        eapply eval_builtin_args_eq; eauto.
+        auto.
+      + constructor; auto.
+        unfold regmap_setres; intros. destruct_match; auto.
+        subst. destruct (peq x0 x); subst.
+        * now rewrite ! PMap.gss.
+        * now rewrite ! PMap.gso by auto.
+    - econstructor; split.
+      + econstructor; eauto. eapply Op.eval_condition_lessdef; eauto.
+        replace (rs' ## args) with (rs ## args).
+        apply regs_lessdef_regs.
+        unfold regs_lessdef; auto.
+        erewrite map_ext; auto.
+        apply Mem.extends_refl.
+      + constructor; auto.
+    - econstructor; split.
+      + econstructor; eauto. now rewrite <- REG.
+      + constructor; auto.
+    - econstructor; split.
+      + econstructor; eauto. unfold transl_function in TRANSL0.
+        destruct_match; try discriminate. inv TRANSL0. eauto.
+      + replace (regmap_optget or Vundef rs') with (regmap_optget or Vundef rs).
+        constructor; auto. unfold regmap_optget. destruct_match; auto.
+    - econstructor; split.
+      + econstructor; eauto.
+      + constructor; auto.
+  Qed.
 
   Lemma match_states_stepBB :
     forall s f sp pc rs pr m sf' f' trs tps tm rs' pr' m' trs' tpr' tm',

@@ -7,7 +7,7 @@ Require Import Coq.Logic.Decidable.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.Sat.
-Require Import HashTree.
+Require Import vericert.hls.HashTree.
 
 Declare Scope pred_op.
 
@@ -603,7 +603,7 @@ Lemma stseytin_and_correct2 :
     sat_lit cur c <-> sat_lit p1 c /\ sat_lit p2 c.
 Proof.
   intros. split. intros. inv H1. unfold stseytin_and in *.
-  inv H0; try contradiction. Admitted.
+  inv H0; try contradiction. Abort.
 
 Lemma stseytin_or_correct :
   forall cur p1 p2 fm c,
@@ -625,7 +625,7 @@ Lemma stseytin_or_correct2 :
     stseytin_or cur p1 p2 = fm ->
     sat_formula fm c ->
     sat_lit cur c <-> sat_lit p1 c \/ sat_lit p2 c.
-Proof. Admitted.
+Proof. Abort.
 
 Lemma xtseytin_correct :
   forall p next l n fm c,

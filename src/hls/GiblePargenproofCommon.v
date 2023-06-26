@@ -309,38 +309,38 @@ Lemma prune_predicated_mutexcl :
     predicated_mutexcl y.
 Proof.
   unfold prune_predicated; intros.
-  Admitted.
-#[local] Hint Resolve prune_predicated_mutexcl : mte.
+  Abort.
+(*#[local] Hint Resolve prune_predicated_mutexcl : mte.*)
 
 Lemma app_predicated_mutexcl :
   forall A p (x: predicated A) y,
     predicated_mutexcl x ->
     predicated_mutexcl y ->
     predicated_mutexcl (app_predicated p x y).
-Proof. Admitted.
-#[local] Hint Resolve app_predicated_mutexcl : mte.
+Proof. Abort.
+(*#[local] Hint Resolve app_predicated_mutexcl : mte.*)
 
 Lemma seq_app_predicated_mutexcl :
   forall A B (f: predicated (A -> B)) y,
     predicated_mutexcl f ->
     predicated_mutexcl y ->
     predicated_mutexcl (seq_app f y).
-Proof. Admitted.
-#[local] Hint Resolve seq_app_predicated_mutexcl : mte.
+Proof. Abort.
+(* #[local] Hint Resolve seq_app_predicated_mutexcl : mte. *)
 
 Lemma all_predicated_mutexcl:
   forall f l,
     all_mutexcl f ->
     predicated_mutexcl (merge (list_translation l f)).
-Proof. Admitted.
-#[local] Hint Resolve all_predicated_mutexcl : mte.
+Proof. Abort.
+(* #[local] Hint Resolve all_predicated_mutexcl : mte. *)
 
 Lemma flap2_predicated_mutexcl :
   forall A B C (f: predicated (A -> B -> C)) x y,
     predicated_mutexcl f ->
     predicated_mutexcl (flap2 f x y).
-Proof. Admitted.
-#[local] Hint Resolve flap2_predicated_mutexcl : mte.
+Proof. Abort.
+(* #[local] Hint Resolve flap2_predicated_mutexcl : mte. *)
 
 Lemma all_mutexcl_set :
   forall f n r,
@@ -370,11 +370,11 @@ Lemma all_mutexcl_maintained :
 Proof.
   destruct i; cbn -[seq_app]; intros; unfold Option.bind in *; repeat destr; inv H0.
   - trivial.
-  - apply prune_predicated_mutexcl in Heqo1; auto with mte.
-  - apply prune_predicated_mutexcl in Heqo0; auto with mte.
-  - apply prune_predicated_mutexcl in Heqo0; auto with mte.
-    apply app_predicated_mutexcl; auto with mte.
-  - unfold all_mutexcl; intros; rewrite forest_pred_reg; auto.
-  - unfold all_mutexcl; intros. unfold "<-e". unfold "#r". cbn.
-    fold (get_forest x f). auto.
-Qed.
+  (* - apply prune_predicated_mutexcl in Heqo1; auto with mte. *)
+  (* - apply prune_predicated_mutexcl in Heqo0; auto with mte. *)
+  (* - apply prune_predicated_mutexcl in Heqo0; auto with mte. *)
+  (*   apply app_predicated_mutexcl; auto with mte. *)
+  (* - unfold all_mutexcl; intros; rewrite forest_pred_reg; auto. *)
+  (* - unfold all_mutexcl; intros. unfold "<-e". unfold "#r". cbn. *)
+  (*   fold (get_forest x f). auto. *)
+Abort.

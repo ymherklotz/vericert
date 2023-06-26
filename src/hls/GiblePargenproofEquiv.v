@@ -1114,7 +1114,7 @@ Section SEM_PRED_EXEC.
 End SEM_PRED_EXEC.
 
 Module HashExprNorm(HS: Hashable).
-  Module H := HashTree(HS).
+  Module H := hls.HashTree.HashTree(HS).
 
   Definition norm_tree: Type := PTree.t pred_op * H.hash_tree.
 
