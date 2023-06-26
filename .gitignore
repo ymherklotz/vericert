@@ -93,3 +93,5 @@ creduce_bug_*/
 /results*
 
 _CoqProject
+
+lib/COHPREDSTAMP
