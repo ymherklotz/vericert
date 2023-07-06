@@ -142,7 +142,7 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
     forall n op args dst s s' e i,
       Z.pos n <= Int.max_unsigned ->
       translate_instr op args s = OK e s' i ->
-      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vnonblock (Vvar dst) e) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iop op args dst n) (Vblock (Vvar dst) e) (state_goto st n)
 | tr_instr_Icond :
     forall n1 n2 cond args s s' i c,
       Z.pos n1 <= Int.max_unsigned ->
@@ -160,12 +160,12 @@ Inductive tr_instr (fin rtrn st stk : reg) : RTL.instruction -> stmnt -> stmnt -
     forall mem addr args s s' i c dst n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (nonblock dst c) (state_goto st n)
+      tr_instr fin rtrn st stk (RTL.Iload mem addr args dst n) (block dst c) (state_goto st n)
 | tr_instr_Istore :
     forall mem addr args s s' i c src n,
       Z.pos n <= Int.max_unsigned ->
       translate_arr_access mem addr args stk s = OK c s' i ->
-      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vnonblock c (Vvar src))
+      tr_instr fin rtrn st stk (RTL.Istore mem addr args src n) (Vblock c (Vvar src))
                (state_goto st n).
 (* tr_instr_Ijumptable :
     forall cexpr tbl r,
@@ -549,7 +549,7 @@ Proof.
 
     + destruct o with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
     + destruct o0 with pc1; destruct H16; simpl in *; rewrite AssocMap.gss in H14; eauto; congruence.
-    + inversion H2. inversion H14. unfold nonblock. replace (st_st s4) with (st_st s2) by congruence.
+    + inversion H2. inversion H14. unfold block. replace (st_st s4) with (st_st s2) by congruence.
       econstructor. apply Z.leb_le; assumption.
       apply EQ1. eapply in_map with (f := fst) in H14. contradiction.
 

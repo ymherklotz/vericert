@@ -102,10 +102,10 @@ Export MonadNotation.
 #[local] Open Scope monad_scope.
 
 Definition state_goto (st : reg) (n : node) : stmnt :=
-  Vnonblock (Vvar st) (Vlit (posToValue n)).
+  Vblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
-  Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
+  Vblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
@@ -454,7 +454,7 @@ Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
 
 Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
   List.map (fun a => match a with
-                    (i, n) => (Vlit (natToValue i), Vnonblock (Vvar st) (Vlit (posToValue n)))
+                    (i, n) => (Vlit (natToValue i), Vblock (Vvar st) (Vlit (posToValue n)))
                   end)
            (enumerate 0 ns).
 
@@ -470,18 +470,18 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do instr <- translate_instr op args;
         do _ <- declare_reg None dst 32;
-        add_instr n n' (nonblock dst instr)
+        add_instr n n' (block dst instr)
       else error (Errors.msg "State is larger than 2^32.")
     | Iload mem addr args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do src <- translate_arr_access mem addr args stack;
         do _ <- declare_reg None dst 32;
-        add_instr n n' (nonblock dst src)
+        add_instr n n' (block dst src)
       else error (Errors.msg "State is larger than 2^32.")
     | Istore mem addr args src n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do dst <- translate_arr_access mem addr args stack;
-        add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+        add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
       else error (Errors.msg "State is larger than 2^32.")
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")

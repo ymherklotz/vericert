@@ -280,10 +280,15 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GibleSeq 0)
    @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
    @@ print (print_GibleSeq 1)
-   @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil))
+   (* @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil)) *)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
    @@ print (print_GibleSeq 2)
-  @@@ DeadBlocks.transf_program
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
    @@ print (print_GibleSeq 3)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
+   @@ print (print_GibleSeq 4)
+  @@@ DeadBlocks.transf_program
+   @@ print (print_GibleSeq 5)
   @@@ GiblePargen.transl_program
    @@ print (print_GiblePar 0)
   @@@ HTLPargen.transl_program

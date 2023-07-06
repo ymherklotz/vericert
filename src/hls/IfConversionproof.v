@@ -153,21 +153,24 @@ Proof.
 Qed.
 
 Lemma if_convert_decide_false :
-  forall pc pc' c b y,
+  forall pc pc' c b y x,
     c ! pc' = Some y ->
-    decide_if_convert y = false ->
+    c ! pc = Some x ->
+    decide_if_convert x y = false ->
     (if_convert c b pc pc') ! pc = b ! pc.
 Proof.
   unfold if_convert; intros.
   repeat (destruct_match; auto; []).
-  setoid_rewrite Heqo0 in H; crush.
+  setoid_rewrite Heqo0 in H.
+  setoid_rewrite Heqo in H0.
+  crush.
 Qed.
 
 Lemma if_convert_decide_true :
   forall pc pc' c b y z,
     c ! pc = Some z ->
     c ! pc' = Some y ->
-    decide_if_convert y = true ->
+    decide_if_convert z y = true ->
     (if_convert c b pc pc') ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
 Proof.
   unfold if_convert; intros.
@@ -181,12 +184,12 @@ Lemma transf_spec_correct_in :
     (fold_left (fun s n => if_convert c s (fst n) (snd n)) l b) = c' ->
     b ! pc = Some z \/ (exists pc' y,
                           c ! pc' = Some y
-                          /\ decide_if_convert y = true
+                          /\ decide_if_convert z y = true
                           /\ b ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z))) ->
     c ! pc = Some z ->
     c' ! pc = Some z \/ exists pc' y,
                           c ! pc' = Some y
-                          /\ decide_if_convert y = true
+                          /\ decide_if_convert z y = true
                           /\ c' ! pc = Some (snd (replace_section (wrap_unit (if_convert_block pc' y)) tt z)).
 Proof.
   induction l; crush. inv H0. tauto.
@@ -196,7 +199,7 @@ Proof.
 
   destruct (peq p pc); [|left; rewrite <- H2; eapply if_convert_neq; eauto]; subst; [].
   destruct (c ! p0) eqn:?; [|left; rewrite <- H2; eapply if_convert_ne_pc'; eauto]; [].
-  destruct (decide_if_convert t) eqn:?; [|left; rewrite <- H2; eapply if_convert_decide_false; eauto]; [].
+  destruct (decide_if_convert z t) eqn:?; [|left; rewrite <- H2; eapply if_convert_decide_false; eauto]; [].
   right. do 2 econstructor; simplify; eauto.
   apply if_convert_decide_true; auto.
 
@@ -207,7 +210,7 @@ Proof.
   destruct (c ! p0) eqn:?;
            [|do 2 econstructor; simplify; eauto;
              rewrite <- H3; eapply if_convert_ne_pc'; auto]; [].
-  destruct (decide_if_convert t) eqn:?;
+  destruct (decide_if_convert z t) eqn:?;
            [|do 2 econstructor; simplify; try eapply H; eauto;
              rewrite <- H3; eapply if_convert_decide_false; eauto].
   do 2 econstructor; simplify; eauto.

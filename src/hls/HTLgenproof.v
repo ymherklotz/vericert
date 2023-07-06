@@ -406,7 +406,7 @@ Section CORRECTNESS.
   Lemma op_stack_based :
     forall F V sp v m args rs op ge pc' res0 pc f e fin rtrn st stk,
       tr_instr fin rtrn st stk (RTL.Iop op args res0 pc')
-               (Verilog.Vnonblock (Verilog.Vvar res0) e)
+               (Verilog.Vblock (Verilog.Vvar res0) e)
                (state_goto st pc') ->
       reg_stack_based_pointers sp rs ->
       (RTL.fn_code f) ! pc = Some (RTL.Iop op args res0 pc') ->
@@ -1097,12 +1097,12 @@ rs assoc``.
     inv CONST; assumption.
     (* processing of state *)
     econstructor.
-    crush.
-    econstructor.
-    econstructor.
-    econstructor.
+    (* crush. *)
+    (* econstructor. *)
+    (* econstructor. *)
+    (* econstructor. *)
 
-    all: inv MARR; big_tac. Abort.
+    (* all: inv MARR; big_tac. *) Abort.
 
 (*    inv CONST; constructor; simplify; rewrite AssocMap.gso; auto; lia.
 

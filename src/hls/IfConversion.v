@@ -98,13 +98,36 @@ Definition no_predicated_store bb :=
   | _ => false
   end.
 
-Definition decide_if_convert b_next :=
-  (length b_next <=? 50)%nat && no_predicated_store b_next.
+Definition gather_set_predicate (l: list positive) (i: instr): list positive :=
+  match i with
+  | RBsetpred _ _ _ p => p::l
+  | _ => l
+  end.
+
+Definition gather_all_set_predicate i :=
+  fold_left gather_set_predicate i nil.
+
+Definition gather_rbgoto (l: list positive) (i: instr): list positive :=
+  match i with
+  | RBexit _ (RBgoto p) => p::l
+  | _ => l
+  end.
+
+Definition gather_all_rbgoto i :=
+  fold_left gather_rbgoto i nil.
+
+Definition distinct_lists (l1 l2: list positive): bool :=
+  forallb (fun x => negb (existsb (Pos.eqb x) l2)) l1.
+
+Definition decide_if_convert b_main b_next :=
+  (length b_next <=? 50)%nat && no_predicated_store b_next
+  && distinct_lists (gather_all_set_predicate b_main) (gather_all_set_predicate b_next)
+  && distinct_lists (gather_all_rbgoto b_main) (gather_all_rbgoto b_next).
 
 Definition if_convert (orig_c c: code) (main next: node) :=
   match orig_c ! main, orig_c ! next with
   | Some b_main, Some b_next =>
-      if decide_if_convert b_next then
+      if decide_if_convert b_main b_next then
         PTree.set main (snd (replace_section (wrap_unit (if_convert_block next b_next)) tt b_main)) c
       else c
   | _, _ => c
