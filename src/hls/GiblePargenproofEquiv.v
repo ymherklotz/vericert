@@ -1177,62 +1177,65 @@ Module HashExprNorm(HS: Hashable).
       mk_pred_stmnt tree == mk_pred_stmnt tree'.
   Proof. Abort.
 
-  Definition tree_equiv_check_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+  Definition tree_equiv_check_el eq_list (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
     match np2 ! n with
-    | Some p' => equiv_check p p'
-    | None => equiv_check p ⟂
+    | Some p' => equiv_check_eq_list eq_list p p'
+    | None => equiv_check_eq_list eq_list p ⟂
     end.
 
-  Definition tree_equiv_check_None_el (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
+  Definition tree_equiv_check_None_el eq_list (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
     match np2 ! n with
     | Some p' => true
-    | None => equiv_check p ⟂
+    | None => equiv_check_eq_list eq_list p ⟂
     end.
 
-  Definition beq_pred_expr (pe1 pe2: predicated HS.t) : bool :=
+  Definition beq_pred_expr eq_list (pe1 pe2: predicated HS.t) : bool :=
     if pred_expr_dec pe1 pe2 then true else
     let (np1, h) := norm_expression 1 pe1 (PTree.empty _) in
     let (np2, h') := norm_expression 1 pe2 h in
-    forall_ptree (tree_equiv_check_el np2) np1
-    && forall_ptree (tree_equiv_check_None_el np1) np2.
+    forall_ptree (tree_equiv_check_el eq_list np2) np1
+    && forall_ptree (tree_equiv_check_None_el eq_list np1) np2.
 
   Lemma beq_pred_expr_correct:
-    forall np1 np2 e p p',
-      forall_ptree (tree_equiv_check_el np2) np1 = true ->
+    forall eq_list np1 np2 e p p' c,
+      sat_predicate (eq_list_to_pred_op eq_list) c = true ->
+      forall_ptree (tree_equiv_check_el eq_list np2) np1 = true ->
       np1 ! e = Some p ->
       np2 ! e = Some p' ->
-      p == p'.
+      sat_predicate p c = sat_predicate p' c.
   Proof.
-    intros.
+    intros * HEQ **.
     eapply forall_ptree_true in H; try eassumption.
     unfold tree_equiv_check_el in H.
-    rewrite H1 in H. now apply equiv_check_correct.
+    rewrite H1 in H. now eapply equiv_check_eq_list_correct; eauto.
   Qed.
 
   Lemma beq_pred_expr_correct2:
-    forall np1 np2 e p,
-      forall_ptree (tree_equiv_check_el np2) np1 = true ->
+    forall eq_list np1 np2 e p c,
+      sat_predicate (eq_list_to_pred_op eq_list) c = true ->
+      forall_ptree (tree_equiv_check_el eq_list np2) np1 = true ->
       np1 ! e = Some p ->
       np2 ! e = None ->
-      p == ⟂.
+      sat_predicate p c = sat_predicate ⟂ c.
   Proof.
-    intros.
+    intros * HEQ **.
     eapply forall_ptree_true in H; try eassumption.
     unfold tree_equiv_check_el in H.
-    rewrite H1 in H. now apply equiv_check_correct.
+    rewrite H1 in H. now eapply equiv_check_eq_list_correct; eauto.
   Qed.
 
   Lemma beq_pred_expr_correct3:
-    forall np1 np2 e p,
-      forall_ptree (tree_equiv_check_None_el np1) np2 = true ->
+    forall eq_list np1 np2 e p c,
+      sat_predicate (eq_list_to_pred_op eq_list) c = true ->
+      forall_ptree (tree_equiv_check_None_el eq_list np1) np2 = true ->
       np1 ! e = None ->
       np2 ! e = Some p ->
-      p == ⟂.
+      sat_predicate p c = sat_predicate ⟂ c.
   Proof.
-    intros.
+    intros * HEQ **.
     eapply forall_ptree_true in H; try eassumption.
     unfold tree_equiv_check_None_el in H.
-    rewrite H0 in H. now apply equiv_check_correct.
+    rewrite H0 in H. now eapply equiv_check_eq_list_correct; eauto.
   Qed.
 
   Section PRED_PROOFS.
@@ -1434,14 +1437,15 @@ Module HashExprNorm(HS: Hashable).
   Qed.
 
   Lemma beq_pred_expr_correct_top:
-    forall p1 p2 v
+    forall eq_list p1 p2 v
            (MUTEXCL1: predicated_mutexcl p1)
            (MUTEXCL2: predicated_mutexcl p2),
-      beq_pred_expr p1 p2 = true ->
+      eval_predf ps (eq_list_to_pred_op eq_list) = true ->
+      beq_pred_expr eq_list p1 p2 = true ->
       sem_pred_expr f a_sem ctx p1 v ->
       sem_pred_expr f a_sem ctx p2 v.
   Proof.
-    unfold beq_pred_expr; intros.
+    unfold beq_pred_expr; intros * MUTEXCL1 MUTEXCL2 HEQ **.
     destruct_match; subst; auto.
     repeat (destruct_match; []).
     symmetry in H. apply andb_true_eq in H. inv H.
@@ -1453,24 +1457,26 @@ Module HashExprNorm(HS: Hashable).
     3: { eauto. }
     2: { unfold H.wf_hash_table; intros. now rewrite PTree.gempty in H3. }
     inv H0. destruct (t0 ! e) eqn:?.
-    - assert (pr == p) by eauto using beq_pred_expr_correct.
+    - (* assert (pr == p) by admit. (* eauto using beq_pred_expr_correct. *) *)
       assert (sem_pexpr ctx (from_pred_op f p) true).
-      { eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H3; eauto. }
-      econstructor. apply H7. eauto. eauto.
+      { eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H3; eauto.
+        unfold eval_predf in *. erewrite <- beq_pred_expr_correct; eauto. }
+      econstructor. apply H0. eauto. eauto.
       eapply norm_expression_in; eauto.
-    - assert (pr == ⟂) by eauto using beq_pred_expr_correct2.
+    - assert (eval_predf ps pr = eval_predf ps ⟂) by (unfold eval_predf; eauto using beq_pred_expr_correct2).
       eapply sem_pexpr_eval_inv in H3; eauto. now rewrite H0 in H3.
   Qed.
 
   Lemma beq_pred_expr_correct_top2:
-    forall p1 p2 v
+    forall eq_list p1 p2 v
            (MUTEXCL1: predicated_mutexcl p1)
            (MUTEXCL2: predicated_mutexcl p2),
-      beq_pred_expr p1 p2 = true ->
+      (eval_predf ps (eq_list_to_pred_op eq_list) = true) ->
+      beq_pred_expr eq_list p1 p2 = true ->
       sem_pred_expr f a_sem ctx p2 v ->
       sem_pred_expr f a_sem ctx p1 v.
   Proof.
-    unfold beq_pred_expr; intros.
+    unfold beq_pred_expr; intros * MUTEXCL1 MUTEXCL2 HEQ **.
     destruct_match; subst; auto.
     repeat (destruct_match; []).
     symmetry in H. apply andb_true_eq in H. inv H.
@@ -1484,7 +1490,7 @@ Module HashExprNorm(HS: Hashable).
     3: { eauto. }
     2: { auto. }
     inv H0. destruct (t ! e) eqn:?.
-    - assert (p == pr) by eauto using beq_pred_expr_correct.
+    - assert (eval_predf ps p = eval_predf ps pr) by (unfold eval_predf; eauto using beq_pred_expr_correct).
       assert (sem_pexpr ctx (from_pred_op f p) true).
       { eapply sem_pexpr_eval; eauto. eapply sem_pexpr_eval_inv in H3; eauto. }
       econstructor. apply H7. eauto. eauto.
@@ -1493,7 +1499,7 @@ Module HashExprNorm(HS: Hashable).
       now rewrite PTree.gempty in YH. eauto. simplify.
       exploit norm_expression_in. 2: { eauto. } auto. eauto. intros.
       crush.
-    - assert (pr == ⟂) by eauto using beq_pred_expr_correct3.
+    - assert (eval_predf ps pr = eval_predf ps ⟂) by (unfold eval_predf; eauto using beq_pred_expr_correct3).
       eapply sem_pexpr_eval_inv in H3; eauto. now rewrite H0 in H3.
   Qed.
 
@@ -1614,14 +1620,35 @@ Proof.
   eapply forall_ptree_true in H; eauto using check_mutexcl_correct.
 Qed.
 
-Definition check f1 f2 :=
-  RTree.beq HN.beq_pred_expr f1.(forest_regs) f2.(forest_regs)
+Definition remove_all {A} :=
+  fold_left (fun (a: PTree.t A) b => PTree.remove b a).
+
+Definition predicated_not_in {A} (p: Gible.predicate) (l: predicated A): bool :=
+  NE.fold_right (fun (a: pred_op * A) (b: bool) =>
+    b && negb (predin peq p (fst a))
+  ) true l.
+
+Definition predicated_not_in_pred_expr (p: Gible.predicate) (tree: RTree.t pred_expr) :=
+  PTree.fold (fun b _ a =>
+    b && predicated_not_in p a
+  ) tree true.
+
+Definition predicated_not_in_pred_eexpr (p: Gible.predicate) (l: pred_eexpr) :=
+  predicated_not_in p l.
+
+Definition predicated_not_in_forest (p: Gible.predicate) (f: forest) :=
+  predicated_not_in_pred_expr p f.(forest_regs)
+  && predicated_not_in p f.(forest_exit).
+
+Definition check (eq_list: list (positive * positive)) f1 f2 :=
+  RTree.beq (HN.beq_pred_expr eq_list) f1.(forest_regs) f2.(forest_regs)
   && PTree.beq beq_pred_pexpr f1.(forest_preds) f2.(forest_preds)
-  && EHN.beq_pred_expr f1.(forest_exit) f2.(forest_exit)
+  && EHN.beq_pred_expr eq_list f1.(forest_exit) f2.(forest_exit)
   && check_mutexcl_tree HN.pred_Ht_dec f1.(forest_regs)
   && check_mutexcl_tree HN.pred_Ht_dec f2.(forest_regs)
   && check_mutexcl EHN.pred_Ht_dec f1.(forest_exit)
-  && check_mutexcl EHN.pred_Ht_dec f2.(forest_exit).
+  && check_mutexcl EHN.pred_Ht_dec f2.(forest_exit)
+  && (forallb (fun x => beq_pred_pexpr (f1 #p (fst x)) (f1 #p (snd x))) eq_list).
 
 Lemma sem_pexpr_forward_eval1 :
   forall A ctx f_p ps,
@@ -2086,9 +2113,9 @@ Proof.
 Qed.
 
 Lemma tree_beq_pred_expr :
-  forall a b x,
-    RTree.beq HN.beq_pred_expr (forest_regs a) (forest_regs b) = true ->
-    HN.beq_pred_expr a #r x b #r x = true.
+  forall eq_list a b x,
+    RTree.beq (HN.beq_pred_expr eq_list) (forest_regs a) (forest_regs b) = true ->
+    HN.beq_pred_expr eq_list a #r x b #r x = true.
 Proof.
   intros. unfold "#r" in *.
   apply PTree.beq_correct with (x := (R_indexed.index x)) in H.
@@ -2098,14 +2125,227 @@ Proof.
   unfold HN.beq_pred_expr. destruct_match; auto.
 Qed.
 
+Definition predicated_not_inP {A} (p: Gible.predicate) (l: predicated A) :=
+  forall op e, NE.In (op, e) l -> ~ PredIn p op.
+
+Lemma predicated_not_inP_cons :
+  forall A p (a: (pred_op * A)) l,
+    predicated_not_inP p (NE.cons a l) ->
+    predicated_not_inP p l.
+Proof.
+  unfold predicated_not_inP; intros. eapply H. econstructor. right; eauto.
+Qed.
+
+Lemma predicated_not_inP_equiv :
+  forall A (a: predicated A) p,
+    predicated_not_in p a = true -> predicated_not_inP p a.
+Proof.
+  induction a.
+  - intros. cbn in *. unfold predicated_not_inP; intros.
+    unfold not; intros. inv H0. cbn in *.
+    destruct (predin peq p op) eqn:?; try discriminate. eapply predin_PredIn in H1.
+    rewrite H1 in Heqb. discriminate.
+  - intros. cbn in H. eapply andb_prop in H. inv H. eapply IHa in H0.
+    unfold predicated_not_inP in *; intros. inv H. inv H3; cbn in *; eauto.
+    unfold not; intros. eapply predin_PredIn in H. now rewrite H in H1.
+Qed.
+
+Lemma pred_fold_true' :
+  forall A l pred y,
+    fold_left (fun a (p : positive * predicated A) => a && predicated_not_in pred (snd p)) l y = true ->
+    y = true.
+Proof.
+  induction l; crush.
+  exploit IHl; try eassumption; intros.
+  eapply andb_prop in H0; tauto.
+Qed.
+
+Lemma pred_fold_true :
+  forall A pred l p y,
+    fold_left (fun (a : bool) (p : positive * predicated A) => a && predicated_not_in pred (snd p)) l y = true ->
+    y = true ->
+    list_norepet (map fst l) ->
+    In p l ->
+    predicated_not_in pred (snd p) = true.
+Proof.
+  induction l; crush.
+  inv H1. inv H2.
+  - cbn in *. now eapply pred_fold_true' in H.
+  - cbn in *; eapply IHl; try eassumption.
+    eapply pred_fold_true'; eauto.
+Qed.
+
+Lemma pred_not_in_forestP :
+  forall pred f,
+    predicated_not_in_forest pred f = true ->
+    forall x, predicated_not_inP pred (f #r x).
+Proof.
+  unfold predicated_not_in_forest, predicated_not_in_pred_expr; intros.
+  destruct (RTree.get x (forest_regs f)) eqn:?.
+  - eapply andb_prop in H. inv H. rewrite PTree.fold_spec in H0.
+    unfold RTree.get in Heqo.
+    exploit pred_fold_true. eauto. auto. apply PTree.elements_keys_norepet.
+    apply PTree.elements_correct; eauto.
+    intros. eapply predicated_not_inP_equiv. unfold "#r".
+    unfold RTree.get. rewrite Heqo. auto.
+  - unfold "#r". rewrite Heqo. unfold predicated_not_inP; intros.
+  inv H0. inversion 1.
+Qed.
+
+Lemma pred_not_in_forest_exitP :
+  forall pred f,
+    predicated_not_in_forest pred f = true ->
+    predicated_not_inP pred (forest_exit f).
+Proof.
+  intros.
+  eapply predicated_not_inP_equiv. unfold predicated_not_in_forest in H.
+  eapply andb_prop in H; tauto.
+Qed.
+
+Lemma sem_pexpr_not_in :
+  forall G (ctx: @ctx G) p0 ps p e b,
+    ~ PredIn p p0 ->
+    sem_pexpr ctx (from_pred_op ps p0) b ->
+    sem_pexpr ctx (from_pred_op (PTree.set p e ps) p0) b.
+Proof.
+  induction p0; auto; intros.
+  - cbn. destruct p. unfold get_forest_p'.
+    assert (p0 <> p) by
+      (unfold not; intros; apply H; subst; constructor).
+    rewrite PTree.gso; auto.
+  - cbn in *.
+    assert (X: ~ PredIn p p0_1 /\ ~ PredIn p p0_2) by
+      (split; unfold not; intros; apply H; constructor; tauto).
+    inversion_clear X as [X1 X2].
+    inv H0. inv H4.
+    specialize (IHp0_1 _ p e _ X1 H0). constructor. tauto.
+    specialize (IHp0_2 _ p e _ X2 H0). constructor. tauto.
+    constructor; auto.
+  - cbn in *.
+    assert (X: ~ PredIn p p0_1 /\ ~ PredIn p p0_2) by
+      (split; unfold not; intros; apply H; constructor; tauto).
+    inversion_clear X as [X1 X2].
+    inv H0. inv H4.
+    specialize (IHp0_1 _ p e _ X1 H0). constructor. tauto.
+    specialize (IHp0_2 _ p e _ X2 H0). constructor. tauto.
+    constructor; auto.
+Qed.
+
+Lemma sem_pexpr_not_in2 :
+  forall G (ctx: @ctx G) p0 ps p b,
+    ~ PredIn p p0 ->
+    sem_pexpr ctx (from_pred_op ps p0) b ->
+    sem_pexpr ctx (from_pred_op (PTree.remove p ps) p0) b.
+Proof.
+  induction p0; auto; intros.
+  - cbn. destruct p. unfold get_forest_p'.
+    assert (p0 <> p) by
+      (unfold not; intros; apply H; subst; constructor).
+    rewrite PTree.gro; auto.
+  - cbn in *.
+    assert (X: ~ PredIn p p0_1 /\ ~ PredIn p p0_2) by
+      (split; unfold not; intros; apply H; constructor; tauto).
+    inversion_clear X as [X1 X2].
+    inv H0. inv H4.
+    specialize (IHp0_1 _ p _ X1 H0). constructor. tauto.
+    specialize (IHp0_2 _ p _ X2 H0). constructor. tauto.
+    constructor; auto.
+  - cbn in *.
+    assert (X: ~ PredIn p p0_1 /\ ~ PredIn p p0_2) by
+      (split; unfold not; intros; apply H; constructor; tauto).
+    inversion_clear X as [X1 X2].
+    inv H0. inv H4.
+    specialize (IHp0_1 _ p _ X1 H0). constructor. tauto.
+    specialize (IHp0_2 _ p _ X2 H0). constructor. tauto.
+    constructor; auto.
+Qed.
+
+Lemma sem_pred_not_in :
+  forall A B G (ctx: @ctx G) (s: @Abstr.ctx G -> A -> B -> Prop) l v p e ps,
+    sem_pred_expr ps s ctx l v ->
+    predicated_not_inP p l ->
+    sem_pred_expr (PTree.set p e ps) s ctx l v.
+Proof.
+  induction l.
+  - intros. unfold predicated_not_inP in H0.
+    destruct a. constructor. apply sem_pexpr_not_in.
+    eapply H0. econstructor. inv H. auto. inv H. auto.
+  - intros. inv H. constructor. unfold predicated_not_inP in H0.
+    eapply sem_pexpr_not_in. eapply H0. constructor. left. eauto.
+    auto. auto.
+    apply sem_pred_expr_cons_false. apply sem_pexpr_not_in. eapply H0.
+    constructor. tauto. auto. auto.
+    eapply IHl. eauto. eapply predicated_not_inP_cons; eauto.
+Qed.
+
+Lemma sem_pred_not_in2 :
+  forall A B G (ctx: @ctx G) (s: @Abstr.ctx G -> A -> B -> Prop) l v p ps,
+    sem_pred_expr ps s ctx l v ->
+    predicated_not_inP p l ->
+    sem_pred_expr (PTree.remove p ps) s ctx l v.
+Proof.
+  induction l.
+  - intros. unfold predicated_not_inP in H0.
+    destruct a. constructor. apply sem_pexpr_not_in2.
+    eapply H0. econstructor. inv H. auto. inv H. auto.
+  - intros. inv H. constructor. unfold predicated_not_inP in H0.
+    eapply sem_pexpr_not_in2. eapply H0. constructor. left. eauto.
+    auto. auto.
+    apply sem_pred_expr_cons_false. apply sem_pexpr_not_in2. eapply H0.
+    constructor. tauto. auto. auto.
+    eapply IHl. eauto. eapply predicated_not_inP_cons; eauto.
+Qed.
+
+Lemma remove_all_sem_pred_expr :
+  forall A B G (ctx: @Abstr.ctx G) (s: @Abstr.ctx G -> A -> B -> Prop) l a y v,
+    sem_pred_expr a s ctx y v ->
+    Forall (fun x => predicated_not_inP x y) l ->
+    sem_pred_expr (remove_all l a) s ctx y v.
+Proof.
+  induction l; cbn; auto; intros.
+  inv H0. eapply IHl; eauto.
+  apply sem_pred_not_in2; auto.
+Qed.
+
+Lemma eval_predf_eq_list :
+  forall G (ictx: @ctx G) a pr' eq_list t,
+    (forall x : positive, sem_pexpr ictx a #p x pr' !! x) ->
+    forallb (fun x : positive * positive => beq_pred_pexpr a #p (fst x) a #p (snd x)) eq_list = true ->
+    eval_predf pr' t = true ->
+    eval_predf pr'
+        (fold_left
+           (fun (a0 : Predicate.pred_op) (b0 : Predicate.predicate * Predicate.predicate) =>
+            a0 ∧ ((Plit (true, fst b0) ∨ Plit (false, snd b0)) ∧ (Plit (true, snd b0) ∨ Plit (false, fst b0)))) eq_list t) =
+      true.
+Proof.
+  induction eq_list; auto; intros.
+  eapply IHeq_list; [auto| |].
+  cbn in H0. apply andb_prop in H0; tauto.
+  rewrite eval_predf_Pand. rewrite H1; cbn -[eval_predf].
+  cbn in H0. apply andb_prop in H0. inv H0.
+  eapply sem_pexpr_beq_correct' with (ctx := ictx) in H2.
+  assert (eval_predf pr' (Plit (true, fst a0)) = eval_predf pr' (Plit (true, snd a0))).
+  remember (eval_predf pr' (Plit (true, fst a0))). symmetry in Heqb.
+  eapply sem_pexpr_eval in Heqb; eauto.
+  apply sem_pexprF_correct2 in Heqb. cbn in Heqb. unfold "#p" in *. rewrite H2 in Heqb.
+  replace (get_forest_p' (snd a0) (forest_preds a))
+    with (from_pred_op (forest_preds a) (Plit (true, snd a0))) in Heqb by auto.
+  apply sem_pexprF_correct in Heqb. eapply sem_pexpr_eval_inv in Heqb. eauto.
+  eauto.
+  destruct (eval_predf pr' (Plit (true, fst a0))) eqn:?;
+  destruct (eval_predf pr' (Plit (true, snd a0))) eqn:?; crush.
+  cbn in *. setoid_rewrite Heqb. setoid_rewrite Heqb0; auto.
+  cbn in *. setoid_rewrite Heqb. setoid_rewrite Heqb0; auto.
+Qed.
+
 Section CORRECT.
 
 Context {FUN TFUN: Type}.
 Context (ictx: @ctx FUN) (octx: @ctx TFUN) (HSIM: similar ictx octx).
 
 Lemma abstr_check_correct :
-  forall i' a b cf,
-    check a b = true ->
+  forall eq_list i' a b cf,
+    check eq_list a b = true ->
     sem ictx a (i', cf) ->
     exists ti', sem octx b (ti', cf) /\ match_states i' ti'.
 Proof.
@@ -2113,28 +2353,37 @@ Proof.
   assert (EVALUABLE: (exists ps, forall x, sem_pexpr ictx (get_forest_p' x (forest_preds a)) ps !! x)).
   { inv H0. inv H4. eauto. }
   unfold check in H. simplify.
-  inv H0. inv H10. inv H11.
+  inv H0. inv H11. inv H12.
   eexists; split; constructor; auto.
   - constructor. intros.
     eapply sem_pred_exec_beq_correct; eauto.
+    (* eapply remove_all_sem_pred_expr; eauto. *)
+    (* 2: { eapply Forall_forall; intros. eapply forallb_forall in H3; eauto. eapply pred_not_in_forestP; eauto. } *)
     eapply sem_pred_expr_corr; eauto. now apply sem_value_corr.
     eapply HN.beq_pred_expr_correct_top; eauto.
     { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
     { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
-    eapply tree_beq_pred_expr; eauto.
+    2: { eapply tree_beq_pred_expr; eauto. }
+    unfold eq_list_to_pred_op. eapply eval_predf_eq_list; eauto.
   - (* This is where three-valued logic would be needed. *)
     constructor. intros. apply sem_pexpr_beq_correct with (p1 := a #p x0).
     apply tree_beq_pred_pexpr; auto.
     apply sem_pexpr_corr with (ictx:=ictx); auto.
   - eapply sem_pred_exec_beq_correct; eauto.
+    (* eapply remove_all_sem_pred_expr; eauto. *)
+    (* 2: { eapply Forall_forall; intros. eapply forallb_forall in H3; eauto. eapply pred_not_in_forestP; eauto. } *)
     eapply sem_pred_expr_corr; eauto. now apply sem_mem_corr.
     eapply HN.beq_pred_expr_correct_top; eauto.
     { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
     { unfold "#r"; destruct_match; eauto using check_mutexcl_tree_correct, predicated_singleton. }
-    eapply tree_beq_pred_expr; eauto.
+    2: { eapply tree_beq_pred_expr; eauto. }
+    unfold eq_list_to_pred_op. eapply eval_predf_eq_list; eauto.
   - eapply sem_pred_exec_beq_correct; eauto.
+    (* eapply remove_all_sem_pred_expr; eauto. *)
+    (* 2: { eapply Forall_forall; intros. eapply forallb_forall in H3; eauto. eapply pred_not_in_forest_exitP; eauto. } *)
     eapply sem_pred_expr_corr; eauto. now apply sem_exit_corr.
     eapply EHN.beq_pred_expr_correct_top; eauto using check_mutexcl_correct.
+    unfold eq_list_to_pred_op. eapply eval_predf_eq_list; eauto.
 Qed.
 
 (*|

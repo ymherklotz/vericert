@@ -55,6 +55,12 @@ install: doc/vericert.1
 	install -d $(PREFIX)/share/man/man1
 	install -C -m 644 $< $(PREFIX)/share/man/man1
 
+install-test: # doc/vericert.1
+	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
+	install -d $(PREFIX)/bin
+	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin
+	install -C _build/default/debug/VericertTest.exe $(PREFIX)/bin/vericert-test
+
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
 	@rm -f src/extraction/STAMP

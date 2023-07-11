@@ -740,6 +740,17 @@ Proof.
   intros. tauto.
 Qed.
 
+Definition eq_list_to_pred_op (eq_list: list (positive * positive)): pred_op :=
+  fold_left (fun a b => a ∧ ((Plit (true, fst b) ∨ Plit (false, snd b))
+                          ∧ (Plit (true, snd b) ∨ Plit (false, fst b))))
+                        eq_list T.
+
+Definition equiv_check_eq_list eq_list p1 p2 :=
+  match sat_pred_simple (simplify (¬ (eq_list_to_pred_op eq_list) ∨ (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1))) with
+  | None => true
+  | _ => false
+  end.
+
 Definition equiv_check p1 p2 :=
   match sat_pred_simple (simplify (p1 ∧ ¬ p2 ∨ p2 ∧ ¬ p1)) with
   | None => true
@@ -757,6 +768,28 @@ Proof.
   eapply sat_equiv3; eauto.
   unfold unsat; intros.
   rewrite <- simplify_correct. eauto.
+Qed.
+
+Lemma equiv_check_eq_list_correct :
+  forall eq_list p1 p2,
+    equiv_check_eq_list eq_list p1 p2 = true ->
+    forall c, sat_predicate (eq_list_to_pred_op eq_list) c = true ->
+    sat_predicate p1 c = sat_predicate p2 c.
+Proof.
+  unfold equiv_check_eq_list. unfold sat_pred_simple. intros.
+  destruct_match; try discriminate; [].
+  destruct_match. destruct_match. discriminate.
+  assert (negb (sat_predicate (eq_list_to_pred_op eq_list) c) = false)
+    by (rewrite H0; auto).
+  clear Heqs.
+  specialize (e c).
+  rewrite simplify_correct in e. rewrite sat_predicate_or in e. rewrite <- negate_correct in H1.
+  rewrite H1 in e. rewrite orb_false_l in e.
+  destruct (sat_predicate p1 c) eqn:X;
+    destruct (sat_predicate p2 c) eqn:X2;
+    crush.
+  rewrite negate_correct in *. rewrite X in *. rewrite X2 in *. auto.
+  rewrite negate_correct in *. rewrite X in *. rewrite X2 in *. auto.
 Qed.
 
 Opaque simplify.

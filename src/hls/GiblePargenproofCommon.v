@@ -210,31 +210,6 @@ Proof.
       econstructor. split. constructor. right. eauto. auto.
 Qed.
 
-Definition predicated_not_inP {A} (p: Gible.predicate) (l: predicated A) :=
-  forall op e, NE.In (op, e) l -> ~ PredIn p op.
-
-Lemma predicated_not_inP_cons :
-  forall A p (a: (pred_op * A)) l,
-    predicated_not_inP p (NE.cons a l) ->
-    predicated_not_inP p l.
-Proof.
-  unfold predicated_not_inP; intros. eapply H. econstructor. right; eauto.
-Qed.
-
-Lemma predicated_not_inP_equiv :
-  forall A (a: predicated A) p,
-    predicated_not_in p a = true -> predicated_not_inP p a.
-Proof.
-  induction a.
-  - intros. cbn in *. unfold predicated_not_inP; intros.
-    unfold not; intros. inv H0. cbn in *.
-    destruct (predin peq p op) eqn:?; try discriminate. eapply predin_PredIn in H1.
-    rewrite H1 in Heqb. discriminate.
-  - intros. cbn in H. eapply andb_prop in H. inv H. eapply IHa in H0.
-    unfold predicated_not_inP in *; intros. inv H. inv H3; cbn in *; eauto.
-    unfold not; intros. eapply predin_PredIn in H. now rewrite H in H1.
-Qed.    
-
 Lemma truthy_dec:
   forall ps a, truthy ps a \/ falsy ps a.
 Proof.

@@ -221,23 +221,6 @@ Definition is_initial_pred_and_notin (f: forest) (p: positive) (p_next: pred_op)
   | _ => false
   end.
 
-Definition predicated_not_in {A} (p: Gible.predicate) (l: predicated A): bool :=
-  NE.fold_right (fun (a: pred_op * A) (b: bool) =>
-    b && negb (predin peq p (fst a))
-  ) true l.
-
-Definition predicated_not_in_pred_expr (p: Gible.predicate) (tree: RTree.t pred_expr) :=
-  PTree.fold (fun b _ a =>
-    b && predicated_not_in p a
-  ) tree true.
-
-Definition predicated_not_in_pred_eexpr (p: Gible.predicate) (l: pred_eexpr) :=
-  predicated_not_in p l.
-
-Definition predicated_not_in_forest (p: Gible.predicate) (f: forest) :=
-  predicated_not_in_pred_expr p f.(forest_regs)
-  && predicated_not_in p f.(forest_exit).
-
 Definition pred_expr_dec: forall a b: pred_op * pred_expression, {a = b} + {a <> b}.
 Proof.
   intros. destruct a, b.
@@ -422,21 +405,21 @@ Definition check_evaluability1 a b :=
   forallb (fun be =>
     existsb (fun ae =>
       resource_eq (fst ae) (fst be) 
-      && HN.beq_pred_expr (snd ae) (snd be)
+      && HN.beq_pred_expr nil (snd ae) (snd be)
       && check_mutexcl HN.pred_Ht_dec (snd ae)
       && check_mutexcl HN.pred_Ht_dec (snd be)
     ) a
   ) b.
 
 Definition check_evaluability2 a b :=
-  forallb (fun be => existsb (fun ae => HN.beq_pred_expr ae be
+  forallb (fun be => existsb (fun ae => HN.beq_pred_expr nil ae be
                                      && check_mutexcl HN.pred_Ht_dec ae
                                      && check_mutexcl HN.pred_Ht_dec be) a) b.
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   match abstract_sequence_top bb, abstract_sequence_top (concat (concat bbt)) with
   | Some (bb', reg_expr, m_expr), Some (bbt', reg_expr_t, m_expr_t) =>
-      check bb' bbt' && empty_trees bb bbt
+      check nil bb' bbt' && empty_trees bb bbt
       && check_evaluability1 reg_expr reg_expr_t
       && check_evaluability2 m_expr m_expr_t
   | _, _ => false

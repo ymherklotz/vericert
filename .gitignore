@@ -45,7 +45,6 @@ _build
 
 /docs/html
 .DS_Store
-debug/*
 
 # CompCert
 *.rtl.*

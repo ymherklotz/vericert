@@ -813,6 +813,7 @@ have been evaluable.
     inversion_clear XX as [v HSEM].
     exists v. eapply HN.beq_pred_expr_correct_top;
     eauto using check_mutexcl_correct.
+    auto.
   Qed.
 
   Lemma check_evaluability2_evaluable :
@@ -836,6 +837,7 @@ have been evaluable.
     inversion_clear HIN' as [v HSEM].
     exists v. eapply HN.beq_pred_expr_correct_top;
     eauto using check_mutexcl_correct.
+    auto.
   Qed.
 
   Lemma evaluable_same_preds :
