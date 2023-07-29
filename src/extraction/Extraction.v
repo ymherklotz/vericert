@@ -152,6 +152,7 @@ Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_GibleSeq => "PrintGibleSeq.print_if".
 Extract Constant Compiler.print_GiblePar => "PrintGiblePar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
+Extract Constant Compiler.print_DHTL => "PrintDHTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".

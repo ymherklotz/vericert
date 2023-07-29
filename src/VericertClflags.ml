@@ -4,6 +4,7 @@ let option_hls = ref true
 let option_debug_hls = ref false
 let option_initial = ref false
 let option_dhtl = ref false
+let option_ddhtl = ref false
 let option_dgblseq = ref false
 let option_dgblpar = ref false
 let option_drtlparfu = ref false

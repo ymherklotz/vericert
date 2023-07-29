@@ -268,10 +268,10 @@ Definition update (fop : pred_op * forest) (i : instr): option (pred_op * forest
            → from_predicated true f.(forest_preds) predicated)
         ∧ (from_pred_op f.(forest_preds) (¬ (dfltp p') ∨ ¬ pred) → (f #p p))
       in
-      do _ <- assert_ (check_mutexcl pred_expr_dec predicated);
-      do _ <- assert_ (predicated_not_in_forest p f);
-      do _ <- assert_ (is_initial_pred_and_notin f p pred);
-      do _ <- assert_ (match sat_pred_simple (¬ from_predicated_inv predicated) with None => true | Some _ => false end);
+      do _t1 <- assert_ (check_mutexcl pred_expr_dec predicated);
+      do _t2 <- assert_ (predicated_not_in_forest p f);
+      do _t3 <- assert_ (is_initial_pred_and_notin f p pred);
+      do _t4 <- assert_ (match sat_pred_simple (¬ from_predicated_inv predicated) with None => true | Some _ => false end);
       Some (pred, f #p p <- new_pred)
   | RBexit p c =>
       let new_p := simplify (negate (dfltp p) ∧ pred) in

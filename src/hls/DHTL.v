@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2023 Yann Herklotz <yann@yannherklotz.com>
  *               2020 James Pollard <j@mes.dev>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -76,7 +76,6 @@ Record module: Type :=
   mkmodule {
     mod_params : list reg;
     mod_datapath : datapath;
-    mod_controllogic : controllogic;
     mod_entrypoint : node;
     mod_st : reg;
     mod_stk : reg;
@@ -89,7 +88,7 @@ Record module: Type :=
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_ram : option ram;
-    mod_wf : map_well_formed mod_controllogic /\ map_well_formed mod_datapath;
+    mod_wf : map_well_formed mod_datapath;
     mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk;
     mod_ram_wf : forall r', mod_ram = Some r' -> mod_clk < ram_addr r';
     mod_params_wf : Forall (Pos.gt mod_st) mod_params;
@@ -172,28 +171,19 @@ Inductive exec_ram:
 
 Inductive step : genv -> state -> Events.trace -> state -> Prop :=
 | step_module :
-    forall g m st sf ctrl data
-      asr asa
-      basr1 basa1 nasr1 nasa1
-      basr2 basa2 nasr2 nasa2
-      basr3 basa3 nasr3 nasa3
-      asr' asa'
-      f pstval,
+    forall g m st sf data
+        asr asa
+        basr2 basa2 nasr2 nasa2
+        basr3 basa3 nasr3 nasa3
+        asr' asa'
+        f pstval,
       asr!(mod_reset m) = Some (ZToValue 0) ->
       asr!(mod_finish m) = Some (ZToValue 0) ->
       asr!(m.(mod_st)) = Some (posToValue st) ->
-      m.(mod_controllogic)!st = Some ctrl ->
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations asr empty_assocmap)
         (Verilog.mkassociations asa (empty_stack m))
-        ctrl
-        (Verilog.mkassociations basr1 nasr1)
-        (Verilog.mkassociations basa1 nasa1) ->
-      basr1!(m.(mod_st)) = Some (posToValue st) ->
-      Verilog.stmnt_runp f
-        (Verilog.mkassociations basr1 nasr1)
-        (Verilog.mkassociations basa1 nasa1)
         data
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
@@ -247,7 +237,7 @@ Definition semantics (m : program) :=
                       (Globalenvs.Genv.globalenv m).
 
 Definition max_pc_function (m: module) :=
-  List.fold_left Pos.max (List.map fst (PTree.elements m.(mod_controllogic))) 1.
+  List.fold_left Pos.max (List.map fst (PTree.elements m.(mod_datapath))) 1.
 
 Definition max_list := fold_right Pos.max 1.
 
@@ -269,14 +259,13 @@ Definition max_reg_ram r :=
 Definition max_reg_module m :=
   Pos.max (max_list (mod_params m))
    (Pos.max (max_stmnt_tree (mod_datapath m))
-    (Pos.max (max_stmnt_tree (mod_controllogic m))
      (Pos.max (mod_st m)
       (Pos.max (mod_stk m)
        (Pos.max (mod_finish m)
         (Pos.max (mod_return m)
          (Pos.max (mod_start m)
           (Pos.max (mod_reset m)
-           (Pos.max (mod_clk m) (max_reg_ram (mod_ram m))))))))))).
+           (Pos.max (mod_clk m) (max_reg_ram (mod_ram m)))))))))).
 
 Lemma max_fold_lt :
   forall m l n, m <= n -> m <= (fold_left Pos.max l n).
@@ -333,10 +322,11 @@ Proof. intros. apply max_reg_stmnt_le_stmnt_tree in H; lia. Qed.
 
 Lemma max_stmnt_lt_module :
   forall m d i,
-    (mod_controllogic m) ! i = Some d \/ (mod_datapath m) ! i = Some d ->
+    (mod_datapath m) ! i = Some d ->
     Verilog.max_reg_stmnt d < max_reg_module m + 1.
 Proof.
-  inversion 1 as [ Hv | Hv ]; unfold max_reg_module;
+  intros * Hv.
+  unfold max_reg_module;
   apply max_reg_stmnt_le_stmnt_tree in Hv; lia.
 Qed.
 

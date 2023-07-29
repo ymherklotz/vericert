@@ -243,6 +243,7 @@ Ltac unfold_merge :=
   rewrite AssocMapExt.merge_base_1.
 
 Declare Scope assocmap.
+
 Notation "a ! b" := (AssocMap.get b a) (at level 1) : assocmap.
 Notation "a # ( b , c )" := (find_assocmap c b a) (at level 1) : assocmap.
 Notation "a # b" := (find_assocmap 32 b a) (at level 1) : assocmap.

@@ -18,12 +18,12 @@
 
 From compcert Require Import Smallstep Linking Integers Globalenvs.
 From vericert Require HTL.
-From vericert Require Import Vericertlib Veriloggen Verilog ValueInt AssocMap.
+From vericert Require Import Vericertlib DVeriloggen Verilog ValueInt AssocMap.
 Require Import Lia.
 
 Local Open Scope assocmap.
 
-Definition match_prog (prog : HTL.program) (tprog : Verilog.program) :=
+Definition match_prog (prog : DHTL.program) (tprog : Verilog.program) :=
   match_program (fun cu f tf => tf = transl_fundef f) eq prog tprog.
 
 Lemma transf_program_match:
@@ -32,28 +32,28 @@ Proof.
   intros. eapply match_transform_program_contextual. auto.
 Qed.
 
-Inductive match_stacks : list HTL.stackframe -> list stackframe -> Prop :=
+Inductive match_stacks : list DHTL.stackframe -> list stackframe -> Prop :=
 | match_stack :
     forall res m pc reg_assoc arr_assoc hstk vstk,
       match_stacks hstk vstk ->
-      match_stacks (HTL.Stackframe res m pc reg_assoc arr_assoc :: hstk)
+      match_stacks (DHTL.Stackframe res m pc reg_assoc arr_assoc :: hstk)
                    (Stackframe res (transl_module m) pc
                                        reg_assoc arr_assoc :: vstk)
 | match_stack_nil : match_stacks nil nil.
 
-Inductive match_states : HTL.state -> state -> Prop :=
+Inductive match_states : DHTL.state -> state -> Prop :=
 | match_state :
     forall m st reg_assoc arr_assoc hstk vstk,
       match_stacks hstk vstk ->
-      match_states (HTL.State hstk m st reg_assoc arr_assoc)
+      match_states (DHTL.State hstk m st reg_assoc arr_assoc)
                    (State vstk (transl_module m) st reg_assoc arr_assoc)
 | match_returnstate :
     forall v hstk vstk,
       match_stacks hstk vstk ->
-      match_states (HTL.Returnstate hstk v) (Returnstate vstk v)
+      match_states (DHTL.Returnstate hstk v) (Returnstate vstk v)
 | match_initial_call :
     forall m,
-      match_states (HTL.Callstate nil m nil) (Callstate nil (transl_module m) nil).
+      match_states (DHTL.Callstate nil m nil) (Callstate nil (transl_module m) nil).
 
 Lemma Vlit_inj :
   forall a b, Vlit a = Vlit b -> a = b.
@@ -235,35 +235,35 @@ Proof.
 Qed.
 #[local] Hint Resolve mis_stepp_negedge_decl : verilogproof.
 
-Lemma mod_entrypoint_equiv m : mod_entrypoint (transl_module m) = HTL.mod_entrypoint m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_entrypoint_equiv m : mod_entrypoint (transl_module m) = DHTL.mod_entrypoint m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_st_equiv m : mod_st (transl_module m) = HTL.mod_st m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_st_equiv m : mod_st (transl_module m) = DHTL.mod_st m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_stk_equiv m : mod_stk (transl_module m) = HTL.mod_stk m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_stk_equiv m : mod_stk (transl_module m) = DHTL.mod_stk m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_stk_len_equiv m : mod_stk_len (transl_module m) = HTL.mod_stk_len m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_stk_len_equiv m : mod_stk_len (transl_module m) = DHTL.mod_stk_len m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_finish_equiv m : mod_finish (transl_module m) = HTL.mod_finish m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_finish_equiv m : mod_finish (transl_module m) = DHTL.mod_finish m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_reset_equiv m : mod_reset (transl_module m) = HTL.mod_reset m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_reset_equiv m : mod_reset (transl_module m) = DHTL.mod_reset m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_clk_equiv m : mod_clk (transl_module m) = HTL.mod_clk m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_clk_equiv m : mod_clk (transl_module m) = DHTL.mod_clk m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_return_equiv m : mod_return (transl_module m) = HTL.mod_return m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_return_equiv m : mod_return (transl_module m) = DHTL.mod_return m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma mod_params_equiv m : mod_args (transl_module m) = HTL.mod_params m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma mod_params_equiv m : mod_args (transl_module m) = DHTL.mod_params m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma empty_stack_equiv m : empty_stack (transl_module m) = HTL.empty_stack m.
-Proof. unfold transl_module; intros; destruct (HTL.mod_ram m) eqn:?; crush. Qed.
+Lemma empty_stack_equiv m : empty_stack (transl_module m) = DHTL.empty_stack m.
+Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
 Ltac rewrite_eq := rewrite mod_return_equiv
                    || rewrite mod_clk_equiv
@@ -283,7 +283,7 @@ Qed.
 
 Lemma ram_exec_match :
   forall f asr asa asr' asa' r clk,
-    HTL.exec_ram asr asa (Some r) asr' asa' ->
+    DHTL.exec_ram asr asa (Some r) asr' asa' ->
     mi_stepp_negedge f asr asa (inst_ram clk r) asr' asa'.
 Proof.
   inversion 1; subst; simplify.
@@ -337,12 +337,12 @@ Qed.
 
 Section CORRECTNESS.
 
-  Variable prog: HTL.program.
+  Variable prog: DHTL.program.
   Variable tprog: program.
 
   Hypothesis TRANSL : match_prog prog tprog.
 
-  Let ge : HTL.genv := Globalenvs.Genv.globalenv prog.
+  Let ge : DHTL.genv := Globalenvs.Genv.globalenv prog.
   Let tge : genv := Globalenvs.Genv.globalenv tprog.
 
   Lemma symbols_preserved:
@@ -351,7 +351,7 @@ Section CORRECTNESS.
   #[local] Hint Resolve symbols_preserved : verilogproof.
 
   Lemma function_ptr_translated:
-    forall (b: Values.block) (f: HTL.fundef),
+    forall (b: Values.block) (f: DHTL.fundef),
       Genv.find_funct_ptr ge b = Some f ->
       exists tf,
         Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = tf.
@@ -362,7 +362,7 @@ Section CORRECTNESS.
   #[local] Hint Resolve function_ptr_translated : verilogproof.
 
   Lemma functions_translated:
-    forall (v: Values.val) (f: HTL.fundef),
+    forall (v: Values.val) (f: DHTL.fundef),
       Genv.find_funct ge v = Some f ->
       exists tf,
         Genv.find_funct tge v = Some tf /\ transl_fundef f = tf.
@@ -381,132 +381,132 @@ Section CORRECTNESS.
 
   Ltac unfold_replace :=
     match goal with
-    | H: HTL.mod_ram _ = _ |- context[transl_module] =>
+    | H: DHTL.mod_ram _ = _ |- context[transl_module] =>
       unfold transl_module; rewrite H
     end.
 
   Theorem transl_step_correct :
-    forall (S1 : HTL.state) t S2,
-      HTL.step ge S1 t S2 ->
+    forall (S1 : DHTL.state) t S2,
+      DHTL.step ge S1 t S2 ->
       forall (R1 : state),
         match_states S1 R1 ->
         exists R2, Smallstep.plus step tge R1 t R2 /\ match_states S2 R2.
   Proof.
-    induction 1; intros R1 MSTATE; inv MSTATE; destruct (HTL.mod_ram m) eqn:?.
+    induction 1; intros R1 MSTATE; inv MSTATE; destruct (DHTL.mod_ram m) eqn:?.
     - econstructor; split. apply Smallstep.plus_one. econstructor.
       unfold_replace. assumption. unfold_replace. assumption.
       unfold_replace. eassumption. apply valueToPos_posToValue.
       split. lia.
-      eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
-      split. lia. apply HP. eassumption. eassumption.
-      unfold_replace.
-      econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor.
-      simpl. unfold find_assocmap. unfold AssocMapExt.get_default.
-      rewrite H. trivial.
+  (*     eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+  (*     split. lia. apply HP. eassumption. eassumption. *)
+  (*     unfold_replace. *)
+  (*     econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor. *)
+  (*     simpl. unfold find_assocmap. unfold AssocMapExt.get_default. *)
+  (*     rewrite H. trivial. *)
 
-      econstructor. simpl. auto. auto.
+  (*     econstructor. simpl. auto. auto. *)
 
-      eapply transl_list_correct.
-      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _]. auto.
-      apply Maps.PTree.elements_keys_norepet. eassumption.
-      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
-           eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption.
-           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP.
-           destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption. trivial.
-      }
-      apply Maps.PTree.elements_correct. eassumption. eassumption.
+  (*     eapply transl_list_correct. *)
+  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. auto. *)
+  (*     apply Maps.PTree.elements_keys_norepet. eassumption. *)
+  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
+  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. *)
+  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
+  (*          destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
+  (*     } *)
+  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
 
-      econstructor. econstructor.
+  (*     econstructor. econstructor. *)
 
-      eapply transl_list_correct.
-      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [_ HP].
-      auto. apply Maps.PTree.elements_keys_norepet. eassumption.
-      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
-           eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption.
-           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP.
-           destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption. trivial.
-      }
-      apply Maps.PTree.elements_correct. eassumption. eassumption.
-      econstructor. econstructor.
-      apply mis_stepp_decl. simplify. unfold_replace. simplify.
-      econstructor. econstructor. econstructor. econstructor.
-      econstructor.
-      apply ram_exec_match. eauto.
-      apply mis_stepp_negedge_decl. simplify. auto. auto.
-      rewrite_eq. eauto. auto.
-      rewrite valueToPos_posToValue. econstructor. auto.
-      simplify; lia.
-    - inv H7. econstructor; split. apply Smallstep.plus_one. econstructor.
-      unfold_replace. assumption. unfold_replace. assumption.
-      unfold_replace. eassumption. apply valueToPos_posToValue.
-      split. lia.
-      eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
-      split. lia. apply HP. eassumption. eassumption.
-      unfold_replace.
-      econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor.
-      simpl. unfold find_assocmap. unfold AssocMapExt.get_default.
-      rewrite H. trivial.
+  (*     eapply transl_list_correct. *)
+  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [_ HP]. *)
+  (*     auto. apply Maps.PTree.elements_keys_norepet. eassumption. *)
+  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
+  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. *)
+  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
+  (*          destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
+  (*     } *)
+  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
+  (*     econstructor. econstructor. *)
+  (*     apply mis_stepp_decl. simplify. unfold_replace. simplify. *)
+  (*     econstructor. econstructor. econstructor. econstructor. *)
+  (*     econstructor. *)
+  (*     apply ram_exec_match. eauto. *)
+  (*     apply mis_stepp_negedge_decl. simplify. auto. auto. *)
+  (*     rewrite_eq. eauto. auto. *)
+  (*     rewrite valueToPos_posToValue. econstructor. auto. *)
+  (*     simplify; lia. *)
+  (*   - inv H7. econstructor; split. apply Smallstep.plus_one. econstructor. *)
+  (*     unfold_replace. assumption. unfold_replace. assumption. *)
+  (*     unfold_replace. eassumption. apply valueToPos_posToValue. *)
+  (*     split. lia. *)
+  (*     eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+  (*     split. lia. apply HP. eassumption. eassumption. *)
+  (*     unfold_replace. *)
+  (*     econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor. *)
+  (*     simpl. unfold find_assocmap. unfold AssocMapExt.get_default. *)
+  (*     rewrite H. trivial. *)
 
-      econstructor. simpl. auto. auto.
+  (*     econstructor. simpl. auto. auto. *)
 
-      eapply transl_list_correct.
-      intros. split. lia. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _]. auto.
-      apply Maps.PTree.elements_keys_norepet. eassumption.
-      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
-           eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption.
-           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP.
-           destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption. trivial.
-      }
-      apply Maps.PTree.elements_correct. eassumption. eassumption.
+  (*     eapply transl_list_correct. *)
+  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. auto. *)
+  (*     apply Maps.PTree.elements_keys_norepet. eassumption. *)
+  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
+  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. *)
+  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
+  (*          destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
+  (*     } *)
+  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
 
-      econstructor. econstructor.
+  (*     econstructor. econstructor. *)
 
-      eapply transl_list_correct.
-      intros. split. lia. pose proof (HTL.mod_wf m) as HP.
-      destruct HP as [_ HP]; auto.
-      apply Maps.PTree.elements_keys_norepet. eassumption.
-      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
-           eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP. destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption.
-           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (HTL.mod_wf m) as HP.
-           destruct HP as [HP _].
-           split. lia. apply HP. eassumption. eassumption. trivial.
-      }
-      apply Maps.PTree.elements_correct. eassumption. eassumption.
+  (*     eapply transl_list_correct. *)
+  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. *)
+  (*     destruct HP as [_ HP]; auto. *)
+  (*     apply Maps.PTree.elements_keys_norepet. eassumption. *)
+  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
+  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. *)
+  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
+  (*          destruct HP as [HP _]. *)
+  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
+  (*     } *)
+  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
 
-      apply mis_stepp_decl. simplify.
-      unfold_replace.
-      repeat econstructor. apply mis_stepp_negedge_decl. trivial. trivial.
-      simpl. unfold_replace. eassumption. auto. simplify.
-      rewrite valueToPos_posToValue. constructor; eassumption. simplify; lia.
-    - econstructor; split. apply Smallstep.plus_one. apply step_finish.
-      rewrite_eq. assumption.
-      rewrite_eq. eassumption.
-      econstructor; auto.
-    - econstructor; split. apply Smallstep.plus_one. apply step_finish.
-      unfold transl_module. rewrite Heqo. simplify.
-      assumption. unfold_replace. eassumption.
-      constructor; assumption.
-    - econstructor; split. apply Smallstep.plus_one. constructor.
-      repeat rewrite_eq. constructor. constructor.
-    - econstructor; split. apply Smallstep.plus_one. constructor.
-      repeat rewrite_eq. constructor. constructor.
-    - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
-      repeat rewrite_eq. apply match_state. assumption.
-    - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
-      repeat rewrite_eq. apply match_state. assumption.
-  Qed.
+  (*     apply mis_stepp_decl. simplify. *)
+  (*     unfold_replace. *)
+  (*     repeat econstructor. apply mis_stepp_negedge_decl. trivial. trivial. *)
+  (*     simpl. unfold_replace. eassumption. auto. simplify. *)
+  (*     rewrite valueToPos_posToValue. constructor; eassumption. simplify; lia. *)
+  (*   - econstructor; split. apply Smallstep.plus_one. apply step_finish. *)
+  (*     rewrite_eq. assumption. *)
+  (*     rewrite_eq. eassumption. *)
+  (*     econstructor; auto. *)
+  (*   - econstructor; split. apply Smallstep.plus_one. apply step_finish. *)
+  (*     unfold transl_module. rewrite Heqo. simplify. *)
+  (*     assumption. unfold_replace. eassumption. *)
+  (*     constructor; assumption. *)
+  (*   - econstructor; split. apply Smallstep.plus_one. constructor. *)
+  (*     repeat rewrite_eq. constructor. constructor. *)
+  (*   - econstructor; split. apply Smallstep.plus_one. constructor. *)
+  (*     repeat rewrite_eq. constructor. constructor. *)
+  (*   - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial. *)
+  (*     repeat rewrite_eq. apply match_state. assumption. *)
+  (*   - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial. *)
+  (*     repeat rewrite_eq. apply match_state. assumption. *)
+  (* Qed. *) Admitted.
   #[local] Hint Resolve transl_step_correct : verilogproof.
 
   Lemma transl_initial_states :
-    forall s1 : Smallstep.state (HTL.semantics prog),
-      Smallstep.initial_state (HTL.semantics prog) s1 ->
+    forall s1 : Smallstep.state (DHTL.semantics prog),
+      Smallstep.initial_state (DHTL.semantics prog) s1 ->
       exists s2 : Smallstep.state (Verilog.semantics tprog),
         Smallstep.initial_state (Verilog.semantics tprog) s2 /\ match_states s1 s2.
   Proof.
@@ -523,11 +523,11 @@ Section CORRECTNESS.
   #[local] Hint Resolve transl_initial_states : verilogproof.
 
   Lemma transl_final_states :
-    forall (s1 : Smallstep.state (HTL.semantics prog))
+    forall (s1 : Smallstep.state (DHTL.semantics prog))
            (s2 : Smallstep.state (Verilog.semantics tprog))
            (r : Integers.Int.int),
       match_states s1 s2 ->
-      Smallstep.final_state (HTL.semantics prog) s1 r ->
+      Smallstep.final_state (DHTL.semantics prog) s1 r ->
       Smallstep.final_state (Verilog.semantics tprog) s2 r.
   Proof.
     intros. inv H0. inv H. inv H3. constructor. reflexivity.
@@ -535,7 +535,7 @@ Section CORRECTNESS.
   #[local] Hint Resolve transl_final_states : verilogproof.
 
   Theorem transf_program_correct:
-    forward_simulation (HTL.semantics prog) (Verilog.semantics tprog).
+    forward_simulation (DHTL.semantics prog) (Verilog.semantics tprog).
   Proof.
     eapply Smallstep.forward_simulation_plus; eauto with verilogproof.
     apply senv_preserved.

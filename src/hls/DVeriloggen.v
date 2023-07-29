@@ -22,7 +22,7 @@ Require Import compcert.lib.Maps.
 
 Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.AssocMap.
-Require Import vericert.hls.HTL.
+Require Import vericert.hls.DHTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
 
@@ -53,52 +53,49 @@ Definition inst_ram clk ram :=
                        (Vnonblock (Vvar (ram_en ram)) (Vvar (ram_u_en ram))))
                  Vskip).
 
-Definition transl_module (m : HTL.module) : Verilog.module :=
-  let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in
+Definition transl_module (m : DHTL.module) : Verilog.module :=
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
-  match m.(HTL.mod_ram) with
+  match m.(DHTL.mod_ram) with
   | Some ram =>
     let body :=
-        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
-                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
-                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
-                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
-                :: inst_ram m.(HTL.mod_clk) ram
+        Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1)))
+                                                  (Vnonblock (Vvar m.(DHTL.mod_st)) (Vlit (posToValue m.(DHTL.mod_entrypoint))))
+(Vcase (Vvar m.(DHTL.mod_st)) case_el_data (Some Vskip)))
+                :: inst_ram m.(DHTL.mod_clk) ram
                 :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
-    Verilog.mkmodule m.(HTL.mod_start)
-                     m.(HTL.mod_reset)
-                     m.(HTL.mod_clk)
-                     m.(HTL.mod_finish)
-                     m.(HTL.mod_return)
-                     m.(HTL.mod_st)
-                     m.(HTL.mod_stk)
-                     m.(HTL.mod_stk_len)
-                     m.(HTL.mod_params)
+    Verilog.mkmodule m.(DHTL.mod_start)
+                     m.(DHTL.mod_reset)
+                     m.(DHTL.mod_clk)
+                     m.(DHTL.mod_finish)
+                     m.(DHTL.mod_return)
+                     m.(DHTL.mod_st)
+                     m.(DHTL.mod_stk)
+                     m.(DHTL.mod_stk_len)
+                     m.(DHTL.mod_params)
                      body
-                     m.(HTL.mod_entrypoint)
+                     m.(DHTL.mod_entrypoint)
   | None =>
     let body :=
-        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
-                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
-                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
-                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
+        Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1)))
+                                                  (Vnonblock (Vvar m.(DHTL.mod_st)) (Vlit (posToValue m.(DHTL.mod_entrypoint))))
+(Vcase (Vvar m.(DHTL.mod_st)) case_el_data (Some Vskip)))
                 :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
-    Verilog.mkmodule m.(HTL.mod_start)
-                     m.(HTL.mod_reset)
-                     m.(HTL.mod_clk)
-                     m.(HTL.mod_finish)
-                     m.(HTL.mod_return)
-                     m.(HTL.mod_st)
-                     m.(HTL.mod_stk)
-                     m.(HTL.mod_stk_len)
-                     m.(HTL.mod_params)
+    Verilog.mkmodule m.(DHTL.mod_start)
+                     m.(DHTL.mod_reset)
+                     m.(DHTL.mod_clk)
+                     m.(DHTL.mod_finish)
+                     m.(DHTL.mod_return)
+                     m.(DHTL.mod_st)
+                     m.(DHTL.mod_stk)
+                     m.(DHTL.mod_stk_len)
+                     m.(DHTL.mod_params)
                      body
-                     m.(HTL.mod_entrypoint)
+                     m.(DHTL.mod_entrypoint)
   end.
 
 Definition transl_fundef := transf_fundef transl_module.
 
-Definition transl_program (p: HTL.program) : Verilog.program :=
+Definition transl_program (p: DHTL.program) : Verilog.program :=
   transform_program transl_fundef p.

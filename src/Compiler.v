@@ -65,6 +65,7 @@ Require vericert.hls.GibleSeq.
 Require vericert.hls.GibleSeqgen.
 Require vericert.hls.GiblePargen.
 Require vericert.hls.HTLPargen.
+Require vericert.hls.DVeriloggen.
 (*Require vericert.hls.Pipeline.*)
 Require vericert.hls.IfConversion.
 Require vericert.hls.CondElim.
@@ -72,6 +73,7 @@ Require vericert.hls.DeadBlocks.
 (*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
+Require vericert.hls.DMemorygen.
 
 Require Import vericert.hls.HTLgenproof.
 
@@ -86,6 +88,7 @@ intermediate steps in the compilation, such as ``print_RTL``, ``print_HTL`` and
 
 Parameter print_RTL: Z -> RTL.program -> unit.
 Parameter print_HTL: Z -> HTL.program -> unit.
+Parameter print_DHTL: Z -> DHTL.program -> unit.
 Parameter print_GibleSeq: Z -> GibleSeq.GibleSeq.program -> unit.
 Parameter print_GiblePar: Z -> GiblePar.GiblePar.program -> unit.
 
@@ -292,8 +295,10 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ GiblePargen.transl_program
    @@ print (print_GiblePar 0)
   @@@ HTLPargen.transl_program
-   @@ print (print_HTL 0)
-   @@ Veriloggen.transl_program.
+   @@ print (print_DHTL 0)
+   @@ DMemorygen.transf_program
+   @@ print (print_DHTL 0)
+   @@ DVeriloggen.transl_program.
 
 (*|
 Correctness Proof

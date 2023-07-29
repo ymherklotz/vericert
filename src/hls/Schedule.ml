@@ -262,34 +262,38 @@ let read_process command =
   Buffer.contents buffer
 
 let comb_delay = function
-  | RBnop -> 0
+  | RBnop -> 1
   | RBop (_, op, _, _) ->
     (match op with
-     | Omove -> 0
-     | Ointconst _ -> 0
-     | Olongconst _ -> 0
-     | Ocast8signed -> 0
-     | Ocast8unsigned -> 0
-     | Ocast16signed -> 0
-     | Ocast16unsigned -> 0
-     | Oneg -> 0
-     | Onot -> 0
-     | Oor -> 0
-     | Oorimm _ -> 0
-     | Oand -> 0
-     | Oandimm _ -> 0
-     | Oxor -> 0
-     | Oxorimm _ -> 0
-     | Omul -> 8
-     | Omulimm _ -> 8
-     | Omulhs -> 8
-     | Omulhu -> 8
-     | Odiv -> 72
-     | Odivu -> 72
-     | Omod -> 72
-     | Omodu -> 72
+     | Omove -> 1
+     | Ointconst _ -> 1
+     | Olongconst _ -> 1
+     | Ocast8signed -> 1
+     | Ocast8unsigned -> 1
+     | Ocast16signed -> 1
+     | Ocast16unsigned -> 1
+     | Oneg -> 1
+     | Onot -> 1
+     | Oor -> 1
+     | Oorimm _ -> 1
+     | Oand -> 1
+     | Oandimm _ -> 1
+     | Oxor -> 1
+     | Oxorimm _ -> 1
+     | Omul -> 64
+     | Omulimm _ -> 64
+     | Omulhs -> 64
+     | Omulhu -> 64
+     | Odiv -> 576
+     | Odivu -> 576
+     | Omod -> 576
+     | Omodu -> 576
      | _ -> 1)
-  | RBexit _ -> 8
+  | RBexit _ -> 64
+(** Because of the limiations of memory generation we add a large combinational
+    delay for loads and stores. *)
+  | RBload _ -> 64
+  | RBstore _ -> 64
   | _ -> 1
 
 let pipeline_stages = function
@@ -537,6 +541,33 @@ let accumulate_post_exit_deps instrs dfg curri =
       ) dfg (List.mapi (fun i x -> (i, x)) instrs)
   | _ -> dfg
 
+(** At the moment, because of the limitations of the memory generation pass, all
+    the loads and stores need to be placed into their own cycles. *)
+
+let accumulate_pre_mem_deps instrs dfg curri =
+  let i, curr = curri in
+  match curr with
+  | RBstore _
+  | RBload _ ->
+    List.fold_left (fun ndfg -> function (i', instr') ->
+        if i' < i
+        then DFG.add_edge ndfg (gen_vertex instrs i') (gen_vertex instrs i)
+        else ndfg
+      ) dfg (List.mapi (fun i x -> (i, x)) instrs)
+  | _ -> dfg
+
+let accumulate_post_mem_deps instrs dfg curri =
+  let i, curr = curri in
+  match curr with
+  | RBstore _
+  | RBload _ ->
+    List.fold_left (fun ndfg -> function (i', instr') ->
+        if i' > i
+        then DFG.add_edge ndfg (gen_vertex instrs i) (gen_vertex instrs i')
+        else ndfg
+      ) dfg (List.mapi (fun i x -> (i, x)) instrs)
+  | _ -> dfg
+
 let accumulate_WAR_deps instrs dfg curri =
   let i, curr = curri in
   let dst_dep dst =
@@ -613,7 +644,9 @@ let gather_bb_constraints debug bb =
         accumulate_WAR_pred_deps;
         accumulate_WAW_pred_deps;
         accumulate_pre_exit_deps;
-        accumulate_post_exit_deps
+        accumulate_post_exit_deps;
+        (* accumulate_post_mem_deps; *)
+        (* accumulate_pre_mem_deps; *)
       ]
   in
   let dfg''' = remove_unnecessary_deps dfg'' in
@@ -748,7 +781,7 @@ let gather_cfg_constraints (c: GibleSeq.code) constr curr =
     |> add_ctrl_deps n (GibleSeq.all_successors bb
                         |> List.map P.to_int
                         |> List.filter (fun n' -> n' < n))
-    |> add_cycle_constr 8 n dfg
+    |> add_cycle_constr 64 n dfg
     |> add_resource_constr n dfg
 
 let rec intersperse s = function
@@ -793,7 +826,8 @@ let parse_soln (tree, bbtree) s =
      else (tree, bbtree))
 
 let solve_constraints constr =
-  let (fn, oc) = Filename.open_temp_file "vericert_" "_lp_solve" in
+  (* let (fn, oc) = Filename.open_temp_file "vericert_" "_lp_solve" in *)
+  let (fn, oc) = ("vericert_lp_solve.txt", open_out "vericert_lp_solve.txt") in
   fprintf oc "%s\n" (print_lp constr);
   close_out oc;
 

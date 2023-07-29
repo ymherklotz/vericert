@@ -32,7 +32,6 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
-Require Import vericert.hls.FunctionalUnits.
 
 #[local] Hint Resolve AssocMap.gempty : htlh.
 #[local] Hint Resolve AssocMap.gso : htlh.
@@ -99,13 +98,14 @@ Export HTLMonad.
 Module HTLMonadExtra := Monad.MonadExtra(HTLMonad).
 Import HTLMonadExtra.
 Export MonadNotation.
+
 #[local] Open Scope monad_scope.
 
 Definition state_goto (st : reg) (n : node) : stmnt :=
-  Vblock (Vvar st) (Vlit (posToValue n)).
+  Vnonblock (Vvar st) (Vlit (posToValue n)).
 
 Definition state_cond (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
-  Vblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
+  Vnonblock (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
 Definition check_empty_node_datapath:
   forall (s: state) (n: node), { s.(st_datapath)!n = None } + { True }.
@@ -385,7 +385,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : mon expr :=
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>
     do tc <- translate_condition c rl;
-    mret (Vternary tc (Vvar r1) (Vvar r2))
+    ret (Vternary tc (Vvar r1) (Vvar r2))
   | Op.Olea a, _ => translate_eff_addressing a args
   | _, _ => error (Errors.msg "Htlgen: Instruction not implemented: other")
   end.
@@ -454,7 +454,7 @@ Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
 
 Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
   List.map (fun a => match a with
-                    (i, n) => (Vlit (natToValue i), Vblock (Vvar st) (Vlit (posToValue n)))
+                    (i, n) => (Vlit (natToValue i), Vnonblock (Vvar st) (Vlit (posToValue n)))
                   end)
            (enumerate 0 ns).
 
@@ -469,19 +469,19 @@ Definition transf_instr (fin rtrn stack: reg) (ni: node * instruction) : mon uni
     | Iop op args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do instr <- translate_instr op args;
-        do _ <- declare_reg None dst 32;
-        add_instr n n' (block dst instr)
+        do _empty <- declare_reg None dst 32;
+        add_instr n n' (nonblock dst instr)
       else error (Errors.msg "State is larger than 2^32.")
     | Iload mem addr args dst n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do src <- translate_arr_access mem addr args stack;
-        do _ <- declare_reg None dst 32;
-        add_instr n n' (block dst src)
+        do _empty <- declare_reg None dst 32;
+        add_instr n n' (nonblock dst src)
       else error (Errors.msg "State is larger than 2^32.")
     | Istore mem addr args src n' =>
       if Z.leb (Z.pos n') Integers.Int.max_unsigned then
         do dst <- translate_arr_access mem addr args stack;
-        add_instr n n' (Vblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
+        add_instr n n' (Vnonblock dst (Vvar src)) (* TODO: Could juse use add_instr? reg exists. *)
       else error (Errors.msg "State is larger than 2^32.")
     | Icall _ _ _ _ _ => error (Errors.msg "Calls are not implemented.")
     | Itailcall _ _ _ => error (Errors.msg "Tailcalls are not implemented.")
@@ -585,7 +585,7 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-(*Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
                           && (d <? e) && (e <? f) && (f <? g))%positive true with
           | left t => left _
@@ -594,7 +594,7 @@ Qed.
   simplify; repeat match goal with
                    | H: context[(_ <? _)%positive] |- _ => apply Pos.ltb_lt in H
                    end; unfold module_ordering; auto.
-Defined.*)
+Defined.
 
 Definition transf_module (f: function) : mon HTL.module.
   refine (
@@ -602,29 +602,26 @@ Definition transf_module (f: function) : mon HTL.module.
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _ <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
-    do _ <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
+    do _empty <- collectlist (transf_instr fin rtrn stack) (Maps.PTree.elements f.(RTL.fn_code));
+    do _empty' <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(RTL.fn_params);
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
-    do r_en <- create_reg None 1;
-    do r_u_en <- create_reg None 1;
-    do r_addr <- create_reg None 32;
-    do r_wr_en <- create_reg None 1;
-    do r_d_in <- create_reg None 32;
-    do r_d_out <- create_reg None 32;
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
           zle (Z.pos (max_pc_map current_state.(st_controllogic))) Integers.Int.max_unsigned,
+          decide_order (st_st current_state) fin rtrn stack start rst clk,
           max_list_dec (RTL.fn_params f) (st_st current_state)
     with
-    | left LEDATA, left LECTRL, left WFPARAMS =>
+    | left LEDATA, left LECTRL, left MORD, left WFPARAMS =>
         ret (HTL.mkmodule
            f.(RTL.fn_params)
            current_state.(st_datapath)
            current_state.(st_controllogic)
            f.(fn_entrypoint)
            current_state.(st_st)
+           stack
+           stack_len
            fin
            rtrn
            start
@@ -632,8 +629,12 @@ Definition transf_module (f: function) : mon HTL.module.
            clk
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
-           (mk_ram stack_len stack r_en r_u_en r_addr r_wr_en r_d_in r_d_out))
-    | _, _, _ => error (Errors.msg "More than 2^32 states.")
+           None
+           (conj (max_pc_wf _ LECTRL) (max_pc_wf _ LEDATA))
+           MORD
+           _
+           WFPARAMS)
+    | _, _, _, _ => error (Errors.msg "More than 2^32 states.")
     end
   else error (Errors.msg "Stack size misalignment.")); discriminate.
 Defined.

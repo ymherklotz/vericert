@@ -68,6 +68,7 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintGibleSeq.destination option_dgblseq ".gblseq";
   set_dest Vericert.PrintGiblePar.destination option_dgblpar ".gblpar";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
+  set_dest Vericert.PrintDHTL.destination option_ddhtl ".dhtl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
   set_dest Vericert.PrintMach.destination option_dmach ".mach";
@@ -97,6 +98,7 @@ let compile_c_file sourcename ifile ofile =
                         then Vericert.Compiler0.transf_hls_temp
                         else Vericert.Compiler0.transf_hls
       in
+      let _ = Vericert.Smtpredicate.check_smt (Vericert.Predicate0.Pimp ((Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)),(Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)))) in
       match translation csyntax with
       | Vericert.Errors.OK v ->
         if !Vericert.Cohpred.cohpred_counter > 0 then Printf.fprintf stderr "OK\n"; v
@@ -396,6 +398,7 @@ let cmdline_actions =
   Exact "-dgblseq", Set option_dgblseq;
   Exact "-dgblpar", Set option_dgblpar;
   Exact "-dhtl", Set option_dhtl;
+  Exact "-ddhtl", Set option_ddhtl;
   Exact "-dltl", Set option_dltl;
   Exact "-dalloctrace", Set option_dalloctrace;
   Exact "-dmach", Set option_dmach;
@@ -410,6 +413,7 @@ let cmdline_actions =
     option_dgblseq := true;
     option_dgblpar := true;
     option_dhtl := true;
+    option_ddhtl := true;
     option_dltl := true;
     option_dalloctrace := true;
     option_dmach := true;

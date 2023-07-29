@@ -43,12 +43,13 @@ Module MonadExtra(M : Monad).
 
   Module Import MonadNotation.
 
-    Notation "'do' X <- A ; B" :=
-      (bind (fun X => B) A)
-        (at level 200, X name, A at level 100, B at level 200) : monad_scope.
-    Notation "'do' ( X , Y ) <- A ; B" :=
-      (bind2 (fun X Y => B) A)
-        (at level 200, X name, Y name, A at level 100, B at level 200) : monad_scope.
+Notation "'do' X <- A ; B" := (bind (fun X => B) A)
+ (at level 200, X ident, A at level 100, B at level 200)
+ : monad_scope.
+
+Notation "'do' ( X , Y ) <- A ; B" := (bind2 (fun X Y => B) A)
+ (at level 200, X ident, Y ident, A at level 100, B at level 200)
+ : monad_scope.
 
   End MonadNotation.
 
@@ -66,7 +67,7 @@ Module MonadExtra(M : Monad).
   Fixpoint collectlist {A : Type} (f : A -> mon unit) (l : list A) {struct l} : mon unit :=
     match l with
     | nil => ret tt
-    | x::xs => do _ <- f x; collectlist f xs
+    | x::xs => do y <- f x; collectlist f xs
     end.
 
   Definition mfold_left {A B} (f: A -> B -> mon A) (l: list B) (s: mon A): mon A :=
