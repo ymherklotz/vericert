@@ -378,14 +378,14 @@ Definition max_reg_bblock (m : positive) (pc : node) (bb : bblock) :=
   let max_body := fold_left (fun x l => fold_left (fun x' l' => fold_left max_reg_instr l' x') l x) bb.(bb_body) m in
   max_reg_cfi max_body bb.(bb_exit).
 
-Definition max_reg_function (f: function) :=
-  Pos.max
-    (PTree.fold max_reg_bblock f.(fn_code) 1%positive)
-    (Pos.max (fold_left Pos.max f.(fn_params) 1%positive)
-             (max_reg_resources f.(fn_funct_units))).
+(* Definition max_reg_function (f: function) := *)
+(*   Pos.max *)
+(*     (PTree.fold max_reg_bblock f.(fn_code) 1%positive) *)
+(*     (Pos.max (fold_left Pos.max f.(fn_params) 1%positive) *)
+(*              (max_reg_resources f.(fn_funct_units))). *)
 
-Definition max_pc_function (f: function) : positive :=
-  PTree.fold (fun m pc i => (Pos.max m
-                                     (pc + match Zlength i.(bb_body)
-                                           with Z.pos p => p | _ => 1 end))%positive)
-             f.(fn_code) 1%positive.
+(* Definition max_pc_function (f: function) : positive := *)
+(*   PTree.fold (fun m pc i => (Pos.max m *)
+(*                                      (pc + match Zlength i.(bb_body) *)
+(*                                            with Z.pos p => p | _ => 1 end))%positive) *)
+(*              f.(fn_code) 1%positive. *)

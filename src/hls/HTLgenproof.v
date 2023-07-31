@@ -1083,54 +1083,6 @@ Ltac unfold_merge :=
   Ltac small_tac := repeat (crush_val; try array; try ptrofs); crush_val; auto.
   Ltac big_tac := repeat (crush_val; try array; try ptrofs; try tac0); crush_val; auto.
 
-  Lemma merge_get_default :
-    forall ars ars' r x,
-      ars ! r = Some x ->
-      (AssocMapExt.merge _ ars ars') # r = x.
-  Proof.
-    unfold AssocMapExt.merge; intros.
-    unfold "#", AssocMapExt.get_default.
-    rewrite AssocMap.gcombine by auto.
-    unfold AssocMapExt.merge_atom. 
-    now rewrite !H.
-  Qed.
-
-  Lemma merge_get_default2 :
-    forall ars ars' r,
-      ars ! r = None ->
-      (AssocMapExt.merge _ ars ars') # r = ars' # r.
-  Proof.
-    unfold AssocMapExt.merge; intros.
-    unfold "#", AssocMapExt.get_default.
-    rewrite AssocMap.gcombine by auto.
-    unfold AssocMapExt.merge_atom. 
-    now rewrite !H.
-  Qed.
-
-  Lemma merge_get_default3 :
-    forall A ars ars' r,
-      ars ! r = None ->
-      (AssocMapExt.merge A ars ars') ! r = ars' ! r.
-  Proof.
-    unfold AssocMapExt.merge; intros.
-    unfold "#", AssocMapExt.get_default.
-    rewrite AssocMap.gcombine by auto.
-    unfold AssocMapExt.merge_atom.
-    now rewrite !H.
-  Qed.
-
-  Lemma merge_get_default4 :
-    forall A ars ars' r x,
-      ars ! r = Some x ->
-      (AssocMapExt.merge A ars ars') ! r = Some x.
-  Proof.
-    unfold AssocMapExt.merge; intros.
-    unfold "#", AssocMapExt.get_default.
-    rewrite AssocMap.gcombine by auto.
-    unfold AssocMapExt.merge_atom. 
-    now rewrite !H.
-  Qed.
-
   Lemma match_assocmaps_merge_empty:
     forall f rs ars,
       match_assocmaps f rs ars ->
@@ -1154,7 +1106,7 @@ Ltac unfold_merge :=
   Proof.
     intros * YFRL YMATCH.
     inv YMATCH. constructor; intros x' YPLE.
-    unfold "#", AssocMapExt.get_default in *. 
+    unfold "#", AssocMapExt.get_default in *.
     rewrite <- YFRL by auto.
     eauto.
   Qed.
@@ -1177,7 +1129,7 @@ Ltac unfold_merge :=
     apply Smallstep.plus_one.
     eapply HTL.step_module; eauto.
     inv CONST; assumption.
-    inv CONST; assumption. 
+    inv CONST; assumption.
     (* processing of state *)
     econstructor.
     crush.
@@ -1199,7 +1151,7 @@ Ltac unfold_merge :=
       rewrite !AssocMap.gcombine by auto. rewrite !AssocMap.gss.
       setoid_rewrite H1.
       repeat erewrite Verilog.merge_arr_empty2; eauto.
-    - inv CONST; cbn in *. constructor; cbn in *. 
+    - inv CONST; cbn in *. constructor; cbn in *.
       + repeat unfold_merge. rewrite AssocMap.gso by lia.
         unfold_merge; auto.
       + repeat unfold_merge. rewrite AssocMap.gso by lia.
@@ -2683,7 +2635,7 @@ Ltac unfold_merge :=
   (*         Smallstep.plus HTL.step tge R1 Events.E0 R2 /\ match_states (RTL.State s f sp pc' rs m) R2. *)
   (* Proof. *)
   (*   intros s f sp pc rs m arg tbl n pc' H H0 H1 R1 MSTATE. *)
-  
+
   (* #[local] Hint Resolve transl_ijumptable_correct : htlproof.*)
 
   Lemma transl_ireturn_correct:

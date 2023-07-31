@@ -256,3 +256,51 @@ Lemma find_get_assocmap :
   assoc ! r = Some v ->
   assoc # r = v.
 Proof. intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H. trivial. Qed.
+
+Lemma merge_get_default :
+  forall ars ars' r x,
+    ars ! r = Some x ->
+    (AssocMapExt.merge _ ars ars') # r = x.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_get_default2 :
+  forall ars ars' r,
+    ars ! r = None ->
+    (AssocMapExt.merge _ ars ars') # r = ars' # r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_get_default3 :
+  forall A ars ars' r,
+    ars ! r = None ->
+    (AssocMapExt.merge A ars ars') ! r = ars' ! r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_get_default4 :
+  forall A ars ars' r x,
+    ars ! r = Some x ->
+    (AssocMapExt.merge A ars ars') ! r = Some x.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
