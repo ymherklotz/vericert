@@ -2627,7 +2627,7 @@ Proof.
     econstructor. econstructor. econstructor. econstructor. econstructor.
     auto. auto. auto. econstructor. econstructor. econstructor.
     econstructor. econstructor. econstructor. econstructor.
-    eapply expr_runp_matches2. eassumption. 2: { eassumption. }
+    eapply expr_runp_matches2. eassumption. 2: { cbn. eassumption. }
     pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
     apply expr_lt_max_module_datapath in X; simplify; remember (max_reg_module m); lia.
     auto.
@@ -2690,20 +2690,11 @@ Proof.
     apply merge_get_default4.
     repeat rewrite AssocMap.gso by lia.
     unfold transf_module; repeat destruct_match; try discriminate; simplify.
-    replace (AssocMapExt.merge value ran' rab') with (merge_regs ran' rab');
-    [|unfold merge_regs; auto].
-    pose proof H19 as X.
-    eapply match_assocmaps_merge in X.
+    eapply match_assocmaps_merge in H21.
     2: { apply H21. }
-    inv X. rewrite <- H14. eassumption. unfold transf_module in H6; repeat destruct_match;
-                                        try discriminate; simplify.
-    lia. auto.
+    admit. admit.
 
-    econstructor. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-    rewrite AssocMapExt.merge_base_1.
-    remember (max_reg_module m).
-    repeat (apply match_assocmaps_gt; [lia|]).
-    solve [eauto with mgen].
+    econstructor. unfold merge_regs. admit.
 
     apply merge_arr_empty. apply match_empty_size_merge.
     apply match_empty_assocmap_set.

@@ -304,3 +304,23 @@ Proof.
   unfold AssocMapExt.merge_atom.
   now rewrite !H.
 Qed.
+
+Lemma merge_left_gso :
+  forall A ars ars' d (v: A) r,
+    d <> r ->
+    (AssocMapExt.merge _ (ars # d <- v) ars') ! r = (AssocMapExt.merge _ ars ars') ! r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  rewrite ! AssocMap.gcombine by auto.
+  now rewrite AssocMap.gso by auto.
+Qed.
+
+Lemma merge_right_gso :
+  forall A ars ars' d (v: A) r,
+    d <> r ->
+    (AssocMapExt.merge _ ars (ars' # d <- v)) ! r = (AssocMapExt.merge _ ars ars') ! r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  rewrite ! AssocMap.gcombine by auto.
+  now rewrite AssocMap.gso by auto.
+Qed.

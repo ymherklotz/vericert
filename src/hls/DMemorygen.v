@@ -2620,134 +2620,206 @@ Proof.
     econstructor. simplify.
     unfold disable_ram in *. unfold transf_module in DISABLE_RAM.
     repeat destruct_match; try discriminate; []. simplify.
-    pose proof H17 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
-    pose proof H17 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
-    pose proof H18 as R3. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R3.
-    pose proof H18 as R4. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R4.
-    pose proof H17 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
-    pose proof H17 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
-    pose proof H18 as R3'. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R3'.
-    pose proof H18 as R4'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R4'.
+    pose proof H11 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
+    pose proof H11 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
+    pose proof H11 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
+    pose proof H11 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
     simplify.
     pose proof DISABLE_RAM as DISABLE_RAM1.
     eapply int_eq_not_changed with (ar' := rab') in DISABLE_RAM; try congruence.
-    eapply int_eq_not_changed with (ar' := rab'1) in DISABLE_RAM; try congruence.
-    rewrite AssocMap.gempty in R2. rewrite <- R2 in R4.
-    rewrite AssocMap.gempty in R2'. rewrite <- R2' in R4'.
+    rewrite AssocMap.gempty in R2. rewrite AssocMap.gempty in R2'.
     eapply int_eq_not_changed in DISABLE_RAM; auto. repeat (rewrite merge_find_assocmap; try congruence).
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
     auto. auto. eauto with mgen. auto.
-    econstructor; mgen_crush. apply merge_arr_empty; mgen_crush.
+    econstructor; mgen_crush_local. apply merge_arr_empty; mgen_crush_local.
     unfold disable_ram in *. unfold transf_module in DISABLE_RAM.
-    repeat destruct_match; crush. unfold transf_module in Heqo; repeat destruct_match; crush.
-    pose proof H17 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1.
-    pose proof H17 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
-    pose proof H18 as R3. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R3.
-    pose proof H18 as R4. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R4.
-    pose proof H17 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
-    pose proof H17 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
-    pose proof H18 as R3'. eapply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R3'.
-    pose proof H18 as R4'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R4'.
-    simplify.
+    repeat destruct_match; crush_local. unfold transf_module in Heqo; repeat destruct_match; crush_local.
+    pose proof H11 as R1. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in R1; try lia.
+    pose proof H11 as R2. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 2) in R2.
+    pose proof H11 as R1'. apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in R1'.
+    pose proof H11 as R2'. eapply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 6) in R2'.
+    simplify_local.
     pose proof DISABLE_RAM as DISABLE_RAM1.
     eapply int_eq_not_changed with (ar' := rab') in DISABLE_RAM; try congruence.
-    eapply int_eq_not_changed with (ar' := rab'1) in DISABLE_RAM; try congruence.
-    rewrite AssocMap.gempty in R2. rewrite <- R2 in R4.
-    rewrite AssocMap.gempty in R2'. rewrite <- R2' in R4'.
+    unfold empty_assocmap, merge_regs.
+    rewrite AssocMap.gempty in R2. rewrite AssocMap.gempty in R2'.
     eapply int_eq_not_changed in DISABLE_RAM; auto. repeat (rewrite merge_find_assocmap; try congruence).
+    apply AssocMap.gempty. apply AssocMap.gempty.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
     eapply max_reg_module_datapath_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
-    eapply max_reg_module_controllogic_gt; eauto; remember (max_reg_module m); lia.
-  - unfold alt_store in *; simplify. inv H6. inv H19. inv H19. simplify.
-    exploit match_states_same; try solve [eapply H4 | eapply max_stmnt_lt_module; eauto
-                                          | econstructor; eauto with mgen];
-    intros; repeat inv_exists; simplify; tac0.
+  - unfold alt_store in *; simplify_local. inv H3. inv H17. inv H18. inv H16. simplify_local.
+    exploit match_states_same; try solve [eapply H14 | eapply max_stmnt_lt_module; eauto
+                                          | econstructor; eauto with mgen].
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+      transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+      cbn; lia.
+      eapply max_reg_stmnt_le_stmnt_tree; eauto.
+      apply max_module_stmnts. }
+    intros; repeat inv_exists; simplify_local; tac0.
     do 2 econstructor. apply Smallstep.plus_one. econstructor. solve [eauto with mgen]. solve [eauto with mgen].
-    solve [eauto with mgen].
-    rewrite H7. eassumption. eassumption. eassumption. solve [eauto with mgen].
+    solve [eauto with mgen]. eassumption.
+    econstructor; eauto.
     econstructor. econstructor. econstructor. econstructor. econstructor.
     auto. auto. auto. econstructor. econstructor. econstructor.
     econstructor. econstructor. econstructor. econstructor.
-    eapply expr_runp_matches2. eassumption. 2: { eassumption. }
-    pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
-    apply expr_lt_max_module_datapath in X; simplify; remember (max_reg_module m); lia.
+    eapply expr_runp_matches2. eassumption. 
+    2: { cbn. instantiate (1 := max_reg_module m + 1). repeat (apply match_assocmaps_gt; [lia|]).
+         assumption. }
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+      transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+      cbn; lia. 
+      eapply max_reg_stmnt_le_stmnt_tree; eauto.
+      apply max_module_stmnts.
+    }
     auto.
     econstructor. econstructor. eapply expr_runp_matches2; eauto.
-    pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
-    apply expr_lt_max_module_datapath in X.
-    remember (max_reg_module m); simplify; lia.
+    { instantiate (1 := max_reg_module m + 1).
+      apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+      transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+      cbn; lia. 
+      eapply max_reg_stmnt_le_stmnt_tree; eauto.
+      apply max_module_stmnts.
+    }
+    cbn.
+    repeat (apply match_assocmaps_gt; [lia|]). auto.
 
     rewrite empty_stack_transf.
     unfold transf_module; repeat destruct_match; try discriminate; simplify; [].
     eapply exec_ram_Some_write.
     3: {
-      simplify. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-      repeat rewrite find_assocmap_gso by lia.
-      pose proof H12 as X.
-      eapply max_reg_stmnt_not_modified_nb with (r := (max_reg_module m + 2)) in X.
-      rewrite AssocMap.gempty in X.
-      apply merge_find_assocmap. auto.
-      apply max_reg_stmnt_le_stmnt_tree in H2.
-      apply expr_lt_max_module_controllogic in H2. lia.
+      cbn. rewrite merge_get_default2.
+      unfold "#", AssocMapExt.get_default. 
+      repeat rewrite AssocMap.gso by lia.
+      fold (AssocMapExt.get_default _ (ZToValue 0) (max_reg_module m + 2) rab').
+      fold (find_assocmap 32 (max_reg_module m + 2) rab').
+      solve [eauto].
+      exploit max_reg_stmnt_not_modified_nb. apply H7.
+      { instantiate (1 := max_reg_module m + 2).
+        apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+        transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+        cbn; lia. 
+        eapply max_reg_stmnt_le_stmnt_tree; eauto.
+        transitivity (max_reg_module m + 1); [|lia].
+        apply max_module_stmnts.
+      }
+      cbn; intros. rewrite <- H11. auto.
     }
     3: {
+      cbn. unfold merge_regs.
       simplify. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-      repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
+      repeat rewrite AssocMap.gso by lia. 
+      rewrite merge_get_default3.
+      repeat rewrite AssocMap.gso by lia.
+      rewrite AssocMap.gss. auto.
+      exploit max_reg_stmnt_not_modified_nb. apply H7.
+      { instantiate (1 := max_reg_module m + 6).
+        apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+        transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+        cbn; lia. 
+        eapply max_reg_stmnt_le_stmnt_tree; eauto.
+        transitivity (max_reg_module m + 1); [|lia].
+        apply max_module_stmnts.
+      }
+      cbn; intros. rewrite <- H11. auto.
     }
     { unfold disable_ram in *. unfold transf_module in DISABLE_RAM;
                                repeat destruct_match; try discriminate.
       simplify.
-      pose proof H12 as X2.
-      pose proof H12 as X4.
+      pose proof H7 as X2.
+      pose proof H7 as X4.
       apply max_reg_stmnt_not_modified with (r := max_reg_module m + 2) in X2.
       apply max_reg_stmnt_not_modified with (r := max_reg_module m + 6) in X4.
       assert (forall ar ar' x, ar ! x = ar' ! x -> ar # x = ar' # x).
-      { intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H6. auto. }
-      apply H6 in X2. apply H6 in X4. simplify. rewrite <- X2. rewrite <- X4.
+      { intros * HTMP. unfold find_assocmap, AssocMapExt.get_default. rewrite HTMP. auto. }
+      apply H11 in X2. apply H11 in X4. simplify_local. rewrite <- X4. rewrite <- X2.
       apply int_eq_not. auto.
-      apply max_reg_stmnt_le_stmnt_tree in H2.
-      apply expr_lt_max_module_controllogic in H2. simplify. remember (max_reg_module m). lia.
-      apply max_reg_stmnt_le_stmnt_tree in H2.
-      apply expr_lt_max_module_controllogic in H2. simplify. remember (max_reg_module m). lia.
+      { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+        transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+        cbn; lia. 
+        eapply max_reg_stmnt_le_stmnt_tree; eauto.
+        transitivity (max_reg_module m + 1); try lia.
+        apply max_module_stmnts.
+      }
+      { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+        transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+        cbn; lia. 
+        eapply max_reg_stmnt_le_stmnt_tree; eauto.
+        transitivity (max_reg_module m + 1); try lia.
+        apply max_module_stmnts.
+      }
     }
     2: {
-      simplify. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-      repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
+      pose proof H7 as X4.
+      apply max_reg_stmnt_not_modified_nb with (r := max_reg_module m + 5) in X4.
+      assert (HTMP2: forall ar ar' x, ar ! x = ar' ! x -> ar # x = ar' # x).
+      { intros * HTMP. unfold find_assocmap, AssocMapExt.get_default. rewrite HTMP. auto. }
+      apply HTMP2 in X4.
+      cbn.
+      unfold merge_regs. rewrite merge_get_default3.
+      repeat rewrite AssocMap.gso by lia.
+      rewrite AssocMap.gss; auto.
+      { exploit max_reg_stmnt_not_modified_nb. apply H7.
+        { instantiate (1 := max_reg_module m + 5).
+          apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+          transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+          cbn; lia. 
+          eapply max_reg_stmnt_le_stmnt_tree; eauto.
+          transitivity (max_reg_module m + 1); [|lia].
+          apply max_module_stmnts.
+        }
+        cbn; intros. rewrite <- H11. auto.
+      }
+      { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+        transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+        cbn; lia. 
+        eapply max_reg_stmnt_le_stmnt_tree; eauto.
+        transitivity (max_reg_module m + 1); [|lia].
+        apply max_module_stmnts.
+      } 
     }
-    solve [auto].
-    simplify. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-    repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
-    simplify. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-    repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
-    simplify. auto.
-    simplify. auto.
-    unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
-    unfold_merge.
-    assert (mod_st (transf_module m) < max_reg_module m + 1).
+    + solve [auto].
+    + simplify_local. unfold merge_regs.
+      rewrite merge_get_default3.
+      repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
+      { exploit max_reg_stmnt_not_modified_nb. apply H7.
+        { instantiate (1 := max_reg_module m + 3).
+          apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+          transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+          cbn; lia. 
+          eapply max_reg_stmnt_le_stmnt_tree; eauto.
+          transitivity (max_reg_module m + 1); [|lia].
+          apply max_module_stmnts.
+        }
+        cbn; intros. rewrite <- H11. auto.
+      }
+    + simplify. unfold merge_regs. rewrite merge_get_default3.
+      repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
+      { exploit max_reg_stmnt_not_modified_nb. apply H7.
+        { instantiate (1 := max_reg_module m + 1).
+          apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+          transitivity (max_reg_stmnt (Vseq x2 (Vblock (Vvari (mod_stk m) x0) x1))).
+          cbn; lia. 
+          eapply max_reg_stmnt_le_stmnt_tree; eauto.
+          apply Pos.le_lt_trans with (max_reg_module m); [|lia].
+          pose proof (max_module_stmnts m). lia.
+        }
+        cbn; intros. rewrite <- H11. auto.
+      }
+    + cbn. auto.
+    + cbn. auto.
+    + assert (mod_st (transf_module m) < max_reg_module m + 1).
     { unfold max_reg_module, transf_module; repeat destruct_match; try discriminate; simplify; lia. }
-    remember (max_reg_module m).
+    
+    rewrite merge_get_default3.
+    rewrite merge_get_default3.
     repeat rewrite AssocMap.gso by lia.
     unfold transf_module; repeat destruct_match; try discriminate; simplify.
-    replace (AssocMapExt.merge value ran' rab') with (merge_regs ran' rab');
-    [|unfold merge_regs; auto].
-    pose proof H19 as X.
-    eapply match_assocmaps_merge in X.
-    2: { apply H21. }
-    inv X. rewrite <- H14. eassumption. unfold transf_module in H6; repeat destruct_match;
-                                        try discriminate; simplify.
-    lia. auto.
+    eapply match_assocmaps_merge in H16.
 
     econstructor. unfold merge_regs. repeat rewrite AssocMapExt.merge_add_assoc.
     rewrite AssocMapExt.merge_base_1.
