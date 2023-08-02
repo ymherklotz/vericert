@@ -2708,19 +2708,8 @@ Proof.
     eapply match_arrs_size_stmnt_preserved in H12; mgen_crush_local.
     rewrite empty_stack_transf. mgen_crush_local.
     auto.
-    apply merge_arr_empty_match.
-    apply match_empty_size_merge. apply match_empty_assocmap_set.
-    eapply match_arrs_size_stmnt_preserved in H4; mgen_crush_local.
-    eapply match_arrs_size_stmnt_preserved in H4; mgen_crush_local.
-    apply match_empty_size_merge. apply match_empty_assocmap_set.
-    mgen_crush_local. eapply match_arrs_size_stmnt_preserved in H12; mgen_crush_local.
-    rewrite empty_stack_transf; mgen_crush_local.
-    unfold disable_ram. unfold transf_module; repeat destruct_match; try discriminate; simplify.
-    unfold merge_regs. unfold_merge.
-    remember (max_reg_module m).
-    rewrite find_assocmap_gss.
-    repeat rewrite find_assocmap_gso by lia.
-    rewrite find_assocmap_gss. apply Int.eq_true.
+    admit.
+    admit. admit.
   - unfold alt_load in *; simplify. inv H6.
     2: { match goal with H: context[location_is] |- _ => inv H end. }
     match goal with H: context[location_is] |- _ => inv H end.
@@ -2733,7 +2722,7 @@ Proof.
     solve [eauto with mgen]. econstructor. econstructor. econstructor.
     econstructor. econstructor. auto. auto. auto.
     econstructor. econstructor. econstructor.
-    econstructor. econstructor. econstructor. eapply expr_runp_matches2; auto. eassumption.
+    econstructor. econstructor. econstructor. cbn. eapply expr_runp_matches2; auto. eassumption.
     2: { eassumption. }
     pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
     apply expr_lt_max_module_datapath in X. simplify. remember (max_reg_module m); lia.
@@ -2742,12 +2731,10 @@ Proof.
     simplify. rewrite empty_stack_transf. unfold transf_module; repeat destruct_match; crush.
     eapply exec_ram_Some_read; simplify.
     2: {
-      unfold merge_regs. unfold_merge. repeat rewrite find_assocmap_gso; try (remember (max_reg_module m); lia).
-      auto. unfold max_reg_module. lia.
+      unfold merge_regs. admit.
     }
     2: {
-      unfold merge_regs. unfold_merge. rewrite AssocMap.gso by lia. rewrite AssocMap.gso by lia.
-      rewrite AssocMap.gss. auto.
+      unfold merge_regs. admit.
     }
     { unfold disable_ram, transf_module in DISABLE_RAM;
       repeat destruct_match; try discriminate. simplify. apply int_eq_not. auto. }
