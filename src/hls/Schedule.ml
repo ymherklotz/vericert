@@ -297,7 +297,8 @@ let comb_delay = function
   | _ -> 1
 
 let pipeline_stages = function
-  | RBload _ -> 2
+  | RBload _ -> 1 (* TODO: Set back to 2 when memory inferrence is fixed. *)
+  | RBstore _ -> 1
   | RBop (_, op, _, _) ->
     (match op with
      | Odiv -> 32
@@ -881,6 +882,31 @@ let range s e =
   List.init (e - s) (fun i -> i)
   |> List.map (fun x -> x + s)
 
+let remove_nop = function
+  | RBnop -> []
+  | a -> [a]
+
+let separate_mem_operations l =
+  let added = ref false in
+  List.concat_map (fun par_list ->
+      List.fold_left (fun new_l seq_list ->
+          match List.concat_map remove_nop seq_list with
+          | [RBload _] | [RBstore _] -> (added := true; new_l @ [[seq_list]])
+          | [] -> new_l
+          | seq_list' ->
+             ((if !added then (added := false; new_l @ [[seq_list']])
+               else
+                 (match List.rev new_l with
+                  | [] -> [[seq_list']]
+                  | new_lx :: new_ly -> List.rev ((new_lx @ [seq_list']) :: new_ly))))
+        ) [] par_list
+    ) l
+
+(* let print_nested = print_list (print_list (print_list (fun a b -> fprintf a "%d" b))) *)
+
+(* let _ = *)
+(*   printf "%a\n" print_nested (separate_mem_operations [[[1]; [3]; [3]; [2]; [3]; [2]]]) *)
+
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c c' schedule =
   let f i bb : ParBB.t =
@@ -917,8 +943,7 @@ let transf_rtlpar c c' schedule =
                                            (*|> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
                                            |> List.rev) body2*)
       in
-      final_body2
-    | _ -> List.map (fun i -> [[i]]) bb
+      (separate_mem_operations final_body2)
   in
   PTree.map f c
 

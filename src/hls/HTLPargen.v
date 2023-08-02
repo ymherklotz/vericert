@@ -409,11 +409,11 @@ Definition transf_instr (fin rtrn stack state preg: reg)
     Errors.OK (curr_p, Vseq d stmnt)
   | RBload p mem addr args dst =>
     do src <- translate_arr_access mem addr args stack;
-    let stmnt := translate_predicate Vblock preg (npred p) (Vvar dst) src in
+    let stmnt := translate_predicate Vnonblock preg (npred p) (Vvar dst) src in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBstore p mem addr args src =>
     do dst <- translate_arr_access mem addr args stack;
-    let stmnt := translate_predicate Vblock preg (npred p) dst (Vvar src) in
+    let stmnt := translate_predicate Vnonblock preg (npred p) dst (Vvar src) in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBsetpred p' cond args p =>
     do cond' <- translate_condition cond args;

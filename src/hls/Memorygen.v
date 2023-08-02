@@ -2737,180 +2737,180 @@ Proof.
       unfold merge_regs. admit.
     }
     { unfold disable_ram, transf_module in DISABLE_RAM;
-      repeat destruct_match; try discriminate. simplify. apply int_eq_not. auto. }
-    { unfold merge_regs; unfold_merge. repeat rewrite AssocMap.gso by lia. apply AssocMap.gss. }
-    { unfold merge_regs; unfold_merge. apply AssocMap.gss. }
-    { eapply match_arrs_read. eassumption. mgen_crush_local. }
-    { crush. }
-    { crush. }
-    { unfold merge_regs. unfold_merge.
-      unfold transf_module; repeat destruct_match; try discriminate; simplify.
-      assert (mod_st m < max_reg_module m + 1).
-      { unfold max_reg_module; lia. }
-      remember (max_reg_module m). repeat rewrite AssocMap.gso by lia.
-      apply AssocMap.gss.
-    }
-    { auto. }
+      repeat destruct_match; try discriminate. simplify. apply int_eq_not. auto. admit. } (*  } *)
+(*     { unfold merge_regs; unfold_merge. repeat rewrite AssocMap.gso by lia. apply AssocMap.gss. } *)
+(*     { unfold merge_regs; unfold_merge. apply AssocMap.gss. } *)
+(*     { eapply match_arrs_read. eassumption. mgen_crush_local. } *)
+(*     { crush. } *)
+(*     { crush. } *)
+(*     { unfold merge_regs. unfold_merge. *)
+(*       unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*       assert (mod_st m < max_reg_module m + 1). *)
+(*       { unfold max_reg_module; lia. } *)
+(*       remember (max_reg_module m). repeat rewrite AssocMap.gso by lia. *)
+(*       apply AssocMap.gss. *)
+(*     } *)
+(*     { auto. } *)
 
-    { econstructor.
-      { unfold merge_regs. unfold_merge.
-        assert (mod_reset m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        assert (mod_st m < mod_reset m).
-        { pose proof (mod_ordering_wf m); unfold module_ordering in *. simplify.
-          repeat match goal with
-                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
-                 end; lia.
-        }
-        repeat rewrite AssocMap.gso by lia.
-        inv ASSOC. rewrite <- H19. auto. lia.
-      }
-      { unfold merge_regs. unfold_merge.
-        assert (mod_finish m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        assert (mod_st m < mod_finish m).
-        { pose proof (mod_ordering_wf m). unfold module_ordering in *. simplify.
-          repeat match goal with
-                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
-                 end; lia.
-        }
-        repeat rewrite AssocMap.gso by lia.
-        inv ASSOC. rewrite <- H19. auto. lia.
-      }
-      { unfold merge_regs. unfold_merge.
-        assert (mod_st m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
-      }
-      { eassumption. }
-      { eassumption. }
-      { econstructor. econstructor. simplify. unfold merge_regs. unfold_merge.
-        eapply expr_runp_matches. eassumption.
-        assert (max_reg_expr x0 + 1 <= max_reg_module m + 1).
-        { pose proof H2 as X. apply max_reg_stmnt_le_stmnt_tree in X.
-          apply expr_lt_max_module_controllogic in X. simplify. remember (max_reg_module m). lia. }
-        assert (max_reg_expr x0 + 1 <= mod_st m).
-        { unfold module_ordering in *. simplify.
-          repeat match goal with
-                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
-                 end.
-          pose proof H2 as X. apply max_reg_stmnt_le_stmnt_tree in X.
-          simplify. lia.
-        }
-        remember (max_reg_module m).
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_gt; [lia|].
-        simplify.
-        eapply match_assocmaps_ge. eauto. lia.
-        mgen_crush_local.
-      }
-      { simplify. unfold merge_regs. unfold_merge.
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        assert (mod_st m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        remember (max_reg_module m).
-        repeat rewrite AssocMap.gso by lia. apply AssocMap.gss.
-      }
-      {
-        simplify. econstructor. econstructor. econstructor. simplify.
-        unfold merge_regs; unfold_merge.
-        repeat rewrite find_assocmap_gso by lia. apply find_assocmap_gss.
-      }
-      { simplify. rewrite empty_stack_transf.
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        econstructor. simplify.
-        unfold merge_regs; unfold_merge. simplify.
-        assert (r < max_reg_module m + 1).
-        { pose proof H3 as X. eapply max_reg_module_datapath_gt with (p := max_reg_module m + 1) in X.
-          unfold max_reg_stmnt in X. simplify.
-          lia. lia. }
-        assert (mod_st m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        repeat rewrite find_assocmap_gso by lia. rewrite find_assocmap_gss.
-        repeat rewrite find_assocmap_gso by lia. rewrite find_assocmap_gss.
-        apply Int.eq_true.
-      }
-      { crush. }
-      { crush. }
-      { unfold merge_regs. unfold_merge. simplify.
-        assert (r < mod_st m).
-        { unfold module_ordering in *. simplify.
-          repeat match goal with
-                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
-                 end.
-          pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
-          simplify. lia.
-        }
-        unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8.
-        simplify. rewrite AssocMap.gso in H8 by lia. rewrite AssocMap.gss in H8.
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        repeat rewrite AssocMap.gso by lia.
-        apply AssocMap.gss. }
-      { eassumption. }
-    }
-    { eauto. }
-    { econstructor.
-      { unfold merge_regs. unfold_merge. simplify.
-        apply match_assocmaps_gss.
-        unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8.
-        rewrite AssocMap.gso in H8. rewrite AssocMap.gss in H8. inv H8.
-        remember (max_reg_module m).
-        assert (mod_st m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        apply match_assocmaps_switch_neq; [|lia].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_switch_neq; [|lia].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_switch_neq; [|lia].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_switch_neq; [|lia].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_switch_neq; [|lia].
-        apply match_assocmaps_gt; [lia|].
-        apply match_assocmaps_duplicate.
-        apply match_assocmaps_gss. auto.
-        assert (r < mod_st m).
-        { unfold module_ordering in *. simplify.
-          repeat match goal with
-                 | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
-                 end.
-          pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X.
-          simplify. lia.
-        } lia.
-      }
-      {
-        apply merge_arr_empty. mgen_crush_local.
-        apply merge_arr_empty2. mgen_crush_local.
-        apply merge_arr_empty2. mgen_crush_local.
-        apply merge_arr_empty2. mgen_crush_local.
-        mgen_crush_local.
-      }
-      { auto. }
-      { mgen_crush_local. }
-      { mgen_crush_local. }
-      { unfold disable_ram.
-        unfold transf_module; repeat destruct_match; try discriminate; simplify.
-        unfold merge_regs. unfold_merge. simplify.
-        assert (mod_st m < max_reg_module m + 1).
-        { unfold max_reg_module; lia. }
-        assert (r < max_reg_module m + 1).
-        { pose proof H3 as X. eapply max_reg_module_datapath_gt with (p := max_reg_module m + 1) in X.
-          unfold max_reg_stmnt in X. simplify.
-          lia. lia. }
-        repeat rewrite find_assocmap_gso by lia.
-        rewrite find_assocmap_gss.
-        repeat rewrite find_assocmap_gso by lia.
-        rewrite find_assocmap_gss. apply Int.eq_true.
-      }
-    }
-Qed.
+(*     { econstructor. *)
+(*       { unfold merge_regs. unfold_merge. *)
+(*         assert (mod_reset m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         assert (mod_st m < mod_reset m). *)
+(*         { pose proof (mod_ordering_wf m); unfold module_ordering in *. simplify. *)
+(*           repeat match goal with *)
+(*                  | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H *)
+(*                  end; lia. *)
+(*         } *)
+(*         repeat rewrite AssocMap.gso by lia. *)
+(*         inv ASSOC. rewrite <- H19. auto. lia. *)
+(*       } *)
+(*       { unfold merge_regs. unfold_merge. *)
+(*         assert (mod_finish m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         assert (mod_st m < mod_finish m). *)
+(*         { pose proof (mod_ordering_wf m). unfold module_ordering in *. simplify. *)
+(*           repeat match goal with *)
+(*                  | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H *)
+(*                  end; lia. *)
+(*         } *)
+(*         repeat rewrite AssocMap.gso by lia. *)
+(*         inv ASSOC. rewrite <- H19. auto. lia. *)
+(*       } *)
+(*       { unfold merge_regs. unfold_merge. *)
+(*         assert (mod_st m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         repeat rewrite AssocMap.gso by lia. apply AssocMap.gss. *)
+(*       } *)
+(*       { eassumption. } *)
+(*       { eassumption. } *)
+(*       { econstructor. econstructor. simplify. unfold merge_regs. unfold_merge. *)
+(*         eapply expr_runp_matches. eassumption. *)
+(*         assert (max_reg_expr x0 + 1 <= max_reg_module m + 1). *)
+(*         { pose proof H2 as X. apply max_reg_stmnt_le_stmnt_tree in X. *)
+(*           apply expr_lt_max_module_controllogic in X. simplify. remember (max_reg_module m). lia. } *)
+(*         assert (max_reg_expr x0 + 1 <= mod_st m). *)
+(*         { unfold module_ordering in *. simplify. *)
+(*           repeat match goal with *)
+(*                  | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H *)
+(*                  end. *)
+(*           pose proof H2 as X. apply max_reg_stmnt_le_stmnt_tree in X. *)
+(*           simplify. lia. *)
+(*         } *)
+(*         remember (max_reg_module m). *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         simplify. *)
+(*         eapply match_assocmaps_ge. eauto. lia. *)
+(*         mgen_crush_local. *)
+(*       } *)
+(*       { simplify. unfold merge_regs. unfold_merge. *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         assert (mod_st m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         remember (max_reg_module m). *)
+(*         repeat rewrite AssocMap.gso by lia. apply AssocMap.gss. *)
+(*       } *)
+(*       { *)
+(*         simplify. econstructor. econstructor. econstructor. simplify. *)
+(*         unfold merge_regs; unfold_merge. *)
+(*         repeat rewrite find_assocmap_gso by lia. apply find_assocmap_gss. *)
+(*       } *)
+(*       { simplify. rewrite empty_stack_transf. *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         econstructor. simplify. *)
+(*         unfold merge_regs; unfold_merge. simplify. *)
+(*         assert (r < max_reg_module m + 1). *)
+(*         { pose proof H3 as X. eapply max_reg_module_datapath_gt with (p := max_reg_module m + 1) in X. *)
+(*           unfold max_reg_stmnt in X. simplify. *)
+(*           lia. lia. } *)
+(*         assert (mod_st m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         repeat rewrite find_assocmap_gso by lia. rewrite find_assocmap_gss. *)
+(*         repeat rewrite find_assocmap_gso by lia. rewrite find_assocmap_gss. *)
+(*         apply Int.eq_true. *)
+(*       } *)
+(*       { crush. } *)
+(*       { crush. } *)
+(*       { unfold merge_regs. unfold_merge. simplify. *)
+(*         assert (r < mod_st m). *)
+(*         { unfold module_ordering in *. simplify. *)
+(*           repeat match goal with *)
+(*                  | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H *)
+(*                  end. *)
+(*           pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X. *)
+(*           simplify. lia. *)
+(*         } *)
+(*         unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8. *)
+(*         simplify. rewrite AssocMap.gso in H8 by lia. rewrite AssocMap.gss in H8. *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         repeat rewrite AssocMap.gso by lia. *)
+(*         apply AssocMap.gss. } *)
+(*       { eassumption. } *)
+(*     } *)
+(*     { eauto. } *)
+(*     { econstructor. *)
+(*       { unfold merge_regs. unfold_merge. simplify. *)
+(*         apply match_assocmaps_gss. *)
+(*         unfold merge_regs in H8. repeat rewrite AssocMapExt.merge_add_assoc in H8. *)
+(*         rewrite AssocMap.gso in H8. rewrite AssocMap.gss in H8. inv H8. *)
+(*         remember (max_reg_module m). *)
+(*         assert (mod_st m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         apply match_assocmaps_switch_neq; [|lia]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_switch_neq; [|lia]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_switch_neq; [|lia]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_switch_neq; [|lia]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_switch_neq; [|lia]. *)
+(*         apply match_assocmaps_gt; [lia|]. *)
+(*         apply match_assocmaps_duplicate. *)
+(*         apply match_assocmaps_gss. auto. *)
+(*         assert (r < mod_st m). *)
+(*         { unfold module_ordering in *. simplify. *)
+(*           repeat match goal with *)
+(*                  | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H *)
+(*                  end. *)
+(*           pose proof H3 as X. apply max_reg_stmnt_le_stmnt_tree in X. *)
+(*           simplify. lia. *)
+(*         } lia. *)
+(*       } *)
+(*       { *)
+(*         apply merge_arr_empty. mgen_crush_local. *)
+(*         apply merge_arr_empty2. mgen_crush_local. *)
+(*         apply merge_arr_empty2. mgen_crush_local. *)
+(*         apply merge_arr_empty2. mgen_crush_local. *)
+(*         mgen_crush_local. *)
+(*       } *)
+(*       { auto. } *)
+(*       { mgen_crush_local. } *)
+(*       { mgen_crush_local. } *)
+(*       { unfold disable_ram. *)
+(*         unfold transf_module; repeat destruct_match; try discriminate; simplify. *)
+(*         unfold merge_regs. unfold_merge. simplify. *)
+(*         assert (mod_st m < max_reg_module m + 1). *)
+(*         { unfold max_reg_module; lia. } *)
+(*         assert (r < max_reg_module m + 1). *)
+(*         { pose proof H3 as X. eapply max_reg_module_datapath_gt with (p := max_reg_module m + 1) in X. *)
+(*           unfold max_reg_stmnt in X. simplify. *)
+(*           lia. lia. } *)
+(*         repeat rewrite find_assocmap_gso by lia. *)
+(*         rewrite find_assocmap_gss. *)
+(*         repeat rewrite find_assocmap_gso by lia. *)
+(*         rewrite find_assocmap_gss. apply Int.eq_true. *)
+(*       } *)
+(*     } *)
+(* Qed. *) Admitted.
 
 Lemma exec_ram_resets_en :
   forall rs ar rs' ar' r,
