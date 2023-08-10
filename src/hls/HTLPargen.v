@@ -1,7 +1,6 @@
 (* 
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
- *               2020 James Pollard <j@mes.dev>
+ * Copyright (C) 2023 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -570,9 +569,9 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
+Definition decide_order a b c d e f g h : {module_ordering a b c d e f g h} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
-                          && (d <? e) && (e <? f) && (f <? g))%positive true with
+                          && (d <? e) && (e <? f) && (f <? g) && (g <? h))%positive true with
           | left t => left _
           | _ => _
           end); auto.
@@ -586,17 +585,17 @@ Definition transf_module (f: function) : mon DHTL.module.
   if stack_correct f.(fn_stacksize) then
     do fin <- create_reg (Some Voutput) 1;
     do rtrn <- create_reg (Some Voutput) 32;
-    do preg <- create_reg None 32;
     do (stack, stack_len) <- create_arr None 32 (Z.to_nat (f.(fn_stacksize) / 4));
-    do _stmnt <- collectlist (transf_seq_blockM fin rtrn stack preg) (Maps.PTree.elements f.(GiblePar.fn_code));
-    do _stmnt' <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(GiblePar.fn_params);
-    do _stmnt'' <- collectlist declare_all_regs (Maps.PTree.elements f.(GiblePar.fn_code));
     do start <- create_reg (Some Vinput) 1;
     do rst <- create_reg (Some Vinput) 1;
     do clk <- create_reg (Some Vinput) 1;
+    do preg <- create_reg None 128;
+    do _stmnt <- collectlist (transf_seq_blockM fin rtrn stack preg) (Maps.PTree.elements f.(GiblePar.fn_code));
+    do _stmnt' <- collectlist (fun r => declare_reg (Some Vinput) r 32) f.(GiblePar.fn_params);
+    do _stmnt'' <- collectlist declare_all_regs (Maps.PTree.elements f.(GiblePar.fn_code));
     do current_state <- get;
     match zle (Z.pos (max_pc_map current_state.(st_datapath))) Integers.Int.max_unsigned,
-          decide_order (st_st current_state) fin rtrn stack start rst clk,
+          decide_order (st_st current_state) fin rtrn stack start rst clk preg,
           max_list_dec (GiblePar.fn_params f) (st_st current_state)
     with
     | left LEDATA, left MORD, left WFPARAMS =>
@@ -612,6 +611,7 @@ Definition transf_module (f: function) : mon DHTL.module.
            start
            rst
            clk
+           preg
            current_state.(st_scldecls)
            current_state.(st_arrdecls)
            None

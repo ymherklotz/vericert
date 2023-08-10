@@ -74,6 +74,7 @@ Require vericert.hls.DeadBlocks.
 Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
 Require vericert.hls.DMemorygen.
+Require vericert.hls.ClockRegisters.
 
 Require Import vericert.hls.HTLgenproof.
 
@@ -230,8 +231,8 @@ Definition transf_backend (r : RTL.program) : res Verilog.program :=
    @@ print (print_RTL 7)
   @@@ HTLgen.transl_program
    @@ print (print_HTL 0)
-(*   @@ total_if HLSOpts.optim_ram Memorygen.transf_program
-   @@ print (print_HTL 1)*)
+  @@ total_if HLSOpts.optim_ram Memorygen.transf_program
+   @@ print (print_HTL 1)
    @@ Veriloggen.transl_program.
 
 (*|
@@ -297,7 +298,9 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ HTLPargen.transl_program
    @@ print (print_DHTL 0)
    @@ DMemorygen.transf_program
-   @@ print (print_DHTL 0)
+   @@ print (print_DHTL 1)
+  @@@ ClockRegisters.transl_program
+   @@ print (print_DHTL 2)
    @@ DVeriloggen.transl_program.
 
 (*|
@@ -326,7 +329,7 @@ Definition CompCert's_passes :=
   ::: mkpass Unusedglobproof.match_prog
   ::: (@mkpass _ _ HTLgenproof.match_prog
                (HTLgenproof.TransfHTLLink HTLgen.transl_program))
-  (*::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)*)
+  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
   ::: mkpass Veriloggenproof.match_prog
   ::: pass_nil _.
 
@@ -380,8 +383,8 @@ Proof.
     simpl in T; try discriminate.
   destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14;
     simpl in T; try discriminate.
-  (*set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.*)
-  set (p15 := Veriloggen.transl_program p14) in *.
+  set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.
+  set (p16 := Veriloggen.transl_program p15) in *.
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -401,9 +404,9 @@ Proof.
   apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
   exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  (*exists p15; split. apply total_if_match.
-    apply Memorygen.transf_program_match; auto.*)
-  exists p15; split. apply Veriloggenproof.transf_program_match; auto.
+  exists p15; split. apply total_if_match.
+    apply Memorygen.transf_program_match; auto.
+  exists p16; split. apply Veriloggenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
 
@@ -423,7 +426,7 @@ Ltac DestructM :=
   end.
   repeat DestructM. subst tp.
   assert (F: forward_simulation (Cstrategy.semantics p)
-                                (Verilog.semantics p15)).
+                                (Verilog.semantics p16)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -457,9 +460,9 @@ Ltac DestructM :=
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply HTLgenproof.transf_program_correct. eassumption.
-  (*eapply compose_forward_simulations.
+  eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption.
-    exact Memorygen.transf_program_correct; eassumption.*)
+    exact Memorygen.transf_program_correct; eassumption.
   eapply Veriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.

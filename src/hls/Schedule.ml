@@ -263,9 +263,35 @@ let read_process command =
 
 let comb_delay = function
   | RBnop -> 1
+  | RBop (Some _, op, _, _) ->
+     (match op with
+      | Omove -> 64
+      | Ointconst _ -> 1
+      | Olongconst _ -> 1
+      | Ocast8signed -> 1
+      | Ocast8unsigned -> 1
+      | Ocast16signed -> 1
+      | Ocast16unsigned -> 1
+      | Oneg -> 1
+      | Onot -> 1
+      | Oor -> 64
+      | Oorimm _ -> 64
+      | Oand -> 64
+      | Oandimm _ -> 64
+      | Oxor -> 64
+      | Oxorimm _ -> 33
+      | Omul -> 64
+      | Omulimm _ -> 64
+      | Omulhs -> 64
+      | Omulhu -> 64
+      | Odiv -> 576
+      | Odivu -> 576
+      | Omod -> 576
+      | Omodu -> 576
+      | _ -> 64)
   | RBop (_, op, _, _) ->
     (match op with
-     | Omove -> 1
+     | Omove -> 16
      | Ointconst _ -> 1
      | Olongconst _ -> 1
      | Ocast8signed -> 1
@@ -274,27 +300,27 @@ let comb_delay = function
      | Ocast16unsigned -> 1
      | Oneg -> 1
      | Onot -> 1
-     | Oor -> 1
-     | Oorimm _ -> 1
-     | Oand -> 1
-     | Oandimm _ -> 1
-     | Oxor -> 1
-     | Oxorimm _ -> 1
-     | Omul -> 64
-     | Omulimm _ -> 64
-     | Omulhs -> 64
-     | Omulhu -> 64
+     | Oor -> 16
+     | Oorimm _ -> 16
+     | Oand -> 16
+     | Oandimm _ -> 4
+     | Oxor -> 16
+     | Oxorimm _ -> 4
+     | Omul -> 56
+     | Omulimm _ -> 56
+     | Omulhs -> 56
+     | Omulhu -> 56
      | Odiv -> 576
      | Odivu -> 576
      | Omod -> 576
      | Omodu -> 576
-     | _ -> 1)
+     | _ -> 16)
   | RBexit _ -> 64
 (** Because of the limiations of memory generation we add a large combinational
     delay for loads and stores. *)
   | RBload _ -> 64
   | RBstore _ -> 64
-  | _ -> 1
+  | _ -> 8
 
 let pipeline_stages = function
   | RBload _ -> 1 (* TODO: Set back to 2 when memory inferrence is fixed. *)

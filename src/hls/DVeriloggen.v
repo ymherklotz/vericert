@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2023 Yann Herklotz <yann@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -55,15 +55,19 @@ Definition inst_ram clk ram :=
 
 Definition transl_module (m : DHTL.module) : Verilog.module :=
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
+  (* let nstate := (max_reg_module m + 1)%positive in *)
   match m.(DHTL.mod_ram) with
   | Some ram =>
     let body :=
-        Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1)))
+       Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1)))
                                                   (Vnonblock (Vvar m.(DHTL.mod_st)) (Vlit (posToValue m.(DHTL.mod_entrypoint))))
-(Vcase (Vvar m.(DHTL.mod_st)) case_el_data (Some Vskip)))
+(Vcase (Vvar (DHTL.mod_st m)) case_el_data (Some Vskip)))
+        (*         :: Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1))) *)
+        (* (Vnonblock (Vvar (DHTL.mod_st m)) (Vlit (posToValue m.(DHTL.mod_entrypoint)))) (Vnonblock (Vvar (DHTL.mod_st m)) (Vvar m.(DHTL.mod_st)))) *)
                 :: inst_ram m.(DHTL.mod_clk) ram
-                :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
-                                                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
+                :: List.map Vdeclaration ((* Vdecl None nstate 32 ::  *)
+                     (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+                     ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls)))) in
     Verilog.mkmodule m.(DHTL.mod_start)
                      m.(DHTL.mod_reset)
                      m.(DHTL.mod_clk)
@@ -79,8 +83,11 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
     let body :=
         Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1)))
                                                   (Vnonblock (Vvar m.(DHTL.mod_st)) (Vlit (posToValue m.(DHTL.mod_entrypoint))))
-(Vcase (Vvar m.(DHTL.mod_st)) case_el_data (Some Vskip)))
-                :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+(Vcase (Vvar (DHTL.mod_st m)) case_el_data (Some Vskip)))
+                (* :: Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1))) *)
+        (* (Vnonblock (Vvar (DHTL.mod_st m)) (Vlit (posToValue m.(DHTL.mod_entrypoint)))) *)
+        (* (Vnonblock (Vvar (DHTL.mod_st m)) (Vvar m.(DHTL.mod_st)))) *)
+                :: List.map Vdeclaration ((* Vdecl None (DHTL.mod_st m) 32 ::  *)arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
     Verilog.mkmodule m.(DHTL.mod_start)
                      m.(DHTL.mod_reset)
