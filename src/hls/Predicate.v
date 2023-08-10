@@ -659,7 +659,7 @@ Proof.
     eapply stseytin_and_correct. unfold stseytin_and. eauto.
     unfold sat_lit. simpl. admit.
     inv H; try contradiction. inv H1; try contradiction. eauto.*)
-Admitted.
+Abort.
 
 Fixpoint max_predicate (p: pred_op) : positive :=
   match p with
@@ -679,7 +679,7 @@ Definition tseytin (p: pred_op) :
                     {fm: formula | forall a, sat_predicate p a = true <-> sat_formula fm a}
        with (m, n, fm) => fun H => exist _ ((n::nil) :: fm) _
        end) (eq_refl (xtseytin (max_predicate p + 1) p))).
-  intros. eapply xtseytin_correct; eauto. Defined.
+  intros. Abort.
 
 Definition tseytin_simple (p: pred_op) : formula :=
   let m := (max_predicate p + 1)%positive in
