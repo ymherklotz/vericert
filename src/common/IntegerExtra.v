@@ -361,26 +361,6 @@ Module IntExtra.
     apply zlt_true. lia. lia.
   Qed.
 
-  Lemma bits_ofwords:
-    forall b4 b3 b2 b1 i, 0 <= i < zwordsize ->
-                          testbit (ofbytes b4 b3 b2 b1) i =
-                          if zlt i Byte.zwordsize
-                          then Byte.testbit b1 i
-                          else (if zlt i (2 * Byte.zwordsize)
-                                then Byte.testbit b2 (i - Byte.zwordsize)
-                                else (if zlt i (3 * Byte.zwordsize)
-                                      then Byte.testbit b2 (i - 2 * Byte.zwordsize)
-                                      else Byte.testbit b2 (i - 3 * Byte.zwordsize))).
-  Proof.
-    intros. unfold ofbytes. repeat (rewrite bits_or; auto). repeat (rewrite bits_shl; auto).
-    change (unsigned (repr Byte.zwordsize)) with Byte.zwordsize.
-    change (unsigned (repr (2 * Byte.zwordsize))) with (2 * Byte.zwordsize).
-    change (unsigned (repr (3 * Byte.zwordsize))) with (3 * Byte.zwordsize).
-    assert (zwordsize = 4 * Byte.zwordsize) by reflexivity.
-    destruct (zlt i Byte.zwordsize).
-    rewrite testbit_repr; auto.
-    Abort.
-
   Lemma div_divs_equiv :
     forall x y,
       signed x >= 0 ->

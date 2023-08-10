@@ -274,40 +274,6 @@ Proof.
     eapply all_evaluable_cons in H. eauto.
 Qed.
 
-Lemma all_evaluable_predicated_prod :
-  forall A B G (ctx: @ctx G) ps (a: predicated A) (b: predicated B),
-    all_evaluable ctx ps a ->
-    all_evaluable ctx ps b ->
-    all_evaluable ctx ps (predicated_prod a b).
-Proof.
-  intros. unfold all_evaluable; intros.
-  unfold predicated_prod in *. exploit all_evaluable_map_and.
-  2: { eauto. }
-  intros. 2: { eauto. }
-Abort. (* Requires simple lemma to prove, but this lemma is not needed. *)
-
-Lemma cons_pred_expr_evaluable :
-  forall G (ctx: @ctx G) ps a b,
-    all_evaluable ctx ps a ->
-    all_evaluable ctx ps b ->
-    all_evaluable ctx ps (cons_pred_expr a b).
-Proof.
-  unfold cons_pred_expr; intros.
-  apply all_evaluable_predicated_map.
-  (*now apply all_evaluable_predicated_prod.*)
-Abort.
-
-Lemma fold_right_all_evaluable :
-  forall G (ctx: @ctx G) ps n,
-    Forall (all_evaluable ctx ps) (NE.to_list n) ->
-    all_evaluable ctx ps (NE.fold_right cons_pred_expr (NE.singleton (T, Enil)) n).
-Proof.
-  induction n; cbn in *; intros.
-  - unfold cons_pred_expr. eapply all_evaluable_predicated_map. (*eapply all_evaluable_predicated_prod.
-    inv H. auto. unfold all_evaluable; intros. inv H0. exists true. constructor.*) admit.
-  - inv H. specialize (IHn H3). (*now eapply cons_pred_expr_evaluable.*)
-Abort.
-
 Lemma merge_all_evaluable :
   forall G (ctx: @ctx G) ps,
     pred_forest_evaluable ctx ps ->

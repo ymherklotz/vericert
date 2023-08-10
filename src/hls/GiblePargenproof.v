@@ -129,6 +129,12 @@ Definition state_lessdef := GiblePargenproofEquiv.match_states.
 Definition match_prog (prog : GibleSeq.program) (tprog : GiblePar.program) :=
   match_program (fun cu f tf => transl_fundef f = OK tf) eq prog tprog.
 
+  Lemma transf_program_match:
+    forall p tp, transl_program p = OK tp -> match_prog p tp.
+  Proof.
+    intros. apply Linking.match_transform_partial_program; auto.
+  Qed.
+
 (* TODO: Fix the `bb` and add matches for them. *)
 Inductive match_stackframes: GibleSeq.stackframe -> GiblePar.stackframe -> Prop :=
 | match_stackframe:

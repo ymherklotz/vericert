@@ -62,6 +62,7 @@ Require vericert.hls.Veriloggen.
 Require vericert.hls.Veriloggenproof.
 Require vericert.hls.HTLgen.
 Require vericert.hls.GibleSeq.
+Require vericert.hls.GiblePar.
 Require vericert.hls.GibleSeqgen.
 Require vericert.hls.GiblePargen.
 Require vericert.hls.HTLPargen.
@@ -72,11 +73,13 @@ Require vericert.hls.CondElim.
 Require vericert.hls.DeadBlocks.
 (*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.
-Require vericert.hls.Memorygen.
 Require vericert.hls.DMemorygen.
 Require vericert.hls.ClockRegisters.
-
-Require Import vericert.hls.HTLgenproof.
+Require vericert.hls.GibleSeqgenproof.
+Require vericert.hls.CondElimproof.
+Require vericert.hls.IfConversionproof.
+Require vericert.hls.DeadBlocksproof.
+Require vericert.hls.GiblePargenproof.
 
 (*|
 Declarations
@@ -147,18 +150,6 @@ Definition match_if {A: Type} (flag: unit -> bool) (R: A -> A -> Prop)
 Definition match_rep {A: Type} (R: A -> A -> Prop): A -> A -> Prop :=
   Relation_Operators.clos_refl_trans A R.
 
-Global Instance TransfIfLink {A: Type} {LA: Linker A}
-                      (transf: A -> A -> Prop) (TL: TransfLink transf)
-                      : TransfLink (match_rep transf).
-Admitted.
-
-Lemma total_rep_match:
-  forall (A B: Type) (n: list B) (f: A -> B -> A)
-         (rel: A -> A -> Prop) (prog: A),
-    (forall b p, rel p (f p b)) ->
-  match_rep rel prog (fold_left f n prog).
-Proof. Admitted.
-
 Lemma total_if_match:
   forall (A: Type) (flag: unit -> bool) (f: A -> A)
          (rel: A -> A -> Prop) (prog: A),
@@ -201,57 +192,6 @@ Proof.
 Qed.
 
 (*|
-Top-level Translation
----------------------
-
-An optimised transformation function from ``RTL`` to ``Verilog`` can then be
-defined, which applies the front end compiler optimisations of CompCert to the
-RTL that is generated and then performs the two Vericert passes from RTL to HTL
-and then from HTL to Verilog.
-|*)
-
-Definition transf_backend (r : RTL.program) : res Verilog.program :=
-  OK r
-  @@@ Inlining.transf_program
-   @@ print (print_RTL 1)
-   @@ Renumber.transf_program
-   @@ print (print_RTL 2)
-   @@ total_if Compopts.optim_constprop
-      (time "Constant propagation" Constprop.transf_program)
-   @@ print (print_RTL 3)
-   @@ total_if Compopts.optim_constprop
-      (time "Renumbering" Renumber.transf_program)
-   @@ print (print_RTL 4)
-  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
-   @@ print (print_RTL 5)
-  @@@ partial_if Compopts.optim_redundancy
-      (time "Redundancy elimination" Deadcode.transf_program)
-   @@ print (print_RTL 6)
-  @@@ time "Unused globals" Unusedglob.transform_program
-   @@ print (print_RTL 7)
-  @@@ HTLgen.transl_program
-   @@ print (print_HTL 0)
-  @@ total_if HLSOpts.optim_ram Memorygen.transf_program
-   @@ print (print_HTL 1)
-   @@ Veriloggen.transl_program.
-
-(*|
-The transformation functions from RTL to Verilog are then added to the backend
-of the CompCert transformations from Clight to RTL.
-|*)
-
-Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
-  OK p
-  @@@ SimplExpr.transl_program
-  @@@ SimplLocals.transf_program
-  @@@ Cshmgen.transl_program
-  @@@ Cminorgen.transl_program
-  @@@ Selection.sel_program
-  @@@ RTLgen.transl_program
-   @@ print (print_RTL 0)
-  @@@ transf_backend.
-
-(*|
 This is an unverified version of transf_hls with some experimental additions
 such as scheduling that aren't completed yet.
 |*)
@@ -285,11 +225,11 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
    @@ print (print_GibleSeq 1)
    (* @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil)) *)
-   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
    @@ print (print_GibleSeq 2)
-   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
    @@ print (print_GibleSeq 3)
-   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
    @@ print (print_GibleSeq 4)
   @@@ DeadBlocks.transf_program
    @@ print (print_GibleSeq 5)
@@ -302,6 +242,47 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ ClockRegisters.transl_program
    @@ print (print_DHTL 2)
    @@ DVeriloggen.transl_program.
+
+Definition transf_hls_scheduled (p : Csyntax.program) : res GiblePar.GiblePar.program :=
+  OK p
+  @@@ SimplExpr.transl_program
+  @@@ SimplLocals.transf_program
+  @@@ Cshmgen.transl_program
+  @@@ Cminorgen.transl_program
+  @@@ Selection.sel_program
+  @@@ RTLgen.transl_program
+  @@@ Inlining.transf_program
+   @@ print (print_RTL 1)
+   @@ Renumber.transf_program
+   @@ print (print_RTL 2)
+   @@ total_if Compopts.optim_constprop
+      (time "Constant propagation" Constprop.transf_program)
+   @@ print (print_RTL 3)
+   @@ total_if Compopts.optim_constprop
+      (time "Renumbering" Renumber.transf_program)
+   @@ print (print_RTL 4)
+  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
+   @@ print (print_RTL 5)
+  @@@ partial_if Compopts.optim_redundancy
+      (time "Redundancy elimination" Deadcode.transf_program)
+   @@ print (print_RTL 6)
+  @@@ time "Unused globals" Unusedglob.transform_program
+   @@ print (print_RTL 7)
+  @@@ GibleSeqgen.transl_program
+   @@ print (print_GibleSeq 0)
+   @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
+   @@ print (print_GibleSeq 1)
+   (* @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil)) *)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
+   @@ print (print_GibleSeq 2)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
+   @@ print (print_GibleSeq 3)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
+   @@ print (print_GibleSeq 4)
+  @@@ DeadBlocks.transf_program
+   @@ print (print_GibleSeq 5)
+  @@@ GiblePargen.transl_program
+   @@ print (print_GiblePar 0).
 
 (*|
 Correctness Proof
@@ -327,10 +308,13 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
-  ::: (@mkpass _ _ HTLgenproof.match_prog
-               (HTLgenproof.TransfHTLLink HTLgen.transl_program))
-  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
-  ::: mkpass Veriloggenproof.match_prog
+  ::: mkpass GibleSeqgenproof.match_prog
+  ::: mkpass (match_if HLSOpts.optim_if_conversion CondElimproof.match_prog)
+  ::: mkpass (match_if HLSOpts.optim_if_conversion IfConversionproof.match_prog)
+  ::: mkpass (match_if HLSOpts.optim_if_conversion IfConversionproof.match_prog)
+  ::: mkpass (match_if HLSOpts.optim_if_conversion IfConversionproof.match_prog)
+  ::: mkpass DeadBlocksproof.match_prog
+  ::: mkpass GiblePargenproof.match_prog
   ::: pass_nil _.
 
 (*|
@@ -338,7 +322,7 @@ These passes are then composed into a larger, top-level ``match_prog`` predicate
 which matches a C program directly with a Verilog program.
 |*)
 
-Definition match_prog: Csyntax.program -> Verilog.program -> Prop :=
+Definition match_prog: Csyntax.program -> GiblePar.GiblePar.program -> Prop :=
   pass_match (compose_passes CompCert's_passes).
 
 (*|
@@ -348,44 +332,47 @@ is performed using the ``transf_hls`` function declared above.
 
 Theorem transf_hls_match:
   forall p tp,
-    transf_hls p = OK tp ->
+    transf_hls_scheduled p = OK tp ->
     match_prog p tp.
 Proof.
   intros p tp T.
-  unfold transf_hls, time in T. simpl in T.
+  unfold transf_hls_scheduled, time in T. cbn in T.
   destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   destruct (Cminorgen.transl_program p3) as [p4|e] eqn:P4;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6;
-    simpl in T; try discriminate.
-  unfold transf_backend, time in T. simpl in T.
-  rewrite ! compose_print_identity in T.
+    cbn in T; try discriminate.
+  unfold time in T. cbn in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
   set (p9 := total_if Compopts.optim_constprop
                       Constprop.transf_program p8) in *.
   set (p10 := total_if Compopts.optim_constprop
                        Renumber.transf_program p9) in *.
   destruct (partial_if Compopts.optim_CSE CSE.transf_program p10)
-    as [p11|e] eqn:P11; simpl in T; try discriminate.
+    as [p11|e] eqn:P11; cbn in T; try discriminate.
   destruct (partial_if Compopts.optim_redundancy Deadcode.transf_program p11)
-    as [p12|e] eqn:P12; simpl in T; try discriminate.
+    as [p12|e] eqn:P12; cbn in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13;
-    simpl in T; try discriminate.
-  destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14;
-    simpl in T; try discriminate.
-  set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.
-  set (p16 := Veriloggen.transl_program p15) in *.
-  unfold match_prog; simpl.
+    cbn in T; try discriminate.
+  destruct (GibleSeqgen.transl_program p13) as [p14|e] eqn:P14;
+    cbn in T; try discriminate.
+  set (p15 := total_if HLSOpts.optim_if_conversion CondElim.transf_program p14) in *.
+  set (p16 := total_if HLSOpts.optim_if_conversion IfConversion.transf_program p15) in *.
+  set (p17 := total_if HLSOpts.optim_if_conversion IfConversion.transf_program p16) in *.
+  set (p18 := total_if HLSOpts.optim_if_conversion IfConversion.transf_program p17) in *.
+  destruct (DeadBlocks.transf_program p18) as [p19|e] eqn:P19; cbn in T; try discriminate.
+  destruct (GiblePargen.transl_program p19) as [p20|e] eqn:P20; cbn in T; try discriminate.
+  unfold match_prog; cbn.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
   exists p3; split. apply Cshmgenproof.transf_program_match; auto.
@@ -403,19 +390,24 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto.
   apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
-  exists p14; split. apply HTLgenproof.transf_program_match; auto.
+  exists p14; split. apply GibleSeqgenproof.transf_program_match; auto.
   exists p15; split. apply total_if_match.
-    apply Memorygen.transf_program_match; auto.
-  exists p16; split. apply Veriloggenproof.transf_program_match; auto.
+    apply CondElimproof.transf_program_match; auto.
+  exists p16; split. apply total_if_match.
+    apply IfConversionproof.transf_program_match; auto.
+  exists p17; split. apply total_if_match.
+    apply IfConversionproof.transf_program_match; auto.
+  exists p18; split. apply total_if_match.
+    apply IfConversionproof.transf_program_match; auto.
+  exists p19; split. apply DeadBlocksproof.transf_program_match; auto.
+  exists p20; split. apply GiblePargenproof.transf_program_match; auto.
   inv T. reflexivity.
 Qed.
 
 Theorem cstrategy_semantic_preservation:
   forall p tp,
   match_prog p tp ->
-  forward_simulation (Cstrategy.semantics p) (Verilog.semantics tp)
-  /\ backward_simulation (atomic (Cstrategy.semantics p))
-                         (Verilog.semantics tp).
+  forward_simulation (Cstrategy.semantics p) (GiblePar.GiblePar.semantics tp).
 Proof.
   intros p tp M. unfold match_prog, pass_match in M; simpl in M.
 Ltac DestructM :=
@@ -426,7 +418,7 @@ Ltac DestructM :=
   end.
   repeat DestructM. subst tp.
   assert (F: forward_simulation (Cstrategy.semantics p)
-                                (Verilog.semantics p16)).
+                                (GiblePar.GiblePar.semantics p20)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -459,44 +451,26 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
-    eapply HTLgenproof.transf_program_correct. eassumption.
+    eapply GibleSeqgenproof.transf_program_correct. eassumption.
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption.
-    exact Memorygen.transf_program_correct; eassumption.
-  eapply Veriloggenproof.transf_program_correct; eassumption.
+    exact CondElimproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption.
+    exact IfConversionproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption.
+    exact IfConversionproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption.
+    exact IfConversionproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply DeadBlocksproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply GiblePargenproof.transf_program_correct; eassumption.
+  apply forward_simulation_identity.
   }
-  split. auto.
-  apply forward_to_backward_simulation.
-  apply factor_forward_simulation. auto. eapply sd_traces.
-  eapply Verilog.semantics_determinate.
-  apply atomic_receptive. apply Cstrategy.semantics_strongly_receptive.
-  apply Verilog.semantics_determinate.
-Qed.
-
-(*|
-Backward Simulation
--------------------
-
-The following theorem is a *backward simulation* between the C and Verilog,
-which proves the semantics preservation of the translation.  We can assume that
-the C and Verilog programs match, as we have proven previously in
-``transf_hls_match`` that our translation implies that the ``match_prog``
-predicate will hold.
-|*)
-
-Theorem c_semantic_preservation:
-  forall p tp,
-  match_prog p tp ->
-  backward_simulation (Csem.semantics p) (Verilog.semantics tp).
-Proof.
-  intros.
-  apply compose_backward_simulation with (atomic (Cstrategy.semantics p)).
-  eapply sd_traces; eapply Verilog.semantics_determinate.
-  apply factor_backward_simulation.
-  apply Cstrategy.strategy_simulation.
-  apply Csem.semantics_single_events.
-  eapply ssr_well_behaved; eapply Cstrategy.semantics_strongly_receptive.
-  exact (proj2 (cstrategy_semantic_preservation _ _ H)).
+  auto.
 Qed.
 
 (*|
@@ -507,35 +481,8 @@ function and that it succeeds.
 
 Theorem transf_c_program_correct:
   forall p tp,
-  transf_hls p = OK tp ->
-  backward_simulation (Csem.semantics p) (Verilog.semantics tp).
+  transf_hls_scheduled p = OK tp ->
+  forward_simulation (Cstrategy.semantics p) (GiblePar.GiblePar.semantics tp).
 Proof.
-  intros. apply c_semantic_preservation. apply transf_hls_match; auto.
-Qed.
-
-(*|
-The final theorem of the semantic preservation of the translation of separate
-translation units can also be proven correct, however, this is only because the
-translation fails if more than one translation unit is passed to Vericert at the
-moment.
-|*)
-
-Theorem separate_transf_c_program_correct:
-  forall c_units verilog_units c_program,
-  nlist_forall2 (fun cu tcu => transf_hls cu = OK tcu) c_units verilog_units ->
-  link_list c_units = Some c_program ->
-  exists verilog_program,
-      link_list verilog_units = Some verilog_program
-   /\ backward_simulation (Csem.semantics c_program)
-                          (Verilog.semantics verilog_program).
-Proof.
-  intros.
-  assert (nlist_forall2 match_prog c_units verilog_units).
-  { eapply nlist_forall2_imply. eauto. simpl; intros.
-    apply transf_hls_match; auto. }
-  assert (exists verilog_program, link_list verilog_units = Some verilog_program
-                                  /\ match_prog c_program verilog_program).
-  { eapply link_list_compose_passes; eauto. }
-  destruct H2 as (verilog_program & P & Q).
-  exists verilog_program; split; auto. apply c_semantic_preservation; auto.
+  intros. eapply cstrategy_semantic_preservation. apply transf_hls_match; auto.
 Qed.

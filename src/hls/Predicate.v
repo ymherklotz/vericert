@@ -596,15 +596,6 @@ Proof.
   simpl in *|-. cbn. unfold sat_lit. cbn. crush.
 Qed.
 
-Lemma stseytin_and_correct2 :
-  forall cur p1 p2 fm c,
-    stseytin_and cur p1 p2 = fm ->
-    sat_formula fm c ->
-    sat_lit cur c <-> sat_lit p1 c /\ sat_lit p2 c.
-Proof.
-  intros. split. intros. inv H1. unfold stseytin_and in *.
-  inv H0; try contradiction. Abort.
-
 Lemma stseytin_or_correct :
   forall cur p1 p2 fm c,
     stseytin_or cur p1 p2 = fm ->
@@ -620,47 +611,6 @@ Proof.
   simpl in *|-. cbn. unfold sat_lit. cbn. crush.
 Qed.
 
-Lemma stseytin_or_correct2 :
-  forall cur p1 p2 fm c,
-    stseytin_or cur p1 p2 = fm ->
-    sat_formula fm c ->
-    sat_lit cur c <-> sat_lit p1 c \/ sat_lit p2 c.
-Proof. Abort.
-
-Lemma xtseytin_correct :
-  forall p next l n fm c,
-    xtseytin next p = (n, l, fm) ->
-    sat_predicate p c = true <-> sat_formula ((l::nil)::fm) c.
-Proof.
-  induction p.
-  - intros. simplify. destruct p.
-    inv H. split.
-    intros. destruct b. split; crush.
-    apply negb_true_iff in H.
-    split; crush.
-    intros. inv H. inv H0; try contradiction.
-    inv H. simplify. rewrite <- H0.
-    destruct b.
-    rewrite -> H0; auto.
-    rewrite -> H0; auto.
-  - admit.
-  - admit.
-  - intros. split. intros. simpl in H0.
-    apply andb_prop in H0. inv H0.
-    cbn in H.
-    repeat destruct_match; try discriminate; []. inv H. eapply IHp1 in Heqp.
-(*    eapply IHp2 in Heqp1. apply Heqp1 in H2.
-    apply Heqp in H1. inv H1. inv H2.
-    assert
-      (sat_formula
-         (((true, n1) :: bar l0 :: bar l1 :: nil)
-            :: (bar (true, n1) :: l0 :: nil)
-            :: (bar (true, n1) :: l1 :: nil) :: nil) c).
-    eapply stseytin_and_correct. unfold stseytin_and. eauto.
-    unfold sat_lit. simpl. admit.
-    inv H; try contradiction. inv H1; try contradiction. eauto.*)
-Abort.
-
 Fixpoint max_predicate (p: pred_op) : positive :=
   match p with
   | Plit (b, p) => p
@@ -669,17 +619,6 @@ Fixpoint max_predicate (p: pred_op) : positive :=
   | Pand a b => Pos.max (max_predicate a) (max_predicate b)
   | Por a b => Pos.max (max_predicate a) (max_predicate b)
   end.
-
-Definition tseytin (p: pred_op) :
-  {fm: formula | forall a,
-      sat_predicate p a = true <-> sat_formula fm a}.
-  refine (
-      (match xtseytin (max_predicate p + 1) p as X
-             return xtseytin (max_predicate p + 1) p = X ->
-                    {fm: formula | forall a, sat_predicate p a = true <-> sat_formula fm a}
-       with (m, n, fm) => fun H => exist _ ((n::nil) :: fm) _
-       end) (eq_refl (xtseytin (max_predicate p + 1) p))).
-  intros. Abort.
 
 Definition tseytin_simple (p: pred_op) : formula :=
   let m := (max_predicate p + 1)%positive in

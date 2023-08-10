@@ -422,59 +422,6 @@ Proof.
   constructor.
 Qed.
 
-(*
-
-Lemma norm_expr_constant :
-  forall x m h t h' e p,
-    HN.norm_expression m x h = (t, h') ->
-    h ! e = Some p ->
-    h' ! e = Some p.
-Proof. Abort.
-
-Definition sat_aequiv ap1 ap2 :=
-  exists h p1 p2,
-    sat_equiv p1 p2
-    /\ hash_predicate 1 ap1 h = (p1, h)
-    /\ hash_predicate 1 ap2 h = (p2, h).
-
-Lemma aequiv_symm : forall a b, sat_aequiv a b -> sat_aequiv b a.
-Proof.
-  unfold sat_aequiv; simplify; do 3 eexists; simplify; [symmetry | |]; eauto.
-Qed.
-
-Lemma existsh :
-  forall ap1,
-  exists h p1,
-    hash_predicate 1 ap1 h = (p1, h).
-Proof. Abort.
-
-Lemma aequiv_refl : forall a, sat_aequiv a a.
-Proof.
-  unfold sat_aequiv; intros.
-  pose proof (existsh a); simplify.
-  do 3 eexists; simplify; eauto. reflexivity.
-Qed.
-
-Lemma aequiv_trans :
-  forall a b c,
-    sat_aequiv a b ->
-    sat_aequiv b c ->
-    sat_aequiv a c.
-Proof.
-  unfold sat_aequiv; intros.
-  simplify.
-Abort.
-
-Lemma norm_expr_mutexcl :
-  forall m pe h t h' e e' p p',
-    HN.norm_expression m pe h = (t, h') ->
-    predicated_mutexcl pe ->
-    t ! e = Some p ->
-    t ! e' = Some p' ->
-    e <> e' ->
-    p ⇒ ¬ p'.
-Proof. Abort.*)
-
 Definition pred_expr_eqb: forall pe1 pe2: pred_expr,
   {pe1 = pe2} + {pe1 <> pe2}.
 Proof.
@@ -593,49 +540,6 @@ Definition ind_preds_l t :=
     In (e2, p2) t ->
     sat_predicate p1 c = true ->
     sat_predicate p2 c = false.
-
-(*Lemma pred_equivalence_Some' :
-  forall ta tb e pe pe',
-    list_norepet (map fst ta) ->
-    list_norepet (map fst tb) ->
-    In (e, pe) ta ->
-    In (e, pe') tb ->
-    fold_right (fun p a => mk_pred_stmnt' (fst p) (snd p) ∧ a) T ta ==
-    fold_right (fun p a => mk_pred_stmnt' (fst p) (snd p) ∧ a) T tb ->
-    pe == pe'.
-Proof.
-  induction ta as [|hd tl Hta]; try solve [crush].
-  - intros * NRP1 NRP2 IN1 IN2 FOLD. inv NRP1. inv IN1.
-    simpl in FOLD.
-
-Lemma pred_equivalence_Some :
-  forall (ta tb: PTree.t pred_op) e pe pe',
-    ta ! e = Some pe ->
-    tb ! e = Some pe' ->
-    mk_pred_stmnt ta == mk_pred_stmnt tb ->
-    pe == pe'.
-Proof.
-  intros * SMEA SMEB EQ. unfold mk_pred_stmnt in *.
-  repeat rewrite PTree.fold_spec in EQ.
-
-Lemma pred_equivalence_None :
-  forall (ta tb: PTree.t pred_op) e pe,
-    (mk_pred_stmnt ta) == (mk_pred_stmnt tb) ->
-    ta ! e = Some pe ->
-    tb ! e = None ->
-    equiv pe ⟂.
-Abort.
-
-Lemma pred_equivalence :
-  forall (ta tb: PTree.t pred_op) e pe,
-    equiv (mk_pred_stmnt ta) (mk_pred_stmnt tb) ->
-    ta ! e = Some pe ->
-    equiv pe ⟂ \/ (exists pe', tb ! e = Some pe' /\ equiv pe pe').
-Proof.
-  intros * EQ SME. destruct (tb ! e) eqn:HTB.
-  { right. econstructor. split; eauto. eapply pred_equivalence_Some; eauto. }
-  { left. eapply pred_equivalence_None; eauto. }
-Qed.*)
 
 Section CORRECT.
 
@@ -1162,20 +1066,6 @@ Module HashExprNorm(HS: Hashable).
     let (p1, h) := encode_expression 1%positive pe1 (PTree.empty _) in
     let (p2, h') := encode_expression 1%positive pe2 h in
     equiv_check p1 p2.
-
-  Lemma mk_pred_stmnt_equiv' :
-    forall l l' e p,
-      mk_pred_stmnt_l l == mk_pred_stmnt_l l' ->
-      In (e, p) l ->
-      list_norepet (map fst l) ->
-      (exists p', In (e, p') l' /\ p == p')
-      \/ ~ In e (map fst l') /\ p == ⟂.
-  Proof. Abort.
-
-  Lemma mk_pred_stmnt_equiv :
-    forall tree tree',
-      mk_pred_stmnt tree == mk_pred_stmnt tree'.
-  Proof. Abort.
 
   Definition tree_equiv_check_el eq_list (np2: PTree.t pred_op) (n: positive) (p: pred_op): bool :=
     match np2 ! n with
@@ -1803,20 +1693,6 @@ Definition match_pred_states
     PredIn p p_out ->
     ht ! p = Some p_in ->
     sem_pred ctx p_in (pred_set !! p).
-
-Lemma eval_hash_predicate :
-  forall max p_in ht p_out ht' br pred_set,
-    hash_predicate max p_in ht = (p_out, ht') ->
-    sem_pexpr ctx p_in br ->
-    match_pred_states ht' p_out pred_set ->
-    eval_predf pred_set p_out = br.
-Proof.
-  induction p_in; simplify.
-  + repeat destruct_match. inv H.
-    unfold eval_predf. cbn.
-    inv H0. inv H4. unfold match_pred_states in H1.
-    specialize (H1 h br).
-Abort.
 
 Local Open Scope monad_scope.
 Fixpoint sem_valueF (e: expression) : option val :=
