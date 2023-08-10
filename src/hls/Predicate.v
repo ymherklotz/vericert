@@ -690,7 +690,7 @@ Definition sat_pred_tseytin (p: pred_op) :
   ({al : alist | sat_predicate p (interp_alist al) = true}
    + {forall a : asgn, sat_predicate p a = false}).
   refine
-    ( match tseytin p with
+    ( match trans_pred p with
       | exist _ fm _ =>
           match sat_solve fm with
           | inleft (exist _ a _) => inleft (exist _ a _)
