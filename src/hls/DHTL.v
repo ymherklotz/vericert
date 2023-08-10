@@ -70,7 +70,7 @@ Record ram := mk_ram {
                  /\ ram_wr_en < ram_u_en)
 }.
 
-Definition module_ordering a b c d e f g := a < b < c /\ c < d < e /\ e < f < g.
+Definition module_ordering a b c d e f g h := a < b < c /\ c < d < e /\ e < f < g /\ g < h.
 
 Record module: Type :=
   mkmodule {
@@ -85,12 +85,13 @@ Record module: Type :=
     mod_start : reg;
     mod_reset : reg;
     mod_clk : reg;
+    mod_preg : reg;
     mod_scldecls : AssocMap.t (option Verilog.io * Verilog.scl_decl);
     mod_arrdecls : AssocMap.t (option Verilog.io * Verilog.arr_decl);
     mod_ram : option ram;
     mod_wf : map_well_formed mod_datapath;
-    mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk;
-    mod_ram_wf : forall r', mod_ram = Some r' -> mod_clk < ram_addr r';
+    mod_ordering_wf : module_ordering mod_st mod_finish mod_return mod_stk mod_start mod_reset mod_clk mod_preg;
+    mod_ram_wf : forall r', mod_ram = Some r' -> mod_preg < ram_addr r';
     mod_params_wf : Forall (Pos.gt mod_st) mod_params;
   }.
 
@@ -265,7 +266,7 @@ Definition max_reg_module m :=
         (Pos.max (mod_return m)
          (Pos.max (mod_start m)
           (Pos.max (mod_reset m)
-           (Pos.max (mod_clk m) (max_reg_ram (mod_ram m)))))))))).
+           (Pos.max (mod_clk m) (Pos.max (mod_preg m) (max_reg_ram (mod_ram m))))))))))).
 
 Lemma max_fold_lt :
   forall m l n, m <= n -> m <= (fold_left Pos.max l n).

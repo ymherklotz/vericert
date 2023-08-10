@@ -298,7 +298,7 @@ Proof. lia. Qed.
 Lemma module_ram_wf' :
   forall m addr,
     addr = max_reg_module m + 1 ->
-    mod_clk m < addr.
+    mod_preg m < addr.
 Proof. unfold max_reg_module; lia. Qed.
 
 Definition transf_module (m: module): module.
@@ -326,6 +326,7 @@ Definition transf_module (m: module): module.
                  (mod_start m)
                  (mod_reset m)
                  (mod_clk m)
+                 (mod_preg m)
                  (AssocMap.set u_en (None, VScalar 1)
                   (AssocMap.set en (None, VScalar 1)
                    (AssocMap.set wr_en (None, VScalar 1)
@@ -3374,7 +3375,7 @@ Section CORRECTNESS.
       { apply init_regs_equal_empty. eapply forall_lt_num. eassumption. lia. }
       assert ((init_regs nil (mod_params m)) ! (ram_u_en r) = None).
       { apply init_regs_equal_empty. eapply forall_lt_num. eassumption. lia. }
-      unfold find_assocmap, AssocMapExt.get_default. rewrite H7. rewrite H14. auto.
+      unfold find_assocmap, AssocMapExt.get_default. rewrite H7. rewrite H15. auto.
     - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).

@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 set -x
 
@@ -24,9 +24,9 @@ fi
 
 echo "copying directory structure from $source to $output"
 mkdir -p $output
-rsync -am --include '*/' --include '*.v' --exclude '*' $source/ $output/
+rsync -am --include '*/' --include '*.sv' --exclude '*' $source/ $output/
 
 echo "executing $parallel runs in parallel"
-cat $scriptsdir/../benchmarks/polybench-syn/benchmark-list-master | \
+cat ./benchmark-list-master | \
     xargs --max-procs=$parallel --replace=% \
     $scriptsdir/synth-ssh.sh 0 % $output

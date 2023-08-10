@@ -32,10 +32,17 @@ all: $(TARGETS)
 clean:
 	rm -f *.iver
 	rm -f *.v
+	rm -f *.sv
 	rm -f *.gcc
 	rm -f *.clog
 	rm -f *.tmp
 	rm -f $(TARGETS)
+	rm -f *.{0,1,2,3,4,5,6,7,8,9}
+	rm -f *.smt2
+	rm -f *.log
+	rm -f *.dot
+	rm -f *.vtlog
+	rm -f *.txt
 	rm -rf *.verilator
 
 .PRECIOUS: %.v %.gcc %.iver

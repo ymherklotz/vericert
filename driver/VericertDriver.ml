@@ -98,7 +98,7 @@ let compile_c_file sourcename ifile ofile =
                         then Vericert.Compiler0.transf_hls_temp
                         else Vericert.Compiler0.transf_hls
       in
-      let _ = Vericert.Smtpredicate.check_smt (Vericert.Predicate0.Pimp ((Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)),(Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)))) in
+      (* let _ = Vericert.Smtpredicate.check_smt (Vericert.Predicate0.Pimp ((Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)),(Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)))) in *)
       match translation csyntax with
       | Vericert.Errors.OK v ->
         if !Vericert.Cohpred.cohpred_counter > 0 then Printf.fprintf stderr "OK\n"; v
