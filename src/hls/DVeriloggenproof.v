@@ -501,7 +501,7 @@ Section CORRECTNESS.
   (*     repeat rewrite_eq. apply match_state. assumption. *)
   (*   - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial. *)
   (*     repeat rewrite_eq. apply match_state. assumption. *)
-  (* Qed. *) Admitted.
+  (* Qed. *) Admitted. (* This translation pass is only used for testing. *)
   #[local] Hint Resolve transl_step_correct : verilogproof.
 
   Lemma transl_initial_states :

@@ -155,7 +155,7 @@ Lemma declare_reg_state_incr :
        (AssocMap.set r (i, VScalar sz) s.(st_scldecls))
        s.(st_arrdecls)
        s.(st_datapath)).
-Proof. Admitted.
+Proof. Admitted. (* This translation pass is only used for testing. *)
 
 Definition declare_reg (i : option io) (r : reg) (sz : nat) : mon unit :=
   fun s => OK tt (mkstate
@@ -177,7 +177,7 @@ Lemma declare_arr_state_incr :
        s.(st_scldecls)
        (AssocMap.set r (i, VArray sz ln) s.(st_arrdecls))
        s.(st_datapath)).
-Proof. Admitted.
+Proof. Admitted. (* This translation pass is only used for testing. *)
 
 Definition declare_arr (i : option io) (r : reg) (sz : nat) (ln : nat) : mon unit :=
   fun s => OK tt (mkstate
@@ -479,8 +479,8 @@ Program Definition transf_seq_blockM (fin rtrn stack preg: reg) (ni: node * ParB
     | Errors.Error m => Error m
     end.
 Next Obligation.
-admit.
-Admitted.
+admit. (* This translation pass is only used for testing. *)
+Admitted. (* This translation pass is only used for testing. *)
 
 Definition declare_regs (i: instr): mon unit :=
   match i with

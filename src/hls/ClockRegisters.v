@@ -234,7 +234,7 @@ Program Definition transf_module (m: DHTL.module) : option DHTL.module :=
   | _ => None
   end.
 Next Obligation.
-Admitted.
+Admitted. (* This translation pass is only used for testing. *)
 
 Definition transl_module (m : DHTL.module) : Errors.res DHTL.module :=
   Verilog.handle_opt (Errors.msg "ClockRegisters: not translated") (transf_module m).
