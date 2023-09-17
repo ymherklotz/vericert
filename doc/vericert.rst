@@ -1,306 +1,484 @@
-===============
-Vericert Manual
-===============
-
+.. _docs:
 
 Introduction
-------------
+============
 
-Vericert translates C code into a hardware description language called Verilog, which can then be
-synthesised into hardware, to be placed onto a field-programmable gate array (FPGA) or
-application-specific integrated circuit (ASIC).
+Vericert translates C code into a hardware description language called
+Verilog, which can then be synthesised into hardware, to be placed onto
+a field-programmable gate array (FPGA) or application-specific
+integrated circuit (ASIC).
 
-.. _fig:design:
+.. figure:: ./images/toolflow.png
+   :alt: 
 
-.. figure:: /_static/images/toolflow.svg
+The design shown in Figure `fig:design <fig:design>`__ shows how
+Vericert leverages an existing verified C compiler called
+`CompCert <https://compcert.org/compcert-C.html>`__ to perform this
+translation.
 
-    Current design of Vericert, where HTL is an intermediate language representing a finite state
-    machine with data-path (FSMD) and Verilog is the target language.
+.. raw:: texinfo
 
-The design shown in Figure `fig:design`_ shows how Vericert leverages an existing verified C
-compiler called `CompCert <https://compcert.org/compcert-C.html>`_ to perform this translation.
+   @insertcopying
+
+COPYING
+=======
+
+Copyright (C) 2019-2022 Yann Herklotz.
+
+   Permission is granted to copy, distribute and/or modify this document
+   under the terms of the GNU Free Documentation License, Version 1.3 or
+   any later version published by the Free Software Foundation; with no
+   Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts. A
+   copy of the license is included in the section entitled \``GNU Free
+   Documentation License''.
 
 .. _building:
 
 Building Vericert
------------------
+=================
 
+.. raw:: org
+
+   #+transclude: [[file:~/projects/vericert/README.org::#building][file:../README.org::#building]] :only-contents :exclude-elements "headline property-drawer"
+
+.. raw:: org
+
+   #+transclude: [[file:~/projects/vericert/README.org::#downloading-compcert][file:../README.org::#downloading-compcert]] :level 2
+
+.. raw:: org
+
+   #+transclude: [[file:~/projects/vericert/README.org::#setting-up-nix][file:../README.org::#setting-up-nix]] :level 2
+
+.. raw:: org
+
+   #+transclude: [[file:~/projects/vericert/README.org::#makefile-build][file:../README.org::#makefile-build]] :level 2
 
 Testing
-~~~~~~~
+-------
 
-To test out ``vericert`` you can try the following examples which are in the test folder using the
-following:
+To test out ``vericert`` you can try the following examples which are in
+the test folder using the following:
 
 .. code:: shell
 
-    ./bin/vericert test/loop.c -o loop.v
-    ./bin/vericert test/conditional.c -o conditional.v
-    ./bin/vericert test/add.c -o add.v
+   ./bin/vericert test/loop.c -o loop.v
+   ./bin/vericert test/conditional.c -o conditional.v
+   ./bin/vericert test/add.c -o add.v
 
 Or by running the test suite using the following command:
 
 .. code:: shell
 
-    make test
-
-.. _using-vericert:
+   make test
 
 Using Vericert
---------------
+==============
 
-Vericert can be used to translate a subset of C into Verilog.  As a simple example, consider the
-following C file (``main.c``):
+Vericert can be used to translate a subset of C into Verilog. As a
+simple example, consider the following C file (``main.c``):
 
-.. code:: C
+.. code:: c
 
-    void matrix_multiply(int first[2][2], int second[2][2], int multiply[2][2]) {
-        int sum = 0;
-        for (int c = 0; c < 2; c++) {
-            for (int d = 0; d < 2; d++) {
-                for (int k = 0; k < 2; k++) {
-                    sum = sum + first[c][k]*second[k][d];
-                }
-                multiply[c][d] = sum;
-                sum = 0;
-            }
-        }
-    }
+   void matrix_multiply(int first[2][2], int second[2][2], int multiply[2][2]) {
+       int sum = 0;
+       for (int c = 0; c < 2; c++) {
+           for (int d = 0; d < 2; d++) {
+               for (int k = 0; k < 2; k++) {
+                   sum = sum + first[c][k]*second[k][d];
+               }
+               multiply[c][d] = sum;
+               sum = 0;
+           }
+       }
+   }
 
-    int main() {
-        int f[2][2] = {{1, 2}, {3, 4}};
-        int s[2][2] = {{5, 6}, {7, 8}};
-        int m[2][2] = {{0, 0}, {0, 0}};
+   int main() {
+       int f[2][2] = {{1, 2}, {3, 4}};
+       int s[2][2] = {{5, 6}, {7, 8}};
+       int m[2][2] = {{0, 0}, {0, 0}};
 
-        matrix_multiply(f, s, m);
-        return m[1][1];
-    }
+       matrix_multiply(f, s, m);
+       return m[1][1];
+   }
 
-It can be compiled using the following command, assuming that vericert is somewhere on the path.
-
-.. code:: shell
-
-    vericert main.c -o main.v
-
-The Verilog file contains a top-level test-bench, which can be given to any Verilog simulator to
-simulate the hardware, which should give the same result as executing the C code.  Using `Icarus
-Verilog <http://iverilog.icarus.com/>`_ as an example:
+It can be compiled using the following command, assuming that vericert
+is somewhere on the path.
 
 .. code:: shell
 
-    iverilog -o main_v main.v
+   vericert main.c -o main.v
+
+The Verilog file contains a top-level test-bench, which can be given to
+any Verilog simulator to simulate the hardware, which should give the
+same result as executing the C code. Using `Icarus
+Verilog <http://iverilog.icarus.com/>`__ as an example:
+
+.. code:: shell
+
+   iverilog -o main_v main.v
 
 When executing, it should therefore print the following:
 
 .. code:: shell
 
-    $ ./main_v
-    finished: 50
+   $ ./main_v
+   finished: 50
 
 This gives the same result as executing the C in the following way:
 
 .. code:: shell
 
-    $ gcc -o main_c main.c
-    $ ./main_c
-    $ echo $?
-    50
+   $ gcc -o main_c main.c
+   $ ./main_c
+   $ echo $?
+   50
 
-Man pages
-~~~~~~~~~
+Running Vericert on the PolyBench/C benchmarks
+----------------------------------------------
 
-.. _unreleased-features:
+The main benchmark that is currently used to run Vericert is
+`PolyBench/C <http://web.cse.ohio-state.edu/~pouchet.2/software/polybench/>`__,
+which was slightly modified to make it run through Vericert. There are
+two versions of this benchmark available: PolyBench/C with and without
+divisions. In the version of the benchmark without division, the
+division C operator ``/`` and modulus operator was replaced by a
+function performing a numerical division and modulus called: ``divide``,
+``sdivide``, ``modulo`` and ``smodulo``.
+
+Vericert also does not support ``printf``, which are used to produce the
+golden output using GCC. They are therefore placed within an
+``ifndef SYNTHESIS`` block. To successfully run vericert on these
+benchmarks one therefore needs to use the ``-DSYNTHESIS`` flag.
+
+Example running a single benchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To run a single benchmark, navigate to the benchmark directory, which
+from the root of the repository (which I will be referencing using
+``$VERICERT_ROOT``) would be:
+
+.. code:: shell
+
+   VERICERT_ROOT=$(git rev-parse --show-toplevel)
+   cd $VERICERT_ROOT/benchmarks/polybench-syn
+
+Then, to run the ``jacobi-1d`` benchmark, one can go into the directory
+that contains the benchmark, which in this case is ``stencils``:
+
+.. code:: shell
+
+   cd stencils
+
+And one can then translate ``jacobi-1d.c`` to hardware using Vericert by
+using the following (assuming that vericert was built using
+``make && make install``, which places the ``vericert`` in
+``$VERICERT_ROOT/bin``):
+
+.. code:: shell
+
+   make VERICERT=$VERICERT_ROOT/bin/vericert VERICERT_OPTS="-DSYNTHESIS" jacobi-1d.sv
+
+#. Running Simulations
+
+   Setting the ``VERICERT`` and ``VERICERT_OPTS`` variables can also be
+   done by modifying the first two lines of the
+   ``$VERICERT_ROOT/benchmarks/polybench-syn/common.mk`` file, which
+   might be more convenient than having to set the settings on every
+   ``Makefile`` run. In the next sections I will assume that these
+   settings have been set in the ``common.mk`` file, and so will not
+   specify them on the commandline anymore.
+
+   Simulations for the SystemVerilog design can be generated using the
+   following:
+
+   .. code:: shell
+
+      # Building Icarus Verilog simulation
+      make jacobi-1d.iver
+      # Running Icarus Verilog simulation
+      ./jacobi-1d.iver
+      # Building Verilator simulation
+      make jacobi-1d.verilator
+      # Running Verilator simulation
+      ./jacobi-1d.verilator/Vmain
+
+#. Producing the golden GCC result
+
+   To produce the golden GCC result to check for the correctness of the
+   simulation result, the following command can be used:
+
+   .. code:: shell
+
+      # Compile C code using gcc
+      make jacobi-1d.gcc
+      # Run the GCC code
+      ./jacobi-1d.gcc
+
+   It should produce the same ``finish`` result as the SystemVerilog
+   simulation.
+
+Running all benchmarks
+~~~~~~~~~~~~~~~~~~~~~~
+
+To run vericert on all benchmarks and simulate them all, one can use the
+base ``Makefile`` in addition to the
+``$VERICERT_ROOT/scripts/run-vericert.sh`` script.
+
+.. code:: shell
+
+   # Build all the benchmarks using vericert, iverilog, verilator and GCC
+   cd $VERICERT_ROOT/benchmarks/polybench-syn
+   make
+   # Run all the simulations and compare against the GCC golden output
+   $VERICERT_ROOT/scripts/run-vericert.sh
+
+This should produce a file containing the cycle counts for each
+benchmark, which can be viewed using:
+
+.. code:: shell
+
+   cat $VERICERT_ROOT/scripts/exec.csv
+
+Man Page
+========
+
+.. raw:: org
+
+   #+transclude: [[file:man.org][file:man.org]] :exclude-elements "keyword" :level 2
 
 Unreleased Features
--------------------
+===================
 
-The following are unreleased features in Vericert that are currently being worked on and have not
-been completely proven correct yet.  Currently this includes features such as:
+The following are unreleased features in Vericert that are currently
+being worked on and have not been completely proven correct yet.
+Currently this includes features such as:
 
-- `scheduling`_,
+-  `scheduling <#scheduling>`__,
+-  `operation chaining <#operation-chaining>`__,
+-  `if-conversion <#if-conversion>`__, and
+-  `functions <#functions>`__.
 
-- `operation-chaining`_,
-
-- `if-conversion`_, and
-
-- `functions`_.
-
-This page gives some preliminary information on how the features are implemented and how the proofs
-for the features are being done.  Once these features are properly implemented, they will be added
-to the proper documentation.
-
-.. _scheduling:
+This page gives some preliminary information on how the features are
+implemented and how the proofs for the features are being done. Once
+these features are properly implemented, they will be added to the
+proper documentation.
 
 Scheduling
-~~~~~~~~~~
+----------
 
-Scheduling is an optimisation which is used to run various instructions in parallel that are
-independent to each other.
+.. raw:: org
 
-.. _operation-chaining:
+   #+cindex: scheduling
+
+Scheduling is an optimisation which is used to run various instructions
+in parallel that are independent to each other.
 
 Operation Chaining
-~~~~~~~~~~~~~~~~~~
+------------------
 
-Operation chaining is an optimisation that can be added on to scheduling and allows for the
-sequential execution of instructions in a clock cycle, while executing other instructions in
-parallel in the same clock cycle.
-
-.. _if-conversion:
+Operation chaining is an optimisation that can be added on to scheduling
+and allows for the sequential execution of instructions in a clock
+cycle, while executing other instructions in parallel in the same clock
+cycle.
 
 If-conversion
-~~~~~~~~~~~~~
+-------------
 
-If-conversion is an optimisation which can turn code with simple control flow into a single block
-(called a hyper-block), using predicated instructions.
-
-.. _functions:
+If-conversion is an optimisation which can turn code with simple control
+flow into a single block (called a hyper-block), using predicated
+instructions.
 
 Functions
-~~~~~~~~~
+---------
 
-Functions are currently only inlined in Vericert, however, we are working on a proper interface to
-integrate function calls into the hardware.
+Functions are currently only inlined in Vericert, however, we are
+working on a proper interface to integrate function calls into the
+hardware.
 
-.. _coq-style-guide:
+Scheduling proof
+================
+
+Semantic identity properties
+----------------------------
+
+This section corresponds to the proofs found in
+``src/hls/AbstrSemIdent.v``.
+
+``sem_merge_list``
+~~~~~~~~~~~~~~~~~~
+
+This lemma proves that given a forest ``f`` that executes from an
+initial context ``ctx`` to a state composed of ``rs``, ``ps`` and ``m``,
+that the evaluation of the merged arguments from the forest is
+equivalent to retrieving the arguments dynamically from the new state of
+the registers. This proves the correctness of the combination of
+``merge`` and ``list_translation`` to encode the list of arguments.
+
+One interesting note about this lemma is that it passes the latest state
+of the predicates from ``f`` into the function, i.e. ``forest_preds f``.
+This allows one to prove the theorem, however, using it later on is more
+problematic, as one cannot easily reuse it in the middle of an
+induction. Instead, one would have to prove that the future changes to
+the forest will not change the result of the current evaluation of the
+register arguments.
+
+It does make sense that this has to be proven somewhere, however, it's
+not clear if this results in the simplest proofs. However, one benefit
+is that this function already has to be used for the forward translation
+proof, so it can easily be reused for the backward execution proof.
+
+Backward proof
+--------------
+
+This corresponds to the proof found in
+``src/hls/GiblePargenproofBackward.v``.
+
+``abstr_seq_reverse_correct_fold``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This proof is mainly tricky because one needs to infer concrete
+execution from the forest execution. There are also different forests
+that are each used for evaluation, for example, the final forest is used
+for predicate evaluation, whereas each individual forest is itself
+evaluated.
+
+However, the proof itself follows a very similar structure to the
+forward proof, with the addition of the assumption that the update
+produces an instruction that is evaluable. This assumption comes from
+the fact that the expression will still be in the forest at the end, or
+that it will be placed into the list of expressions that is checked for
+evaluation against the input instructions.
 
 Coq Style Guide
----------------
+===============
 
-This style guide was taken from `Silveroak <https://github.com/project-oak/silveroak>`_, it outlines
-code style for Coq code in this repository. There are certainly other valid strategies and opinions
-on Coq code style; this is laid out purely in the name of consistency. For a visual example of the
-style, see the `example`_ at the bottom of this file.
-
-.. _code-organization:
+This style guide was taken from
+`Silveroak <https://github.com/project-oak/silveroak>`__, it outlines
+code style for Coq code in this repository. There are certainly other
+valid strategies and opinions on Coq code style; this is laid out purely
+in the name of consistency. For a visual example of the style, see the
+`example <#example>`__ at the bottom of this file.
 
 Code organization
-~~~~~~~~~~~~~~~~~
-
-.. _legal-banner:
+-----------------
 
 Legal banner
-^^^^^^^^^^^^
+~~~~~~~~~~~~
 
-- Files should begin with a copyright/license banner, as shown in the example above.
-
-.. _import-statements:
+-  Files should begin with a copyright/license banner, as shown in the
+   example above.
 
 Import statements
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 
-- ``Require Import`` statements should all go at the top of the file, followed by file-wide ``Import``
-  statements.
+-  ``Require Import`` statements should all go at the top of the file,
+   followed by file-wide ``Import`` statements.
 
-  - =Import=s often contain notations or typeclass instances that might override notations or
-    instances from another library, so it’s nice to highlight them separately.
+   -  =Import=s often contain notations or typeclass instances that
+      might override notations or instances from another library, so
+      it's nice to highlight them separately.
 
-- One ``Require Import`` statement per line; it’s easier to scan that way.
+-  One ``Require Import`` statement per line; it's easier to scan that
+   way.
 
-- ``Require Import`` statements should use “fully-qualified” names (e.g. ``Require Import
-  Coq.ZArith.ZArith`` instead of ``Require Import ZArith``).
+-  ``Require Import`` statements should use "fully-qualified" names
+   (e.g. =Require Import Coq.ZArith.ZArith= instead of
+   ``Require Import ZArith``).
 
-  - Use the ``Locate`` command to find the fully-qualified name!
+   -  Use the ``Locate`` command to find the fully-qualified name!
 
-- ``Require Import``’s should go in the following order:
+-  ``Require Import``'s should go in the following order:
 
-  1. Standard library dependencies (start with ``Coq.``)
+   #. Standard library dependencies (start with ``Coq.``)
+   #. External dependencies (anything outside the current project)
+   #. Same-project dependencies
 
-  2. External dependencies (anything outside the current project)
-
-  3. Same-project dependencies
-
-- ``Require Import``’s with the same root library (the name before the first ``.``) should be
-  grouped together. Within each root-library group, they should be in alphabetical order (so
-  ``Coq.Lists.List`` before ``Coq.ZArith.ZArith``).
-
-.. _notations-and-scopes:
+-  ``Require Import``'s with the same root library (the name before the
+   first ``.``) should be grouped together. Within each root-library
+   group, they should be in alphabetical order (so ``Coq.Lists.List``
+   before ``Coq.ZArith.ZArith``).
 
 Notations and scopes
-^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~
 
-- Any file-wide ``Local Open Scope``’s should come immediately after the =Import=s (see example).
+-  Any file-wide ``Local Open Scope``'s should come immediately after
+   the =Import=s (see example).
 
-  - Always use ``Local Open Scope``; just ``Open Scope`` will sneakily open the scope for those who
-    import your file.
+   -  Always use ``Local Open Scope``; just ``Open Scope`` will sneakily
+      open the scope for those who import your file.
 
-- Put notations in their own separate modules or files, so that those who import your file can
-  choose whether or not they want the notations.
+-  Put notations in their own separate modules or files, so that those
+   who import your file can choose whether or not they want the
+   notations.
 
-  - Conflicting notations can cause a lot of headache, so it comes in very handy to leave this
-    flexibility!
-
-.. _formatting:
+   -  Conflicting notations can cause a lot of headache, so it comes in
+      very handy to leave this flexibility!
 
 Formatting
-~~~~~~~~~~
-
-.. _line-length:
+----------
 
 Line length
-^^^^^^^^^^^
+~~~~~~~~~~~
 
-- Maximum line length 80 characters.
+-  Maximum line length 80 characters.
 
-  - Many Coq IDE setups divide the screen in half vertically and use only half to display source
-    code, so more than 80 characters can be genuinely hard to read on a laptop.
-
-.. _whitespace-and-indentation:
+   -  Many Coq IDE setups divide the screen in half vertically and use
+      only half to display source code, so more than 80 characters can
+      be genuinely hard to read on a laptop.
 
 Whitespace and indentation
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- No trailing whitespace.
+-  No trailing whitespace.
 
-- Spaces, not tabs.
+-  Spaces, not tabs.
 
-- Files should end with a newline.
+-  Files should end with a newline.
 
-  - Many editors do this automatically on save.
+   -  Many editors do this automatically on save.
 
-- Colons may be either “English-spaced”, with no space before the colon and one space after (``x:
-  nat``) or “French-spaced”, with one space before and after (``x : nat``).
+-  Colons may be either "English-spaced", with no space before the colon
+   and one space after (``x: nat``) or "French-spaced", with one space
+   before and after (``x : nat``).
 
-- Default indentation is 2 spaces.
+-  Default indentation is 2 spaces.
 
-  - Keeping this small prevents complex proofs from being indented ridiculously far, and matches IDE
-    defaults.
+   -  Keeping this small prevents complex proofs from being indented
+      ridiculously far, and matches IDE defaults.
 
-- Use 2-space indents if inserting a line break immediately after:
+-  Use 2-space indents if inserting a line break immediately after:
 
-  - ``Proof.``
+   -  ``Proof.``
+   -  ``fun <...> =>``
+   -  ``forall <...>,``
+   -  ``exists <....>,``
 
-  - ``fun <...> =>``
+-  The style for indenting arguments in function application depends on
+   where you make a line break. If you make the line break immediately
+   after the function name, use a 2-space indent. However, if you make
+   it after one or more arguments, align the next line with the first
+   argument:
 
-  - ``forall <...>,``
-
-  - ``exists <....>,``
-
-- The style for indenting arguments in function application depends on where you make a line
-  break. If you make the line break immediately after the function name, use a 2-space
-  indent. However, if you make it after one or more arguments, align the next line with the first
-  argument:
-
-  .. code:: coq
+   .. code:: coq
 
       (Z.pow
          1 2)
       (Z.pow 1 2 3
              4 5 6)
 
-- ``Inductive`` cases should not be indented. Example:
+-  ``Inductive`` cases should not be indented. Example:
 
-  .. code:: coq
+   .. code:: coq
 
       Inductive Foo : Type :=
       | FooA : Foo
       | FooB : Foo
       .
 
-- ``match`` or ``lazymatch`` cases should line up with the “m” in ``match`` or “l” in ``lazymatch``,
-  as in the following examples:
+-  ``match`` or ``lazymatch`` cases should line up with the "m" in
+   ``match`` or "l" in ``lazymatch``, as in the following examples:
 
-  .. code:: coq
+   .. code:: coq
 
       match x with
       | 3 => true
@@ -321,25 +499,23 @@ Whitespace and indentation
            | |- context [eq] => idtac
            end.
 
-.. _definitions-and-fixpoints:
-
 Definitions and Fixpoints
-~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------
 
-- It’s okay to leave the return type of ``Definition``’s and ``Fixpoint``’s implicit
-  (e.g. ``Definition x := 5`` instead of ``Definition x : nat := 5``) when the type is very simple
-  or obvious (for instance, the definition is in a file which deals exclusively with operations on
-  ``Z``).
-
-.. _inductives:
+-  It's okay to leave the return type of ``Definition``'s and
+   ``Fixpoint``'s implicit (e.g. ``Definition x := 5`` instead of
+   ``Definition x : nat := 5``) when the type is very simple or obvious
+   (for instance, the definition is in a file which deals exclusively
+   with operations on ``Z``).
 
 Inductives
-~~~~~~~~~~
+----------
 
-- The ``.`` ending an ``Inductive`` can be either on the same line as the last case or on its own
-  line immediately below. That is, both of the following are acceptable:
+-  The ``.`` ending an ``Inductive`` can be either on the same line as
+   the last case or on its own line immediately below. That is, both of
+   the following are acceptable:
 
-  .. code:: coq
+   .. code:: coq
 
       Inductive Foo : Type :=
       | FooA : Foo
@@ -349,75 +525,80 @@ Inductives
       | FooA : Foo
       | FooB : Foo.
 
-.. _lemmatheorem-statements:
-
 Lemma/Theorem statements
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
 
-- Generally, use ``Theorem`` for the most important, top-level facts you prove and ``Lemma`` for
-  everything else.
-
-- Insert a line break after the colon in the lemma statement.
-
-- Insert a line break after the comma for ``forall`` or ``exist`` quantifiers.
-
-- Implication arrows (``->``) should share a line with the previous hypothesis, not the following
-  one.
-
-- There is no need to make a line break after every ``->``; short preconditions may share a line.
-
-.. _proofs-and-tactics:
+-  Generally, use ``Theorem`` for the most important, top-level facts
+   you prove and ``Lemma`` for everything else.
+-  Insert a line break after the colon in the lemma statement.
+-  Insert a line break after the comma for ``forall`` or ``exist``
+   quantifiers.
+-  Implication arrows (``->``) should share a line with the previous
+   hypothesis, not the following one.
+-  There is no need to make a line break after every ``->``; short
+   preconditions may share a line.
 
 Proofs and tactics
-~~~~~~~~~~~~~~~~~~
+------------------
 
-- Use the ``Proof`` command (lined up vertically with ``Lemma`` or ``Theorem`` it corresponds to) to
-  open a proof, and indent the first line after it 2 spaces.
+-  Use the ``Proof`` command (lined up vertically with ``Lemma`` or
+   ``Theorem`` it corresponds to) to open a proof, and indent the first
+   line after it 2 spaces.
 
-- Very small proofs (where ``Proof. <tactics> Qed.`` is <= 80 characters) can go all in one line.
+-  Very small proofs (where ``Proof. <tactics> Qed.`` is <= 80
+   characters) can go all in one line.
 
-- When ending a proof, align the ending statement (``Qed``, ``Admitted``, etc.) with ``Proof``.
+-  When ending a proof, align the ending statement (``Qed``,
+   ``Admitted``, etc.) with ``Proof``.
 
-- Avoid referring to autogenerated names (e.g. ``H0``, ``n0``). It’s okay to let Coq generate these
-  names, but you should not explicitly refer to them in your proof. So ``intros; my_solver`` is
-  fine, but ``intros; apply H1; my_solver`` is not fine.
+-  Avoid referring to autogenerated names (e.g. =H0=, ``n0``). It's okay
+   to let Coq generate these names, but you should not explicitly refer
+   to them in your proof. So ``intros; my_solver`` is fine, but
+   ``intros; apply H1; my_solver`` is not fine.
 
-  - You can force a non-autogenerated name by either putting the variable before the colon in the
-    lemma statement (``Lemma foo x : ...`` instead of ``Lemma foo : forall x, ...``), or by passing
-    arguments to ``intros`` (e.g. ``intros ? x`` to name the second argument ``x``)
+   -  You can force a non-autogenerated name by either putting the
+      variable before the colon in the lemma statement
+      (``Lemma foo x : ...`` instead of ``Lemma foo : forall x, ...``),
+      or by passing arguments to ``intros`` (e.g. =intros ? x= to name
+      the second argument ``x``)
 
-- This way, the proof won’t break when new hypotheses are added or autogenerated variable names
-  change.
+-  This way, the proof won't break when new hypotheses are added or
+   autogenerated variable names change.
 
-- Use curly braces ``{}`` for subgoals, instead of bullets.
+-  Use curly braces ``{}`` for subgoals, instead of bullets.
 
-- *Never write tactics with more than one subgoal focused.* This can make the proof very confusing
-  to step through! If you have more than one subgoal, use curly braces.
+-  *Never write tactics with more than one subgoal focused.* This can
+   make the proof very confusing to step through! If you have more than
+   one subgoal, use curly braces.
 
-- Consider adding a comment after the opening curly brace that explains what case you’re in (see
-  example).
+-  Consider adding a comment after the opening curly brace that explains
+   what case you're in (see example).
 
-  - This is not necessary for small subgoals but can help show the major lines of reasoning in large
-    proofs.
+   -  This is not necessary for small subgoals but can help show the
+      major lines of reasoning in large proofs.
 
-- If invoking a tactic that is expected to return multiple subgoals, use ``[ | ... | ]`` before the
-  ``.`` to explicitly specify how many subgoals you expect.
+-  If invoking a tactic that is expected to return multiple subgoals,
+   use ``[ | ... | ]`` before the ``.`` to explicitly specify how many
+   subgoals you expect.
 
-  - Examples: ``split; [ | ].`` ``induction z; [ | | ].``
+   -  Examples: ``split; [ | ].`` ``induction z; [ | | ].``
+   -  This helps make code more maintainable, because it fails
+      immediately if your tactic no longer solves as many subgoals as
+      expected (or unexpectedly solves more).
 
-  - This helps make code more maintainable, because it fails immediately if your tactic no longer
-    solves as many subgoals as expected (or unexpectedly solves more).
+-  If invoking a string of tactics (composed by ``;``) that will break
+   the goal into multiple subgoals and then solve all but one, still use
+   ``[ ]`` to enforce that all but one goal is solved.
 
-- If invoking a string of tactics (composed by ``;``) that will break the goal into multiple
-  subgoals and then solve all but one, still use ``[ ]`` to enforce that all but one goal is solved.
+   -  Example: ``split; try lia; [ ]``.
 
-  - Example: ``split; try lia; [ ]``.
+-  Tactics that consist only of ``repeat``-ing a procedure (e.g.
+   ``repeat match``, ``repeat first``) should factor out a single step
+   of that procedure a separate tactic called ``<tactic name>_step``,
+   because the single-step version is much easier to debug. For
+   instance:
 
-- Tactics that consist only of ``repeat``-ing a procedure (e.g. ``repeat match``, ``repeat first``)
-  should factor out a single step of that procedure a separate tactic called ``<tactic name>_step``,
-  because the single-step version is much easier to debug. For instance:
-
-  .. code:: coq
+   .. code:: coq
 
       Ltac crush_step :=
         match goal with
@@ -426,101 +607,111 @@ Proofs and tactics
         end.
       Ltac crush := repeat crush_step.
 
-.. _naming:
-
 Naming
-~~~~~~
+------
 
-- Helper proofs about standard library datatypes should go in a module that is named to match the
-  standard library module (see example).
+-  Helper proofs about standard library datatypes should go in a module
+   that is named to match the standard library module (see example).
 
-  - This makes the helper proofs look like standard-library ones, which is helpful for categorizing
-    them if they’re genuinely at the standard-library level of abstraction.
+   -  This makes the helper proofs look like standard-library ones,
+      which is helpful for categorizing them if they're genuinely at the
+      standard-library level of abstraction.
 
-- Names of modules should start with capital letters.
+-  Names of modules should start with capital letters.
 
-- Names of inductives and their constructors should start with capital letters.
+-  Names of inductives and their constructors should start with capital
+   letters.
 
-- Names of other definitions/lemmas should be snake case.
-
-.. _example:
+-  Names of other definitions/lemmas should be snake case.
 
 Example
-~~~~~~~
+-------
 
 A small standalone Coq file that exhibits many of the style points.
 
-.. coq:: no-out
+.. code:: coq
 
-    (*
-     * Vericert: Verified high-level synthesis.
-     * Copyright (C) 2021 Name <email@example.com>
-     *
-     * <License...>
-     *)
+   (*
+    * Vericert: Verified high-level synthesis.
+    * Copyright (C) 2021 Name <email@example.com>
+    *
+    * <License...>
+    *)
 
-      Require Import Coq.Lists.List.
-      Require Import Coq.micromega.Lia.
-      Require Import Coq.ZArith.ZArith.
-      Import ListNotations.
-      Local Open Scope Z_scope.
+     Require Import Coq.Lists.List.
+     Require Import Coq.micromega.Lia.
+     Require Import Coq.ZArith.ZArith.
+     Import ListNotations.
+     Local Open Scope Z_scope.
 
-      (* Helper proofs about standard library integers (Z) go within [Module Z] so
-         that they match standard-library Z lemmas when used. *)
-      Module Z.
-        Lemma pow_3_r x : x ^ 3 = x * x * x.
-        Proof. lia. Qed. (* very short proofs can go all on one line *)
+     (* Helper proofs about standard library integers (Z) go within [Module Z] so
+        that they match standard-library Z lemmas when used. *)
+     Module Z.
+       Lemma pow_3_r x : x ^ 3 = x * x * x.
+       Proof. lia. Qed. (* very short proofs can go all on one line *)
 
-        Lemma pow_4_r x : x ^ 4 = x * x * x * x.
-        Proof.
-          change 4 with (Z.succ (Z.succ (Z.succ (Z.succ 0)))).
-          repeat match goal with
-                 | _ => rewrite Z.pow_1_r
-                 | _ => rewrite Z.pow_succ_r by lia
-                 | |- context [x * (?a * ?b)] =>
-                   replace (x * (a * b)) with (a * b * x) by lia
-                 | _ => reflexivity
-                 end.
-        Qed.
-      End Z.
-      (* Now we can access the lemmas above as Z.pow_3_r and Z.pow_4_r, as if they
-         were in the ZArith library! *)
+       Lemma pow_4_r x : x ^ 4 = x * x * x * x.
+       Proof.
+         change 4 with (Z.succ (Z.succ (Z.succ (Z.succ 0)))).
+         repeat match goal with
+                | _ => rewrite Z.pow_1_r
+                | _ => rewrite Z.pow_succ_r by lia
+                | |- context [x * (?a * ?b)] =>
+                  replace (x * (a * b)) with (a * b * x) by lia
+                | _ => reflexivity
+                end.
+       Qed.
+     End Z.
+     (* Now we can access the lemmas above as Z.pow_3_r and Z.pow_4_r, as if they
+        were in the ZArith library! *)
 
-      Definition bar (x y : Z) := x ^ (y + 1).
+     Definition bar (x y : Z) := x ^ (y + 1).
 
-      (* example with a painfully manual proof to show case formatting *)
-      Lemma bar_upper_bound :
-        forall x y a,
-          0 <= x <= a -> 0 <= y ->
-          0 <= bar x y <= a ^ (y + 1).
-      Proof.
-        (* avoid referencing autogenerated names by explicitly naming variables *)
-        intros x y a Hx Hy. revert y Hy x a Hx.
-        (* explicitly indicate # subgoals with [ | ... | ] if > 1 *)
-        cbv [bar]; refine (natlike_ind _ _ _); [ | ].
-        { (* y = 0 *)
-          intros; lia. }
-        { (* y = Z.succ _ *)
-          intros.
-          rewrite Z.add_succ_l, Z.pow_succ_r by lia.
-          split.
-          { (* 0 <= bar x y *)
-            apply Z.mul_nonneg_nonneg; [ lia | ].
-            apply Z.pow_nonneg; lia. }
-          { (* bar x y < a ^ y *)
-            rewrite Z.pow_succ_r by lia.
-            apply Z.mul_le_mono_nonneg; try lia;
-              [ apply Z.pow_nonneg; lia | ].
-            (* For more flexible proofs, use match statements to find hypotheses
-               rather than referring to them by autogenerated names like H0. In this
-               case, we'll take any hypothesis that applies to and then solves the
-               goal. *)
-            match goal with H : _ |- _ => apply H; solve [auto] end. } }
-      Qed.
+     (* example with a painfully manual proof to show case formatting *)
+     Lemma bar_upper_bound :
+       forall x y a,
+         0 <= x <= a -> 0 <= y ->
+         0 <= bar x y <= a ^ (y + 1).
+     Proof.
+       (* avoid referencing autogenerated names by explicitly naming variables *)
+       intros x y a Hx Hy. revert y Hy x a Hx.
+       (* explicitly indicate # subgoals with [ | ... | ] if > 1 *)
+       cbv [bar]; refine (natlike_ind _ _ _); [ | ].
+       { (* y = 0 *)
+         intros; lia. }
+       { (* y = Z.succ _ *)
+         intros.
+         rewrite Z.add_succ_l, Z.pow_succ_r by lia.
+         split.
+         { (* 0 <= bar x y *)
+           apply Z.mul_nonneg_nonneg; [ lia | ].
+           apply Z.pow_nonneg; lia. }
+         { (* bar x y < a ^ y *)
+           rewrite Z.pow_succ_r by lia.
+           apply Z.mul_le_mono_nonneg; try lia;
+             [ apply Z.pow_nonneg; lia | ].
+           (* For more flexible proofs, use match statements to find hypotheses
+              rather than referring to them by autogenerated names like H0. In this
+              case, we'll take any hypothesis that applies to and then solves the
+              goal. *)
+           match goal with H : _ |- _ => apply H; solve [auto] end. } }
+     Qed.
 
-      (* Put notations in a separate module or file so that importers can
-         decide whether or not to use them. *)
-      Module BarNotations.
-        Infix "#" := bar (at level 40) : Z_scope.
-        Notation "x '##'" := (bar x x) (at level 40) : Z_scope.
-      End BarNotations.
+     (* Put notations in a separate module or file so that importers can
+        decide whether or not to use them. *)
+     Module BarNotations.
+       Infix "#" := bar (at level 40) : Z_scope.
+       Notation "x '##'" := (bar x x) (at level 40) : Z_scope.
+     End BarNotations.
+
+.. _cindex:
+
+Index - Features
+================
+
+GNU Free Documentation License
+==============================
+
+.. raw:: org
+
+   #+include: res/fdl.org

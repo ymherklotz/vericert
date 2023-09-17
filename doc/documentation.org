@@ -1,7 +1,7 @@
 #+title: Vericert Manual
 #+subtitle: Release {{{version}}}
 #+author:   Yann Herklotz
-#+email:    git@ymhg.org
+#+email:    git@yannherklotz.com
 #+language: en
 
 * Introduction
@@ -132,9 +132,105 @@ $ echo $?
 50
 #+end_src
 
-** Man pages
+** Running Vericert on the PolyBench/C benchmarks
 
-#+transclude: [[file:man.org][file:man.org]] :exclude-elements "keyword" :level 3
+The main benchmark that is currently used to run Vericert is [[http://web.cse.ohio-state.edu/~pouchet.2/software/polybench/][PolyBench/C]], which
+was slightly modified to make it run through Vericert.  There are two versions
+of this benchmark available: PolyBench/C with and without divisions.  In the
+version of the benchmark without division, the division C operator =/= and
+modulus operator was replaced by a function performing a numerical division
+and modulus called: =divide=, =sdivide=, =modulo= and =smodulo=.
+
+Vericert also does not support =printf=, which are used to produce the golden
+output using GCC.  They are therefore placed within an =ifndef SYNTHESIS= block.
+To successfully run vericert on these benchmarks one therefore needs to use the
+=-DSYNTHESIS= flag.
+
+*** Example running a single benchmark
+
+To run a single benchmark, navigate to the benchmark directory, which from the
+root of the repository (which I will be referencing using =$VERICERT_ROOT=)
+would be:
+
+#+begin_src shell
+VERICERT_ROOT=$(git rev-parse --show-toplevel)
+cd $VERICERT_ROOT/benchmarks/polybench-syn
+#+end_src
+
+Then, to run the =jacobi-1d= benchmark, one can go into the directory that
+contains the benchmark, which in this case is =stencils=:
+
+#+begin_src shell
+cd stencils
+#+end_src
+
+And one can then translate =jacobi-1d.c= to hardware using Vericert by using the
+following (assuming that vericert was built using =make && make install=, which
+places the =vericert= in =$VERICERT_ROOT/bin=):
+
+#+begin_src shell
+make VERICERT=$VERICERT_ROOT/bin/vericert VERICERT_OPTS="-DSYNTHESIS" jacobi-1d.sv
+#+end_src
+
+**** Running Simulations
+
+Setting the =VERICERT= and =VERICERT_OPTS= variables can also be done by
+modifying the first two lines of the
+=$VERICERT_ROOT/benchmarks/polybench-syn/common.mk= file, which might be more
+convenient than having to set the settings on every =Makefile= run.  In the next
+sections I will assume that these settings have been set in the =common.mk=
+file, and so will not specify them on the commandline anymore.
+
+Simulations for the SystemVerilog design can be generated using the following:
+
+#+begin_src shell
+# Building Icarus Verilog simulation
+make jacobi-1d.iver
+# Running Icarus Verilog simulation
+./jacobi-1d.iver
+# Building Verilator simulation
+make jacobi-1d.verilator
+# Running Verilator simulation
+./jacobi-1d.verilator/Vmain
+#+end_src
+
+**** Producing the golden GCC result
+
+To produce the golden GCC result to check for the correctness of the simulation
+result, the following command can be used:
+
+#+begin_src shell
+# Compile C code using gcc
+make jacobi-1d.gcc
+# Run the GCC code
+./jacobi-1d.gcc
+#+end_src
+
+It should produce the same =finish= result as the SystemVerilog simulation.
+
+*** Running all benchmarks
+
+To run vericert on all benchmarks and simulate them all, one can use the base
+=Makefile= in addition to the =$VERICERT_ROOT/scripts/run-vericert.sh= script.
+
+#+begin_src shell
+# Build all the benchmarks using vericert, iverilog, verilator and GCC
+cd $VERICERT_ROOT/benchmarks/polybench-syn
+make
+# Run all the simulations and compare against the GCC golden output
+$VERICERT_ROOT/scripts/run-vericert.sh
+#+end_src
+
+This should produce a file containing the cycle counts for each benchmark, which
+can be viewed using:
+
+#+begin_src shell
+cat $VERICERT_ROOT/scripts/exec.csv
+#+end_src
+
+* Man Page
+
+#+transclude: [[file:man.org][file:man.org]] :exclude-elements "keyword" :level 2
 
 * Unreleased Features
 :PROPERTIES:

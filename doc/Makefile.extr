@@ -9,13 +9,20 @@ install-deps:
 %.html: %.org
 	emacs --batch --file $< --load ./res/publish.el --funcall org-html-export-to-html
 
-manual:
-	mkdir -p manual
+vericert.texi: documentation.org ./res/publish.el
 	emacs --batch --file documentation.org --load ./res/publish.el --funcall org-texinfo-export-to-texinfo
+
+manual: vericert.texi
+	mkdir -p manual
 	makeinfo --html --number-sections --no-split \
         --css-ref "https://www.gnu.org/software/emacs/manual.css" \
         vericert.texi -o ./manual/index.html
-	cp -r images ./manual/.
+# cp -r images ./manual/.
+
+manual-split: vericert.texi
+	makeinfo --html --number-sections --split=section \
+        --css-ref "https://www.gnu.org/software/emacs/manual.css" \
+        vericert.texi -o ./manual-split
 
 man-html: man.html
 	mkdir -p man
