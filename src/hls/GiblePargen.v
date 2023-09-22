@@ -339,35 +339,45 @@ Definition remember_expr_p (f : forest) (lst: list pred_op) (i : instr): list pr
   | RBexit p c => lst
   end.
 
-Definition remember_expr_inc (fop : pred_op * forest) (lst: list (resource * pred_expr)) (i : instr): option (list (resource * pred_expr)) :=
-  match i, symbolic_op fop i with
-  | RBnop, _ => Some lst
-  | RBop p op rl r, Some expr => Some ((Reg r, expr) :: lst)
-  | RBload  p chunk addr rl r, Some expr => Some ((Reg r, expr) :: lst)
-  | RBstore p chunk addr rl r, _ => Some lst
-  | RBsetpred p' c args p, _ => Some lst
-  | RBexit p c, _ => Some lst
-  | _, _ => None
-  end.
-
-Definition remember_expr_m_inc (fop : pred_op * forest) (lst: list pred_expr) (i : instr): option (list pred_expr) :=
-  match i, symbolic_op fop i with
-  | RBnop, _ => Some lst
-  | RBop p op rl r, _ => Some lst
-  | RBload  p chunk addr rl r, _ => Some lst
-  | RBstore p chunk addr rl r, Some expr => Some (expr :: lst)
-  | RBsetpred p' c args p, _ => Some lst
-  | RBexit p c, _ => Some lst
-  | _, _ => None
-  end.
-
-Definition update_top' (s: pred_op * forest * list (resource * pred_expr) * list pred_expr) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr) :=
+Definition update_top (s: pred_op * forest * list (resource * pred_expr) * list pred_expr) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr) :=
   let '(p, f, l, lm) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr f l i, remember_expr_m f lm i)) (update (p, f) i).
 
-Definition update_top (s: pred_op * forest * list (resource * pred_expr) * list pred_expr) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr) :=
+Definition remember_expr_inc (fop : pred_op * forest) (lst: list (resource * pred_expr)) (i : instr): list (resource * pred_expr) :=
+  let (pred, f) := fop in
+  match i with
+  | RBnop => lst
+  | RBop p op rl r => (Reg r, (NE.map (fun x => (dfltp p ∧ pred ∧ fst x, snd x))
+        (seq_app (pred_ret (Eop op)) (merge (list_translation rl f))))) :: lst
+  | RBload p chunk addr rl r => (Reg r, (NE.map (fun x => (dfltp p ∧ pred ∧ fst x, snd x))
+        (seq_app
+          (seq_app (pred_ret (Eload chunk addr))
+            (merge (list_translation rl f)))
+            (f #r Mem)))) :: lst
+  | RBstore p chunk addr rl r => lst
+  | RBsetpred p' c args p =>  lst
+  | RBexit p c => lst
+  end.
+
+Definition remember_expr_m_inc (fop : pred_op * forest) (lst: list pred_expr) (i : instr): list pred_expr :=
+  let (pred, f) := fop in
+  match i with
+  | RBnop => lst
+  | RBop p op rl r => lst
+  | RBload  p chunk addr rl r => lst
+  | RBstore p chunk addr rl r => (NE.map (fun x => (dfltp p ∧ pred ∧ fst x, snd x))
+        (seq_app
+          (seq_app
+             (flap2 (seq_app (pred_ret Estore)
+                                                (f #r (Reg r))) chunk addr)
+             (merge (list_translation rl f))) (f #r Mem))) :: lst
+  | RBsetpred p' c args p => lst
+  | RBexit p c => lst
+  end.
+
+Definition update_top_inc (s: pred_op * forest * list (resource * pred_expr) * list pred_expr) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr) :=
   let '(p, f, l, lm) := s in
-  Option.bind2 (fun p' f' => Option.bind (fun rem => Option.bind (fun rem_m => Option.ret (p', f', rem, rem_m)) (remember_expr_m_inc (p, f) lm i)) (remember_expr_inc (p, f) l i)) (update (p, f) i).
+  Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr_inc (p, f) l i, remember_expr_m_inc (p, f) lm i)) (update (p, f) i).
 
 Definition update'' (s: pred_op * forest * list (resource * pred_expr) * list pred_expr * list pred_op) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr * list pred_op) :=
   let '(p, f, l, lm, lp) := s in
@@ -393,17 +403,17 @@ Definition gather_predicates (preds : PTree.t unit) (i : instr): option (PTree.t
   | _ => Some preds
   end.
 
-Definition abstract_sequence_top' (b : list instr) : option (forest * list (resource * pred_expr) * list pred_expr) :=
-  Option.bind (fun x => Option.bind (fun _ => Some x)
-    (mfold_left gather_predicates b (Some (PTree.empty _))))
-      (Option.map (fun x => let '(_, y, z, zm) := x in (y, z, zm))
-        (mfold_left update_top' b (Some (Ptrue, empty, nil, nil)))).
-
 Definition abstract_sequence_top (b : list instr) : option (forest * list (resource * pred_expr) * list pred_expr) :=
   Option.bind (fun x => Option.bind (fun _ => Some x)
     (mfold_left gather_predicates b (Some (PTree.empty _))))
       (Option.map (fun x => let '(_, y, z, zm) := x in (y, z, zm))
         (mfold_left update_top b (Some (Ptrue, empty, nil, nil)))).
+
+Definition abstract_sequence_top_inc (b : list instr) : option (forest * list (resource * pred_expr) * list pred_expr) :=
+  Option.bind (fun x => Option.bind (fun _ => Some x)
+    (mfold_left gather_predicates b (Some (PTree.empty _))))
+      (Option.map (fun x => let '(_, y, z, zm) := x in (y, z, zm))
+        (mfold_left update_top_inc b (Some (Ptrue, empty, nil, nil)))).
 
 (*Compute match update (T, mk_forest (PTree.empty _) (PTree.empty _) (NE.singleton (T, EEbase)))
   (RBop None Op.Odiv (1::2::nil) 3) with
