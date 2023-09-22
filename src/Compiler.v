@@ -293,7 +293,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GibleSeq 4)
   @@@ DeadBlocks.transf_program
    @@ print (print_GibleSeq 5)
-  @@@ GiblePargen.transl_program
+  @@@ time "Scheduling" GiblePargen.transl_program
    @@ print (print_GiblePar 0)
   @@@ HTLPargen.transl_program
    @@ print (print_DHTL 0)

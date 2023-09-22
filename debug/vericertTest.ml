@@ -104,14 +104,14 @@ let () =
   (*       ] ] ] *)
   (* then Printf.printf "Passed 1\n" *)
   (*  else Printf.printf "Failed 1\n"); *)
-  (if schedule_oracle []
-        [ const (Some (plit true 1)) 1 0;
-          const (Some (Por (plit true 1, plit false 1))) 1 1;
-        ]
-        [ [ [ const None 1 1;
-        ] ] ]
-   then Printf.printf "Passed 1\n"
-   else Printf.printf "Failed 1\n");
+  (* (if schedule_oracle [] *)
+  (*       [ const (Some (plit true 1)) 1 0; *)
+  (*         const (Some (Por (plit true 1, plit false 1))) 1 1; *)
+  (*       ] *)
+  (*       [ [ [ const None 1 1; *)
+  (*       ] ] ] *)
+  (*  then Printf.printf "Passed 1\n" *)
+  (*  else Printf.printf "Failed 1\n"); *)
   (* (if schedule_oracle [(pred 3, pred 2)] *)
   (*      [ add None 2 1 4; *)
   (*        seteq None 1 10 11; *)
@@ -172,35 +172,35 @@ let () =
   (*      ] ] ] *)
   (* then Printf.printf "Passed 110\n" *)
   (*    else Printf.printf "Failed 102\n"); *)
-  (*   (if schedule_oracle [(pred 3, pred 2)] *)
-  (*      [  *)
-  (*        seteq None 1 10 11; *)
-  (*        seteq None 3 12 13; *)
-  (*        seteq None 2 12 13; *)
-  (*        add None 2 1 4; *)
-  (*        mul (Some (Pand (plit false 1, plit false 3))) 3 1 1; *)
-  (*        mul (Some (Pand (plit false 1, plit false 3))) 5 3 3; *)
-  (*        goto (Some (Pand (plit false 1, plit false 3))) 10; *)
-  (*        mul (Some (Pand (plit false 1, plit true 3))) 3 1 4; *)
-  (*        goto (Some (Pand (plit false 1, plit true 3))) 10; *)
-  (*        add (Some (plit true 1)) 1 2 4; *)
-  (*        mul (Some (Pand (plit true 1, plit false 2))) 5 3 3; *)
-  (*        goto (Some (Pand (plit true 1, plit false 2))) 10; *)
-  (*        mul (Some (Pand (plit true 1, plit true 2))) 3 1 4; *)
-  (*        goto (Some (Pand (plit true 1, plit true 2))) 10; *)
-  (*      ] *)
-  (*      [ [ [ seteq None 1 10 11; *)
-  (*            seteq None 3 12 13; *)
-  (*            seteq None 2 12 13; *)
-  (*            mul (Some (Pand (plit false 1, plit false 2))) 3 1 1; *)
-  (*            add None 2 1 4; *)
-  (*            add (Some (plit true 1)) 1 2 4; *)
-  (*            mul (Some (Pand (plit false 1, plit true 2))) 3 1 4; *)
-  (*            mul (Some (Pand (plit true 1, plit true 2))) 3 1 4; *)
-  (*            mul (Some (Pand (plit false 1, plit false 2))) 5 3 3; *)
-  (*            mul (Some (Pand (plit true 1, plit false 2))) 5 3 3; *)
-  (*            goto None 10; *)
-  (*      ] ] ] *)
-  (* then Printf.printf "Passed 110\n" *)
-  (*    else Printf.printf "Failed 102\n") *)
+    (if schedule_oracle []
+       [
+         seteq None 1 10 11;
+         seteq None 3 12 13;
+         seteq None 2 12 13;
+         add None 2 1 4;
+         mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
+         mul (Some (Pand (plit false 1, plit false 2))) 5 3 3;
+         goto (Some (Pand (plit false 1, plit false 2))) 10;
+         mul (Some (Pand (plit false 1, plit true 2))) 3 1 4;
+         goto (Some (Pand (plit false 1, plit true 2))) 10;
+         add (Some (plit true 1)) 1 2 4;
+         mul (Some (Pand (plit true 1, plit false 2))) 5 3 3;
+         goto (Some (Pand (plit true 1, plit false 2))) 10;
+         mul (Some (Pand (plit true 1, plit true 2))) 3 1 4;
+         goto (Some (Pand (plit true 1, plit true 2))) 10;
+       ]
+       [ [ [ seteq None 1 10 11;
+             seteq None 3 12 13;
+             seteq None 2 12 13;
+             mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
+             add None 2 1 4;
+             add (Some (plit true 1)) 1 2 4;
+             mul (Some (Pand (plit false 1, plit true 2))) 3 1 4;
+             mul (Some (Pand (plit true 1, plit true 2))) 3 1 4;
+             mul (Some (Pand (plit false 1, plit false 2))) 5 3 3;
+             mul (Some (Pand (plit true 1, plit false 2))) 5 3 3;
+             goto None 10;
+       ] ] ]
+  then Printf.printf "Passed 110\n"
+     else Printf.printf "Failed 102\n")
 
