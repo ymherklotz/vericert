@@ -26,7 +26,12 @@ let schedule_oracle l bb bbt =
        let (p2, m_expr_t) = p1 in
        let (bbt', reg_expr_t) = p2 in
        printf "F1:\n%a\n" PrintAbstr.print_forest bb';
-       printf "F2:\n%a\n" PrintAbstr.print_forest bbt'; flush stdout;
+       printf "%a\n" PrintAbstr.print_evaluability_list reg_expr;
+       printf "%a\n" PrintAbstr.print_evaluability_list2 m_expr;
+       printf "F2:\n%a\n" PrintAbstr.print_forest bbt';
+       printf "%a\n" PrintAbstr.print_evaluability_list reg_expr_t;
+       printf "%a\n" PrintAbstr.print_evaluability_list2 m_expr_t;
+       flush stdout;
        (&&)
          ((&&) ((&&) (if check l bb' bbt' then true else (Printf.printf "Failed 1\n"; false)) (empty_trees bb bbt))
            (if (check_evaluability1 reg_expr reg_expr_t) then true else (Printf.printf "Failed 12\n"; false)))
@@ -179,12 +184,12 @@ let () =
          seteq None 2 12 13;
          add None 2 1 4;
          mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
-         mul (Some (Pand (plit false 1, plit false 2))) 5 3 3;
+         mul (Some (Pand (plit false 1, plit false 2))) 3 3 3;
          goto (Some (Pand (plit false 1, plit false 2))) 10;
          mul (Some (Pand (plit false 1, plit true 2))) 3 1 4;
          goto (Some (Pand (plit false 1, plit true 2))) 10;
          add (Some (plit true 1)) 1 2 4;
-         mul (Some (Pand (plit true 1, plit false 2))) 5 3 3;
+         mul (Some (Pand (plit true 1, plit false 2))) 3 3 3;
          goto (Some (Pand (plit true 1, plit false 2))) 10;
          mul (Some (Pand (plit true 1, plit true 2))) 3 1 4;
          goto (Some (Pand (plit true 1, plit true 2))) 10;
@@ -197,8 +202,8 @@ let () =
              add (Some (plit true 1)) 1 2 4;
              mul (Some (Pand (plit false 1, plit true 2))) 3 1 4;
              mul (Some (Pand (plit true 1, plit true 2))) 3 1 4;
-             mul (Some (Pand (plit false 1, plit false 2))) 5 3 3;
-             mul (Some (Pand (plit true 1, plit false 2))) 5 3 3;
+             mul (Some (Pand (plit false 1, plit false 2))) 3 3 3;
+             mul (Some (Pand (plit true 1, plit false 2))) 3 3 3;
              goto None 10;
        ] ] ]
   then Printf.printf "Passed 110\n"

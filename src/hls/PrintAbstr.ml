@@ -81,9 +81,22 @@ let print_forest_exit pp f =
   fprintf pp "------------------- Exit  -------------------\n";
   print_predicated_exit pp f
 
+let print_evaluability_list pp = function
+  | [] -> ()
+  | r -> (fprintf pp "------------------- Eval  -------------------\n";
+          fprintf pp "["; List.iter (fun x -> fprintf pp "%a = %a\n" res (fst x) print_predicated (snd x)) r; fprintf pp "]";
+         )
+
+let print_evaluability_list2 pp = function
+  | [] -> ()
+  | r -> (fprintf pp "------------------- Eval2 -------------------\n";
+          fprintf pp "["; List.iter (fun x -> fprintf pp "%a\n" print_predicated x) r; fprintf pp "]";
+         )
+
 let print_forest pp f =
   fprintf pp "#############################################\n";
   fprintf pp "%a\n%a\n%a\n"
     print_forest_regs f.forest_regs
     print_forest_preds f.forest_preds
     print_forest_exit f.forest_exit
+  

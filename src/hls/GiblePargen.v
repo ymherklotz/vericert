@@ -347,13 +347,13 @@ Definition remember_expr_inc (fop : pred_op * forest) (lst: list (resource * pre
   let (pred, f) := fop in
   match i with
   | RBnop => lst
-  | RBop p op rl r => (Reg r, (NE.map (fun x => (dfltp p ∧ pred ∧ fst x, snd x))
-        (seq_app (pred_ret (Eop op)) (merge (list_translation rl f))))) :: lst
-  | RBload p chunk addr rl r => (Reg r, (NE.map (fun x => (dfltp p ∧ pred ∧ fst x, snd x))
+  | RBop p op rl r => (Reg r, (app_predicated (dfltp p ∧ pred) (NE.singleton (Ptrue, Ebase (Reg 1))) (
+        (seq_app (pred_ret (Eop op)) (merge (list_translation rl f)))))) :: lst
+  | RBload p chunk addr rl r => (Reg r, (app_predicated (dfltp p ∧ pred) (NE.singleton (Ptrue, Ebase (Reg 1))) (
         (seq_app
           (seq_app (pred_ret (Eload chunk addr))
             (merge (list_translation rl f)))
-            (f #r Mem)))) :: lst
+            (f #r Mem))))) :: lst
   | RBstore p chunk addr rl r => lst
   | RBsetpred p' c args p =>  lst
   | RBexit p c => lst
@@ -365,7 +365,7 @@ Definition remember_expr_m_inc (fop : pred_op * forest) (lst: list pred_expr) (i
   | RBnop => lst
   | RBop p op rl r => lst
   | RBload  p chunk addr rl r => lst
-  | RBstore p chunk addr rl r => (NE.map (fun x => (dfltp p ∧ pred ∧ fst x, snd x))
+  | RBstore p chunk addr rl r => (app_predicated (dfltp p ∧ pred) (NE.singleton (Ptrue, Ebase Mem))
         (seq_app
           (seq_app
              (flap2 (seq_app (pred_ret Estore)
@@ -483,6 +483,15 @@ Definition check_evaluability2 a b :=
 
 Definition schedule_oracle (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   match abstract_sequence_top bb, abstract_sequence_top (concat (concat bbt)) with
+  | Some (bb', reg_expr, m_expr), Some (bbt', reg_expr_t, m_expr_t) =>
+      check nil bb' bbt' && empty_trees bb bbt
+      && check_evaluability1 reg_expr reg_expr_t
+      && check_evaluability2 m_expr m_expr_t
+  | _, _ => false
+  end.
+
+Definition schedule_oracle_inc (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
+  match abstract_sequence_top_inc bb, abstract_sequence_top_inc (concat (concat bbt)) with
   | Some (bb', reg_expr, m_expr), Some (bbt', reg_expr_t, m_expr_t) =>
       check nil bb' bbt' && empty_trees bb bbt
       && check_evaluability1 reg_expr reg_expr_t

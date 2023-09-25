@@ -210,6 +210,7 @@ Separate Extraction
          Bourdoncle.bourdoncle
 
    Smtpredicate.check_smt_total
+   GiblePargen.abstract_sequence_top_inc
 
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
