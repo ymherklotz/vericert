@@ -207,8 +207,6 @@ Fixpoint from_predicated_inv (a: predicated pred_expression): pred_op :=
 Definition simpl_combine {A: Type} (a b: option (@Predicate.pred_op A)) :=
   Option.map simplify (combine_pred a b).
 
-Definition dfltp {A} (p: option (@Predicate.pred_op A)) := Option.default T p.
-
 Definition assert_ (b: bool): option unit :=
   if b then Some tt else None.
 

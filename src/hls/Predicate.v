@@ -161,6 +161,8 @@ Section PRED_DEFINITION.
 
 End PRED_DEFINITION.
 
+Definition dfltp {A} (p: option (@Predicate.pred_op A)) := Option.default Ptrue p.
+
 Notation "A ∧ B" := (Pand A B) (at level 20) : pred_op.
 Notation "A ∨ B" := (Por A B) (at level 25) : pred_op.
 Notation "⟂" := (Pfalse) : pred_op.
