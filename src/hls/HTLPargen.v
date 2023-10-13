@@ -443,11 +443,11 @@ Program Definition transl_module (f: function) : res DHTL.module :=
                             (Maps.PTree.elements f.(GiblePar.fn_code)) (ret (PTree.empty _));
     match zle (Z.pos (max_pc_map _stmnt)) Integers.Int.max_unsigned,
             decide_order st fin rtrn stack start rst clk,
-            max_list_dec (GiblePar.fn_params f) st
+            max_list_dec (List.map reg_enc (GiblePar.fn_params f)) st
     with
     | left LEDATA, left MORD, left WFPARAMS =>
         ret (DHTL.mkmodule
-           f.(GiblePar.fn_params)
+           (List.map reg_enc f.(GiblePar.fn_params))
            _stmnt
            f.(fn_entrypoint)
            st
@@ -465,9 +465,9 @@ Program Definition transl_module (f: function) : res DHTL.module :=
            MORD
            _
            WFPARAMS)
-    | _, _, _ => error "More than 2^32 states."
+    | _, _, _ => error "More than 2^32 states"
     end
-  else error "Stack size misalignment.".
+  else error "Stack size misalignment".
 
 Definition transl_fundef := transf_partial_fundef transl_module.
 
@@ -485,4 +485,4 @@ Definition main_is_internal (p : GiblePar.program) : bool :=
 Definition transl_program (p : GiblePar.program) : Errors.res DHTL.program :=
   if main_is_internal p
   then transform_partial_program transl_fundef p
-  else Errors.Error (Errors.msg "Main function is not Internal.").
+  else Errors.Error (Errors.msg "Main function is not Internal").

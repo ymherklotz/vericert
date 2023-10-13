@@ -1066,13 +1066,248 @@ Ltac unfold_merge :=
     eauto.
   Qed.
 
-  (* Lemma transl_iop_correct: *)
-  (*   forall ge sp max_reg max_pred d d' curr_p next_p fin rtrn stack state rs ps m rs' ps' m' p op args dst asr arr asr' arr', *)
-  (*     transf_instr fin rtrn stack state (curr_p, d) (RBop p op args dst) = Errors.OK (next_p, d') -> *)
-  (*     step_instr ge sp (Iexec (mk_instr_state rs ps m)) (RBop p op args dst) (Iexec (mk_instr_state rs' ps m)) -> *)
-  (*     stmnt_runp tt asr arr d asr' arr' -> *)
-  (*     match_assocmaps max_reg max_pred rs ps asr' -> *)
-  (*     exists asr'', stmnt_runp tt asr arr d' asr'' arr' /\ match_assocmaps max_reg max_pred rs' ps' asr''. *)
-  (* Proof. *)
+  Definition e_assoc asr : reg_associations := mkassociations asr (AssocMap.empty _).
+  Definition e_assoc_arr asr : arr_associations := mkassociations asr (AssocMap.empty _).
+
+  Lemma transl_iop_correct:
+    forall sp max_reg max_pred d d' curr_p next_p fin rtrn stack state rs ps m rs' ps' p op args dst asr arr asr' arr',
+      transf_instr fin rtrn stack state (curr_p, d) (RBop p op args dst) = Errors.OK (next_p, d') ->
+      step_instr ge sp (Iexec (mk_instr_state rs ps m)) (RBop p op args dst) (Iexec (mk_instr_state rs' ps m)) ->
+      stmnt_runp tt (e_assoc asr) (e_assoc_arr arr) d (e_assoc asr') (e_assoc_arr arr') ->
+      match_assocmaps max_reg max_pred rs ps asr' ->
+      exists asr'', stmnt_runp tt (e_assoc asr) (e_assoc_arr arr) d' (e_assoc asr'') (e_assoc_arr arr') 
+        /\ match_assocmaps max_reg max_pred rs' ps' asr''.
+  Proof.
+    Admitted.
+
+  Lemma option_inv :
+    forall A x y,
+      @Some A x = Some y -> x = y.
+  Proof. intros. inversion H. trivial. Qed.
+
+  Lemma main_tprog_internal :
+    forall b,
+      Globalenvs.Genv.find_symbol tge tprog.(AST.prog_main) = Some b ->
+      exists f, Genv.find_funct_ptr (Genv.globalenv tprog) b = Some (AST.Internal f).
+  Proof.
+    intros.
+    destruct TRANSL. unfold main_is_internal in H1.
+    repeat (unfold_match H1). replace b with b0.
+    exploit function_ptr_translated; eauto. intros [tf [A B]].
+    unfold transl_fundef, AST.transf_partial_fundef, Errors.bind in B.
+    unfold_match B. inv B. econstructor. apply A.
+
+    apply option_inv. rewrite <- Heqo. rewrite <- H.
+    rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
+    trivial. symmetry; eapply Linking.match_program_main; eauto.
+  Qed.
+
+  Lemma transl_initial_states :
+    forall s1 : Smallstep.state (GiblePar.semantics prog),
+      Smallstep.initial_state (GiblePar.semantics prog) s1 ->
+      exists s2 : Smallstep.state (DHTL.semantics tprog),
+        Smallstep.initial_state (DHTL.semantics tprog) s2 /\ match_states s1 s2.
+  Proof.
+    induction 1.
+    destruct TRANSL. unfold main_is_internal in H4.
+    repeat (unfold_match H4).
+    assert (f = AST.Internal f1). apply option_inv.
+    rewrite <- Heqo0. rewrite <- H1. replace b with b0.
+    auto. apply option_inv. rewrite <- H0. rewrite <- Heqo.
+    trivial.
+    exploit function_ptr_translated; eauto.
+    intros [tf [A B]].
+    unfold transl_fundef, Errors.bind in B.
+    unfold AST.transf_partial_fundef, Errors.bind in B.
+    repeat (unfold_match B). inversion B. subst.
+    exploit main_tprog_internal; eauto; intros.
+    rewrite symbols_preserved. replace (AST.prog_main tprog) with (AST.prog_main prog).
+    apply Heqo. symmetry; eapply Linking.match_program_main; eauto.
+    inversion H5.
+    econstructor; split. econstructor.
+    apply (Genv.init_mem_transf_partial TRANSL'); eauto.
+    replace (AST.prog_main tprog) with (AST.prog_main prog).
+    rewrite symbols_preserved; eauto.
+    symmetry; eapply Linking.match_program_main; eauto.
+    apply H6.
+
+    constructor. inv B.
+    assert (Some (AST.Internal x) = Some (AST.Internal m)).
+    replace (AST.fundef DHTL.module) with (DHTL.fundef).
+    rewrite <- H6. setoid_rewrite <- A. trivial.
+    trivial. inv H7. assumption.
+  Qed.
+  #[local] Hint Resolve transl_initial_states : htlproof.
+
+  Lemma transl_final_states :
+    forall (s1 : Smallstep.state (GiblePar.semantics prog))
+           (s2 : Smallstep.state (DHTL.semantics tprog))
+           (r : Integers.Int.int),
+      match_states s1 s2 ->
+      Smallstep.final_state (GiblePar.semantics prog) s1 r ->
+      Smallstep.final_state (DHTL.semantics tprog) s2 r.
+  Proof.
+    intros. inv H0. inv H. inv H4. inv MF. constructor. reflexivity.
+  Qed.
+  #[local] Hint Resolve transl_final_states : htlproof.
+
+  Lemma ple_max_resource_function:
+    forall f r,
+      Ple r (max_reg_function f) ->
+      Ple (reg_enc r) (max_resource_function f).
+  Proof.
+    intros * Hple.
+    unfold max_resource_function, reg_enc, Ple in *. lia.
+  Qed.
+
+  Lemma ple_pred_max_resource_function:
+    forall f r,
+      Ple r (max_pred_function f) ->
+      Ple (pred_enc r) (max_resource_function f).
+  Proof.
+    intros * Hple.
+    unfold max_resource_function, pred_enc, Ple in *. lia.
+  Qed.
+
+  Lemma stack_correct_inv :
+    forall s,
+      stack_correct s = true ->
+      (0 <= s) /\ (s < Ptrofs.modulus) /\ (s mod 4 = 0).
+  Proof.
+    unfold stack_correct; intros.
+    crush.
+  Qed.
+
+  Lemma init_regs_empty:
+    forall l, init_regs nil l = (Registers.Regmap.init Values.Vundef).
+  Proof. destruct l; auto. Qed.
+
+  Lemma dhtl_init_regs_empty:
+    forall l, DHTL.init_regs nil l = (AssocMap.empty _).
+  Proof. destruct l; auto. Qed.
+
+Lemma assocmap_gempty :
+  forall n a,
+    find_assocmap n a (AssocMap.empty _) = ZToValue 0.
+Proof.
+  intros. unfold find_assocmap, AssocMapExt.get_default.
+  now rewrite AssocMap.gempty.
+Qed.
+
+Transparent Mem.load.
+Transparent Mem.store.
+Transparent Mem.alloc.
+  Lemma transl_callstate_correct:
+    forall (s : list GiblePar.stackframe) (f : GiblePar.function) (args : list Values.val)
+      (m : mem) (m' : Mem.mem') (stk : Values.block),
+      Mem.alloc m 0 (GiblePar.fn_stacksize f) = (m', stk) ->
+      forall R1 : DHTL.state,
+        match_states (GiblePar.Callstate s (AST.Internal f) args m) R1 ->
+        exists R2 : DHTL.state,
+          Smallstep.plus DHTL.step tge R1 Events.E0 R2 /\
+          match_states
+            (GiblePar.State s f (Values.Vptr stk Integers.Ptrofs.zero) (GiblePar.fn_entrypoint f)
+                       (Gible.init_regs args (GiblePar.fn_params f)) (PMap.init false) m') R2.
+  Proof.
+    intros * H R1 MSTATE.
+
+    inversion MSTATE; subst. inversion TF; subst.
+    econstructor. split. apply Smallstep.plus_one.
+    eapply DHTL.step_call.
+
+    unfold transl_module, Errors.bind, Errors.bind2, ret in *. 
+    repeat (destruct_match; try discriminate; []). inv TF. cbn.
+    econstructor; eauto; inv MSTATE; inv H1; eauto.
+
+    - constructor; intros.
+      + pose proof (ple_max_resource_function f r H0) as Hple.
+        unfold Ple in *. repeat rewrite assocmap_gso by lia. rewrite init_regs_empty.
+        rewrite dhtl_init_regs_empty. rewrite assocmap_gempty. rewrite Registers.Regmap.gi. 
+        constructor.
+      + pose proof (ple_pred_max_resource_function f r H0) as Hple.
+        unfold Ple in *. repeat rewrite assocmap_gso by lia.
+        rewrite dhtl_init_regs_empty. rewrite assocmap_gempty. rewrite PMap.gi.
+        auto.
+    - cbn in *. unfold state_st_wf. repeat rewrite AssocMap.gso by lia.
+      now rewrite AssocMap.gss.
+    - constructor.
+    - unfold DHTL.empty_stack. cbn in *. econstructor. repeat split; intros.
+      + now rewrite AssocMap.gss.
+      + cbn. now rewrite list_repeat_len.
+      + destruct (Mem.loadv Mint32 m' (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:Heqn; constructor.
+        unfold Mem.loadv in Heqn. destruct_match; try discriminate. cbn in Heqv0. 
+        symmetry in Heqv0. inv Heqv0.
+        pose proof Mem.load_alloc_same as LOAD_ALLOC.
+        pose proof H as ALLOC.
+        eapply LOAD_ALLOC in ALLOC; eauto; subst. constructor.
+    - unfold reg_stack_based_pointers; intros. unfold stack_based.
+      unfold init_regs;
+      destruct (GiblePar.fn_params f);
+      rewrite Registers.Regmap.gi; constructor.
+    - unfold arr_stack_based_pointers; intros. unfold stack_based.
+      destruct (Mem.loadv Mint32 m' (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:LOAD; cbn; auto.
+      pose proof Mem.load_alloc_same as LOAD_ALLOC.
+      pose proof H as ALLOC.
+      eapply LOAD_ALLOC in ALLOC. now rewrite ALLOC.
+      exact LOAD.
+    - unfold stack_bounds; intros. split.
+      + unfold Mem.loadv. destruct_match; auto.
+        unfold Mem.load, Mem.alloc in *. inv H. cbn -[Ptrofs.max_unsigned] in *.
+        destruct_match; auto. unfold Mem.valid_access, Mem.range_perm, Mem.perm, Mem.perm_order' in *.
+        clear Heqs2. inv v0. cbn -[Ptrofs.max_unsigned] in *. inv Heqv0. exfalso.
+        specialize (H ptr). rewrite ! Ptrofs.add_zero_l in H. rewrite ! Ptrofs.unsigned_repr in H.
+        specialize (H ltac:(lia)). destruct_match; auto. rewrite PMap.gss in Heqo. 
+        destruct_match; try discriminate. simplify. apply proj_sumbool_true in H5. lia.
+        apply stack_correct_inv in Heqb. lia.
+      + unfold Mem.storev. destruct_match; auto.
+        unfold Mem.store, Mem.alloc in *. inv H. cbn -[Ptrofs.max_unsigned] in *.
+        destruct_match; auto. unfold Mem.valid_access, Mem.range_perm, Mem.perm, Mem.perm_order' in *.
+        clear Heqs2. inv v0. cbn -[Ptrofs.max_unsigned] in *. inv Heqv0. exfalso.
+        specialize (H ptr). rewrite ! Ptrofs.add_zero_l in H. rewrite ! Ptrofs.unsigned_repr in H.
+        specialize (H ltac:(lia)). destruct_match; auto. rewrite PMap.gss in Heqo. 
+        destruct_match; try discriminate. simplify. apply proj_sumbool_true in H5. lia.
+        apply stack_correct_inv in Heqb. lia.
+    - cbn; constructor; repeat rewrite PTree.gso by lia; now rewrite PTree.gss.
+  Qed.
+Opaque Mem.load.
+Opaque Mem.store.
+Opaque Mem.alloc.
+
+  Lemma transl_returnstate_correct:
+    forall (res0 : Registers.reg) (f : GiblePar.function) (sp : Values.val) (pc : Gible.node)
+      (rs : Gible.regset) (s : list GiblePar.stackframe) (vres : Values.val) (m : mem) ps
+      (R1 : DHTL.state),
+      match_states (GiblePar.Returnstate (GiblePar.Stackframe res0 f sp pc rs ps :: s) vres m) R1 ->
+      exists R2 : DHTL.state,
+        Smallstep.plus DHTL.step tge R1 Events.E0 R2 /\
+        match_states (GiblePar.State s f sp pc (Registers.Regmap.set res0 vres rs) ps m) R2.
+  Proof.
+    intros * MSTATE.
+    inversion MSTATE. inversion MF.
+  Qed.
+  #[local] Hint Resolve transl_returnstate_correct : htlproof.
+
+  Theorem transl_step_correct:
+    forall (S1 : GiblePar.state) t S2,
+      GiblePar.step ge S1 t S2 ->
+      forall (R1 : DHTL.state),
+        match_states S1 R1 ->
+        exists R2, Smallstep.plus DHTL.step tge R1 t R2 /\ match_states S2 R2.
+  Proof.
+    induction 1.
+    - inversion 1; subst. unfold transl_module, Errors.bind, Errors.bind2, ret in *. 
+    repeat (destruct_match; try discriminate; []). inv TF. cbn in *.
+    - now apply transl_callstate_correct.
+    - inversion 1.
+    - now apply transl_returnstate_correct.
+  Qed.
+  #[local] Hint Resolve transl_step_correct : htlproof.
+
+  Theorem transf_program_correct:
+    Smallstep.forward_simulation (GiblePar.semantics prog) (DHTL.semantics tprog).
+  Proof.
+    eapply Smallstep.forward_simulation_plus; eauto with htlproof.
+    apply senv_preserved.
+  Qed.
     
 End CORRECTNESS.
