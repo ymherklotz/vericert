@@ -75,6 +75,7 @@ Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
 Require vericert.hls.DMemorygen.
 Require vericert.hls.ClockRegisters.
+Require vericert.hls.ClockMemory.
 
 Require Import vericert.hls.HTLgenproof.
 
@@ -297,10 +298,12 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GiblePar 0)
   @@@ HTLPargen.transl_program
    @@ print (print_DHTL 0)
-   @@ DMemorygen.transf_program
+   @@ ClockMemory.transf_program
    @@ print (print_DHTL 1)
-  @@@ ClockRegisters.transl_program
+   @@ DMemorygen.transf_program
    @@ print (print_DHTL 2)
+  @@@ ClockRegisters.transf_program
+   @@ print (print_DHTL 3)
    @@ DVeriloggen.transl_program.
 
 (*|

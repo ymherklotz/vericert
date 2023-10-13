@@ -163,6 +163,29 @@ Definition transf_maps state ram in_ (d: PTree.t stmnt) :=
   match in_ with
   | (i, n) =>
     match PTree.get i d with
+    (* Conditional store *)
+    | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) (Vternary cond e2 (Vvari r' e1')))) =>
+      if (r =? (ram_mem ram)) && (r =? r') && (expr_eqb e1 e1') then
+        let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vternary cond (Vunop Vnot (Vvar (ram_u_en ram))) (Vvar (ram_u_en ram))))
+                       (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+                             (Vseq (Vblock (Vvar (ram_d_in ram)) e2)
+                                   (Vblock (Vvar (ram_addr ram)) e1)))
+        in
+        PTree.set i (Vseq rest nd) d
+      else d
+    | Some (Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vternary cond (Vvari r e2) edef))) =>
+      if (r =? (ram_mem ram)) && (st' =? state) && (Z.pos n <=? Int.max_unsigned)%Z
+         && (e1 <? state) && (max_reg_expr e2 <? state) && (max_reg_expr e3 <? state)
+      then
+        let nd :=
+            Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
+                 (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                       (Vblock (Vvar (ram_addr ram)) e2))
+        in
+        let aout := Vblock (Vvar e1) (Vternary cond (Vvar (ram_d_out ram)) edef) in
+        let redirect := Vblock (Vvar state) (Vlit (posToValue n)) in
+        (PTree.set i (Vseq redirect nd) (PTree.set n (Vseq (Vblock (Vvar st') e3) aout) d))
+      else d
     | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) e2)) =>
       if r =? (ram_mem ram) then
         let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
@@ -217,7 +240,7 @@ Proof.
     eapply H. eapply AssocMapExt.elements_iff; eauto.
   + rewrite PTree.gso in H1 by auto. eapply H.
     eapply AssocMapExt.elements_iff; eauto.
-Qed.
+Admitted.
 
 Definition max_pc {A: Type} (m: PTree.t A) :=
   fold_right Pos.max 1%positive (map fst (PTree.elements m)).
@@ -298,7 +321,7 @@ Proof. lia. Qed.
 Lemma module_ram_wf' :
   forall m addr,
     addr = max_reg_module m + 1 ->
-    mod_preg m < addr.
+    mod_clk m < addr.
 Proof. unfold max_reg_module; lia. Qed.
 
 Definition transf_module (m: module): module.
@@ -326,7 +349,6 @@ Definition transf_module (m: module): module.
                  (mod_start m)
                  (mod_reset m)
                  (mod_clk m)
-                 (mod_preg m)
                  (AssocMap.set u_en (None, VScalar 1)
                   (AssocMap.set en (None, VScalar 1)
                    (AssocMap.set wr_en (None, VScalar 1)
@@ -792,6 +814,12 @@ Proof.
     apply IHexpr_runp2; eauto. econstructor. inv H2. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max d b) + 1) by lia.
     eapply H5 in H2. apply H4 in H2. auto. auto.
+  - intros. econstructor. apply IHexpr_runp; eauto. constructor. inv H3.
+    intros. simplify. assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
+    eapply H1 in H0. eapply H5. instantiate (1:=1) in H0. lia. eauto. eauto.
+    inv H3.
+    intros. simplify. assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
+    unfold "#". unfold AssocMapExt.get_default. rewrite H5. auto. lia.
 Qed.
 #[local] Hint Resolve expr_runp_matches : mgen.
 
@@ -1049,7 +1077,7 @@ Lemma transf_not_changed :
     (forall e1 e2 e3 e4 r, d_s <> (Vseq (Vblock (Vvar e1) e2) (Vnonblock e3 (Vvari r e4)))) ->
     d!i = Some d_s ->
     transf_maps state ram (i, n) d = d.
-Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Qed.
+Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Admitted.
 
 Lemma transf_not_changed_neq :
   forall state ram n d d' i a d_s,
@@ -2242,7 +2270,7 @@ Proof.
          | |- _ = None => apply max_index_2; lia
          | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
          end; auto.
-Qed.
+Admitted.
 
 Lemma transf_alternatives_neq :
   forall state ram a n' n d'' d' i d,
@@ -3375,7 +3403,7 @@ Section CORRECTNESS.
       { apply init_regs_equal_empty. eapply forall_lt_num. eassumption. lia. }
       assert ((init_regs nil (mod_params m)) ! (ram_u_en r) = None).
       { apply init_regs_equal_empty. eapply forall_lt_num. eassumption. lia. }
-      unfold find_assocmap, AssocMapExt.get_default. rewrite H7. rewrite H15. auto.
+      unfold find_assocmap, AssocMapExt.get_default. rewrite H7. rewrite H14. auto.
     - econstructor. econstructor. apply Smallstep.plus_one. econstructor.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).

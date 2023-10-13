@@ -32,13 +32,16 @@ Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.Array.
 Require Import vericert.hls.DHTL.
-Require Import vericert.common.Monad.
-Require Import vericert.common.Optionmonad.
 Require vericert.hls.Verilog.
 
-Import OptionExtra.
+Require Import vericert.common.Errormonad.
+Import ErrorMonad.
+Import ErrorMonadExtra.
+Import MonadNotation.
 
 #[local] Open Scope monad_scope.
+
+Definition error {A} m := @Errors.Error A (Errors.msg m).
 
 Definition pred := positive.
 
@@ -70,111 +73,90 @@ Module RTree := ITree(R_indexed).
 
 Inductive flat_expr : Type :=
 | FVlit : value -> flat_expr
-| FVvar : lhs -> flat_expr
+| FVvar : reg -> flat_expr
 | FVbinop : Verilog.binop -> flat_expr -> flat_expr -> flat_expr
 | FVunop : Verilog.unop -> flat_expr -> flat_expr
 | FVternary : flat_expr -> flat_expr -> flat_expr -> flat_expr
 .
 
 Inductive flat_stmnt : Type :=
-| FVblock : lhs -> flat_expr -> flat_stmnt
-| FVnonblock : lhs -> flat_expr -> flat_stmnt
+| FVblock : reg -> flat_expr -> flat_stmnt
+| FVnonblock : reg -> flat_expr -> flat_stmnt
 .
 
-Fixpoint flatten_expr (preg: reg) (e: Verilog.expr) : option flat_expr :=
+Fixpoint flatten_expr (e: Verilog.expr) : Errors.res flat_expr :=
   match e with
-  | Verilog.Vlit v => Some (FVlit v)
-  | Verilog.Vvar r => Some (FVvar (LhsReg r))
-  | Verilog.Vrange r (Verilog.Vlit i1) (Verilog.Vlit i2) =>
-    if Pos.eqb preg r && Int.eq i1 i2 then
-      match Int.unsigned i1 with
-      | Zpos p => Some (FVvar (LhsPred p))
-      | _ => None
-      end
-    else None
+  | Verilog.Vlit v => ret (FVlit v)
+  | Verilog.Vvar r => ret (FVvar r)
   | Verilog.Vunop u e => 
-    match flatten_expr preg e with
-    | Some fe => Some (FVunop u fe)
-    | _ => None
-    end
+    do fe <- flatten_expr e;
+    ret (FVunop u fe)
   | Verilog.Vbinop u e1 e2 => 
-    match flatten_expr preg e1, flatten_expr preg e2 with
-    | Some fe1, Some fe2 => Some (FVbinop u fe1 fe2)
-    | _, _ => None
-    end
+    do fe1 <- flatten_expr e1;
+    do fe2 <- flatten_expr e2;
+    ret (FVbinop u fe1 fe2)
   | Verilog.Vternary e1 e2 e3 => 
-    match flatten_expr preg e1, flatten_expr preg e2, flatten_expr preg e3 with
-    | Some fe1, Some fe2, Some fe3 => Some (FVternary fe1 fe2 fe3)
-    | _, _, _ => None
-    end
-  | _ => None
+    do fe1 <- flatten_expr e1;
+    do fe2 <- flatten_expr e2;
+    do fe3 <- flatten_expr e3;
+    ret (FVternary fe1 fe2 fe3)
+  | Verilog.Vrange _ _ _ => error "ClockRegisters: Could not translate Vrange"
+  | Verilog.Vvari _ _ => error "ClockRegisters: Could not translate Vvari"
+  | Verilog.Vinputvar _ => error "ClockRegisters: Could not translate Vinputvar"
   end.
 
-Fixpoint flatten_seq_block (preg: reg) (s: Verilog.stmnt) : option (list flat_stmnt) := 
+Fixpoint flatten_seq_block (s: Verilog.stmnt) : Errors.res (list flat_stmnt) := 
   match s with
-  | Verilog.Vskip => Some nil
+  | Verilog.Vskip => ret nil
   | Verilog.Vseq s1 s2 =>
-    match flatten_seq_block preg s1, flatten_seq_block preg s2 with
-    | Some s1', Some s2' => 
-      Some (s1' ++ s2')
-    | _, _ => None
-    end
+    do s1' <- flatten_seq_block s1;
+    do s2' <- flatten_seq_block s2;
+    ret (s1' ++ s2')
   | Verilog.Vblock (Verilog.Vvar r) e => 
-    match flatten_expr preg e with 
-    | Some fe => Some (FVblock (LhsReg r) fe :: nil)
-    | _ => None
-    end
-  | Verilog.Vblock (Verilog.Vrange r (Verilog.Vlit i1) (Verilog.Vlit i2)) e => 
-    if Pos.eqb preg r && Int.eq i1 i2 then
-      match Int.unsigned i1, flatten_expr preg e with 
-      | Zpos p, Some fe => Some (FVblock (LhsPred p) fe :: nil)
-      | _, _ => None
-      end
-    else None
+    do fe <- flatten_expr e;
+    ret (FVblock r fe :: nil)
+  (* | Verilog.Vblock (Verilog.Vrange r (Verilog.Vlit i1) (Verilog.Vlit i2)) e =>  *)
+  (*   if Pos.eqb preg r && Int.eq i1 i2 then *)
+  (*     match Int.unsigned i1, flatten_expr e with  *)
+  (*     | Zpos p, Some fe => Some (FVblock p fe :: nil) *)
+  (*     | _, _ => None *)
+  (*     end *)
+  (*   else None *)
   | Verilog.Vnonblock (Verilog.Vvar r) e => 
-    match flatten_expr preg e with 
-    | Some fe => Some (FVnonblock (LhsReg r) fe :: nil)
-    | _ => None
-    end
-  | Verilog.Vnonblock (Verilog.Vrange r (Verilog.Vlit i1) (Verilog.Vlit i2)) e => 
-    if Pos.eqb preg r && Int.eq i1 i2 then
-      match Int.unsigned i1, flatten_expr preg e with 
-      | Zpos p, Some fe => Some (FVnonblock (LhsPred p) fe :: nil)
-      | _, _ => None
-      end
-    else None
-  | _ => None
+    do fe <- flatten_expr e;
+    ret (FVnonblock r fe :: nil)
+  (* | Verilog.Vnonblock (Verilog.Vrange r (Verilog.Vlit i1) (Verilog.Vlit i2)) e =>  *)
+  (*   if Pos.eqb preg r && Int.eq i1 i2 then *)
+  (*     match Int.unsigned i1, flatten_expr e with  *)
+  (*     | Zpos p, Some fe => Some (FVnonblock p fe :: nil) *)
+  (*     | _, _ => None *)
+  (*     end *)
+  (*   else None *)
+  | _ => error "ClockRegisters: Could not translate seq_block"
   end.
 
-Fixpoint expand_expr (preg: reg) (f: flat_expr): Verilog.expr :=
+Fixpoint expand_expr (f: flat_expr): Verilog.expr :=
   match f with
   | FVlit l => Verilog.Vlit l
-  | FVvar (LhsReg r) => Verilog.Vvar r
-  | FVvar (LhsPred p) => Verilog.Vrange preg (Verilog.Vlit (Int.repr (Zpos p))) (Verilog.Vlit (Int.repr (Zpos p)))
-  | FVbinop b e1 e2 => Verilog.Vbinop b (expand_expr preg e1) (expand_expr preg e2)
-  | FVunop b e => Verilog.Vunop b (expand_expr preg e)
-  | FVternary e1 e2 e3 => Verilog.Vternary (expand_expr preg e1) (expand_expr preg e2) (expand_expr preg e3)
+  | FVvar r => Verilog.Vvar r
+  | FVbinop b e1 e2 => Verilog.Vbinop b (expand_expr e1) (expand_expr e2)
+  | FVunop b e => Verilog.Vunop b (expand_expr e)
+  | FVternary e1 e2 e3 => Verilog.Vternary (expand_expr e1) (expand_expr e2) (expand_expr e3)
   end.
 
-Definition expand_assignment (preg: reg) (f: flat_stmnt): Verilog.stmnt := 
+Definition expand_assignment (f: flat_stmnt): Verilog.stmnt := 
   match f with
-  | FVblock (LhsReg r) e => Verilog.Vblock (Verilog.Vvar r) (expand_expr preg e)
-  | FVnonblock (LhsReg r) e => Verilog.Vnonblock (Verilog.Vvar r) (expand_expr preg e)
-  | FVblock (LhsPred p) e => 
-    Verilog.Vblock (Verilog.Vrange preg (Verilog.Vlit (Int.repr (Zpos p))) 
-      (Verilog.Vlit (Int.repr (Zpos p)))) (expand_expr preg e)
-  | FVnonblock (LhsPred p) e => 
-    Verilog.Vnonblock (Verilog.Vrange preg (Verilog.Vlit (Int.repr (Zpos p))) 
-      (Verilog.Vlit (Int.repr (Zpos p)))) (expand_expr preg e)
+  | FVblock r e => Verilog.Vblock (Verilog.Vvar r) (expand_expr e)
+  | FVnonblock r e => Verilog.Vnonblock (Verilog.Vvar r) (expand_expr e)
   end.
 
-Definition fold_seq_block (preg: reg) (s: list flat_stmnt): Verilog.stmnt :=
-  fold_left (fun a b => Verilog.Vseq a (expand_assignment preg b)) s Verilog.Vskip.
+Definition fold_seq_block (s: list flat_stmnt): Verilog.stmnt :=
+  fold_left (fun a b => Verilog.Vseq a (expand_assignment b)) s Verilog.Vskip.
 
-Fixpoint clock_expr (t: RTree.t flat_expr) (f: flat_expr): flat_expr :=
+Fixpoint clock_expr (t: PTree.t flat_expr) (f: flat_expr): flat_expr :=
   match f with
   | FVvar r => 
-    match RTree.get r t with
+    match PTree.get r t with
     | Some e => e
     | None => FVvar r
     end
@@ -192,54 +174,44 @@ Definition clock_assignment (tl: RTree.t flat_expr * list flat_stmnt) (f: flat_s
   match f with
   | FVblock r e => 
     let fe := clock_expr t e in 
-    (RTree.set r fe t, l ++ (FVnonblock r fe :: nil))
+    (PTree.set r fe t, l ++ (FVnonblock r fe :: nil))
   | _ => (t, l ++ (f :: nil))
   end.
 
 Definition clock_assignments (s: list flat_stmnt): list flat_stmnt :=
   snd (fold_left clock_assignment s (RTree.empty _, nil)).
 
-Definition clock_stmnt_assignments (preg: reg) (s: Verilog.stmnt): option Verilog.stmnt :=
-  match flatten_seq_block preg s with
-  | Some fs => Some (fold_seq_block preg (clock_assignments fs))
-  | None => None
-  end.
+Definition clock_stmnt_assignments (s: Verilog.stmnt): Errors.res Verilog.stmnt :=
+  do fs <- flatten_seq_block s;
+  ret (fold_seq_block (clock_assignments fs)).
 
-Program Definition transf_module (m: DHTL.module) : option DHTL.module :=
-  match (PTree.fold (fun b i a => 
-           match b, clock_stmnt_assignments m.(mod_preg) a with 
-           | Some tb, Some a' => Some (PTree.set i a' tb)
-           | _, _ => None
-           end)) m.(mod_datapath) (Some (PTree.empty _)) with
-  | Some dp =>
-    Some (mkmodule m.(mod_params)
-      dp
-      m.(mod_entrypoint)
-      m.(mod_st)
-      m.(mod_stk)
-      m.(mod_stk_len)
-      m.(mod_finish)
-      m.(mod_return)
-      m.(mod_start)
-      m.(mod_reset)
-      m.(mod_clk)
-      m.(mod_preg)
-      m.(mod_scldecls)
-      m.(mod_arrdecls)
-      m.(mod_ram) 
-      _
-      m.(mod_ordering_wf)
-      m.(mod_ram_wf)
-      m.(mod_params_wf))
-  | _ => None
-  end.
+Program Definition transf_module (m: DHTL.module) : Errors.res DHTL.module :=
+  do dp <- PTree.fold (fun b i a =>
+             do tb <- b;
+             do a' <- clock_stmnt_assignments a;
+             ret (PTree.set i a' tb)) m.(mod_datapath) (Errors.OK (PTree.empty _));
+  ret (mkmodule m.(mod_params)
+    dp
+    m.(mod_entrypoint)
+    m.(mod_st)
+    m.(mod_stk)
+    m.(mod_stk_len)
+    m.(mod_finish)
+    m.(mod_return)
+    m.(mod_start)
+    m.(mod_reset)
+    m.(mod_clk)
+    m.(mod_scldecls)
+    m.(mod_arrdecls)
+    m.(mod_ram) 
+    _
+    m.(mod_ordering_wf)
+    m.(mod_ram_wf)
+    m.(mod_params_wf)).
 Next Obligation.
 Admitted.
 
-Definition transl_module (m : DHTL.module) : Errors.res DHTL.module :=
-  Verilog.handle_opt (Errors.msg "ClockRegisters: not translated") (transf_module m).
+Definition transf_fundef := transf_partial_fundef transf_module.
 
-Definition transl_fundef := transf_partial_fundef transl_module.
-
-Definition transl_program (p : DHTL.program) : Errors.res DHTL.program :=
-  transform_partial_program transl_fundef p.
+Definition transf_program (p : DHTL.program) : Errors.res DHTL.program :=
+  transform_partial_program transf_fundef p.

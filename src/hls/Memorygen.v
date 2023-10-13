@@ -686,6 +686,12 @@ Proof.
     apply IHexpr_runp2; eauto. econstructor. inv H2. simplify.
     assert (forall a b c d, a < b + 1 -> a < Pos.max c (Pos.max d b) + 1) by lia.
     eapply H5 in H2. apply H4 in H2. auto. auto.
+  - intros. econstructor. apply IHexpr_runp; eauto. constructor. inv H3.
+    intros. simplify. assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
+    eapply H1 in H0. eapply H5. instantiate (1:=1) in H0. lia. eauto. eauto.
+    inv H3.
+    intros. simplify. assert (forall a b c, a < b + 1 -> a < Pos.max b c + 1) by lia.
+    unfold "#". unfold AssocMapExt.get_default. rewrite H5. auto. lia.
 Qed.
 #[local] Hint Resolve expr_runp_matches : mgen.
 

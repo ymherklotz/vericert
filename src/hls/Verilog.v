@@ -441,7 +441,14 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       expr_runp fext reg stack c vc ->
       expr_runp fext reg stack fs vf ->
       valueToBool vc = false ->
-      expr_runp fext reg stack (Vternary c ts fs) vf.
+      expr_runp fext reg stack (Vternary c ts fs) vf
+  | erun_Vrange :
+      forall fext reg stack r e1 e2 v vc vres b,
+      expr_runp fext reg stack e1 vc ->
+      reg#r = v ->
+      Int.testbit v (Int.unsigned vc) = b ->
+      vres = boolToValue b ->
+      expr_runp fext reg stack (Vrange r e1 e2) vres.
 #[export] Hint Constructors expr_runp : verilog.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
@@ -680,6 +687,15 @@ Fixpoint stmnt_to_list st :=
   | Stmntcons e s r => (e, s) :: stmnt_to_list r
   | Stmntnil => nil
   end.
+
+  Lemma int_inj :
+    forall x y,
+      Int.unsigned x = Int.unsigned y ->
+      x = y.
+  Proof.
+    intros. rewrite <- Int.repr_unsigned at 1. rewrite <- Int.repr_unsigned.
+    rewrite <- H. trivial.
+  Qed.
 
 Lemma expr_runp_determinate :
   forall f e asr asa v,

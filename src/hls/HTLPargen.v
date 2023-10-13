@@ -36,6 +36,7 @@ Require Import vericert.hls.Predicate.
 Require Import vericert.common.Errormonad.
 Import ErrorMonad.
 Import ErrorMonadExtra.
+Import MonadNotation.
 
 #[local] Open Scope monad_scope.
 
@@ -48,59 +49,78 @@ Import ErrorMonadExtra.
 Record control_regs: Type := mk_control_regs {
   ctrl_st : reg;
   ctrl_stack : reg;
-  ctrl_preg : reg;
   ctrl_fin : reg;
   ctrl_return : reg;
 }.
 
-Definition pred_lit (preg: reg) (pred: predicate) :=
-  Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred)).
+(* Definition pred_lit (preg: reg) (pred: predicate) := *)
+(*   Vrange preg (Vlit (posToValue pred)) (Vlit (posToValue pred)). *)
 
-Fixpoint pred_expr (preg: reg) (p: pred_op) :=
+(* Fixpoint pred_expr (preg: reg) (p: pred_op) := *)
+(*   match p with *)
+(*   | Plit (b, pred) => *)
+(*     if b *)
+(*     then pred_lit preg pred *)
+(*     else Vunop Vnot (pred_lit preg pred) *)
+(*   | Ptrue => Vlit (ZToValue 1) *)
+(*   | Pfalse => Vlit (ZToValue 0) *)
+(*   | Pand p1 p2 => *)
+(*     Vbinop Vand (pred_expr preg p1) (pred_expr preg p2) *)
+(*   | Por p1 p2 => *)
+(*     Vbinop Vor (pred_expr preg p1) (pred_expr preg p2) *)
+(*   end. *)
+
+Definition pred_enc (pred: predicate) :=
+  xI pred.
+
+Definition reg_enc (r: reg) :=
+  xO r.
+
+Fixpoint pred_expr (p: pred_op) :=
   match p with
   | Plit (b, pred) =>
     if b
-    then pred_lit preg pred
-    else Vunop Vnot (pred_lit preg pred)
+    then Vvar (pred_enc pred)
+    else Vunop Vnot (Vvar (pred_enc pred))
   | Ptrue => Vlit (ZToValue 1)
   | Pfalse => Vlit (ZToValue 0)
   | Pand p1 p2 =>
-    Vbinop Vand (pred_expr preg p1) (pred_expr preg p2)
+    Vbinop Vand (pred_expr p1) (pred_expr p2)
   | Por p1 p2 =>
-    Vbinop Vor (pred_expr preg p1) (pred_expr preg p2)
+    Vbinop Vor (pred_expr p1) (pred_expr p2)
   end.
 
 Definition assignment : Type := expr -> expr -> stmnt.
 
 Definition translate_predicate (a : assignment)
-           (preg: reg) (p: option pred_op) (dst e: expr) :=
+           (p: option pred_op) (dst e: expr) :=
   match p with
   | None => a dst e
   | Some pos =>
     let pos' := deep_simplify peq pos in
     match sat_pred_simple (negate pos') with
     | None => a dst e
-    | Some _ => a dst (Vternary (pred_expr preg pos') e dst)
+    | Some _ => a dst (Vternary (pred_expr pos') e dst)
     end
   end.
  
-Definition state_goto (preg: reg) (p: option pred_op) (st : reg) (n : node) : stmnt :=
-  translate_predicate Vblock preg p (Vvar st) (Vlit (posToValue n)).
+Definition state_goto (p: option pred_op) (st : reg) (n : node) : stmnt :=
+  translate_predicate Vblock p (Vvar st) (Vlit (posToValue n)).
 
-Definition state_cond (preg: reg) (p: option pred_op) (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
-  translate_predicate Vblock preg p (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
+Definition state_cond (p: option pred_op) (st : reg) (c : expr) (n1 n2 : node) : stmnt :=
+  translate_predicate Vblock p (Vvar st) (Vternary c (posToExpr n1) (posToExpr n2)).
 
-Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar dst) e.
-Definition block (dst : reg) (e : expr) := Vblock (Vvar dst) e.
+Definition nonblock (dst : reg) (e : expr) := Vnonblock (Vvar (reg_enc dst)) e.
+Definition block (dst : reg) (e : expr) := Vblock (Vvar (reg_enc dst)) e.
 
 Definition bop (op : binop) (r1 r2 : reg) : expr :=
-  Vbinop op (Vvar r1) (Vvar r2).
+  Vbinop op (Vvar (reg_enc r1)) (Vvar (reg_enc r2)).
 
 Definition boplit (op : binop) (r : reg) (l : Integers.int) : expr :=
-  Vbinop op (Vvar r) (Vlit (intToValue l)).
+  Vbinop op (Vvar (reg_enc r)) (Vlit (intToValue l)).
 
 Definition boplitz (op: binop) (r: reg) (l: Z) : expr :=
-  Vbinop op (Vvar r) (Vlit (ZToValue l)).
+  Vbinop op (Vvar (reg_enc r)) (Vlit (ZToValue l)).
 
 Definition error {A} m := @Errors.Error A (Errors.msg m).
 
@@ -180,7 +200,7 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : Errors
     else Errors.Error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2): address out of bounds")
   | Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
     if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
-    then Errors.OK (Vbinop Vadd (Vvar r1) (Vbinop Vadd (boplitz Vmul r2 scale) (Vlit (ZToValue offset))))
+    then Errors.OK (Vbinop Vadd (Vvar (reg_enc r1)) (Vbinop Vadd (boplitz Vmul r2 scale) (Vlit (ZToValue offset))))
     else Errors.Error (Errors.msg "Veriloggen: translate_eff_addressing (Aindexed2scaled): address out of bounds")
   | Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
@@ -196,9 +216,9 @@ Definition translate_eff_addressing (a: Op.addressing) (args: list reg) : Errors
 (** Translate an instruction to a statement. FIX mulhs mulhu *)
 Definition translate_instr (op : Op.operation) (args : list reg) : Errors.res expr :=
   match op, args with
-  | Op.Omove, r::nil => Errors.OK (Vvar r)
+  | Op.Omove, r::nil => Errors.OK (Vvar (reg_enc r))
   | Op.Ointconst n, _ => Errors.OK (Vlit (intToValue n))
-  | Op.Oneg, r::nil => Errors.OK (Vunop Vneg (Vvar r))
+  | Op.Oneg, r::nil => Errors.OK (Vunop Vneg (Vvar (reg_enc r)))
   | Op.Osub, r1::r2::nil => Errors.OK (bop Vsub r1 r2)
   | Op.Omul, r1::r2::nil => Errors.OK (bop Vmul r1 r2)
   | Op.Omulimm n, r::nil => Errors.OK (boplit Vmul r n)
@@ -214,15 +234,15 @@ Definition translate_instr (op : Op.operation) (args : list reg) : Errors.res ex
   | Op.Oorimm n, r::nil => Errors.OK (boplit Vor r n)
   | Op.Oxor, r1::r2::nil => Errors.OK (bop Vxor r1 r2)
   | Op.Oxorimm n, r::nil => Errors.OK (boplit Vxor r n)
-  | Op.Onot, r::nil => Errors.OK (Vunop Vnot (Vvar r))
+  | Op.Onot, r::nil => Errors.OK (Vunop Vnot (Vvar (reg_enc r)))
   | Op.Oshl, r1::r2::nil => Errors.OK (bop Vshl r1 r2)
   | Op.Oshlimm n, r::nil => Errors.OK (boplit Vshl r n)
   | Op.Oshr, r1::r2::nil => Errors.OK (bop Vshr r1 r2)
   | Op.Oshrimm n, r::nil => Errors.OK (boplit Vshr r n)
   | Op.Oshrximm n, r::nil =>
-    Errors.OK (Vternary (Vbinop Vlt (Vvar r) (Vlit (ZToValue 0)))
-                  (Vunop Vneg (Vbinop Vshru (Vunop Vneg (Vvar r)) (Vlit n)))
-                  (Vbinop Vshru (Vvar r) (Vlit n)))
+    Errors.OK (Vternary (Vbinop Vlt (Vvar (reg_enc r)) (Vlit (ZToValue 0)))
+                  (Vunop Vneg (Vbinop Vshru (Vunop Vneg (Vvar (reg_enc r))) (Vlit n)))
+                  (Vbinop Vshru (Vvar (reg_enc r)) (Vlit n)))
   | Op.Oshru, r1::r2::nil => Errors.OK (bop Vshru r1 r2)
   | Op.Oshruimm n, r::nil => Errors.OK (boplit Vshru r n)
   | Op.Ororimm n, r::nil => Errors.Error (Errors.msg "Htlpargen: Instruction not implemented: Ororimm")
@@ -232,7 +252,7 @@ Definition translate_instr (op : Op.operation) (args : list reg) : Errors.res ex
   | Op.Ocmp c, _ => translate_condition c args
   | Op.Osel c AST.Tint, r1::r2::rl =>
     do tc <- translate_condition c rl;
-    Errors.OK (Vternary tc (Vvar r1) (Vvar r2))
+    Errors.OK (Vternary tc (Vvar (reg_enc r1)) (Vvar (reg_enc r2)))
   | Op.Olea a, _ => translate_eff_addressing a args
   | _, _ => Errors.Error (Errors.msg "Htlpargen: Instruction not implemented: other")
   end.
@@ -267,18 +287,18 @@ Fixpoint enumerate (i : nat) (ns : list node) {struct ns} : list (nat * node) :=
 
 Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
   List.map (fun a => match a with
-                    (i, n) => (Vlit (natToValue i), Vnonblock (Vvar st) (Vlit (posToValue n)))
+                    (i, n) => (Vlit (natToValue i), Vblock (Vvar st) (Vlit (posToValue n)))
                   end)
            (enumerate 0 ns).
 
-Definition translate_cfi (fin rtrn state preg: reg) p (cfi: cf_instr)
+Definition translate_cfi (fin rtrn state: reg) p (cfi: cf_instr)
   : Errors.res stmnt :=
   match cfi with
   | RBgoto n' =>
-    Errors.OK (state_goto preg p state n')
+    Errors.OK (state_goto p state n')
   | RBcond c args n1 n2 =>
     do e <- translate_condition c args;
-    Errors.OK (state_cond preg p state e n1 n2)
+    Errors.OK (state_cond p state e n1 n2)
   | RBreturn r =>
     match r with
     | Some r' =>
@@ -296,7 +316,7 @@ Definition translate_cfi (fin rtrn state preg: reg) p (cfi: cf_instr)
     Errors.Error (Errors.msg "HTLPargen: RBbuildin not supported.")
   end.
 
-Definition transf_instr (fin rtrn stack state preg: reg) 
+Definition transf_instr (fin rtrn stack state: reg) 
            (dc: pred_op * stmnt) (i: instr)
            : Errors.res (pred_op * stmnt) :=
   let '(curr_p, d) := dc in
@@ -305,38 +325,38 @@ Definition transf_instr (fin rtrn stack state preg: reg)
   | RBnop => Errors.OK dc
   | RBop p op args dst => 
     do instr <- translate_instr op args;
-    let stmnt := translate_predicate Vblock preg (npred p) (Vvar dst) instr in
+    let stmnt := translate_predicate Vblock (npred p) (Vvar dst) instr in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBload p mem addr args dst =>
     do src <- translate_arr_access mem addr args stack;
-    let stmnt := translate_predicate Vnonblock preg (npred p) (Vvar dst) src in
+    let stmnt := translate_predicate Vblock (npred p) (Vvar dst) src in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBstore p mem addr args src =>
     do dst <- translate_arr_access mem addr args stack;
-    let stmnt := translate_predicate Vnonblock preg (npred p) dst (Vvar src) in
+    let stmnt := translate_predicate Vblock (npred p) dst (Vvar src) in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBsetpred p' cond args p =>
     do cond' <- translate_condition cond args;
-    let stmnt := translate_predicate Vblock preg (npred p') (pred_expr preg (Plit (true, p))) cond' in
+    let stmnt := translate_predicate Vblock (npred p') (pred_expr (Plit (true, p))) cond' in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBexit p cf => 
-    do d_stmnt <- translate_cfi fin rtrn state preg (npred p) cf;
+    do d_stmnt <- translate_cfi fin rtrn state (npred p) cf;
     Errors.OK (Pand curr_p (negate (dfltp p)), Vseq d d_stmnt)
   end.
 
-Definition transf_chained_block (fin rtrn stack state preg: reg)
+Definition transf_chained_block (fin rtrn stack state: reg)
            (dc: @pred_op positive * stmnt)
            (block: list instr)
            : Errors.res (pred_op * stmnt) :=
-  mfold_left (transf_instr fin rtrn stack state preg) block (ret dc).
+  mfold_left (transf_instr fin rtrn stack state) block (ret dc).
 
-Definition transf_parallel_block (fin rtrn stack state preg: reg)
+Definition transf_parallel_block (fin rtrn stack state: reg)
            (dc: @pred_op positive * stmnt)
            (block: list (list instr))
            : Errors.res (pred_op * stmnt) :=
-  mfold_left (transf_chained_block fin rtrn stack state preg) block (ret dc).
+  mfold_left (transf_chained_block fin rtrn stack state) block (ret dc).
 
-Definition transf_parallel_full_block (fin rtrn stack state preg: reg)
+Definition transf_parallel_full_block (fin rtrn stack state: reg)
            (dc: node * @pred_op positive * datapath)
            (block: list (list instr))
            : Errors.res (node * pred_op * datapath) :=
@@ -344,25 +364,25 @@ Definition transf_parallel_full_block (fin rtrn stack state preg: reg)
   match AssocMap.get n dt with
   | None =>
     do ctrl_init_stmnt <-
-          translate_cfi fin rtrn state preg (Some curr_p) (RBgoto (n - 1)%positive);
-    do dc' <- transf_parallel_block fin rtrn stack state preg (curr_p, ctrl_init_stmnt) block;
+          translate_cfi fin rtrn state (Some curr_p) (RBgoto (n - 1)%positive);
+    do dc' <- transf_parallel_block fin rtrn stack state (curr_p, ctrl_init_stmnt) block;
     let '(curr_p', dt_stmnt) := dc' in
     Errors.OK ((n - 1)%positive, curr_p', AssocMap.set n dt_stmnt dt)
   | _ => Errors.Error (msg "HtlPargen.transf_parallel_full_block: block not empty")
   end.
 
-Definition transf_seq_block (fin rtrn stack state preg: reg)
+Definition transf_seq_block (fin rtrn stack state: reg)
            (d: datapath) (n: node)
            (block: list (list (list instr)))
            : Errors.res datapath :=
   do res <- mfold_left
-    (transf_parallel_full_block fin rtrn stack state preg) block (ret (n, Ptrue, d));
+    (transf_parallel_full_block fin rtrn stack state) block (ret (n, Ptrue, d));
   let '(_, _, d') := res in
   Errors.OK d'.
 
 Definition transf_seq_blockM (ctrl: control_regs) (d: datapath) (ni: node * ParBB.t): res datapath :=
     let (n, i) := ni in
-    transf_seq_block ctrl.(ctrl_fin) ctrl.(ctrl_return) ctrl.(ctrl_stack) ctrl.(ctrl_st) ctrl.(ctrl_preg) d n i.
+    transf_seq_block ctrl.(ctrl_fin) ctrl.(ctrl_return) ctrl.(ctrl_stack) ctrl.(ctrl_st) d n i.
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
@@ -396,9 +416,9 @@ Proof.
   simplify. transitivity (Z.pos (max_pc_map m)); eauto.
 Qed.
 
-Definition decide_order a b c d e f g h : {module_ordering a b c d e f g h} + {True}.
+Definition decide_order a b c d e f g : {module_ordering a b c d e f g} + {True}.
   refine (match bool_dec ((a <? b) && (b <? c) && (c <? d)
-                          && (d <? e) && (e <? f) && (f <? g) && (g <? h))%positive true with
+                          && (d <? e) && (e <? f) && (f <? g))%positive true with
           | left t => left _
           | _ => _
           end); auto.
@@ -407,20 +427,22 @@ Definition decide_order a b c d e f g h : {module_ordering a b c d e f g h} + {T
                    end; unfold module_ordering; auto.
 Defined.
 
+Definition max_resource_function (f: function) :=
+  Pos.max (reg_enc (max_reg_function f)) (pred_enc (max_pred_function f)).
+
 Program Definition transl_module (f: function) : res DHTL.module :=
   if stack_correct f.(fn_stacksize) then
-    let st := Pos.succ (max_reg_function f) in
+    let st := Pos.succ (max_resource_function f) in
     let fin := Pos.succ st in
     let rtrn := Pos.succ fin in
     let stack := Pos.succ rtrn in
     let start := Pos.succ stack in
     let rst := Pos.succ start in
     let clk := Pos.succ rst in
-    let preg := Pos.succ clk in 
-    do _stmnt <- mfold_left (transf_seq_blockM (mk_control_regs st stack preg fin rtrn)) 
+    do _stmnt <- mfold_left (transf_seq_blockM (mk_control_regs st stack fin rtrn)) 
                             (Maps.PTree.elements f.(GiblePar.fn_code)) (ret (PTree.empty _));
     match zle (Z.pos (max_pc_map _stmnt)) Integers.Int.max_unsigned,
-            decide_order st fin rtrn stack start rst clk preg,
+            decide_order st fin rtrn stack start rst clk,
             max_list_dec (GiblePar.fn_params f) st
     with
     | left LEDATA, left MORD, left WFPARAMS =>
@@ -436,7 +458,6 @@ Program Definition transl_module (f: function) : res DHTL.module :=
            start
            rst
            clk
-           preg
            (AssocMap.empty _)
            (AssocMap.empty _)
            None
