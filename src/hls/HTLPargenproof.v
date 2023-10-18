@@ -69,8 +69,9 @@ Inductive match_arrs (stack_size: Z) (stk: positive) (stk_len: nat) (sp : Values
 | match_arr : forall asa stack,
     asa ! stk = Some stack /\
     stack.(arr_length) = Z.to_nat (stack_size / 4) /\
+    stack.(arr_length) = stk_len /\
     (forall ptr,
-        0 <= ptr < Z.of_nat stk_len ->
+        0 <= ptr < Z.of_nat stack.(arr_length) ->
         opt_val_value_lessdef (Mem.loadv AST.Mint32 mem
                                          (Values.Val.offset_ptr sp (Ptrofs.repr (4 * ptr))))
                               (Option.default (NToValue 0)
@@ -144,6 +145,22 @@ Inductive match_states : GiblePar.state -> DHTL.state -> Prop :=
       match_states (GiblePar.Callstate nil (AST.Internal f) nil m0) (DHTL.Callstate nil m nil).
 #[local] Hint Constructors match_states : htlproof.
 
+Inductive match_states_reduced : nat -> GiblePar.state -> DHTL.state -> Prop :=
+| match_states_reduced_intro : forall asa asr sf f sp sp' rs mem m st res ps n
+    (MASSOC : match_assocmaps (max_reg_function f) (max_pred_function f) rs ps asr)
+    (TF : transl_module f = Errors.OK m)
+    (WF : state_st_wf asr m.(DHTL.mod_st) (Pos.of_nat (Pos.to_nat st - n)%nat))
+    (MF : match_frames sf res)
+    (MARR : match_arrs f.(fn_stacksize) m.(DHTL.mod_stk) m.(DHTL.mod_stk_len) sp mem asa)
+    (SP : sp = Values.Vptr sp' (Ptrofs.repr 0))
+    (RSBP : reg_stack_based_pointers sp' rs)
+    (ASBP : arr_stack_based_pointers sp' mem (f.(GiblePar.fn_stacksize)) sp)
+    (BOUNDS : stack_bounds sp (f.(GiblePar.fn_stacksize)) mem)
+    (CONST : match_constants m.(DHTL.mod_reset) m.(DHTL.mod_finish) asr),
+    (* Add a relation about ps compared with the state register. *)
+    match_states_reduced n (GiblePar.State sf f sp st rs ps mem)
+                 (DHTL.State res m (Pos.of_nat (Pos.to_nat st - n)%nat) asr asa).
+
 Definition match_prog (p: GiblePar.program) (tp: DHTL.program) :=
   Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp /\
   main_is_internal p = true.
@@ -212,11 +229,11 @@ Lemma plt_pred_enc :
   forall a b, Ple a b -> Ple (pred_enc a) (pred_enc b).
 Proof. unfold Ple, reg_enc, pred_enc in *; intros. lia. Qed.
 
-Lemma reg_enc_inj : 
+Lemma reg_enc_inj :
   forall a b, reg_enc a = reg_enc b -> a = b.
 Proof. unfold reg_enc; intros; lia. Qed.
 
-Lemma pred_enc_inj : 
+Lemma pred_enc_inj :
   forall a b, pred_enc a = pred_enc b -> a = b.
 Proof. unfold pred_enc; intros; lia. Qed.
 
@@ -639,7 +656,7 @@ Section CORRECTNESS.
       Forall (fun x => Ple x m) l ->
       In y l ->
       Ple y m.
-  Proof. 
+  Proof.
     intros. eapply Forall_forall in H; eauto.
   Qed.
 
@@ -888,11 +905,11 @@ Section CORRECTNESS.
       val_value_lessdef (Values.Val.add a b) (Int.add a' b').
   Proof.
     intros * HPLE HPLE0.
-    inv HPLE; inv HPLE0; cbn in *; unfold valueToInt; 
+    inv HPLE; inv HPLE0; cbn in *; unfold valueToInt;
     try destruct_match; constructor; auto; unfold valueToPtr;
-    unfold Ptrofs.of_int; apply ptrofs_inj; 
+    unfold Ptrofs.of_int; apply ptrofs_inj;
     rewrite Ptrofs.unsigned_repr by auto with int_ptrofs;
-    [rewrite Int.add_commut|]; apply Ptrofs.agree32_add; auto; 
+    [rewrite Int.add_commut|]; apply Ptrofs.agree32_add; auto;
     rewrite <- Int.repr_unsigned; now apply Ptrofs.agree32_repr.
   Qed.
 
@@ -903,7 +920,7 @@ Section CORRECTNESS.
   Proof.
     intros * HPLE.
     inv HPLE; cbn in *; unfold valueToInt; try destruct_match; try constructor; auto.
-    unfold valueToPtr. apply ptrofs_inj. unfold Ptrofs.of_int. 
+    unfold valueToPtr. apply ptrofs_inj. unfold Ptrofs.of_int.
     rewrite Ptrofs.unsigned_repr by auto with int_ptrofs.
     apply Ptrofs.agree32_add; auto. rewrite <- Int.repr_unsigned.
     apply Ptrofs.agree32_repr; auto.
@@ -924,7 +941,7 @@ Section CORRECTNESS.
     pose proof MSTATE as MSTATE_2. inv MSTATE.
     inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
     unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
-    repeat (simplify; eval_correct_tac; unfold valueToInt in *);  
+    repeat (simplify; eval_correct_tac; unfold valueToInt in *);
     repeat (apply Forall_cons_iff in INSTR; destruct INSTR as (?HPLE & INSTR));
       try (apply H in HPLE); try (apply H in HPLE0).
     - do 2 econstructor; eauto. repeat econstructor.
@@ -957,9 +974,9 @@ Section CORRECTNESS.
     - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shl'.
     - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shr.
     - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shr'.
-    - inv H2. rewrite Heqv0 in HPLE. inv HPLE. 
-      assert (0 <= 31 <= Int.max_unsigned). 
-      { pose proof Int.two_wordsize_max_unsigned as Y. 
+    - inv H2. rewrite Heqv0 in HPLE. inv HPLE.
+      assert (0 <= 31 <= Int.max_unsigned).
+      { pose proof Int.two_wordsize_max_unsigned as Y.
         unfold Int.zwordsize, Int.wordsize, Wordsize_32.wordsize in Y. lia. }
       assert (Int.unsigned n <= 30).
       { unfold Int.ltu in Heqb. destruct_match; try discriminate.
@@ -978,7 +995,7 @@ Section CORRECTNESS.
           assert (Int.signed (find_assocmap 32 (reg_enc p) asr) >= 0 -> False) by auto. apply H3. unfold Int.lt in HLT.
           destruct_match; try discriminate. auto. }
         destruct_match; try discriminate.
-        do 2 econstructor; eauto. eapply erun_Vternary_false; repeat econstructor. 
+        do 2 econstructor; eauto. eapply erun_Vternary_false; repeat econstructor.
         now rewrite HLT.
         constructor; cbn. unfold IntExtra.shrx_alt. rewrite Heqs. auto.
     - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shru.
@@ -993,12 +1010,12 @@ Section CORRECTNESS.
         apply eval_correct_add; auto. apply eval_correct_add; auto.
         constructor; auto.
       + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
-        apply eval_correct_add; try constructor; auto. 
-        apply eval_correct_mul; try constructor; auto. 
+        apply eval_correct_add; try constructor; auto.
+        apply eval_correct_mul; try constructor; auto.
       + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
         apply eval_correct_add; try constructor; auto.
-        apply eval_correct_add; try constructor; auto. 
-        apply eval_correct_mul; try constructor; auto. 
+        apply eval_correct_add; try constructor; auto.
+        apply eval_correct_mul; try constructor; auto.
       + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
         assert (X: Archi.ptr64 = false) by auto.
         rewrite X in H3. inv H3.
@@ -1045,6 +1062,73 @@ Ltac unfold_merge :=
     rewrite merge_get_default2 by auto. auto.
   Qed.
 
+  Lemma match_constants_merge_empty:
+    forall n m ars,
+      match_constants n m ars ->
+      match_constants n m (AssocMapExt.merge value empty_assocmap ars).
+  Proof.
+    inversion 1. constructor; unfold AssocMapExt.merge.
+    - rewrite PTree.gcombine; auto.
+    - rewrite PTree.gcombine; auto.
+  Qed.
+
+  Lemma match_state_st_wf_empty:
+    forall asr st pc,
+      state_st_wf asr st pc ->
+      state_st_wf (AssocMapExt.merge value empty_assocmap asr) st pc.
+  Proof.
+    unfold state_st_wf; intros.
+    unfold AssocMapExt.merge. rewrite AssocMap.gcombine by auto. rewrite H.
+    rewrite AssocMap.gempty. auto.
+  Qed.
+
+  Lemma match_arrs_merge_empty:
+    forall sz stk stk_len sp mem asa,
+      match_arrs sz stk stk_len sp mem asa ->
+      match_arrs sz stk stk_len sp mem (merge_arrs (DHTL.empty_stack stk stk_len) asa).
+  Proof.
+    inversion 1. inv H0. inv H3. inv H1. destruct stack. econstructor; unfold AssocMapExt.merge.
+    split; [|split]; [| |split]; cbn in *.
+    - unfold merge_arrs in *. rewrite AssocMap.gcombine by auto.
+      setoid_rewrite H2. unfold DHTL.empty_stack. rewrite AssocMap.gss.
+      cbn in *. eauto.
+    - cbn. rewrite list_combine_length. rewrite list_repeat_len. lia.
+    - cbn. rewrite list_combine_length. rewrite list_repeat_len. lia.
+    - cbn; intros.
+      assert ((Datatypes.length (list_combine merge_cell (list_repeat None arr_length) arr_contents)) = arr_length).
+      { rewrite list_combine_length. rewrite list_repeat_len. lia. }
+      rewrite H3 in H1. apply H4 in H1.
+      inv H1; try constructor.
+      assert (array_get_error (Z.to_nat ptr)
+           {| arr_contents := arr_contents; arr_length := Datatypes.length arr_contents; arr_wf := eq_refl |} =
+           (array_get_error (Z.to_nat ptr)
+             (combine merge_cell (arr_repeat None (Datatypes.length arr_contents))
+                {| arr_contents := arr_contents; arr_length := Datatypes.length arr_contents; arr_wf := eq_refl |}))).
+      { apply array_get_error_equal; auto. cbn. now rewrite list_combine_none. }
+      rewrite <- H1. auto.
+  Qed.
+
+  Lemma match_states_merge_empty :
+    forall st f sp pc rs ps m st' modle asr asa,
+      match_states (GiblePar.State st f sp pc rs ps m) (DHTL.State st' modle pc asr asa) ->
+      match_states (GiblePar.State st f sp pc rs ps m) (DHTL.State st' modle pc (AssocMapExt.merge value empty_assocmap asr) asa).
+  Proof.
+    inversion 1; econstructor; eauto using match_assocmaps_merge_empty,
+      match_constants_merge_empty, match_state_st_wf_empty.
+  Qed.
+
+  Lemma match_states_merge_empty_arr :
+    forall st f sp pc rs ps m st' modle asr asa,
+      match_states (GiblePar.State st f sp pc rs ps m) (DHTL.State st' modle pc asr asa) ->
+      match_states (GiblePar.State st f sp pc rs ps m) (DHTL.State st' modle pc asr (merge_arrs (DHTL.empty_stack modle.(DHTL.mod_stk) modle.(DHTL.mod_stk_len)) asa)).
+  Proof. inversion 1; econstructor; eauto using match_arrs_merge_empty. Qed.
+
+  Lemma match_states_merge_empty_all :
+    forall st f sp pc rs ps m st' modle asr asa,
+      match_states (GiblePar.State st f sp pc rs ps m) (DHTL.State st' modle pc asr asa) ->
+      match_states (GiblePar.State st f sp pc rs ps m) (DHTL.State st' modle pc (AssocMapExt.merge value empty_assocmap asr) (merge_arrs (DHTL.empty_stack modle.(DHTL.mod_stk) modle.(DHTL.mod_stk_len)) asa)).
+  Proof. eauto using match_states_merge_empty, match_states_merge_empty_arr. Qed.
+
   Opaque AssocMap.get.
   Opaque AssocMap.set.
   Opaque AssocMapExt.merge.
@@ -1060,25 +1144,12 @@ Ltac unfold_merge :=
     intros * YFRL YFRL2 YMATCH.
     inv YMATCH. constructor; intros x' YPLE.
     unfold "#", AssocMapExt.get_default in *.
-    rewrite <- YFRL by auto.
-    eauto.
-    unfold "#", AssocMapExt.get_default. rewrite <- YFRL2 by auto.
-    eauto.
+    rewrite <- YFRL by auto. eauto.
+    unfold "#", AssocMapExt.get_default. rewrite <- YFRL2 by auto. eauto.
   Qed.
 
   Definition e_assoc asr : reg_associations := mkassociations asr (AssocMap.empty _).
-  Definition e_assoc_arr asr : arr_associations := mkassociations asr (AssocMap.empty _).
-
-  Lemma transl_iop_correct:
-    forall sp max_reg max_pred d d' curr_p next_p fin rtrn stack state rs ps m rs' ps' p op args dst asr arr asr' arr',
-      transf_instr fin rtrn stack state (curr_p, d) (RBop p op args dst) = Errors.OK (next_p, d') ->
-      step_instr ge sp (Iexec (mk_instr_state rs ps m)) (RBop p op args dst) (Iexec (mk_instr_state rs' ps m)) ->
-      stmnt_runp tt (e_assoc asr) (e_assoc_arr arr) d (e_assoc asr') (e_assoc_arr arr') ->
-      match_assocmaps max_reg max_pred rs ps asr' ->
-      exists asr'', stmnt_runp tt (e_assoc asr) (e_assoc_arr arr) d' (e_assoc asr'') (e_assoc_arr arr') 
-        /\ match_assocmaps max_reg max_pred rs' ps' asr''.
-  Proof.
-    Admitted.
+  Definition e_assoc_arr stk stk_len asr : arr_associations := mkassociations asr (DHTL.empty_stack stk stk_len).
 
   Lemma option_inv :
     forall A x y,
@@ -1194,6 +1265,17 @@ Proof.
   now rewrite AssocMap.gempty.
 Qed.
 
+  Lemma transl_iop_correct:
+    forall ctrl sp max_reg max_pred d d' curr_p next_p rs ps m rs' ps' p op args dst asr arr asr' arr' stk stk_len,
+      transf_instr ctrl (curr_p, d) (RBop p op args dst) = Errors.OK (next_p, d') ->
+      step_instr ge sp (Iexec (mk_instr_state rs ps m)) (RBop p op args dst) (Iexec (mk_instr_state rs' ps m)) ->
+      stmnt_runp tt (e_assoc asr) (e_assoc_arr stk stk_len arr) d (e_assoc asr') (e_assoc_arr stk stk_len arr') ->
+      match_assocmaps max_reg max_pred rs ps asr' ->
+      exists asr'', stmnt_runp tt (e_assoc asr) (e_assoc_arr stk stk_len arr) d' (e_assoc asr'') (e_assoc_arr stk stk_len arr')
+        /\ match_assocmaps max_reg max_pred rs' ps' asr''.
+  Proof.
+    Admitted.
+
 Transparent Mem.load.
 Transparent Mem.store.
 Transparent Mem.alloc.
@@ -1215,14 +1297,14 @@ Transparent Mem.alloc.
     econstructor. split. apply Smallstep.plus_one.
     eapply DHTL.step_call.
 
-    unfold transl_module, Errors.bind, Errors.bind2, ret in *. 
+    unfold transl_module, Errors.bind, Errors.bind2, ret in *.
     repeat (destruct_match; try discriminate; []). inv TF. cbn.
     econstructor; eauto; inv MSTATE; inv H1; eauto.
 
     - constructor; intros.
       + pose proof (ple_max_resource_function f r H0) as Hple.
         unfold Ple in *. repeat rewrite assocmap_gso by lia. rewrite init_regs_empty.
-        rewrite dhtl_init_regs_empty. rewrite assocmap_gempty. rewrite Registers.Regmap.gi. 
+        rewrite dhtl_init_regs_empty. rewrite assocmap_gempty. rewrite Registers.Regmap.gi.
         constructor.
       + pose proof (ple_pred_max_resource_function f r H0) as Hple.
         unfold Ple in *. repeat rewrite assocmap_gso by lia.
@@ -1234,8 +1316,9 @@ Transparent Mem.alloc.
     - unfold DHTL.empty_stack. cbn in *. econstructor. repeat split; intros.
       + now rewrite AssocMap.gss.
       + cbn. now rewrite list_repeat_len.
+      + cbn. now rewrite list_repeat_len.
       + destruct (Mem.loadv Mint32 m' (Values.Val.offset_ptr (Values.Vptr stk Ptrofs.zero) (Ptrofs.repr (4 * ptr)))) eqn:Heqn; constructor.
-        unfold Mem.loadv in Heqn. destruct_match; try discriminate. cbn in Heqv0. 
+        unfold Mem.loadv in Heqn. destruct_match; try discriminate. cbn in Heqv0.
         symmetry in Heqv0. inv Heqv0.
         pose proof Mem.load_alloc_same as LOAD_ALLOC.
         pose proof H as ALLOC.
@@ -1256,7 +1339,7 @@ Transparent Mem.alloc.
         destruct_match; auto. unfold Mem.valid_access, Mem.range_perm, Mem.perm, Mem.perm_order' in *.
         clear Heqs2. inv v0. cbn -[Ptrofs.max_unsigned] in *. inv Heqv0. exfalso.
         specialize (H ptr). rewrite ! Ptrofs.add_zero_l in H. rewrite ! Ptrofs.unsigned_repr in H.
-        specialize (H ltac:(lia)). destruct_match; auto. rewrite PMap.gss in Heqo. 
+        specialize (H ltac:(lia)). destruct_match; auto. rewrite PMap.gss in Heqo.
         destruct_match; try discriminate. simplify. apply proj_sumbool_true in H5. lia.
         apply stack_correct_inv in Heqb. lia.
       + unfold Mem.storev. destruct_match; auto.
@@ -1264,7 +1347,7 @@ Transparent Mem.alloc.
         destruct_match; auto. unfold Mem.valid_access, Mem.range_perm, Mem.perm, Mem.perm_order' in *.
         clear Heqs2. inv v0. cbn -[Ptrofs.max_unsigned] in *. inv Heqv0. exfalso.
         specialize (H ptr). rewrite ! Ptrofs.add_zero_l in H. rewrite ! Ptrofs.unsigned_repr in H.
-        specialize (H ltac:(lia)). destruct_match; auto. rewrite PMap.gss in Heqo. 
+        specialize (H ltac:(lia)). destruct_match; auto. rewrite PMap.gss in Heqo.
         destruct_match; try discriminate. simplify. apply proj_sumbool_true in H5. lia.
         apply stack_correct_inv in Heqb. lia.
     - cbn; constructor; repeat rewrite PTree.gso by lia; now rewrite PTree.gss.
@@ -1287,6 +1370,395 @@ Opaque Mem.alloc.
   Qed.
   #[local] Hint Resolve transl_returnstate_correct : htlproof.
 
+  Lemma mfold_left_error:
+    forall A B f l m, @mfold_left A B f l (Error m) = Error m.
+  Proof. now induction l. Qed.
+
+  Lemma transf_block_correct1:
+    forall l ctrl d d' pc bb pbb i,
+      mfold_left (transf_seq_block ctrl) l (OK d) = OK d' ->
+      In (pc, bb) l ->
+      nth_error bb i = Some pbb ->
+      exists curr_p next_p stmnt,
+        d' ! (Pos.of_nat (Pos.to_nat pc - i)%nat) = Some stmnt
+        /\ transf_parallel_full_stmnt ctrl curr_p (Pos.of_nat (Pos.to_nat pc - i)%nat) pbb
+           = OK (next_p, stmnt).
+  Admitted.
+
+  Lemma step_list_inter_not_term :
+    forall A step_i sp i cf l i' cf',
+      @step_list_inter A step_i sp (Iterm i cf) l (Iterm i' cf') ->
+      i = i' /\ cf = cf'.
+  Proof. now inversion 1. Qed.
+
+  Lemma step_list_inter_not_exec :
+    forall A step_i sp i cf l i',
+      ~ @step_list_inter A step_i sp (Iterm i cf) l (Iexec i').
+  Proof. now inversion 1. Qed.
+
+  Lemma step_list_nth_iterm':
+    forall sp n instrs m out1 out2,
+      step_list_nth (ParBB.step_instr_seq ge) sp n out1 instrs m out2 ->
+      forall i cf,
+        out1 = Iterm i cf ->
+        out1 = out2.
+  Proof.
+    induction 1; subst; auto.
+    intros. subst. destruct out.
+    - now apply step_list_inter_not_exec in H0.
+    - apply step_list_inter_not_term in H0. inv H0.
+      now erewrite <- IHstep_list_nth by eauto.
+  Qed.
+
+  Lemma step_list_nth_iterm:
+    forall sp n instrs m out2 i cf,
+      step_list_nth (ParBB.step_instr_seq ge) sp n (Iterm i cf) instrs m out2 ->
+      Iterm i cf = out2.
+  Proof. eauto using step_list_nth_iterm'. Qed.
+
+  Lemma transl_step_state_correct' :
+    forall sp bb pc_final vstep init_state final_state pc_init,
+      step_list_nth vstep sp pc_init init_state bb pc_final final_state ->
+      forall rs rs' m m' pr pr' cf state t pc f s,
+        vstep = (ParBB.step_instr_seq ge) ->
+        init_state = (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) ->
+        final_state = (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+        (fn_code f) ! pc = Some bb ->
+        (pc_final <= Datatypes.length bb)%nat ->
+        step_cf_instr ge (GiblePar.State s f sp pc rs' pr' m') cf t state ->
+        forall R1 : DHTL.state,
+          match_states_reduced pc_init (GiblePar.State s f sp pc rs pr m) R1 ->
+          exists R2 : DHTL.state, Smallstep.plus DHTL.step tge R1 t R2 /\ match_states state R2.
+  Proof.
+    induction 1; intros * EQ1 EQ2 EQ3 HCODE HBOUND HSTEP R1 HMATCH; subst.
+    - discriminate.
+    - destruct out as [[rs_mid ps_mid m_mid] | [rs_mid ps_mid m_mid] cf_mid].
+      + inv HMATCH. unfold transl_module, Errors.bind, ret in TF.
+        repeat (destruct_match; try discriminate; []).
+        inv TF.
+        exploit transf_block_correct1. eauto. apply PTree.elements_correct. eassumption.
+        eauto.
+        intros (curr_p & next_p & stmnt0 & HIND & HTRANSF).
+        exploit IHstep_list_nth; trivial.
+        * eassumption.
+        * eassumption.
+        * admit.
+        * intros (R2' & HSMALL & HMATCH'). admit.
+      + clear IHstep_list_nth.
+        pose proof (step_list_nth_iterm _ _ _ _ _ _ _ H1) as HITERM. inv HITERM.
+        admit.
+  Admitted.
+
+Inductive match_states_reduced' : GiblePar.state -> DHTL.state -> Prop :=
+| match_states_reduced'_intro : forall asa asr sf f sp sp' rs mem m st res ps n
+    (MASSOC : match_assocmaps (max_reg_function f) (max_pred_function f) rs ps asr)
+    (TF : transl_module f = Errors.OK m)
+    (WF : state_st_wf asr m.(DHTL.mod_st) n)
+    (MF : match_frames sf res)
+    (MARR : match_arrs f.(fn_stacksize) m.(DHTL.mod_stk) m.(DHTL.mod_stk_len) sp mem asa)
+    (SP : sp = Values.Vptr sp' (Ptrofs.repr 0))
+    (RSBP : reg_stack_based_pointers sp' rs)
+    (ASBP : arr_stack_based_pointers sp' mem (f.(GiblePar.fn_stacksize)) sp)
+    (BOUNDS : stack_bounds sp (f.(GiblePar.fn_stacksize)) mem)
+    (CONST : match_constants m.(DHTL.mod_reset) m.(DHTL.mod_finish) asr),
+    (* Add a relation about ps compared with the state register. *)
+    match_states_reduced' (GiblePar.State sf f sp st rs ps mem)
+                 (DHTL.State res m n asr asa).
+
+  Lemma step_cf_instr_pc_ind :
+    forall s f sp rs' pr' m' pc pc' cf t state,
+      step_cf_instr ge (GiblePar.State s f sp pc rs' pr' m') cf t state ->
+      step_cf_instr ge (GiblePar.State s f sp pc' rs' pr' m') cf t state.
+  Proof. destruct cf; intros; inv H; econstructor; eauto. Qed.
+
+  Definition mk_ctrl f := {|
+                 ctrl_st := Pos.succ (max_resource_function f);
+                 ctrl_stack := Pos.succ (Pos.succ (Pos.succ (Pos.succ (max_resource_function f))));
+                 ctrl_fin := Pos.succ (Pos.succ (max_resource_function f));
+                 ctrl_return := Pos.succ (Pos.succ (Pos.succ (max_resource_function f)))
+               |}.
+
+  Lemma transl_step_state_correct_instr :
+    forall s f sp bb hw_pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa,
+      (* (fn_code f) ! pc = Some bb -> *)
+      mfold_left (transf_instr (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
+      stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
+      eval_predf pr curr_p = true ->
+      ParBB.step_instr_list ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
+             (Iexec {| is_rs := rs'; is_ps := pr'; is_mem := m' |}) ->
+      match_states (GiblePar.State s f sp hw_pc rs pr m) (DHTL.State s' m_ hw_pc asr asa) ->
+      exists asr' asa',
+        stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
+        /\ match_states (GiblePar.State s f sp hw_pc rs' pr' m') (DHTL.State s' m_ hw_pc asr' asa').
+  Proof. Admitted.
+
+  Lemma transl_step_state_correct_chained :
+    forall s f sp bb hw_pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa,
+      (* (fn_code f) ! pc = Some bb -> *)
+      mfold_left (transf_chained_block (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
+      stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
+      eval_predf pr curr_p = true ->
+      ParBB.step_instr_seq ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
+             (Iexec {| is_rs := rs'; is_ps := pr'; is_mem := m' |}) ->
+      match_states (GiblePar.State s f sp hw_pc rs pr m) (DHTL.State s' m_ hw_pc asr asa) ->
+      exists asr' asa',
+        stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
+        /\ match_states (GiblePar.State s f sp hw_pc rs' pr' m') (DHTL.State s' m_ hw_pc asr' asa').
+  Proof. Admitted.
+
+  Lemma one_ne_zero:
+    Int.repr 1 <> Int.repr 0.
+  Proof.
+    unfold not; intros.
+    assert (Int.unsigned (Int.repr 1) = Int.unsigned (Int.repr 0)) by (now rewrite H).
+    rewrite ! Int.unsigned_repr in H0 by crush. lia.
+  Qed.
+
+  Lemma int_and_boolToValue :
+    forall b1 b2,
+      Int.and (boolToValue b1) (boolToValue b2) = boolToValue (b1 && b2).
+  Proof.
+    destruct b1; destruct b2; cbn; unfold boolToValue; unfold natToValue;
+    replace (Z.of_nat 1) with 1 by auto;
+    replace (Z.of_nat 0) with 0 by auto.
+    - apply Int.and_idem.
+    - apply Int.and_zero.
+    - apply Int.and_zero_l.
+    - apply Int.and_zero.
+  Qed.
+
+  Lemma int_or_boolToValue :
+    forall b1 b2,
+      Int.or (boolToValue b1) (boolToValue b2) = boolToValue (b1 || b2).
+  Proof.
+    destruct b1; destruct b2; cbn; unfold boolToValue; unfold natToValue;
+    replace (Z.of_nat 1) with 1 by auto;
+    replace (Z.of_nat 0) with 0 by auto.
+    - apply Int.or_idem.
+    - apply Int.or_zero.
+    - apply Int.or_zero_l.
+    - apply Int.or_zero_l.
+  Qed.
+
+  Lemma translate_pred_correct :
+    forall curr_p pr asr asa,
+      (forall r, Ple r (max_predicate curr_p) ->
+          find_assocmap 1 (pred_enc r) asr = boolToValue (PMap.get r pr)) ->
+      expr_runp tt asr asa (pred_expr curr_p) (boolToValue (eval_predf pr curr_p)).
+  Proof.
+    induction curr_p.
+    - intros * HFRL. cbn. destruct p as [b p']. destruct b.
+      + constructor. eapply HFRL. cbn. unfold Ple. lia.
+      + econstructor. constructor. eapply HFRL. cbn. unfold Ple; lia.
+        econstructor. cbn. f_equal. unfold boolToValue.
+        f_equal. destruct pr !! p' eqn:?. cbn.
+        rewrite Int.eq_false; auto. unfold natToValue.
+        replace (Z.of_nat 1) with 1 by auto. unfold Int.zero.
+        apply one_ne_zero.
+        cbn. rewrite Int.eq_true; auto.
+    - intros. cbn. constructor.
+    - intros. cbn. constructor.
+    - cbn -[eval_predf]; intros. econstructor. eapply IHcurr_p1. intros. eapply H.
+      unfold Ple in *. lia.
+      eapply IHcurr_p2; intros. eapply H. unfold Ple in *; lia.
+      cbn -[eval_predf]. f_equal. symmetry. apply int_and_boolToValue.
+    - cbn -[eval_predf]; intros. econstructor. eapply IHcurr_p1. intros. eapply H.
+      unfold Ple in *. lia.
+      eapply IHcurr_p2; intros. eapply H. unfold Ple in *; lia.
+      cbn -[eval_predf]. f_equal. symmetry. apply int_or_boolToValue.
+  Qed.
+
+  Lemma max_predicate_deep_simplify' :
+    forall peq curr r,
+      (r <= max_predicate (deep_simplify' peq curr))%positive ->
+      (r <= max_predicate curr)%positive.
+  Proof.
+    destruct curr; cbn -[deep_simplify']; auto.
+    - intros. unfold deep_simplify' in H.
+      destruct curr1; destruct curr2; try (destruct_match; cbn in *); lia.
+    - intros. unfold deep_simplify' in H.
+      destruct curr1; destruct curr2; try (destruct_match; cbn in *); lia.
+  Qed.
+
+  Lemma max_predicate_deep_simplify :
+    forall peq curr r,
+      (r <= max_predicate (deep_simplify peq curr))%positive ->
+      (r <= max_predicate curr)%positive.
+  Proof.
+    induction curr; try solve [cbn; auto]; cbn -[deep_simplify'] in *.
+    - intros. apply max_predicate_deep_simplify' in H. cbn -[deep_simplify'] in *.
+      assert (HX: (r <= max_predicate (deep_simplify peq curr1))%positive \/ (r <= max_predicate (deep_simplify peq curr2))%positive) by lia.
+      inv HX; [eapply IHcurr1 in H0 | eapply IHcurr2 in H0]; lia.
+    - intros. apply max_predicate_deep_simplify' in H. cbn -[deep_simplify'] in *.
+      assert (HX: (r <= max_predicate (deep_simplify peq curr1))%positive \/ (r <= max_predicate (deep_simplify peq curr2))%positive) by lia.
+      inv HX; [eapply IHcurr1 in H0 | eapply IHcurr2 in H0]; lia.
+  Qed.
+
+  Lemma translate_cfi_goto:
+    forall pr curr_p pc s ctrl asr asa,
+      (forall r, Ple r (max_predicate curr_p) ->
+        find_assocmap 1 (pred_enc r) asr = boolToValue (PMap.get r pr)) ->
+      eval_predf pr curr_p = true ->
+      translate_cfi ctrl (Some curr_p) (RBgoto pc) = OK s ->
+      stmnt_runp tt (e_assoc asr) asa s
+        (e_assoc (AssocMap.set ctrl.(ctrl_st) (posToValue pc) asr)) asa.
+  Proof.
+    intros * HPLE HEVAL HTRANSL. unfold translate_cfi in *.
+    inversion_clear HTRANSL as []. destruct_match.
+    - constructor. constructor. econstructor. eapply translate_pred_correct.
+      intros. unfold Ple in *. eapply HPLE.
+      now apply max_predicate_deep_simplify in H.
+      eauto. constructor. rewrite eval_predf_deep_simplify. rewrite HEVAL. auto.
+    - repeat constructor.
+  Qed.
+
+  Lemma translate_cfi_goto_none:
+    forall pc s ctrl asr asa,
+      translate_cfi ctrl None (RBgoto pc) = OK s ->
+      stmnt_runp tt (e_assoc asr) asa s
+        (e_assoc (AssocMap.set ctrl.(ctrl_st) (posToValue pc) asr)) asa.
+  Proof. intros; inversion_clear H as []; repeat constructor. Qed.
+
+  Lemma transl_module_ram_none :
+    forall f m_,
+      transl_module f = OK m_ ->
+      m_.(mod_ram) = None.
+  Proof.
+    unfold transl_module, Errors.bind, Errors.bind2, ret; intros.
+    repeat (destruct_match; try discriminate). inversion_clear H as []. auto.
+  Qed.
+
+  Lemma transl_step_state_correct_ :
+    forall s f sp bb hw_pc curr_p d hw_pc' pc_ind next_p d' rs rs' m m' pr pr' state cf m_ s',
+      (* (fn_code f) ! pc = Some bb -> *)
+      mfold_left (transf_parallel_full_block (mk_ctrl f)) bb (OK (hw_pc, curr_p, d)) = OK (hw_pc', next_p, d') ->
+      (forall x y, d' ! x = Some y -> m_.(mod_datapath) ! x = Some y) ->
+      eval_predf pr curr_p = true ->
+      (max_predicate curr_p <= max_pred_function f)%positive ->
+      ParBB.step ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
+             (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+      step_cf_instr ge (GiblePar.State s f sp pc_ind rs' pr' m') cf Events.E0 state ->
+      forall asr asa,
+        match_states (GiblePar.State s f sp hw_pc rs pr m) (DHTL.State s' m_ hw_pc asr asa) ->
+        exists R2 : DHTL.state, Smallstep.plus DHTL.step tge (DHTL.State s' m_ hw_pc asr asa) Events.E0 R2
+        /\ match_states state R2.
+  Proof.
+    induction bb.
+    - cbn; intros * HFOLD HSUB HCURR HMAX HPAR HSTEP * HMATCH. inv HPAR.
+    - intros * HFOLD HSUB HCURR HMAX HPAR HSTEP * HMATCH. inv HPAR.
+      + destruct state' as [rs_mid pr_mid m_mid].
+        cbn -[transf_parallel_full_block] in HFOLD.
+        assert (HTRANSF_EX: exists tres, (transf_parallel_full_block
+           (mk_ctrl f) (hw_pc, curr_p, d) a) = OK tres) by admit.
+        inversion_clear HTRANSF_EX as [[[hw_pc_mid curr_p_mid] d_mid] HTRANSF_EX'].
+        rewrite HTRANSF_EX' in HFOLD.
+        unfold transf_parallel_full_block, Errors.bind2,
+               transf_parallel_full_stmnt, Errors.bind in HTRANSF_EX'.
+        repeat (destruct_match; try discriminate; []). inv Heqp0. inv HTRANSF_EX'.
+        exploit translate_cfi_goto. instantiate (2 := asr). admit. eauto. eauto. intros.
+        instantiate (1 := (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa)) in H.
+        exploit transl_step_state_correct_chained; eauto. admit.
+        intros (asr' & asa' & HSTMNT & HMATCH').
+        eapply match_states_merge_empty_all in HMATCH'.
+        eapply match_states_merge_empty_all in HMATCH'.
+        exploit IHbb.
+        * eauto.
+        * eauto.
+        * instantiate (1 := pr_mid). admit.
+        * admit.
+        * eauto.
+        * eauto.
+        * eauto.
+        * intros (R2 & HSEMPLUS & HMATCH'').
+          exists R2; split; auto.
+          eapply Smallstep.plus_left'; eauto.
+          2: { symmetry; eapply Events.E0_right. }
+          inv HMATCH. inv CONST. econstructor.
+          eauto. eauto. eauto. inv WF. eapply HSUB.
+          instantiate (1:=s0). admit.
+          unfold e_assoc, e_assoc_arr in HSTMNT. eauto. rewrite transl_module_ram_none with (f := f) by auto.
+          constructor. auto. auto. admit. admit.
+      + admit.
+  Admitted.
+
+  (* Lemma transl_step_state_correct : *)
+  (*   forall s f sp pc rs rs' m m' bb pr pr' t state cf, *)
+  (*     (fn_code f) ! pc = Some bb -> *)
+  (*     ParBB.step ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb *)
+  (*            (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) -> *)
+  (*     step_cf_instr ge (GiblePar.State s f sp pc rs' pr' m') cf t state -> *)
+  (*       forall R1 : DHTL.state, *)
+  (*         match_states (GiblePar.State s f sp pc rs pr m) R1 -> *)
+  (*         exists R2 : DHTL.state, Smallstep.plus DHTL.step tge R1 Events.E0 R2 /\ match_states state R2. *)
+  (* Proof. *)
+  (*   intros * HCODE HPARBB HSTEP R1 HMATCH.  *)
+  (*   exploit step_list_equiv; eauto. intros (pc_final & HSTEPNTH & HBOUND). *)
+  (*   eapply transl_step_state_correct'; eauto. inv HMATCH. *)
+  (*   replace pc with (Pos.of_nat ((Pos.to_nat pc) - O)%nat) at 2 by lia. *)
+  (*   econstructor; eauto. *)
+  (*   now replace (Pos.of_nat ((Pos.to_nat pc) - O)%nat) with pc by lia. *)
+  (* Qed. *)
+
+  Lemma transf_seq_block_in_const :
+    forall d_init pc bb ctrl l d',
+      mfold_left (transf_seq_block ctrl) l (OK d_init) = OK d' ->
+      d_init ! pc = Some bb ->
+      d' ! pc = Some bb.
+  Proof. Admitted.
+
+  Lemma transf_seq_block_in' :
+    forall d_init pc bb ctrl l d',
+      mfold_left (transf_seq_block ctrl) l (OK d_init) = OK d' ->
+      list_norepet (List.map fst l) ->
+      In (pc, bb) l ->
+      exists d_mid d_mid' n' next_p',
+        (mfold_left (transf_parallel_full_block ctrl) bb (OK (pc, Ptrue, d_mid)) = OK (n', next_p', d_mid'))
+        /\ (forall x y, d_mid' ! x = Some y -> d' ! x = Some y).
+  Proof. Admitted.
+
+  Lemma transf_seq_block_in :
+    forall d_init pc bb ctrl d' d,
+      mfold_left (transf_seq_block ctrl) (PTree.elements d) (OK d_init) = OK d' ->
+      d ! pc = Some bb ->
+      exists d_mid d_mid' n' next_p',
+        (mfold_left (transf_parallel_full_block ctrl) bb (OK (pc, Ptrue, d_mid)) = OK (n', next_p', d_mid'))
+        /\ (forall x y, d_mid' ! x = Some y -> d' ! x = Some y).
+  Proof. 
+    intros. eapply transf_seq_block_in'; eauto.
+    apply PTree.elements_keys_norepet.
+    apply PTree.elements_correct; eassumption.
+  Qed.
+
+  Lemma transl_step_state_correct :
+    forall s f sp pc rs rs' m m' bb pr pr' state cf,
+      (fn_code f) ! pc = Some bb ->
+      ParBB.step ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
+             (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+      step_cf_instr ge (GiblePar.State s f sp pc rs' pr' m') cf Events.E0 state ->
+        forall R1 : DHTL.state,
+          match_states (GiblePar.State s f sp pc rs pr m) R1 ->
+          exists R2 : DHTL.state, Smallstep.plus DHTL.step tge R1 Events.E0 R2 /\ match_states state R2.
+  Proof.
+    intros * HCODE HPARBB HSTEP R1 HMATCH.
+    inversion HMATCH. unfold transl_module, Errors.bind, ret in *.
+    repeat (destruct_match; try discriminate; []). inv TF.
+    exploit transf_seq_block_in; eauto.
+    intros (d_mid & d_mid' & n' & next_p' & HFOLD & HIN).
+    eapply transl_step_state_correct_; eauto.
+    cbn; lia.
+  Qed.
+
+  Lemma transl_step_state_correct_final :
+    forall s f sp pc rs rs' m m' bb pr pr' state cf t,
+      (fn_code f) ! pc = Some bb ->
+      ParBB.step ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
+             (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+      step_cf_instr ge (GiblePar.State s f sp pc rs' pr' m') cf t state ->
+        forall R1 : DHTL.state,
+          match_states (GiblePar.State s f sp pc rs pr m) R1 ->
+          exists R2 : DHTL.state, Smallstep.plus DHTL.step tge R1 t R2 /\ match_states state R2.
+  Proof. Admitted.
+
   Theorem transl_step_correct:
     forall (S1 : GiblePar.state) t S2,
       GiblePar.step ge S1 t S2 ->
@@ -1295,8 +1767,7 @@ Opaque Mem.alloc.
         exists R2, Smallstep.plus DHTL.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1.
-    - inversion 1; subst. unfold transl_module, Errors.bind, Errors.bind2, ret in *. 
-    repeat (destruct_match; try discriminate; []). inv TF. cbn in *.
+    - now (eapply transl_step_state_correct_final; eauto).
     - now apply transl_callstate_correct.
     - inversion 1.
     - now apply transl_returnstate_correct.
@@ -1309,5 +1780,5 @@ Opaque Mem.alloc.
     eapply Smallstep.forward_simulation_plus; eauto with htlproof.
     apply senv_preserved.
   Qed.
-    
+
 End CORRECTNESS.

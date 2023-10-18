@@ -403,7 +403,7 @@ Inductive match_arrs_size : assocmap_arr -> assocmap_arr -> Prop :=
       match_arrs_size nasa basa.
 
 Definition match_empty_size (m : module) (ar : assocmap_arr) : Prop :=
-  match_arrs_size (empty_stack m) ar.
+  match_arrs_size (empty_stack m.(mod_stk) m.(mod_stk_len)) ar.
 #[local] Hint Unfold match_empty_size : mgen.
 
 Definition disable_ram (ram: option ram) (asr : assocmap_reg) : Prop :=
@@ -501,7 +501,7 @@ Lemma match_stacks_equiv :
   forall m s l,
     mod_stk m = s ->
     mod_stk_len m = l ->
-    empty_stack' l s = empty_stack m.
+    empty_stack' l s = empty_stack m.(mod_stk) m.(mod_stk_len).
 Proof. unfold empty_stack', empty_stack; mgen_crush. Qed.
 #[local] Hint Rewrite match_stacks_equiv : mgen.
 
@@ -638,8 +638,8 @@ Qed.
 
 Lemma empty_arr :
   forall m s,
-    (exists l, (empty_stack m) ! s = Some (arr_repeat None l))
-    \/ (empty_stack m) ! s = None.
+    (exists l, (empty_stack m.(mod_stk) m.(mod_stk_len)) ! s = Some (arr_repeat None l))
+    \/ (empty_stack m.(mod_stk) m.(mod_stk_len)) ! s = None.
 Proof.
   unfold empty_stack. simplify.
   destruct (Pos.eq_dec s (mod_stk m)); subst.
@@ -650,13 +650,13 @@ Qed.
 Lemma merge_arr_empty':
   forall m ar s v,
     match_empty_size m ar ->
-    (merge_arrs (empty_stack m) ar) ! s = v ->
+    (merge_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) ar) ! s = v ->
     ar ! s = v.
 Proof.
   inversion 1; subst.
   pose proof (empty_arr m s).
   simplify_local.
-  destruct (merge_arrs (empty_stack m) ar) ! s eqn:?; subst.
+  destruct (merge_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) ar) ! s eqn:?; subst.
   - inv H3. inv H4.
     learn H3 as H5. apply H0 in H5. inv H5. simplify_local.
     unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto.
@@ -678,7 +678,7 @@ Lemma merge_arr_empty :
   forall m ar ar',
     match_empty_size m ar ->
     match_arrs ar ar' ->
-    match_arrs (merge_arrs (empty_stack m) ar) ar'.
+    match_arrs (merge_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) ar) ar'.
 Proof.
   inversion 1; subst; inversion 1; subst;
   econstructor; intros; apply merge_arr_empty' in H6; auto.
@@ -689,12 +689,12 @@ Lemma merge_arr_empty'':
   forall m ar s v,
     match_empty_size m ar ->
     ar ! s = v ->
-    (merge_arrs (empty_stack m) ar) ! s = v.
+    (merge_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) ar) ! s = v.
 Proof.
   inversion 1; subst.
   pose proof (empty_arr m s).
   simplify_local.
-  destruct (merge_arrs (empty_stack m) ar) ! s eqn:?; subst.
+  destruct (merge_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) ar) ! s eqn:?; subst.
   - inv H3. inv H4.
     learn H3 as H5. apply H0 in H5. inv H5. simplify_local.
     unfold merge_arrs in *. rewrite AssocMap.gcombine in Heqo; auto.
@@ -715,7 +715,7 @@ Qed.
 Lemma merge_arr_empty_match :
   forall m ar,
     match_empty_size m ar ->
-    match_empty_size m (merge_arrs (empty_stack m) ar).
+    match_empty_size m (merge_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) ar).
 Proof.
   inversion 1; subst.
   constructor; simplify_local.
@@ -725,7 +725,7 @@ Proof.
   split; simplify_local.
   unfold merge_arrs in H3. rewrite AssocMap.gcombine in H3; auto.
   unfold merge_arr in *.
-  destruct (empty_stack m) ! s eqn:?;
+  destruct (empty_stack m.(mod_stk) m.(mod_stk_len)) ! s eqn:?;
            destruct ar ! s; try discriminate; eauto.
   apply merge_arr_empty''; auto. apply H2 in H3; auto.
 Qed.
@@ -1196,7 +1196,7 @@ Qed.
 
 Lemma empty_arrs_match :
   forall m,
-    match_arrs (empty_stack m) (empty_stack (transf_module m)).
+    match_arrs (empty_stack m.(mod_stk) m.(mod_stk_len)) (empty_stack (transf_module m).(mod_stk) (transf_module m).(mod_stk_len)).
 Proof.
   intros;
   unfold empty_stack, transf_module; repeat destruct_match; mgen_crush.
@@ -1764,7 +1764,7 @@ Qed.
 #[local] Hint Resolve match_arrs_size_ram_preserved2 : mgen.
 
 Lemma empty_stack_m :
-  forall m, empty_stack m = empty_stack' (mod_stk_len m) (mod_stk m).
+  forall m, empty_stack (mod_stk m) (mod_stk_len m) = empty_stack' (mod_stk_len m) (mod_stk m).
 Proof. unfold empty_stack, empty_stack'; mgen_crush. Qed.
 #[local] Hint Rewrite empty_stack_m : mgen.
 
@@ -1954,27 +1954,27 @@ Lemma match_empty_size_exists_Some :
   forall m rab s v,
     match_empty_size m rab ->
     rab ! s = Some v ->
-    exists v', (empty_stack m) ! s = Some v' /\ arr_length v = arr_length v'.
+    exists v', (empty_stack (mod_stk m) (mod_stk_len m)) ! s = Some v' /\ arr_length v = arr_length v'.
 Proof. inversion 1; intros; repeat masrp_tac. Qed.
 
 Lemma match_empty_size_exists_None :
   forall m rab s,
     match_empty_size m rab ->
     rab ! s = None ->
-    (empty_stack m) ! s = None.
+    (empty_stack (mod_stk m) (mod_stk_len m)) ! s = None.
 Proof. inversion 1; intros; repeat masrp_tac. Qed.
 
 Lemma match_empty_size_exists_None' :
   forall m rab s,
     match_empty_size m rab ->
-    (empty_stack m) ! s = None ->
+    (empty_stack (mod_stk m) (mod_stk_len m)) ! s = None ->
     rab ! s = None.
 Proof. inversion 1; intros; repeat masrp_tac. Qed.
 
 Lemma match_empty_size_exists_Some' :
   forall m rab s v,
     match_empty_size m rab ->
-    (empty_stack m) ! s = Some v ->
+    (empty_stack (mod_stk m) (mod_stk_len m)) ! s = Some v ->
     exists v', rab ! s = Some v' /\ arr_length v = arr_length v'.
 Proof. inversion 1; intros; repeat masrp_tac. Qed.
 
@@ -2007,7 +2007,7 @@ Ltac learn_next :=
 
 Ltac learn_empty :=
   match goal with
-  | H: match_empty_size _ _, H2: (empty_stack _) ! _ = Some _ |- _ =>
+  | H: match_empty_size _ _, H2: (empty_stack _ _) ! _ = Some _ |- _ =>
     let H3 := fresh "H" in
     learn H as H3; eapply match_empty_size_exists_Some' in H3;
     [| eassumption]; inv_exists; simplify
@@ -2015,7 +2015,7 @@ Ltac learn_empty :=
     let H3 := fresh "H" in
     learn H as H3; eapply match_arrs_Some in H3;
     [| eassumption]; inv_exists; simplify
-  | H: match_empty_size _ _, H2: (empty_stack _) ! _ = None |- _ =>
+  | H: match_empty_size _ _, H2: (empty_stack _ _) ! _ = None |- _ =>
     let H3 := fresh "H" in
     learn H as H3; eapply match_empty_size_exists_None' in H3;
     [| eassumption]; simplify
@@ -2068,7 +2068,7 @@ Lemma match_arrs_merge_set2 :
     match_arrs rab rab' ->
     match_arrs ran ran' ->
     match_arrs (merge_arrs (arr_assocmap_set s i v ran) rab)
-               (merge_arrs (arr_assocmap_set s i v (empty_stack m))
+               (merge_arrs (arr_assocmap_set s i v (empty_stack (mod_stk m) (mod_stk_len m)))
                            (merge_arrs ran' rab')).
 Proof.
   simplify.
@@ -2217,7 +2217,7 @@ Qed.
 (*     constructor. admit. *)
 (*   Abort. *)
 
-Lemma empty_stack_transf : forall m, empty_stack (transf_module m) = empty_stack m.
+Lemma empty_stack_transf : forall m, empty_stack (mod_stk (transf_module m)) (mod_stk_len (transf_module m)) = empty_stack (mod_stk m) (mod_stk_len m).
 Proof. unfold empty_stack, transf_module; intros; repeat destruct_match; crush. Qed.
 
 Definition alt_unchanged (d d': AssocMap.t stmnt) i := d ! i = d' ! i.
@@ -2513,7 +2513,7 @@ Lemma merge_arr_empty2 :
   forall m ar ar',
     match_empty_size m ar' ->
     match_arrs ar ar' ->
-    match_arrs ar (merge_arrs (empty_stack m) ar').
+    match_arrs ar (merge_arrs (empty_stack (mod_stk m) (mod_stk_len m)) ar').
 Proof.
   inversion 1; subst; inversion 1; subst.
   econstructor; intros. apply H4 in H6; inv_exists. simplify_local.
@@ -2630,7 +2630,7 @@ Lemma translation_correct_unchanged :
   (H1 : asr ! (mod_st m) = Some (posToValue st))
   (H2 : (mod_datapath m) ! st = Some data)
   (H3 : stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
-         {| assoc_blocking := asa; assoc_nonblocking := empty_stack m |} data
+         {| assoc_blocking := asa; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} data
          {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
          {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |})
   (H5 : (merge_regs empty_assocmap (merge_regs nasr2 basr2)) ! (mod_st m) = Some (posToValue pstval))
@@ -2649,7 +2649,7 @@ Lemma translation_correct_unchanged :
     Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
     match_states
       (State sf m pstval (merge_regs empty_assocmap (merge_regs nasr2 basr2))
-         (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2))) R2.
+         (merge_arrs (empty_stack (mod_stk m) (mod_stk_len m)) (merge_arrs nasa2 basa2))) R2.
 Proof.
   intros.
   unfold alt_unchanged in *; simplify_local.
@@ -2725,7 +2725,7 @@ Lemma translation_correct_store :
   (H1 : asr ! (mod_st m) = Some (posToValue st))
   (H2 : (mod_datapath m) ! st = Some data)
   (H3 : stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
-         {| assoc_blocking := asa; assoc_nonblocking := empty_stack m |} data
+         {| assoc_blocking := asa; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} data
          {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
          {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |})
   (H5 : (merge_regs empty_assocmap (merge_regs nasr2 basr2)) ! (mod_st m) = Some (posToValue pstval))
@@ -2755,7 +2755,7 @@ Lemma translation_correct_store :
     Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
     match_states
       (State sf m pstval (merge_regs empty_assocmap (merge_regs nasr2 basr2))
-         (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2))) R2.
+         (merge_arrs (empty_stack (mod_stk m) (mod_stk_len m)) (merge_arrs nasa2 basa2))) R2.
 Proof.
   intros.
   unfold alt_store in *; simplify_local. inv H3. inv H17. inv H18. inv H16. simplify_local.
@@ -2999,7 +2999,7 @@ Lemma translation_correct_load :
   (H1 : asr ! (mod_st m) = Some (posToValue st))
   (H2 : (mod_datapath m) ! st = Some data)
   (H3 : stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
-         {| assoc_blocking := asa; assoc_nonblocking := empty_stack m |} data
+         {| assoc_blocking := asa; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} data
          {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
          {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |})
   (H5 : (merge_regs empty_assocmap (merge_regs nasr2 basr2)) ! (mod_st m) = Some (posToValue pstval))
@@ -3029,7 +3029,7 @@ Lemma translation_correct_load :
     Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
     match_states
       (State sf m pstval (merge_regs empty_assocmap (merge_regs nasr2 basr2))
-         (merge_arrs (empty_stack m) (merge_arrs nasa2 basa2))) R2.
+         (merge_arrs (empty_stack (mod_stk m) (mod_stk_len m)) (merge_arrs nasa2 basa2))) R2.
 Proof.
   intros.
   unfold alt_load in *; simplify_local. inv H3. inv H22.
@@ -3206,11 +3206,11 @@ Lemma translation_correct :
     asr ! (mod_st m) = Some (posToValue st) ->
     (mod_datapath m) ! st = Some data ->
     stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
-               {| assoc_blocking := asa; assoc_nonblocking := empty_stack m |} data
+               {| assoc_blocking := asa; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} data
                {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
                {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |} ->
     exec_ram {| assoc_blocking := merge_regs nasr2 basr2; assoc_nonblocking := empty_assocmap |}
-             {| assoc_blocking := merge_arrs nasa2 basa2; assoc_nonblocking := empty_stack m |} None
+             {| assoc_blocking := merge_arrs nasa2 basa2; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} None
              {| assoc_blocking := basr3; assoc_nonblocking := nasr3 |}
              {| assoc_blocking := basa3; assoc_nonblocking := nasa3 |} ->
     (merge_regs nasr3 basr3) ! (mod_st m) = Some (posToValue pstval) ->
@@ -3388,7 +3388,7 @@ Section CORRECTNESS.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m) by (rewrite RAM0; auto).
       replace (mod_reset (transf_module m)) with (mod_reset m) by (rewrite RAM0; auto).
       replace (mod_finish (transf_module m)) with (mod_finish m) by (rewrite RAM0; auto).
-      replace (empty_stack (transf_module m)) with (empty_stack m) by (rewrite RAM0; auto).
+      replace (empty_stack (mod_stk (transf_module m)) (mod_stk_len (transf_module m))) with (empty_stack (mod_stk m) (mod_stk_len m)) by (rewrite RAM0; auto).
       replace (mod_params (transf_module m)) with (mod_params m) by (rewrite RAM0; auto).
       replace (mod_st (transf_module m)) with (mod_st m) by (rewrite RAM0; auto).
       repeat econstructor; mgen_crush.
@@ -3408,7 +3408,7 @@ Section CORRECTNESS.
       replace (mod_entrypoint (transf_module m)) with (mod_entrypoint m).
       replace (mod_reset (transf_module m)) with (mod_reset m).
       replace (mod_finish (transf_module m)) with (mod_finish m).
-      replace (empty_stack (transf_module m)) with (empty_stack m).
+      replace (empty_stack (mod_stk (transf_module m)) (mod_stk_len (transf_module m))) with (empty_stack (mod_stk m) (mod_stk_len m)).
       replace (mod_params (transf_module m)) with (mod_params m).
       replace (mod_st (transf_module m)) with (mod_st m).
       all: try solve [unfold transf_module; repeat destruct_match; mgen_crush].

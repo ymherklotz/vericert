@@ -81,9 +81,9 @@ Fixpoint pred_expr (p: pred_op) :=
   | Plit (b, pred) =>
     if b
     then Vvar (pred_enc pred)
-    else Vunop Vnot (Vvar (pred_enc pred))
-  | Ptrue => Vlit (ZToValue 1)
-  | Pfalse => Vlit (ZToValue 0)
+    else (Vbinop Veq (Vvar (pred_enc pred)) (Vlit Integers.Int.zero))
+  | Ptrue => Vlit (boolToValue true)
+  | Pfalse => Vlit (boolToValue false)
   | Pand p1 p2 =>
     Vbinop Vand (pred_expr p1) (pred_expr p2)
   | Por p1 p2 =>
@@ -291,23 +291,23 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-Definition translate_cfi (fin rtrn state: reg) p (cfi: cf_instr)
+Definition translate_cfi (ctrl: control_regs) p (cfi: cf_instr)
   : Errors.res stmnt :=
   match cfi with
   | RBgoto n' =>
-    Errors.OK (state_goto p state n')
+    Errors.OK (state_goto p ctrl.(ctrl_st) n')
   | RBcond c args n1 n2 =>
     do e <- translate_condition c args;
-    Errors.OK (state_cond p state e n1 n2)
+    Errors.OK (state_cond p ctrl.(ctrl_st) e n1 n2)
   | RBreturn r =>
     match r with
     | Some r' =>
-      Errors.OK (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vvar r')))
+      Errors.OK (Vseq (block ctrl.(ctrl_fin) (Vlit (ZToValue 1%Z))) (block ctrl.(ctrl_return) (Vvar r')))
     | None =>
-      Errors.OK (Vseq (block fin (Vlit (ZToValue 1%Z))) (block rtrn (Vlit (ZToValue 0%Z))))
+      Errors.OK (Vseq (block ctrl.(ctrl_fin) (Vlit (ZToValue 1%Z))) (block ctrl.(ctrl_return) (Vlit (ZToValue 0%Z))))
     end
   | RBjumptable r tbl =>
-    Errors.OK (Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr state tbl)) (Some Vskip))
+    Errors.OK (Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr ctrl.(ctrl_st) tbl)) (Some Vskip))
   | RBcall sig ri rl r n =>
     Errors.Error (Errors.msg "HTLPargen: RBcall not supported.")
   | RBtailcall sig ri lr =>
@@ -316,8 +316,7 @@ Definition translate_cfi (fin rtrn state: reg) p (cfi: cf_instr)
     Errors.Error (Errors.msg "HTLPargen: RBbuildin not supported.")
   end.
 
-Definition transf_instr (fin rtrn stack state: reg) 
-           (dc: pred_op * stmnt) (i: instr)
+Definition transf_instr (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
            : Errors.res (pred_op * stmnt) :=
   let '(curr_p, d) := dc in
   let npred p := Some (Pand curr_p (dfltp p)) in
@@ -328,11 +327,11 @@ Definition transf_instr (fin rtrn stack state: reg)
     let stmnt := translate_predicate Vblock (npred p) (Vvar dst) instr in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBload p mem addr args dst =>
-    do src <- translate_arr_access mem addr args stack;
+    do src <- translate_arr_access mem addr args ctrl.(ctrl_stack);
     let stmnt := translate_predicate Vblock (npred p) (Vvar dst) src in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBstore p mem addr args src =>
-    do dst <- translate_arr_access mem addr args stack;
+    do dst <- translate_arr_access mem addr args ctrl.(ctrl_stack);
     let stmnt := translate_predicate Vblock (npred p) dst (Vvar src) in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBsetpred p' cond args p =>
@@ -340,49 +339,38 @@ Definition transf_instr (fin rtrn stack state: reg)
     let stmnt := translate_predicate Vblock (npred p') (pred_expr (Plit (true, p))) cond' in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBexit p cf => 
-    do d_stmnt <- translate_cfi fin rtrn state (npred p) cf;
+    do d_stmnt <- translate_cfi ctrl (npred p) cf;
     Errors.OK (Pand curr_p (negate (dfltp p)), Vseq d d_stmnt)
   end.
 
-Definition transf_chained_block (fin rtrn stack state: reg)
-           (dc: @pred_op positive * stmnt)
-           (block: list instr)
+Definition transf_chained_block (ctrl: control_regs) (dc: @pred_op positive * stmnt) (block: list instr)
            : Errors.res (pred_op * stmnt) :=
-  mfold_left (transf_instr fin rtrn stack state) block (ret dc).
+  mfold_left (transf_instr ctrl) block (ret dc).
 
-Definition transf_parallel_block (fin rtrn stack state: reg)
-           (dc: @pred_op positive * stmnt)
-           (block: list (list instr))
+Definition transf_parallel_block (ctrl: control_regs) (dc: @pred_op positive * stmnt) (block: list (list instr))
            : Errors.res (pred_op * stmnt) :=
-  mfold_left (transf_chained_block fin rtrn stack state) block (ret dc).
+  mfold_left (transf_chained_block ctrl) block (ret dc).
 
-Definition transf_parallel_full_block (fin rtrn stack state: reg)
-           (dc: node * @pred_op positive * datapath)
-           (block: list (list instr))
+Definition transf_parallel_full_stmnt ctrl curr_p n block :=
+  do ctrl_init_stmnt <- translate_cfi ctrl (Some curr_p) (RBgoto (n - 1)%positive);
+  transf_parallel_block ctrl (curr_p, ctrl_init_stmnt) block.
+
+Definition transf_parallel_full_block (ctrl: control_regs) (dc: node * @pred_op positive * datapath) (block: list (list instr))
            : Errors.res (node * pred_op * datapath) :=
   let '(n, curr_p, dt) := dc in
   match AssocMap.get n dt with
   | None =>
-    do ctrl_init_stmnt <-
-          translate_cfi fin rtrn state (Some curr_p) (RBgoto (n - 1)%positive);
-    do dc' <- transf_parallel_block fin rtrn stack state (curr_p, ctrl_init_stmnt) block;
-    let '(curr_p', dt_stmnt) := dc' in
+    do (curr_p', dt_stmnt) <- transf_parallel_full_stmnt ctrl curr_p n block;
     Errors.OK ((n - 1)%positive, curr_p', AssocMap.set n dt_stmnt dt)
   | _ => Errors.Error (msg "HtlPargen.transf_parallel_full_block: block not empty")
   end.
 
-Definition transf_seq_block (fin rtrn stack state: reg)
-           (d: datapath) (n: node)
-           (block: list (list (list instr)))
+Definition transf_seq_block (ctrl: control_regs) (d: datapath) (ni: node * ParBB.t)
            : Errors.res datapath :=
-  do res <- mfold_left
-    (transf_parallel_full_block fin rtrn stack state) block (ret (n, Ptrue, d));
+  let (n, block) := ni in
+  do res <- mfold_left (transf_parallel_full_block ctrl) block (ret (n, Ptrue, d));
   let '(_, _, d') := res in
   Errors.OK d'.
-
-Definition transf_seq_blockM (ctrl: control_regs) (d: datapath) (ni: node * ParBB.t): res datapath :=
-    let (n, i) := ni in
-    transf_seq_block ctrl.(ctrl_fin) ctrl.(ctrl_return) ctrl.(ctrl_stack) ctrl.(ctrl_st) d n i.
 
 Definition stack_correct (sz : Z) : bool :=
   (0 <=? sz) && (sz <? Integers.Ptrofs.modulus) && (Z.modulo sz 4 =? 0).
@@ -439,7 +427,7 @@ Program Definition transl_module (f: function) : res DHTL.module :=
     let start := Pos.succ stack in
     let rst := Pos.succ start in
     let clk := Pos.succ rst in
-    do _stmnt <- mfold_left (transf_seq_blockM (mk_control_regs st stack fin rtrn)) 
+    do _stmnt <- mfold_left (transf_seq_block (mk_control_regs st stack fin rtrn)) 
                             (Maps.PTree.elements f.(GiblePar.fn_code)) (ret (PTree.empty _));
     match zle (Z.pos (max_pc_map _stmnt)) Integers.Int.max_unsigned,
             decide_order st fin rtrn stack start rst clk,

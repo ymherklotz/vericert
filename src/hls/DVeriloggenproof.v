@@ -262,7 +262,7 @@ Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed
 Lemma mod_params_equiv m : mod_args (transl_module m) = DHTL.mod_params m.
 Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
-Lemma empty_stack_equiv m : empty_stack (transl_module m) = DHTL.empty_stack m.
+Lemma empty_stack_equiv m : empty_stack (transl_module m) = DHTL.empty_stack m.(DHTL.mod_stk) m.(DHTL.mod_stk_len).
 Proof. unfold transl_module; intros; destruct (DHTL.mod_ram m) eqn:?; crush. Qed.
 
 Ltac rewrite_eq := rewrite mod_return_equiv

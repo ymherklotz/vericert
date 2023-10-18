@@ -104,8 +104,8 @@ Fixpoint init_regs (vl : list value) (rl : list reg) {struct rl} :=
   | _, _ => empty_assocmap
   end.
 
-Definition empty_stack (m : module) : Verilog.assocmap_arr :=
-  (AssocMap.set m.(mod_stk) (Array.arr_repeat None m.(mod_stk_len)) (AssocMap.empty Verilog.arr)).
+Definition empty_stack stk stk_len : Verilog.assocmap_arr :=
+  (AssocMap.set stk (Array.arr_repeat None stk_len) (AssocMap.empty Verilog.arr)).
 
 (** * Operational Semantics *)
 
@@ -183,13 +183,13 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
       m.(mod_datapath)!st = Some data ->
       Verilog.stmnt_runp f
         (Verilog.mkassociations asr empty_assocmap)
-        (Verilog.mkassociations asa (empty_stack m))
+        (Verilog.mkassociations asa (empty_stack m.(mod_stk) m.(mod_stk_len)))
         data
         (Verilog.mkassociations basr2 nasr2)
         (Verilog.mkassociations basa2 nasa2) ->
       exec_ram
         (Verilog.mkassociations (Verilog.merge_regs nasr2 basr2) empty_assocmap)
-        (Verilog.mkassociations (Verilog.merge_arrs nasa2 basa2) (empty_stack m))
+        (Verilog.mkassociations (Verilog.merge_arrs nasa2 basa2) (empty_stack m.(mod_stk) m.(mod_stk_len)))
         (mod_ram m)
         (Verilog.mkassociations basr3 nasr3)
         (Verilog.mkassociations basa3 nasa3) ->
@@ -211,7 +211,7 @@ Inductive step : genv -> state -> Events.trace -> state -> Prop :=
               (AssocMap.set (mod_finish m) (ZToValue 0)
                (AssocMap.set (mod_st m) (posToValue m.(mod_entrypoint))
                 (init_regs args m.(mod_params)))))
-             (empty_stack m))
+             (empty_stack m.(mod_stk) m.(mod_stk_len)))
 | step_return :
     forall g m asr asa i r sf pc mst,
       mst = mod_st m ->

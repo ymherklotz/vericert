@@ -481,6 +481,90 @@ Inductive step_list {A} (step_i: val -> istate -> A -> istate -> Prop):
     step_i sp (Iexec state) i (Iterm state' cf) ->
     step_list step_i sp (Iexec state) (i :: instrs) (Iterm state' cf).
 
+Inductive step_list_nth {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> nat -> istate -> list A -> nat -> istate -> Prop :=
+| exec_RBnth_refl :
+  forall out n instrs sp,
+    step_list_nth step_i sp n out instrs n out
+| exec_RBnth_star :
+  forall state i n out instrs sp m out',
+    nth_error instrs n = Some i ->
+    step_i sp state i out ->
+    step_list_nth step_i sp (S n) out instrs m out' ->
+    (n < m)%nat ->
+    step_list_nth step_i sp n state instrs m out'.
+
+Lemma list_drop_nil :
+  forall A n, @list_drop A n nil = nil.
+Proof. intros. destruct n; auto. Qed.
+
+Lemma list_drop_length :
+  forall A n (l: list A), (length l <= n)%nat -> @list_drop A n l = nil.
+Proof. 
+  induction n; intros.
+  - destruct l; cbn in *; auto. lia.
+  - destruct l; cbn; auto.
+    rewrite IHn; eauto. cbn in *. lia.
+Qed.
+
+Lemma step_list_equiv_nth:
+  forall A (step_i: val -> istate -> A -> istate -> Prop) sp l n m st1 st2,
+    step_list_nth step_i sp n st1 l m st2 ->
+    forall offs l',
+    (forall x e, (n <= x < m)%nat -> nth_error l x = Some e -> nth_error l' (x+offs) = Some e) ->
+    step_list_nth step_i sp (n+offs) st1 l' (m+offs) st2.
+Proof.
+  induction 1. intros. constructor.
+  intros. econstructor; eauto; [|lia].
+  eapply IHstep_list_nth; eauto.
+  intros. eapply H3; auto; lia.
+Qed.
+
+Lemma step_list_nth_cons':
+  forall A (step_i: val -> istate -> A -> istate -> Prop) sp 
+      n m (l: list A) a st1 st2,
+    step_list_nth step_i sp n st1 l m st2 ->
+    step_list_nth step_i sp (S n) st1 (a :: l) (S m) st2.
+Proof.
+  intros * Hstep.
+  assert (Hequiv: forall x e, (n <= x < m)%nat -> nth_error l x = Some e -> nth_error (a :: l) (x+1) = Some e).
+  { intros. replace (a :: l) with ((a :: nil) ++ l) by auto.
+    rewrite nth_error_app2 by (cbn; lia).
+    cbn. now replace ((x + 1 - 1)%nat) with x by lia.
+  }
+  replace (S n) with (n + 1)%nat by lia.
+  replace (S m) with (m + 1)%nat by lia.
+  eapply step_list_equiv_nth; eauto.
+Qed.
+
+Lemma step_list_nth_cons :
+  forall A (step_i: val -> istate -> A -> istate -> Prop) sp 
+      (instrs: list A) (a: A) l st1 st2 st3,
+    step_i sp st1 a st2 ->
+    step_list_nth step_i sp 0 st2 instrs l st3 ->
+    step_list_nth step_i sp 0 st1 (a :: instrs) (S l) st3.
+Proof.
+  intros. econstructor; cbn; eauto; [|lia].
+  replace 1%nat with (0 + 1)%nat at 1 by lia. 
+  now apply step_list_nth_cons'.
+Qed.
+
+Lemma step_list_equiv :
+  forall A step_i sp (instrs: list A) st1 st2,
+    step_list step_i sp st1 instrs st2 ->
+    exists l, step_list_nth step_i sp 0 st1 instrs l st2 
+      /\ (l <= length instrs)%nat.
+Proof.
+  induction instrs.
+  - cbn; intros. inv H.
+  - cbn; intros. inv H.
+    + exploit IHinstrs. eauto. simplify.
+      exists (S x). split; [|lia].
+      eapply step_list_nth_cons; eauto.
+    + exists 1%nat. split; [|lia].
+      econstructor; cbn; eauto. constructor.
+Qed.
+
 Inductive step_list2 {A} (step_i: val -> istate -> A -> istate -> Prop):
   val -> istate -> list A -> istate -> Prop :=
 | exec_RBcons2 :
@@ -503,6 +587,21 @@ Inductive step_list_inter {A} (step_i: val -> istate -> A -> istate -> Prop):
 | exec_term_RBcons_term :
   forall i cf l sp,
     step_list_inter step_i sp (Iterm i cf) l (Iterm i cf).
+
+Inductive step_list_inter_strict {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> istate -> list A -> istate -> Prop :=
+| exec_term_strict_RBcons :
+  forall i0 i1 i2 i instrs sp,
+    step_i sp (Iexec i0) i i1 ->
+    step_list_inter_strict step_i sp i1 instrs i2 ->
+    step_list_inter_strict step_i sp (Iexec i0) (i :: instrs) i2
+| exec_term_strict_RBnil :
+  forall sp i, step_list_inter_strict step_i sp i nil i
+| exec_term_strict_RBcons_term :
+  forall i cf instr instrs sp,
+    step_i sp (Iexec i) instr (Iexec i) ->
+    step_list_inter_strict step_i sp (Iexec i) instrs (Iexec i) ->
+    step_list_inter_strict step_i sp (Iterm i cf) (instr :: instrs) (Iterm i cf).
 
 (*|
 Top-Level Type Definitions
