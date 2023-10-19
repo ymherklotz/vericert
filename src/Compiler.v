@@ -95,6 +95,7 @@ Parameter print_HTL: Z -> HTL.program -> unit.
 Parameter print_DHTL: Z -> DHTL.program -> unit.
 Parameter print_GibleSeq: Z -> GibleSeq.GibleSeq.program -> unit.
 Parameter print_GiblePar: Z -> GiblePar.GiblePar.program -> unit.
+Parameter print_GibleSubPar: Z -> GibleSubPar.GibleSubPar.program -> unit.
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.
@@ -299,6 +300,7 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   @@@ time "Scheduling" GiblePargen.transl_program
    @@ print (print_GiblePar 0)
   @@@ GibleSubPargen.transl_program
+   @@ print (print_GibleSubPar 0)
   (* @@@ HTLPargen.transl_program *)
   @@@ DHTLgen.transl_program
    @@ print (print_DHTL 0)

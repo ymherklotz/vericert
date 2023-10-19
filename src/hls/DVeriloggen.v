@@ -42,6 +42,16 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
+Definition declare_all (start reset clk finish ret st stk: reg) (stk_len: nat) (body: list module_item) :=
+  Vdeclaration (Vdecl (Some Vinput) start 1)
+  :: Vdeclaration (Vdecl (Some Vinput) reset 1)
+  :: Vdeclaration (Vdecl (Some Vinput) clk 1)
+  :: Vdeclaration (Vdecl (Some Voutput) finish 1)
+  :: Vdeclaration (Vdecl (Some Voutput) ret 32)
+  :: Vdeclaration (Vdecl None st 32)
+  :: Vdeclaration (Vdeclarr None stk 32 stk_len)
+  :: (all_reg_declarations (start::reset::clk::finish::ret::st::stk::nil) body).
+
 Definition inst_ram clk ram :=
   Valways (Vnegedge clk)
           (Vcond (Vbinop Vne (Vvar (ram_u_en ram)) (Vvar (ram_en ram)))
@@ -65,9 +75,7 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
         (*         :: Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1))) *)
         (* (Vnonblock (Vvar (DHTL.mod_st m)) (Vlit (posToValue m.(DHTL.mod_entrypoint)))) (Vnonblock (Vvar (DHTL.mod_st m)) (Vvar m.(DHTL.mod_st)))) *)
                 :: inst_ram m.(DHTL.mod_clk) ram
-                :: List.map Vdeclaration ((* Vdecl None nstate 32 ::  *)
-                     (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
-                     ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls)))) in
+                :: nil in
     Verilog.mkmodule m.(DHTL.mod_start)
                      m.(DHTL.mod_reset)
                      m.(DHTL.mod_clk)
@@ -77,7 +85,14 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
                      m.(DHTL.mod_stk)
                      m.(DHTL.mod_stk_len)
                      m.(DHTL.mod_params)
-                     body
+                     (body ++ declare_all m.(DHTL.mod_start)
+                     m.(DHTL.mod_reset)
+                     m.(DHTL.mod_clk)
+                     m.(DHTL.mod_finish)
+                     m.(DHTL.mod_return)
+                     m.(DHTL.mod_st)
+                     m.(DHTL.mod_stk)
+                     m.(DHTL.mod_stk_len) body)
                      m.(DHTL.mod_entrypoint)
   | None =>
     let body :=
@@ -87,8 +102,7 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
                 (* :: Valways (Vposedge m.(DHTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(DHTL.mod_reset)) (Vlit (ZToValue 1))) *)
         (* (Vnonblock (Vvar (DHTL.mod_st m)) (Vlit (posToValue m.(DHTL.mod_entrypoint)))) *)
         (* (Vnonblock (Vvar (DHTL.mod_st m)) (Vvar m.(DHTL.mod_st)))) *)
-                :: List.map Vdeclaration ((* Vdecl None (DHTL.mod_st m) 32 ::  *)arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
-                                                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
+        :: nil in
     Verilog.mkmodule m.(DHTL.mod_start)
                      m.(DHTL.mod_reset)
                      m.(DHTL.mod_clk)
@@ -98,7 +112,14 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
                      m.(DHTL.mod_stk)
                      m.(DHTL.mod_stk_len)
                      m.(DHTL.mod_params)
-                     body
+                     (body ++ declare_all m.(DHTL.mod_start)
+                     m.(DHTL.mod_reset)
+                     m.(DHTL.mod_clk)
+                     m.(DHTL.mod_finish)
+                     m.(DHTL.mod_return)
+                     m.(DHTL.mod_st)
+                     m.(DHTL.mod_stk)
+                     m.(DHTL.mod_stk_len) body)
                      m.(DHTL.mod_entrypoint)
   end.
 

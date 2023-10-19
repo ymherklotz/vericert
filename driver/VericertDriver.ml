@@ -67,6 +67,7 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
   set_dest Vericert.PrintGibleSeq.destination option_dgblseq ".gblseq";
   set_dest Vericert.PrintGiblePar.destination option_dgblpar ".gblpar";
+  set_dest Vericert.PrintGibleSubPar.destination option_dgblsubpar ".gblsubpar";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.PrintDHTL.destination option_ddhtl ".dhtl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
@@ -270,6 +271,7 @@ HLS Optimisations:
   -drtl          Save RTL at various optimization points in <file>.rtl.<n>
   -dgblseq       Save GibleSeq <file>.gblseq
   -dgblpar       Save GiblePar <file>.gblpar
+  -dgblsubpar    Save GibleSubPar <file>.gblsubpar
   -dhtl          Save HTL before Verilog generation <file>.htl
   -dltl          Save LTL after register allocation in <file>.ltl
   -dmach         Save generated Mach code in <file>.mach
@@ -412,6 +414,7 @@ let cmdline_actions =
     option_drtl := true;
     option_dgblseq := true;
     option_dgblpar := true;
+    option_dgblsubpar := true;
     option_dhtl := true;
     option_ddhtl := true;
     option_dltl := true;

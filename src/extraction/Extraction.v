@@ -151,6 +151,7 @@ Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_GibleSeq => "PrintGibleSeq.print_if".
 Extract Constant Compiler.print_GiblePar => "PrintGiblePar.print_if".
+Extract Constant Compiler.print_GibleSubPar => "PrintGibleSubPar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
 Extract Constant Compiler.print_DHTL => "PrintDHTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".

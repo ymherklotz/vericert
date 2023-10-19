@@ -164,28 +164,28 @@ Definition transf_maps state ram in_ (d: PTree.t stmnt) :=
   | (i, n) =>
     match PTree.get i d with
     (* Conditional store *)
-    | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) (Vternary cond e2 (Vvari r' e1')))) =>
-      if (r =? (ram_mem ram)) && (r =? r') && (expr_eqb e1 e1') then
-        let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vternary cond (Vunop Vnot (Vvar (ram_u_en ram))) (Vvar (ram_u_en ram))))
-                       (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
-                             (Vseq (Vblock (Vvar (ram_d_in ram)) e2)
-                                   (Vblock (Vvar (ram_addr ram)) e1)))
-        in
-        PTree.set i (Vseq rest nd) d
-      else d
-    | Some (Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vternary cond (Vvari r e2) edef))) =>
-      if (r =? (ram_mem ram)) && (st' =? state) && (Z.pos n <=? Int.max_unsigned)%Z
-         && (e1 <? state) && (max_reg_expr e2 <? state) && (max_reg_expr e3 <? state)
-      then
-        let nd :=
-            Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
-                 (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
-                       (Vblock (Vvar (ram_addr ram)) e2))
-        in
-        let aout := Vblock (Vvar e1) (Vternary cond (Vvar (ram_d_out ram)) edef) in
-        let redirect := Vblock (Vvar state) (Vlit (posToValue n)) in
-        (PTree.set i (Vseq redirect nd) (PTree.set n (Vseq (Vblock (Vvar st') e3) aout) d))
-      else d
+    (* | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) (Vternary cond e2 (Vvari r' e1')))) => *)
+    (*   if (r =? (ram_mem ram)) && (r =? r') && (expr_eqb e1 e1') then *)
+    (*     let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vternary cond (Vunop Vnot (Vvar (ram_u_en ram))) (Vvar (ram_u_en ram)))) *)
+    (*                    (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1))) *)
+    (*                          (Vseq (Vblock (Vvar (ram_d_in ram)) e2) *)
+    (*                                (Vblock (Vvar (ram_addr ram)) e1))) *)
+    (*     in *)
+    (*     PTree.set i (Vseq rest nd) d *)
+    (*   else d *)
+    (* | Some (Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vternary cond (Vvari r e2) edef))) => *)
+    (*   if (r =? (ram_mem ram)) && (st' =? state) && (Z.pos n <=? Int.max_unsigned)%Z *)
+    (*      && (e1 <? state) && (max_reg_expr e2 <? state) && (max_reg_expr e3 <? state) *)
+    (*   then *)
+    (*     let nd := *)
+    (*         Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram)))) *)
+    (*              (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0))) *)
+    (*                    (Vblock (Vvar (ram_addr ram)) e2)) *)
+    (*     in *)
+    (*     let aout := Vblock (Vvar e1) (Vternary cond (Vvar (ram_d_out ram)) edef) in *)
+    (*     let redirect := Vblock (Vvar state) (Vlit (posToValue n)) in *)
+    (*     (PTree.set i (Vseq redirect nd) (PTree.set n (Vseq (Vblock (Vvar st') e3) aout) d)) *)
+    (*   else d *)
     | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) e2)) =>
       if r =? (ram_mem ram) then
         let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
@@ -240,7 +240,7 @@ Proof.
     eapply H. eapply AssocMapExt.elements_iff; eauto.
   + rewrite PTree.gso in H1 by auto. eapply H.
     eapply AssocMapExt.elements_iff; eauto.
-Admitted.
+Qed.
 
 Definition max_pc {A: Type} (m: PTree.t A) :=
   fold_right Pos.max 1%positive (map fst (PTree.elements m)).
@@ -1077,7 +1077,7 @@ Lemma transf_not_changed :
     (forall e1 e2 e3 e4 r, d_s <> (Vseq (Vblock (Vvar e1) e2) (Vnonblock e3 (Vvari r e4)))) ->
     d!i = Some d_s ->
     transf_maps state ram (i, n) d = d.
-Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Admitted.
+Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Qed.
 
 Lemma transf_not_changed_neq :
   forall state ram n d d' i a d_s,
@@ -2270,7 +2270,7 @@ Proof.
          | |- _ = None => apply max_index_2; lia
          | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
          end; auto.
-Admitted.
+Qed.
 
 Lemma transf_alternatives_neq :
   forall state ram a n' n d'' d' i d,

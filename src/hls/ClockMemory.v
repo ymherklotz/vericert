@@ -44,9 +44,9 @@ Definition pred := positive.
 
 Definition transf_maps (d: stmnt) :=
   match d with
-  | Vseq ((Vblock (Vvar _) _) as rest) (Vblock (Vvari r e1) e2) =>
+  | Vseq (Vseq Vskip (Vblock (Vvari r e1) e2)) ((Vblock (Vvar _) _) as rest) =>
     Vseq rest (Vnonblock (Vvari r e1) e2)
-  | Vseq (Vblock (Vvar st') e3) (Vblock (Vvar e1) (Vvari r e2)) =>
+  | Vseq (Vseq Vskip (Vblock (Vvar e1) (Vvari r e2))) (Vblock (Vvar st') e3) =>
     Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vvari r e2))
   | _ => d
   end.

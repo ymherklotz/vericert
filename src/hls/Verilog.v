@@ -904,3 +904,72 @@ with max_reg_stmnt_expr_list (stl: stmnt_expr_list) :=
             (Pos.max (max_reg_stmnt s)
                      (max_reg_stmnt_expr_list stl'))
   end.
+
+Definition combine_reg (r1 r2 : option unit) := 
+  match r1, r2 with
+  | Some _, _ => Some tt
+  | _, Some _ => Some tt
+  | _, _ => None
+  end.
+
+Import Maps.
+
+Fixpoint all_reg_expr (e: expr): PTree.t unit :=
+  match e with
+  | Vlit _ => PTree.empty _
+  | Vvar r => PTree.set r tt (PTree.empty _)
+  | Vvari r e => all_reg_expr e
+  | Vrange r e1 e2 => PTree.set r tt (PTree.empty _)
+  | Vinputvar r => PTree.empty _
+  | Vbinop _ e1 e2 => PTree.combine combine_reg (all_reg_expr e1) (all_reg_expr e2)
+  | Vunop _ e => all_reg_expr e
+  | Vternary e1 e2 e3 => 
+    PTree.combine combine_reg (all_reg_expr e1) (PTree.combine combine_reg (all_reg_expr e2) (all_reg_expr e3))
+  end.
+
+Fixpoint all_reg_stmnt (st: stmnt): PTree.t unit :=
+  match st with
+  | Vskip => PTree.empty _
+  | Vseq s1 s2 => PTree.combine combine_reg (all_reg_stmnt s1) (all_reg_stmnt s2)
+  | Vcond e s1 s2 =>
+    PTree.combine combine_reg (all_reg_expr e) (PTree.combine combine_reg (all_reg_stmnt s1) (all_reg_stmnt s2))
+  | Vcase e stl None => PTree.combine combine_reg (all_reg_expr e) (all_reg_stmnt_expr_list stl)
+  | Vcase e stl (Some s) =>
+    PTree.combine combine_reg (all_reg_stmnt s)
+            (PTree.combine combine_reg (all_reg_expr e) (all_reg_stmnt_expr_list stl))
+  | Vblock e1 e2 => PTree.combine combine_reg (all_reg_expr e1) (all_reg_expr e2)
+  | Vnonblock e1 e2 => PTree.combine combine_reg (all_reg_expr e1) (all_reg_expr e2)
+  end
+with all_reg_stmnt_expr_list (stl: stmnt_expr_list) :=
+  match stl with
+  | Stmntnil => PTree.empty _
+  | Stmntcons e s stl' =>
+    PTree.combine combine_reg (all_reg_expr e)
+            (PTree.combine combine_reg (all_reg_stmnt s)
+                     (all_reg_stmnt_expr_list stl'))
+  end.
+
+Fixpoint all_reg_edge (e: edge): PTree.t unit :=
+  match e with
+  | Vposedge r => PTree.set r tt (PTree.empty _)
+  | Vnegedge r => PTree.set r tt (PTree.empty _)
+  | Valledge => PTree.empty _
+  | Voredge e1 e2 => PTree.combine combine_reg (all_reg_edge e1) (all_reg_edge e2)
+  end.
+
+Definition all_reg_module_item (m: module_item): PTree.t unit :=
+  match m with
+  | Vdeclaration d => PTree.empty _
+  | Valways e s
+  | Valways_ff e s
+  | Valways_comb e s => PTree.combine combine_reg (all_reg_edge e) (all_reg_stmnt s)
+  end.
+
+Definition all_reg_module_item_l (ml: list module_item): PTree.t unit :=
+  List.fold_left (fun a b => PTree.combine combine_reg a (all_reg_module_item b)) ml (PTree.empty _).
+
+Definition all_reg_to_declaration (tree: PTree.t unit): list module_item :=
+  PTree.fold (fun ml p _ => Vdeclaration (Vdecl None p 32) :: ml) tree nil.
+
+Definition all_reg_declarations (rem: list positive) (ml: list module_item): list module_item :=
+  all_reg_to_declaration (List.fold_left (fun a b => PTree.remove b a) rem (all_reg_module_item_l ml)).

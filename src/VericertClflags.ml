@@ -7,6 +7,7 @@ let option_dhtl = ref false
 let option_ddhtl = ref false
 let option_dgblseq = ref false
 let option_dgblpar = ref false
+let option_dgblsubpar = ref false
 let option_drtlparfu = ref false
 let option_hls_schedule = ref false
 let option_fif_conv = ref false

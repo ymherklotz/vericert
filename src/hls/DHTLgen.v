@@ -103,7 +103,7 @@ Definition translate_predicate (a : assignment)
     | Some _ => a dst (Vternary (pred_expr pos') e dst)
     end
   end.
- 
+
 Definition state_goto (p: option pred_op) (st : reg) (n : node) : stmnt :=
   translate_predicate Vblock p (Vvar st) (Vlit (posToValue n)).
 
@@ -302,12 +302,12 @@ Definition translate_cfi (ctrl: control_regs) p (cfi: cf_instr)
   | RBreturn r =>
     match r with
     | Some r' =>
-      Errors.OK (Vseq (block ctrl.(ctrl_fin) (Vlit (ZToValue 1%Z))) (block ctrl.(ctrl_return) (Vvar r')))
+      Errors.OK (Vseq (Vblock (Vvar ctrl.(ctrl_fin)) (Vlit (ZToValue 1%Z))) (Vblock (Vvar ctrl.(ctrl_return)) (Vvar (reg_enc r'))))
     | None =>
-      Errors.OK (Vseq (block ctrl.(ctrl_fin) (Vlit (ZToValue 1%Z))) (block ctrl.(ctrl_return) (Vlit (ZToValue 0%Z))))
+      Errors.OK (Vseq (Vblock (Vvar ctrl.(ctrl_fin)) (Vlit (ZToValue 1%Z))) (Vblock (Vvar ctrl.(ctrl_return)) (Vlit (ZToValue 0%Z))))
     end
   | RBjumptable r tbl =>
-    Errors.OK (Vcase (Vvar r) (list_to_stmnt (tbl_to_case_expr ctrl.(ctrl_st) tbl)) (Some Vskip))
+    Errors.OK (Vcase (Vvar (reg_enc r)) (list_to_stmnt (tbl_to_case_expr ctrl.(ctrl_st) tbl)) (Some Vskip))
   | RBcall sig ri rl r n =>
     Errors.Error (Errors.msg "HTLPargen: RBcall not supported.")
   | RBtailcall sig ri lr =>
@@ -324,15 +324,15 @@ Definition transf_instr (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
   | RBnop => Errors.OK dc
   | RBop p op args dst => 
     do instr <- translate_instr op args;
-    let stmnt := translate_predicate Vblock (npred p) (Vvar dst) instr in
+    let stmnt := translate_predicate Vblock (npred p) (Vvar (reg_enc dst)) instr in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBload p mem addr args dst =>
     do src <- translate_arr_access mem addr args ctrl.(ctrl_stack);
-    let stmnt := translate_predicate Vblock (npred p) (Vvar dst) src in
+    let stmnt := translate_predicate Vblock (npred p) (Vvar (reg_enc dst)) src in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBstore p mem addr args src =>
     do dst <- translate_arr_access mem addr args ctrl.(ctrl_stack);
-    let stmnt := translate_predicate Vblock (npred p) dst (Vvar src) in
+    let stmnt := translate_predicate Vblock (npred p) dst (Vvar (reg_enc src)) in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBsetpred p' cond args p =>
     do cond' <- translate_condition cond args;
