@@ -64,7 +64,9 @@ Require vericert.hls.HTLgen.
 Require vericert.hls.GibleSeq.
 Require vericert.hls.GibleSeqgen.
 Require vericert.hls.GiblePargen.
+Require vericert.hls.GibleSubPargen.
 Require vericert.hls.HTLPargen.
+Require vericert.hls.DHTLgen.
 Require vericert.hls.DVeriloggen.
 (*Require vericert.hls.Pipeline.*)
 Require vericert.hls.IfConversion.
@@ -296,7 +298,9 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_GibleSeq 5)
   @@@ time "Scheduling" GiblePargen.transl_program
    @@ print (print_GiblePar 0)
-  @@@ HTLPargen.transl_program
+  @@@ GibleSubPargen.transl_program
+  (* @@@ HTLPargen.transl_program *)
+  @@@ DHTLgen.transl_program
    @@ print (print_DHTL 0)
    @@ ClockMemory.transf_program
    @@ print (print_DHTL 1)
