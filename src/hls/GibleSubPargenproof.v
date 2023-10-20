@@ -319,8 +319,12 @@ Section CORRECTNESS.
   Proof.
     induction a; intros.
     - cbn in *. inv H.
-    - inv H.
-  Admitted.
+    - inv H. destruct i1; destruct i. 
+      + econstructor. eapply step_list_ge; eauto.
+        eapply IHa; eauto.
+      + inv H6. eapply exec_RBterm; eauto. eapply step_list_ge; eauto.
+        eapply exec_RBterm; eauto. eapply step_list_ge; eauto.
+  Qed.
 
   Lemma transl_spec_not_in':
     forall bb pc fresh code_start fresh' code_end pc' y,
@@ -397,10 +401,13 @@ Section CORRECTNESS.
     - cbn in HTRANSL. repeat (destruct_match; try discriminate). inv HTRANSL.
       exploit transl_spec_not_in'. unfold transl_block. rewrite HFOLD. cbn. eauto.
       rewrite PTree.gss. eauto. intros. eapply H2 in H.
-      econstructor. split.
-      + apply Smallstep.plus_one. econstructor; eauto.
-        eapply step_instr_seq_with_exit'; eauto.
-  Admitted.
+      exploit step_cf_instr_ge; eauto.
+      inv H3. econstructor; eauto.
+      intros (tst' & HSTEP & HMATCH).
+      econstructor. split; eauto.
+      apply Smallstep.plus_one. econstructor; eauto.
+      eapply step_instr_seq_with_exit'; eauto.
+  Qed.
 
   Lemma transl_spec':
     forall l fresh fresh' code_start code_end pc bb,
@@ -465,7 +472,6 @@ Section CORRECTNESS.
     - cbn in *. intros * HMATCH. inv HMATCH. cbn in *. inv TF.
       econstructor. split.
       + apply Smallstep.plus_one. econstructor. eapply Events.external_call_symbols_preserved; eauto.
-        eapply senv_preserved.
       + now constructor.
     - cbn in *. intros * HMATCH. inv HMATCH. inv STK. inv H1.
       econstructor; split.
