@@ -167,6 +167,131 @@ Section CORRECTNESS.
       ~ @step_list_inter A step_i sp (Iterm i cf) l (Iexec i').
   Proof. now inversion 1. Qed.
 
+  Lemma eval_op_eq:
+    forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
+      Op.eval_operation ge sp0 op vl m = Op.eval_operation tge sp0 op vl m.
+  Proof using TRANSL.
+    intros.
+    destruct op; auto; unfold Op.eval_operation, Genv.symbol_address, Op.eval_addressing32;
+    [| destruct a; unfold Genv.symbol_address ];
+    try rewrite symbols_preserved; auto.
+  Qed.
+
+  Lemma eval_addressing_eq:
+    forall sp addr vl,
+      Op.eval_addressing ge sp addr vl = Op.eval_addressing tge sp addr vl.
+  Proof using TRANSL.
+    intros.
+    destruct addr;
+      unfold Op.eval_addressing, Op.eval_addressing32;
+      unfold Genv.symbol_address;
+      try rewrite symbols_preserved; auto.
+  Qed.
+
+  Lemma step_instr_ge :
+    forall sp i a i',
+      step_instr ge sp i a i' ->
+      step_instr tge sp i a i'.
+  Proof using TRANSL.
+    inversion 1; subst; simplify; clear H; econstructor; eauto;
+      try (rewrite <- eval_op_eq; auto); rewrite <- eval_addressing_eq; auto.
+  Qed.
+
+  Lemma functions_translated:
+    forall (v: Values.val) (f: GiblePar.fundef),
+      Genv.find_funct ge v = Some f ->
+      exists tf, Genv.find_funct tge v = Some tf /\ transl_fundef f = OK tf.
+  Proof using TRANSL.
+    intros. exploit (Genv.find_funct_transf_partial TRANSL); eauto.
+  Qed.
+
+  Lemma find_function_translated:
+    forall ros rs f,
+      GiblePar.find_function ge ros rs = Some f ->
+      exists tf, find_function tge ros rs = Some tf /\ transl_fundef f = OK tf.
+  Proof using TRANSL.
+    Ltac ffts := match goal with
+                 | [ H: forall _, Values.Val.lessdef _ _, r: Registers.reg |- _ ] =>
+                     specialize (H r); inv H
+                 | [ H: Values.Vundef = ?r, H1: Genv.find_funct _ ?r = Some _ |- _ ] =>
+                     rewrite <- H in H1
+                 | [ H: Genv.find_funct _ Values.Vundef = Some _ |- _] => solve [inv H]
+                 | _ => solve [exploit functions_translated; eauto]
+                 end.
+    destruct ros; simplify; try rewrite <- H;
+      [| rewrite symbols_preserved; destruct_match;
+         try (apply function_ptr_translated); crush ];
+      intros;
+      repeat ffts.
+  Qed.
+
+  Lemma sig_transf_function:
+    forall f tf,
+      transl_fundef f = OK tf ->
+      funsig tf = GiblePar.funsig f.
+  Proof using.
+    unfold transl_fundef. unfold AST.transf_fundef; intros. destruct f.
+    - cbn in *. unfold transl_function, bind, Errors.bind in *.
+      repeat (destruct_match; try discriminate). inv H. inv Heqm. auto.
+    - cbn in *. inv H. auto.
+  Qed.
+
+  #[local] Hint Resolve Events.eval_builtin_args_preserved : core.
+  #[local] Hint Resolve symbols_preserved : core.
+  #[local] Hint Resolve Events.external_call_symbols_preserved : core.
+  #[local] Hint Resolve senv_preserved : core.
+  #[local] Hint Resolve find_function_translated : core.
+  #[local] Hint Resolve sig_transf_function : core.
+
+  Lemma step_cf_instr_ge :
+    forall st cf t st' tst,
+      GiblePar.step_cf_instr ge st cf t st' ->
+      match_states st tst ->
+      exists tst', step_cf_instr tge tst cf t tst' /\ match_states st' tst'.
+  Proof using TRANSL.
+    inversion 1; subst; simplify; clear H;
+      match goal with H: context[match_states] |- _ => inv H end;
+      try match goal with H: context[GiblePar.find_function] |- _ => 
+        exploit find_function_translated; eauto; simplify end;
+      repeat (econstructor; eauto);
+      erewrite stacksize_equal; eauto.
+  Qed.
+
+  Lemma step_list2_ge :
+    forall sp l i i',
+      step_list2 (step_instr ge) sp i l i' ->
+      step_list2 (step_instr tge) sp i l i'.
+  Proof using TRANSL.
+    induction l; simplify; inv H.
+    - constructor.
+    - econstructor. apply step_instr_ge; eauto.
+      eauto.
+  Qed.
+
+  Lemma step_list_ge :
+    forall sp l i i',
+      step_list_inter (step_instr ge) sp i l i' ->
+      step_list_inter (step_instr tge) sp i l i'.
+  Proof using TRANSL.
+    induction l; simplify; inv H.
+    - eauto using exec_term_RBnil, step_instr_ge.
+    - eauto using exec_term_RBnil, step_instr_ge.
+    - eauto using exec_term_RBcons, step_instr_ge.
+    - eauto using exec_term_RBcons_term, step_instr_ge.
+  Qed.
+
+  Lemma step_list_2_ge :
+    forall sp l i i',
+      step_list_inter (step_list_inter (step_instr ge)) sp i l i' ->
+      step_list_inter (step_list_inter (step_instr tge)) sp i l i'.
+  Proof using TRANSL.
+    induction l; simplify; inv H.
+    - eauto using exec_term_RBnil, step_list_ge.
+    - eauto using exec_term_RBnil, step_list_ge.
+    - eauto using exec_term_RBcons, step_list_ge.
+    - eauto using exec_term_RBcons_term, step_list_ge.
+  Qed.
+
   Lemma step_instr_seq_with_exit:
     forall sp a rs pr m rs' pr' m' pc,
       ParBB.step_instr_seq ge sp
@@ -179,7 +304,9 @@ Section CORRECTNESS.
     induction a; intros.
     - cbn in *. inv H. eapply exec_RBterm. repeat econstructor.
     - cbn in *. inv H. destruct i1. destruct i. econstructor; eauto.
-  Admitted.
+      eapply step_list_ge; eauto. eapply IHa; eauto.
+      inv H6.
+  Qed.
 
   Lemma step_instr_seq_with_exit':
     forall sp a rs pr m rs' pr' m' pc cf,
@@ -191,7 +318,8 @@ Section CORRECTNESS.
         (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf).
   Proof.
     induction a; intros.
-    - cbn in *. inv H. 
+    - cbn in *. inv H.
+    - inv H.
   Admitted.
 
   Lemma transl_spec_not_in':
