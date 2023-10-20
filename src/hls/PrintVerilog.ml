@@ -28,7 +28,7 @@ open Clflags
 open Printf
 
 open VericertClflags
-open FunctionalUnits
+(* open FunctionalUnits *)
 
 module PMap = Map.Make (struct
   type t = P.t
