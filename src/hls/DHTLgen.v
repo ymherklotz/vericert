@@ -356,7 +356,7 @@ Definition transf_seq_block (ctrl: control_regs) (d: datapath) (ni: node * SubPa
   let (n, bb) := ni in
   match d ! n with
   | None => 
-    do (_pred, stmnt) <- transf_parallel_block ctrl bb;
+    do (_pred, stmnt) <- transf_chained_block ctrl (Ptrue, Vskip) (concat bb);
     OK (PTree.set n stmnt d)
   | _ => Error (msg "DHTLgen: overwriting location")
   end.

@@ -1373,6 +1373,20 @@ Opaque Mem.alloc.
     forall A B f l m, @mfold_left A B f l (Error m) = Error m.
   Proof. now induction l. Qed.
 
+  Lemma mfold_left_cons:
+    forall A B f a l x y, 
+      @mfold_left A B f (a :: l) x = OK y ->
+      exists x' y', @mfold_left A B f l (OK y') = OK y /\ f x' a = OK y' /\ x = OK x'.
+  Proof.
+    intros.
+    destruct x; [|now rewrite mfold_left_error in H].
+    cbn in H.
+    replace (fold_left (fun (a : mon A) (b : B) => bind (fun a' : A => f a' b) a) l (f a0 a) = OK y) with
+      (mfold_left f l (f a0 a) = OK y) in H by auto.
+    destruct (f a0 a) eqn:?; [|now rewrite mfold_left_error in H].
+    eauto.
+  Qed.
+
   Lemma step_cf_instr_pc_ind :
     forall s f sp rs' pr' m' pc pc' cf t state,
       step_cf_instr ge (GibleSubPar.State s f sp pc rs' pr' m') cf t state ->
@@ -1386,33 +1400,183 @@ Opaque Mem.alloc.
                  ctrl_return := Pos.succ (Pos.succ (Pos.succ (max_resource_function f)))
                |}.
 
-  Lemma transl_step_state_correct_instr :
-    forall s f sp bb hw_pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa,
+  Lemma step_list_inter_not_term :
+    forall A step_i sp i cf l i' cf',
+      @step_list_inter A step_i sp (Iterm i cf) l (Iterm i' cf') ->
+      i = i' /\ cf = cf'.
+  Proof. now inversion 1. Qed.
+
+  Lemma step_exec_concat2' :
+    forall sp i c a l cf,
+      SubParBB.step_instr_list ge sp (Iexec a) i (Iterm c cf) ->
+      SubParBB.step_instr_list ge sp (Iexec a) (i ++ l) (Iterm c cf).
+  Proof. 
+    induction i.
+    - inversion 1.
+    - inversion 1; subst; clear H; cbn.
+      destruct i1. econstructor; eauto. eapply IHi; eauto.
+      exploit step_list_inter_not_term; eauto; intros. inv H.
+      eapply exec_term_RBcons; eauto. eapply exec_term_RBcons_term.
+  Qed.
+
+  Lemma step_exec_concat' :
+    forall sp i c a b l,
+      SubParBB.step_instr_list ge sp (Iexec a) i (Iexec c) ->
+      SubParBB.step_instr_list ge sp (Iexec c) l b ->
+      SubParBB.step_instr_list ge sp (Iexec a) (i ++ l) b.
+  Proof.
+    induction i.
+    - inversion 1. eauto.
+    - inversion 1; subst. clear H. cbn. intros. econstructor; eauto.
+      destruct i1; [|inversion H6].
+      eapply IHi; eauto.
+  Qed.
+
+  Lemma step_exec_concat:
+    forall sp bb a b,
+      SubParBB.step ge sp a bb b ->
+      SubParBB.step_instr_list ge sp a (concat bb) b.
+  Proof.
+    induction bb.
+    - inversion 1.
+    - inversion 1; subst; clear H.
+      + cbn. eapply step_exec_concat'; eauto.
+      + cbn in *. eapply step_exec_concat2'; eauto.
+  Qed.
+
+  Lemma transl_step_state_correct_instr_state :
+    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf pc',
       (* (fn_code f) ! pc = Some bb -> *)
       mfold_left (transf_instr (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
       eval_predf pr curr_p = true ->
       SubParBB.step_instr_list ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
-             (Iexec {| is_rs := rs'; is_ps := pr'; is_mem := m' |}) ->
-      match_states (GibleSubPar.State s f sp hw_pc rs pr m) (DHTL.State s' m_ hw_pc asr asa) ->
+             (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+      step_cf_instr ge (GibleSubPar.State s f sp pc rs' pr' m') cf Events.E0 (GibleSubPar.State s f sp pc' rs' pr' m') ->
+      match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
       exists asr' asa',
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
-        /\ match_states (GibleSubPar.State s f sp hw_pc rs' pr' m') (DHTL.State s' m_ hw_pc asr' asa').
+        /\ match_states (GibleSubPar.State s f sp pc' rs' pr' m') (DHTL.State s' m_ pc' asr' asa').
   Proof. Admitted.
 
-  Lemma transl_step_state_correct_chained :
-    forall s f sp bb hw_pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa,
+  Lemma transl_step_state_correct_instr_return :
+    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf v,
+      (* (fn_code f) ! pc = Some bb -> *)
+      mfold_left (transf_instr (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
+      stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
+      eval_predf pr curr_p = true ->
+      SubParBB.step_instr_list ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
+             (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+      step_cf_instr ge (GibleSubPar.State s f sp pc rs' pr' m') cf Events.E0 (GibleSubPar.Returnstate s v m') ->
+      match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
+      exists asr' asa' retval,
+        stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
+        /\ val_value_lessdef v retval
+        /\ asr'!(m_.(DHTL.mod_finish)) = Some (ZToValue 1)
+        /\ asr'!(m_.(DHTL.mod_return)) = Some retval
+        /\ match_states (GibleSubPar.Returnstate s v m') (DHTL.Returnstate s' retval).
+  Proof. Admitted.
+
+  Lemma transl_step_state_correct_chained_state :
+    forall s f sp bb pc pc' curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf,
       (* (fn_code f) ! pc = Some bb -> *)
       mfold_left (transf_chained_block (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
       eval_predf pr curr_p = true ->
       SubParBB.step ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
-             (Iexec {| is_rs := rs'; is_ps := pr'; is_mem := m' |}) ->
-      match_states (GibleSubPar.State s f sp hw_pc rs pr m) (DHTL.State s' m_ hw_pc asr asa) ->
+             (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
+      step_cf_instr ge (GibleSubPar.State s f sp pc rs' pr' m') cf Events.E0 (GibleSubPar.State s f sp pc' rs' pr' m') ->
+      match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
       exists asr' asa',
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
-        /\ match_states (GibleSubPar.State s f sp hw_pc rs' pr' m') (DHTL.State s' m_ hw_pc asr' asa').
-  Proof. Admitted.
+        /\ match_states (GibleSubPar.State s f sp pc' rs' pr' m') (DHTL.State s' m_ pc' asr' asa').
+  Proof. Abort.
+
+  Lemma transl_step_through_cfi' :
+    forall bb ctrl curr_p stmnt next_p stmnt' p cf,
+      mfold_left (transf_instr ctrl) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
+      In (RBexit p cf) bb ->
+      exists curr_p' stmnt'', translate_cfi ctrl (Some (Pand curr_p' (dfltp p))) cf = OK stmnt''.
+  Proof.
+    induction bb.
+    - inversion 2.
+    - intros * HFOLD HIN.
+      exploit mfold_left_cons; eauto.
+      intros (x' & y' & HFOLD' & HTRANSF & HSUBST).
+      inversion HSUBST. inv H0. clear HSUBST.
+      inv HIN; destruct y'; eauto.
+      cbn in HTRANSF. unfold Errors.bind in HTRANSF. repeat (destruct_match; try discriminate; []).
+      inv HTRANSF. eauto.
+  Qed.
+
+  Lemma transl_step_through_cfi :
+    forall bb ctrl curr_p stmnt next_p stmnt' l p cf,
+      mfold_left (transf_chained_block ctrl) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
+      In l bb ->
+      In (RBexit p cf) l ->
+      exists curr_p' stmnt'', translate_cfi ctrl (Some (Pand curr_p' (dfltp p))) cf = OK stmnt''.
+  Proof.
+    induction bb.
+    - inversion 2.
+    - intros * HFOLD HIN1 HIN2.
+      exploit mfold_left_cons; eauto.
+      intros (x' & y' & HFOLD' & HTRANSF & HSUBST).
+      destruct y'. inv HSUBST.
+      inv HIN1; eauto.
+      exploit transl_step_through_cfi'; eauto.
+  Qed.
+
+  Lemma cf_in_bb_subparbb' :
+    forall sp bb a b cf,
+      SubParBB.step_instr_list ge sp (Iexec a) bb (Iterm b cf) ->
+      exists curr_p, In (RBexit curr_p cf) bb /\ truthy (is_ps b) curr_p.
+  Proof.
+    induction bb.
+    - intros. inv H.
+    - intros. inv H.
+      destruct i1.
+      + exploit IHbb; eauto. intros (curr_p & HIN & HTRY).
+        exists curr_p. split; auto. now apply in_cons.
+      + inv H4. exists p. inv H6; split; auto; now constructor.
+  Qed.
+
+  Lemma cf_in_bb_subparbb :
+    forall sp bb a b cf,
+      SubParBB.step_instr_seq ge sp (Iexec a) bb (Iterm b cf) ->
+      exists l curr_p, In l bb /\ In (RBexit curr_p cf) l /\ truthy (is_ps b) curr_p.
+  Proof.
+    induction bb.
+    - intros. inv H.
+    - intros. inv H.
+      + exploit IHbb; eauto. intros (l & curr_p & HIN2 & HIN & HTRY).
+        exists l, curr_p. split; auto. now apply in_cons.
+      + exploit cf_in_bb_subparbb'; eauto. 
+        intros (curr_p & HIN & HTR).
+        exists a, curr_p. split; auto. now constructor.
+  Qed.
+
+  Lemma match_states_cf_events_translate_cfi:
+    forall T1 cf T2 p t ctrl stmnt,
+      translate_cfi ctrl p cf = OK stmnt ->
+      step_cf_instr ge T1 cf t T2 ->
+      t = Events.E0.
+  Proof.
+    intros * HGET HSTEP.
+    destruct cf; try discriminate; inv HSTEP; eauto.
+  Qed.
+
+  Lemma match_states_cf_states_translate_cfi:
+    forall T1 cf T2 p t ctrl stmnt,
+      translate_cfi ctrl p cf = OK stmnt ->
+      step_cf_instr ge T1 cf t T2 ->
+      exists s f sp pc rs pr m,
+        T1 = GibleSubPar.State s f sp pc rs pr m
+        /\ ((exists pc', T2 = GibleSubPar.State s f sp pc' rs pr m)
+            \/ (exists v m' stk, Mem.free m stk 0 (fn_stacksize f) = Some m' /\ sp = Values.Vptr stk Ptrofs.zero /\ T2 = GibleSubPar.Returnstate s v m')).
+  Proof.
+    intros * HGET HSTEP.
+    destruct cf; try discriminate; inv HSTEP; try (now repeat econstructor).
+  Qed.
 
   Lemma one_ne_zero:
     Int.repr 1 <> Int.repr 0.
@@ -1536,6 +1700,56 @@ Opaque Mem.alloc.
     repeat (destruct_match; try discriminate). inversion_clear H as []. auto.
   Qed.
 
+  Lemma match_states_ok_transl :
+    forall s f sp pc rs pr mem R1,
+      match_states (GibleSubPar.State s f sp pc rs pr mem) R1 ->
+      exists m asr asa s', transl_module f = OK m /\ R1 = DHTL.State s' m pc asr asa.
+  Proof. inversion 1; subst. now repeat eexists. Qed.
+
+  Lemma transl_spec_in_output :
+    forall l ctrl d_in d_out pc stmnt,
+      mfold_left (transf_seq_block ctrl) l (OK d_in) = OK d_out ->
+      d_in ! pc = Some stmnt ->
+      d_out ! pc = Some stmnt.
+  Proof.
+    induction l; intros * HFOLD HIN.
+    - cbn in *; now (inversion HFOLD; subst).
+    - exploit mfold_left_cons; eauto. 
+      intros (x' & y' & HFOLD_EXP & TRANSFSEQ & HINV). inv HINV.
+      unfold transf_seq_block in TRANSFSEQ. repeat (destruct_match; try discriminate; []).
+      destruct (peq pc n); subst.
+      + now rewrite Heqo in HIN.
+      + unfold Errors.bind2 in TRANSFSEQ. repeat (destruct_match; try discriminate; []).
+        inv TRANSFSEQ. eapply IHl; eauto. now rewrite PTree.gso by auto.
+  Qed.
+
+  Lemma transl_spec_correct' :
+    forall l ctrl d_in d_out pc bb,
+      mfold_left (transf_seq_block ctrl) l (OK d_in) = OK d_out ->
+      In (pc, bb) l ->
+      exists pred' stmnt, transf_chained_block ctrl (Ptrue, Vskip) (concat bb) = OK (pred', stmnt)
+        /\ d_out ! pc = Some stmnt.
+  Proof.
+    induction l; [now inversion 2|].
+    cbn -[mfold_left]. intros * HFOLD HIN.
+    exploit mfold_left_cons; eauto. 
+    intros (x' & y' & HFOLD_EXP & TRANSFSEQ & HINV). inv HINV.
+    inversion_clear HIN as [HIN' | HIN']; eauto.
+    inversion HIN' as [HIN_CLEAR]; subst. clear HIN_CLEAR.
+    unfold transf_seq_block, Errors.bind2 in TRANSFSEQ. 
+    repeat (destruct_match; try discriminate; []).
+    inversion TRANSFSEQ as []; subst. clear TRANSFSEQ.
+    exploit transl_spec_in_output; eauto. now rewrite PTree.gss.
+  Qed.
+
+  Lemma transl_spec_correct :
+    forall ctrl d_in d_out pc bb c,
+      mfold_left (transf_seq_block ctrl) (PTree.elements c) (OK d_in) = OK d_out ->
+      c ! pc = Some bb ->
+      exists pred' stmnt, transf_chained_block ctrl (Ptrue, Vskip) (concat bb) = OK (pred', stmnt)
+        /\ d_out ! pc = Some stmnt.
+  Proof. intros. eapply transl_spec_correct'; eauto using PTree.elements_correct. Qed.
+
   Lemma transl_step_state_correct :
     forall s f sp pc rs rs' m m' bb pr pr' state cf t,
       (fn_code f) ! pc = Some bb ->
@@ -1545,7 +1759,27 @@ Opaque Mem.alloc.
       forall R1 : DHTL.state,
         match_states (GibleSubPar.State s f sp pc rs pr m) R1 ->
         exists R2 : DHTL.state, Smallstep.plus DHTL.step tge R1 t R2 /\ match_states state R2.
-  Proof. Admitted.
+  Proof.
+    intros * HIN HSTEP HCF * HMATCH.
+    exploit match_states_ok_transl; eauto.
+    intros (m0 & asr & asa & s' & HTRANSL & ?). subst.
+    unfold transl_module, Errors.bind, bind, ret in HTRANSL.
+    repeat (destruct_match; try discriminate; []).
+    exploit transl_spec_correct; eauto.
+    intros (pred' & stmnt0 & HTRANSF & HGET).
+    exploit step_exec_concat; eauto; intros HCONCAT.
+    exploit cf_in_bb_subparbb'; eauto. intros (exit_p & HINEXIT & HTRUTHY).
+    exploit transl_step_through_cfi'; eauto. intros (curr_p & _stmnt & HCFI).
+    exploit match_states_cf_states_translate_cfi; eauto. intros (s0 & f1 & sp0 & pc0 & rs0 & pr0 & m2 & HPARSTATE & HEXISTS).
+    exploit match_states_cf_events_translate_cfi; eauto; intros; subst.
+    inv HEXISTS.
+    - inv HPARSTATE. inv H. exploit transl_step_state_correct_instr_state; eauto.
+      constructor. intros (asr' & asa' & HSTMNTRUN & HMATCH').
+      do 2 apply match_states_merge_empty_all in HMATCH'.
+      eexists. split; eauto. inv HMATCH. inv CONST.
+      apply Smallstep.plus_one. econstructor; eauto.
+      inv HTRANSL. auto. erewrite transl_module_ram_none by eauto. constructor.
+      inv HMATCH'. unfold state_st_wf in WF0. auto.
 
   Theorem transl_step_correct:
     forall (S1 : GibleSubPar.state) t S2,
