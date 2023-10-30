@@ -672,6 +672,32 @@ Fixpoint max_predicate (p: pred_op) : positive :=
   | Por a b => Pos.max (max_predicate a) (max_predicate b)
   end.
 
+  Lemma max_predicate_deep_simplify' :
+    forall peq curr r,
+      (r <= max_predicate (deep_simplify' peq curr))%positive ->
+      (r <= max_predicate curr)%positive.
+  Proof.
+    destruct curr; cbn -[deep_simplify']; auto.
+    - intros. unfold deep_simplify' in H.
+      destruct curr1; destruct curr2; try (destruct_match; cbn in *); lia.
+    - intros. unfold deep_simplify' in H.
+      destruct curr1; destruct curr2; try (destruct_match; cbn in *); lia.
+  Qed.
+
+  Lemma max_predicate_deep_simplify :
+    forall peq curr r,
+      (r <= max_predicate (deep_simplify peq curr))%positive ->
+      (r <= max_predicate curr)%positive.
+  Proof.
+    induction curr; try solve [cbn; auto]; cbn -[deep_simplify'] in *.
+    - intros. apply max_predicate_deep_simplify' in H. cbn -[deep_simplify'] in *.
+      assert (HX: (r <= max_predicate (deep_simplify peq curr1))%positive \/ (r <= max_predicate (deep_simplify peq curr2))%positive) by lia.
+      inv HX; [eapply IHcurr1 in H0 | eapply IHcurr2 in H0]; lia.
+    - intros. apply max_predicate_deep_simplify' in H. cbn -[deep_simplify'] in *.
+      assert (HX: (r <= max_predicate (deep_simplify peq curr1))%positive \/ (r <= max_predicate (deep_simplify peq curr2))%positive) by lia.
+      inv HX; [eapply IHcurr1 in H0 | eapply IHcurr2 in H0]; lia.
+  Qed.
+
 Definition tseytin (p: pred_op) :
   {fm: formula | forall a,
       sat_predicate p a = true <-> sat_formula fm a}.

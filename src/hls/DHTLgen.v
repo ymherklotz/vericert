@@ -291,7 +291,7 @@ Definition tbl_to_case_expr (st : reg) (ns : list node) : list (expr * stmnt) :=
                   end)
            (enumerate 0 ns).
 
-Definition translate_cfi (ctrl: control_regs) p (cfi: cf_instr)
+Definition translate_cfi curr_n (ctrl: control_regs) p (cfi: cf_instr)
   : Errors.res stmnt :=
   match cfi with
   | RBgoto n' =>
@@ -302,9 +302,13 @@ Definition translate_cfi (ctrl: control_regs) p (cfi: cf_instr)
   | RBreturn r =>
     match r with
     | Some r' =>
-      Errors.OK (Vseq (Vblock (Vvar ctrl.(ctrl_fin)) (Vlit (ZToValue 1%Z))) (Vblock (Vvar ctrl.(ctrl_return)) (Vvar (reg_enc r'))))
+      Errors.OK (Vseq (Vseq (translate_predicate Vblock p (Vvar ctrl.(ctrl_fin)) (Vlit (ZToValue 1)))
+                 (translate_predicate Vblock p (Vvar ctrl.(ctrl_return)) (Vvar (reg_enc r')))) 
+                 (state_goto p ctrl.(ctrl_st) curr_n))
     | None =>
-      Errors.OK (Vseq (Vblock (Vvar ctrl.(ctrl_fin)) (Vlit (ZToValue 1%Z))) (Vblock (Vvar ctrl.(ctrl_return)) (Vlit (ZToValue 0%Z))))
+      Errors.OK (Vseq (Vseq (translate_predicate Vblock p (Vvar ctrl.(ctrl_fin)) (Vlit (ZToValue 1)))
+                 (translate_predicate Vblock p (Vvar ctrl.(ctrl_return)) (Vlit (ZToValue 0)))) 
+                 (state_goto p ctrl.(ctrl_st) curr_n))
     end
   | RBjumptable r tbl =>
     Errors.OK (Vcase (Vvar (reg_enc r)) (list_to_stmnt (tbl_to_case_expr ctrl.(ctrl_st) tbl)) (Some Vskip))
@@ -316,7 +320,23 @@ Definition translate_cfi (ctrl: control_regs) p (cfi: cf_instr)
     Errors.Error (Errors.msg "HTLPargen: RBbuildin not supported.")
   end.
 
-Definition transf_instr (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
+Definition assert_ (b: bool) m: res unit :=
+  if b then OK tt else Error (msg m).
+
+Definition check_cfi n (cfi: cf_instr): res unit :=
+  do _assert <- assert_ (Z.pos n <=? Integers.Int.max_unsigned) "DHTLgen: State larger than 2^32";
+  match cfi with
+  | RBgoto n' =>
+    assert_ (Z.pos n' <=? Integers.Int.max_unsigned) "DHTLgen: State larger than 2^32"
+  | RBcond c args n1 n2 =>
+    assert_ ((Z.pos n1 <=? Integers.Int.max_unsigned) 
+             && (Z.pos n2 <=? Integers.Int.max_unsigned)) "DHTLgen: State larger than 2^32"
+  | RBjumptable r tbl =>
+    assert_ (forallb (fun x => Z.pos x <=? Integers.Int.max_unsigned) tbl) "DHTLgen: State larger than 2^32"
+  | _ => OK tt
+  end.
+
+Definition transf_instr n (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
            : Errors.res (pred_op * stmnt) :=
   let '(curr_p, d) := dc in
   let npred p := Some (Pand curr_p (dfltp p)) in
@@ -339,24 +359,25 @@ Definition transf_instr (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
     let stmnt := translate_predicate Vblock (npred p') (pred_expr (Plit (true, p))) cond' in
     Errors.OK (curr_p, Vseq d stmnt)
   | RBexit p cf => 
-    do d_stmnt <- translate_cfi ctrl (npred p) cf;
+    do _check <- check_cfi n cf;
+    do d_stmnt <- translate_cfi n ctrl (npred p) cf;
     Errors.OK (Pand curr_p (negate (dfltp p)), Vseq d d_stmnt)
   end.
 
-Definition transf_chained_block (ctrl: control_regs) (dc: @pred_op positive * stmnt) (block: list instr)
+Definition transf_chained_block n (ctrl: control_regs) (dc: @pred_op positive * stmnt) (block: list instr)
            : Errors.res (pred_op * stmnt) :=
-  mfold_left (transf_instr ctrl) block (OK dc).
+  mfold_left (transf_instr n ctrl) block (OK dc).
 
-Definition transf_parallel_block (ctrl: control_regs) (block: list (list instr))
+Definition transf_parallel_block n (ctrl: control_regs) (block: list (list instr))
            : Errors.res (pred_op * stmnt) :=
-  mfold_left (transf_chained_block ctrl) block (OK (Ptrue, Vskip)).
+  mfold_left (transf_chained_block n ctrl) block (OK (Ptrue, Vskip)).
 
 Definition transf_seq_block (ctrl: control_regs) (d: datapath) (ni: node * SubParBB.t)
            : Errors.res datapath :=
   let (n, bb) := ni in
   match d ! n with
   | None => 
-    do (_pred, stmnt) <- transf_chained_block ctrl (Ptrue, Vskip) (concat bb);
+    do (_pred, stmnt) <- transf_chained_block n ctrl (Ptrue, Vskip) (concat bb);
     OK (PTree.set n stmnt d)
   | _ => Error (msg "DHTLgen: overwriting location")
   end.
