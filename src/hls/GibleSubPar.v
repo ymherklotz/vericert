@@ -40,9 +40,7 @@ Module SubParBB <: BlockType.
   Definition t := list (list instr).
 
   Definition foldl (A: Type) (f: A -> instr -> A) (bb : t) (m : A): A :=
-    fold_left
-      (fun x l => fold_left f l x)
-      bb m.
+    fold_left f (concat bb) m.
 
   Definition length : t -> nat := @length (list instr).
 

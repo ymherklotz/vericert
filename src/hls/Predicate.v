@@ -698,6 +698,12 @@ Fixpoint max_predicate (p: pred_op) : positive :=
       inv HX; [eapply IHcurr1 in H0 | eapply IHcurr2 in H0]; lia.
   Qed.
 
+  Lemma max_predicate_negate : 
+    forall p, max_predicate (negate p) = max_predicate p.
+  Proof.
+    induction p; intuition; cbn; rewrite IHp1; now rewrite IHp2.
+  Qed.
+
 Definition tseytin (p: pred_op) :
   {fm: formula | forall a,
       sat_predicate p a = true <-> sat_formula fm a}.

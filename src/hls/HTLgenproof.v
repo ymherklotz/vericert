@@ -1695,7 +1695,6 @@ Ltac unfold_merge :=
       exact (Values.Vint (Int.repr 0)).
       exact tt.
   Qed.
-  Admitted.
   #[local] Hint Resolve transl_iload_correct : htlproof.
 
   Lemma transl_istore_correct:

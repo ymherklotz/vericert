@@ -104,6 +104,12 @@ Definition translate_predicate (a : assignment)
     end
   end.
 
+Definition translate_predicate_cond (p: option pred_op) (s: stmnt) :=
+  match p with
+  | None => s
+  | Some pos => Vcond (pred_expr pos) s Vskip
+  end.
+
 Definition state_goto (p: option pred_op) (st : reg) (n : node) : stmnt :=
   translate_predicate Vblock p (Vvar st) (Vlit (posToValue n)).
 
@@ -311,7 +317,8 @@ Definition translate_cfi curr_n (ctrl: control_regs) p (cfi: cf_instr)
                  (state_goto p ctrl.(ctrl_st) curr_n))
     end
   | RBjumptable r tbl =>
-    Errors.OK (Vcase (Vvar (reg_enc r)) (list_to_stmnt (tbl_to_case_expr ctrl.(ctrl_st) tbl)) (Some Vskip))
+    (* Errors.OK (Vcase (Vvar (reg_enc r)) (list_to_stmnt (tbl_to_case_expr ctrl.(ctrl_st) tbl)) (Some Vskip)) *)
+    Errors.Error (Errors.msg "DHTLgen: RBjumptable not supported.")
   | RBcall sig ri rl r n =>
     Errors.Error (Errors.msg "HTLPargen: RBcall not supported.")
   | RBtailcall sig ri lr =>
@@ -352,8 +359,8 @@ Definition transf_instr n (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
     Errors.OK (curr_p, Vseq d stmnt)
   | RBstore p mem addr args src =>
     do dst <- translate_arr_access mem addr args ctrl.(ctrl_stack);
-    let stmnt := translate_predicate Vblock (npred p) dst (Vvar (reg_enc src)) in
-    Errors.OK (curr_p, Vseq d stmnt)
+    let stmnt := Vblock dst (Vvar (reg_enc src)) in
+    Errors.OK (curr_p, Vseq d (translate_predicate_cond (npred p) stmnt))
   | RBsetpred p' cond args p =>
     do cond' <- translate_condition cond args;
     let stmnt := translate_predicate Vblock (npred p') (pred_expr (Plit (true, p))) cond' in

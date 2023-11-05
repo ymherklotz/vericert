@@ -82,6 +82,12 @@ Ltac destruct_match :=
 
 Ltac auto_destruct x := destruct x eqn:?; simpl in *; try discriminate; try congruence.
 
+  Ltac destin x := 
+    match type of x with 
+    | context[match ?y with _ => _ end] => let DIN := fresh "DIN" in destruct y eqn:DIN
+    | _ => fail
+    end.
+
 Ltac nicify_hypotheses :=
   repeat match goal with
          | [ H : ex _ |- _ ] => inv H
