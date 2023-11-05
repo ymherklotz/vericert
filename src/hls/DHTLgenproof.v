@@ -655,7 +655,7 @@ Section CORRECTNESS.
     apply Ptrofs.agree32_of_int; auto.
   Qed.
 
-  Lemma lt_in_range :
+  Lemma le_in_range :
     forall a b c,
       c >= 0 ->
       a mod c = 0 ->
@@ -671,10 +671,152 @@ Section CORRECTNESS.
       rewrite ZLib.div_mul_undo by lia. nia.
   Qed.
 
+  Lemma lt_in_range :
+    forall a b c,
+      c >= 0 ->
+      a mod c = 0 ->
+      0 <= a < b ->
+      0 <= a / c < b.
+  Proof.
+    intros * ? HY **.
+    split.
+    - apply Z_div_nonneg_nonneg; lia.
+    - assert (forall a b c, c > 0 -> a * c < b * c -> a < b) by nia.
+      destruct (Z.eq_dec c 0); subst; try lia. rewrite Zdiv_0_r; lia.
+      apply H1 with (c:=c); try lia.
+      rewrite ZLib.div_mul_undo by lia. nia.
+  Qed.
+
   Hint Resolve int_unsigned_lt_ptrofs_max : int_ptrofs.
   Hint Resolve ptrofs_unsigned_lt_int_max : int_ptrofs.
   Hint Resolve Ptrofs.unsigned_range_2 : int_ptrofs.
   Hint Resolve Int.unsigned_range_2 : int_ptrofs.
+
+  Lemma ptrofs_mod_4 :
+    forall a m b v,
+      Mem.load Mint32 m b (Ptrofs.unsigned a) = Some v ->
+      Int.unsigned (ptrToValue a) mod 4 = 0.
+  Proof. 
+    intros. exploit loadv_mod_ok2. unfold Mem.loadv. eassumption. intros.
+    rewrite <- H0; symmetry. unfold ptrToValue. f_equal. apply Ptrofs.agree32_to_int; auto.
+  Qed.
+
+  Lemma ptrofs_div_4 :
+    forall a,
+      Int.unsigned (ptrToValue a) mod 4 = 0 ->
+      ((Ptrofs.unsigned (Ptrofs.repr (4 * Int.unsigned (Int.divu (ptrToValue a) (ZToValue 4))))) = Ptrofs.unsigned a).
+  Proof. 
+    intros. unfold Int.divu. rewrite Int.unsigned_repr.
+    replace (Int.unsigned (ZToValue 4)) with 4 by auto. rewrite <- Z_div_exact_2.
+    rewrite Ptrofs.unsigned_repr. unfold ptrToValue. symmetry. apply Ptrofs.agree32_to_int; auto.
+    apply int_unsigned_lt_ptrofs_max. lia. auto.
+    unfold ZToValue; rewrite ! Int.unsigned_repr; try now crush. apply le_in_range. lia. auto.
+    auto with int_ptrofs.
+  Qed.
+
+  Lemma equiv_stack_pointer_reg_stack_based :
+    forall rs b,
+      reg_stack_based_pointers b rs ->
+      forall sp r i,
+        rs !! r = Values.Vptr sp i ->
+        b = sp.
+  Proof.
+    intros * RSBP * Heqv1.
+    unfold reg_stack_based_pointers, stack_based in RSBP. specialize (RSBP r). now rewrite Heqv1 in RSBP.
+  Qed.
+
+  Lemma storev_stack_bounds :
+    forall m sp v dst m' hi,
+      Mem.storev Mint32 m (Values.Vptr sp v) dst = Some m' ->
+      stack_bounds (Values.Vptr sp (Ptrofs.repr 0)) hi m ->
+      (Ptrofs.unsigned v) mod 4 = 0 ->
+      0 <= Ptrofs.unsigned v < hi.
+  Proof.
+    intros. unfold stack_bounds in *.
+    pose proof (Ptrofs.unsigned_range_2 v).
+    assert (Ptrofs.max_unsigned = Int.max_unsigned) by crush.
+    destruct (Z.lt_decidable Int.max_unsigned hi).
+    - lia.
+    - assert (0 <= Ptrofs.unsigned v < hi \/ hi <= Ptrofs.unsigned v <= Int.max_unsigned) by lia.
+      inv H5; auto. pose proof (H0 _ dst H6 H1). destruct H5. rewrite Ptrofs.repr_unsigned in *. 
+      cbn in H7. rewrite Ptrofs.add_zero_l in *. unfold Mem.storev in *. congruence.
+  Qed.
+
+  Lemma loadv_stack_bounds :
+    forall m sp v m' hi,
+      Mem.loadv Mint32 m (Values.Vptr sp v) = Some m' ->
+      stack_bounds (Values.Vptr sp (Ptrofs.repr 0)) hi m ->
+      (Ptrofs.unsigned v) mod 4 = 0 ->
+      0 <= Ptrofs.unsigned v < hi.
+  Proof.
+    intros. unfold stack_bounds in *.
+    pose proof (Ptrofs.unsigned_range_2 v).
+    assert (Ptrofs.max_unsigned = Int.max_unsigned) by crush.
+    destruct (Z.lt_decidable Int.max_unsigned hi).
+    - lia.
+    - assert (0 <= Ptrofs.unsigned v < hi \/ hi <= Ptrofs.unsigned v <= Int.max_unsigned) by lia.
+      inv H5; auto. pose proof (H0 _ (Values.Vint (Int.repr 0)) H6 H1). destruct H5. rewrite Ptrofs.repr_unsigned in *. 
+      cbn in H5. rewrite Ptrofs.add_zero_l in *. unfold Mem.loadv in *. congruence.
+  Qed.
+
+  Lemma agree32_ptrToValue :
+    forall p, Ptrofs.agree32 p (ptrToValue p).
+  Proof.
+    unfold ptrToValue. eapply Ptrofs.agree32_to_int; auto.
+  Qed.
+
+  Lemma div_lt_mono :
+    forall a b c, c > 0 -> b mod c = 0 -> a < b -> a / c < b / c.
+  Proof.
+    intros. assert (forall a b c, c > 0 -> a * c < b * c -> a < b) by nia.
+    eapply Zdiv_lt_upper_bound; try lia.
+    replace (b / c * c) with (c * (b / c) + b mod c) by lia.
+    now rewrite <- Z_div_mod_eq_full.
+  Qed.
+
+  Lemma int_divu_cast:
+    forall a,
+      Ptrofs.unsigned a mod 4 = 0 ->
+      Int.unsigned (Int.divu (ptrToValue a) (ZToValue 4)) = 
+        Ptrofs.unsigned a / 4.
+  Proof.
+    unfold Int.divu; intros. unfold ZToValue.
+    pose proof (agree32_ptrToValue a). unfold Ptrofs.agree32 in *.
+    repeat rewrite !Int.unsigned_repr; try now crush.
+    eapply le_in_range; try now crush. auto with int_ptrofs.
+  Qed.
+
+  Lemma le_div_implies_le: 
+    forall a b c, c >= 0 -> a mod c = 0 -> b mod c = 0 -> a / c <= b / c -> a <= b.
+  Proof.
+    intros * HGT **. rewrite Z_div_mod_eq_full with (a := a) (b := c).
+    rewrite Z_div_mod_eq_full with (a := b) (b := c).
+    rewrite H. rewrite H0. rewrite !Z.add_0_r.
+    nia.
+  Qed.
+
+  Lemma not_eq_pointer_to_addr :
+    forall ptr a,
+      0 <= 4 * ptr <= Ptrofs.max_unsigned ->
+      Ptrofs.unsigned a mod 4 = 0 ->
+      ptr <> Int.unsigned (Int.divu (ptrToValue a) (ZToValue 4)) ->
+      Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr 0) (Ptrofs.repr (4 * ptr))) + 4 <= Ptrofs.unsigned a 
+      \/ Ptrofs.unsigned a + 4 <= Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr 0) (Ptrofs.repr (4 * ptr))).
+  Proof.
+    intros * HMAX **. rewrite int_divu_cast in *; auto.
+    rewrite !Ptrofs.add_zero_l.
+    assert (4 * ptr <> Ptrofs.unsigned a).
+    { unfold not; intros. apply H0. rewrite <- H1. rewrite Z.mul_comm. now rewrite Z.div_mul. }
+    rewrite Ptrofs.unsigned_repr; auto. destruct (Z.lt_decidable ptr (Ptrofs.unsigned a / 4)).
+    - left. apply le_div_implies_le with (c := 4); try lia. rewrite ZLib.mod_add_r by lia.
+      now rewrite ZLib.Z_mod_mult'.
+      rewrite Z.add_comm. rewrite Z.mul_comm. rewrite Z_div_plus by lia. rewrite Z_div_same by lia.
+      lia.
+    - right. apply le_div_implies_le with (c := 4); try lia. now rewrite ZLib.mod_add_r by lia. 
+      now rewrite ZLib.Z_mod_mult'.
+      replace 4 with (4 * 1) at 1 by lia. rewrite Z.mul_comm. rewrite Z_div_plus by lia.
+      rewrite Z.mul_comm. rewrite Z.div_mul by lia. lia.
+  Qed.
 
   Lemma transl_store_correct :
     forall m0 a0 l f e asr0 asa0 asr asa next_p sp o m_ rs pr m r rs' pr' m' s pc s' a stmnt,
@@ -718,32 +860,37 @@ Section CORRECTNESS.
           -- erewrite arr_assocmap_set_gss by eassumption. eauto.
           -- now rewrite <- array_set_len.
           -- now rewrite <- array_set_len.
-          -- intros * HBOUND. rewrite <- array_set_len in HBOUND. apply HARR4 in HBOUND. 
+          -- intros * HBOUND. rewrite <- array_set_len in HBOUND. pose proof HBOUND as HBOUND'. learn HBOUND'. apply HARR4 in HBOUND. 
              unfold Mem.loadv, Mem.storev in *. move MEMLOAD after HBOUND. repeat destr.
              destruct (rs' !! r0) eqn:?; crush. replace Archi.ptr64 with false in Heqv0 by auto.
              inv Heqv0. inv HADD. inv Heqv. 
+             exploit stack_correct_transl; eauto; intros (STK1 & STK2 & STK3).
              destruct (Z.eq_dec ptr (Int.unsigned (Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) (ZToValue 4)))); subst.
-             ++ rewrite get_mem_set_array_gss. exploit Mem.load_store_same; eauto; intros.
-                rewrite Ptrofs.add_zero_l in *.
-                assert (Int.unsigned (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) mod 4 = 0).
-                { exploit loadv_mod_ok2. unfold Mem.loadv. eassumption. intros.
-                  rewrite <- H0; symmetry. unfold ptrToValue. f_equal. apply Ptrofs.agree32_to_int; auto. }
-                assert (Ptrofs.unsigned (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z))) 
-                  = (Ptrofs.unsigned (Ptrofs.repr (4 * Int.unsigned (Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) (ZToValue 4)))))).
-                { unfold Int.divu. rewrite Int.unsigned_repr.
-                  replace (Int.unsigned (ZToValue 4)) with 4 by auto. rewrite <- Z_div_exact_2.
-                  rewrite Ptrofs.unsigned_repr. unfold ptrToValue. apply Ptrofs.agree32_to_int; auto.
-                  apply int_unsigned_lt_ptrofs_max. lia. auto.
-                  unfold ZToValue; rewrite ! Int.unsigned_repr; try now crush. apply lt_in_range. auto with int_ptrofs; crush.
-                  auto. auto with int_ptrofs.
-                }
-                rewrite <- H0.
-                assert (b = sp0).
-                { unfold reg_stack_based_pointers, stack_based in RSBP. specialize (RSBP r0). now rewrite Heqv1 in RSBP. }
-                subst. rewrite H. cbn. destruct_match; econstructor; try solve [repeat econstructor].
-                rewrite <- Heqv. inv MASSOC. eapply H1; extlia. replace Archi.ptr64 with false by auto. rewrite <- Heqv. 
-                inv MASSOC. eapply H1; extlia. unfold valueToNat. unfold Int.divu.
-             ++ admit.
+             ++ exploit Mem.load_store_same; eauto; intros.
+                pose proof (ptrofs_mod_4 _ _ _ _ H) as HY.
+                pose proof (ptrofs_div_4 _ HY) as HYY.
+                assert (b = sp0) by (eapply equiv_stack_pointer_reg_stack_based; eauto); subst.
+                rewrite get_mem_set_array_gss; try rewrite Ptrofs.add_zero_l in *.
+                ** rewrite HYY.
+                   subst. rewrite H. cbn. destruct_match; econstructor; try solve [repeat econstructor].
+                   rewrite <- Heqv. inv MASSOC. eapply H2; extlia. replace Archi.ptr64 with false by auto. rewrite <- Heqv. 
+                   inv MASSOC. eapply H2; extlia.
+                ** unfold valueToNat. unfold Int.divu. unfold stack_bounds in *.
+                   enough ((0 <= (Int.unsigned (Int.repr (Int.unsigned (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) / Int.unsigned (ZToValue 4)))) < Z.of_nat (arr_length stack))); [lia|].
+                   repeat rewrite !Int.unsigned_repr; try now crush.
+                   2: { eapply le_in_range; eauto; try lia; eauto with int_ptrofs. }
+                   exploit storev_stack_bounds; eauto. rewrite <- HY. f_equal. apply agree32_ptrToValue.
+                   intros. rewrite HARR2. rewrite Z_to_nat_max.
+                   replace (Z.max (fn_stacksize f / 4) 0) with (fn_stacksize f / 4).
+                   pose proof (agree32_ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))); unfold Ptrofs.agree32 in *.
+                   split. eapply Z_div_nonneg_nonneg; lia.
+                   eapply div_lt_mono; lia.
+                   destruct (Z.max_dec (fn_stacksize f / 4) 0). congruence.
+                   rewrite e. pose proof (Z.le_max_l (fn_stacksize f / 4) 0). rewrite e in H3. 
+                   pose proof (Z_div_nonneg_nonneg _ 4 STK1 ltac:(lia)). lia.
+             ++ exploit Mem.load_store_other; eauto.
+                2: { intros HLOAD. rewrite HLOAD. admit. }
+                cbn. right. eapply not_eq_pointer_to_addr; eauto. admit. admit.
          * admit.
          * admit.
       + auto.
