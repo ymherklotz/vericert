@@ -655,6 +655,27 @@ Section CORRECTNESS.
     apply Ptrofs.agree32_of_int; auto.
   Qed.
 
+  Lemma lt_in_range :
+    forall a b c,
+      c >= 0 ->
+      a mod c = 0 ->
+      0 <= a <= b ->
+      0 <= a / c <= b.
+  Proof.
+    intros * ? HY **.
+    split.
+    - apply Z_div_nonneg_nonneg; lia.
+    - assert (forall a b c, c > 0 -> a * c <= b * c -> a <= b) by nia.
+      destruct (Z.eq_dec c 0); subst; try lia. rewrite Zdiv_0_r; lia.
+      apply H1 with (c:=c); try lia.
+      rewrite ZLib.div_mul_undo by lia. nia.
+  Qed.
+
+  Hint Resolve int_unsigned_lt_ptrofs_max : int_ptrofs.
+  Hint Resolve ptrofs_unsigned_lt_int_max : int_ptrofs.
+  Hint Resolve Ptrofs.unsigned_range_2 : int_ptrofs.
+  Hint Resolve Int.unsigned_range_2 : int_ptrofs.
+
   Lemma transl_store_correct :
     forall m0 a0 l f e asr0 asa0 asr asa next_p sp o m_ rs pr m r rs' pr' m' s pc s' a stmnt,
       translate_arr_access m0 a0 l (ctrl_stack (mk_ctrl f)) = OK e ->
@@ -700,10 +721,31 @@ Section CORRECTNESS.
           -- intros * HBOUND. rewrite <- array_set_len in HBOUND. apply HARR4 in HBOUND. 
              unfold Mem.loadv, Mem.storev in *. move MEMLOAD after HBOUND. repeat destr.
              destruct (rs' !! r0) eqn:?; crush. replace Archi.ptr64 with false in Heqv0 by auto.
-             inv Heqv0. inv HADD. inv Heqv.
-             exploit Mem.load_store_other.
-             exploit Mem.load_store_same; eauto; intros. inv HADD. cbn in Heqv. inv Heqv.
-             inv Heqv0.
+             inv Heqv0. inv HADD. inv Heqv. 
+             destruct (Z.eq_dec ptr (Int.unsigned (Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) (ZToValue 4)))); subst.
+             ++ rewrite get_mem_set_array_gss. exploit Mem.load_store_same; eauto; intros.
+                rewrite Ptrofs.add_zero_l in *.
+                assert (Int.unsigned (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) mod 4 = 0).
+                { exploit loadv_mod_ok2. unfold Mem.loadv. eassumption. intros.
+                  rewrite <- H0; symmetry. unfold ptrToValue. f_equal. apply Ptrofs.agree32_to_int; auto. }
+                assert (Ptrofs.unsigned (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z))) 
+                  = (Ptrofs.unsigned (Ptrofs.repr (4 * Int.unsigned (Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) (ZToValue 4)))))).
+                { unfold Int.divu. rewrite Int.unsigned_repr.
+                  replace (Int.unsigned (ZToValue 4)) with 4 by auto. rewrite <- Z_div_exact_2.
+                  rewrite Ptrofs.unsigned_repr. unfold ptrToValue. apply Ptrofs.agree32_to_int; auto.
+                  apply int_unsigned_lt_ptrofs_max. lia. auto.
+                  unfold ZToValue; rewrite ! Int.unsigned_repr; try now crush. apply lt_in_range. auto with int_ptrofs; crush.
+                  auto. auto with int_ptrofs.
+                }
+                rewrite <- H0.
+                assert (b = sp0).
+                { unfold reg_stack_based_pointers, stack_based in RSBP. specialize (RSBP r0). now rewrite Heqv1 in RSBP. }
+                subst. rewrite H. cbn. destruct_match; econstructor; try solve [repeat econstructor].
+                rewrite <- Heqv. inv MASSOC. eapply H1; extlia. replace Archi.ptr64 with false by auto. rewrite <- Heqv. 
+                inv MASSOC. eapply H1; extlia. unfold valueToNat. unfold Int.divu.
+             ++ admit.
+         * admit.
+         * admit.
       + auto.
     - admit.
     - admit.
