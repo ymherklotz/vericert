@@ -362,6 +362,7 @@ Definition transf_instr n (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
     let stmnt := Vblock dst (Vvar (reg_enc src)) in
     Errors.OK (curr_p, Vseq d (translate_predicate_cond (npred p) stmnt))
   | RBsetpred p' cond args p =>
+    do _check <- assert_ (negb (predin peq p curr_p)) "DHTLgen: Predicate being reassigned";
     do cond' <- translate_condition cond args;
     let stmnt := translate_predicate Vblock (npred p') (pred_expr (Plit (true, p))) cond' in
     Errors.OK (curr_p, Vseq d stmnt)

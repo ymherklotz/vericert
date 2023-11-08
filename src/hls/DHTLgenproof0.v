@@ -473,32 +473,11 @@ Lemma all_le_max_predicate_instr :
     Forall (fun x : positive => Ple x max) (pred_uses bb) ->
     Ple (max_predicate curr_p) max ->
     Ple (max_predicate next_p) max.
-Proof. Admitted.
-
-Lemma all_le_max_predicate :
-  forall n ctrl bb curr_p stmnt next_p stmnt' max,
-    mfold_left (transf_instr n ctrl) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
-    Forall (fun i0 : instr => Forall (fun x : positive => Ple x max) (pred_uses i0)) bb ->
-    Ple (max_predicate curr_p) max ->
-    Ple (max_predicate next_p) max.
-Proof. Admitted.
-
-Lemma ple_max_resource_function:
-  forall f r,
-    Ple r (max_reg_function f) ->
-    Ple (reg_enc r) (max_resource_function f).
-Proof.
-  intros * Hple.
-  unfold max_resource_function, reg_enc, Ple in *. lia.
-Qed.
-
-Lemma ple_pred_max_resource_function:
-  forall f r,
-    Ple r (max_pred_function f) ->
-    Ple (pred_enc r) (max_resource_function f).
-Proof.
-  intros * Hple.
-  unfold max_resource_function, pred_enc, Ple in *. lia.
+Proof. 
+  intros. 
+  unfold transf_instr, Errors.bind, ret in *. destruct_match; repeat destr; crush.
+  inv H. cbn. destruct o; cbn; try extlia.
+  apply le_max_pred in H0. rewrite max_predicate_negate. extlia.
 Qed.
 
 Lemma mfold_left_error:
@@ -528,6 +507,37 @@ Proof.
   - intros. destruct x; [|now rewrite mfold_left_error in H]. exists a. eauto.
   - intros. destruct x; [|now rewrite mfold_left_error in H]. rewrite <- app_comm_cons in H.
     exploit mfold_left_cons; eauto.
+Qed.
+
+Lemma all_le_max_predicate :
+  forall n ctrl bb curr_p stmnt next_p stmnt' max,
+    mfold_left (transf_instr n ctrl) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
+    Forall (fun i0 : instr => Forall (fun x : positive => Ple x max) (pred_uses i0)) bb ->
+    Ple (max_predicate curr_p) max ->
+    Ple (max_predicate next_p) max.
+Proof. 
+  induction bb.
+  - crush.
+  - intros. exploit mfold_left_cons; eauto; intros (x' & y' & M1 & M2 & M3). inv M3.
+    destruct y'. inv H0. eapply IHbb; eauto. eapply all_le_max_predicate_instr; eauto.
+Qed.
+
+Lemma ple_max_resource_function:
+  forall f r,
+    Ple r (max_reg_function f) ->
+    Ple (reg_enc r) (max_resource_function f).
+Proof.
+  intros * Hple.
+  unfold max_resource_function, reg_enc, Ple in *. lia.
+Qed.
+
+Lemma ple_pred_max_resource_function:
+  forall f r,
+    Ple r (max_pred_function f) ->
+    Ple (pred_enc r) (max_resource_function f).
+Proof.
+  intros * Hple.
+  unfold max_resource_function, pred_enc, Ple in *. lia.
 Qed.
 
 Section CORRECTNESS.

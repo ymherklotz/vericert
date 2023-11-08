@@ -655,6 +655,37 @@ Section CORRECTNESS.
     apply Ptrofs.agree32_of_int; auto.
   Qed.
 
+
+  Lemma exec_expr_store_2 :
+    forall f m_ rs' pr' asr r0 r1 z sp v' asa z0,
+      transl_module f = OK m_ ->
+      match_assocmaps (max_reg_function f) (max_pred_function f) rs' pr' asr ->
+      Values.Val.add rs' !! r0 (Values.Val.add (Values.Val.mul rs' !! r1 (Values.Vint (Int.repr z))) (Values.Vint (Int.repr z0))) = Values.Vptr sp v' ->
+      reg_stack_based_pointers sp rs' ->
+      Ple r0 (max_reg_function f) ->
+      Ple r1 (max_reg_function f) ->
+      expr_runp tt asr asa (Vbinop Vdivu (Vbinop Vadd (boplitz Vadd r0 z0) (boplitz Vmul r1 z)) (Vlit (ZToValue 4))) (Int.divu (ptrToValue v') (ZToValue 4)).
+  Proof.
+    intros * ? ? ? ? ? HPLE2. rename H3 into HPLE. repeat econstructor. cbn.
+    replace (Int.eq (ZToValue 4) Int.zero) with false.
+    2: { unfold Int.eq. destruct_match; auto. exfalso. unfold Int.zero, ZToValue in *. 
+         clear Heqs. rewrite ! Int.unsigned_repr in e; [discriminate| |]; crush. }
+    unfold ptrToValue.
+    destruct (rs' !! r0) eqn:?; crush;
+    destruct (rs' !! r1) eqn:?; crush.
+    replace Archi.ptr64 with false in H1 by auto. inv H1.
+    f_equal. unfold Ptrofs.to_int.
+    symmetry; rewrite <- Int.repr_unsigned at 1. symmetry. f_equal.
+    setoid_rewrite Int.add_commut at 2.
+    rewrite Int.add_permut at 1.
+    apply Ptrofs.agree32_add; auto; unfold ZToValue.
+    inv H0. exploit H1; try eapply HPLE; intros. rewrite Heqv in H0. inv H0. unfold valueToPtr.
+    apply Ptrofs.agree32_of_int; auto.
+    assert (forall a b : int, b = a -> Ptrofs.agree32 (Ptrofs.of_int b) a) by (intros; subst; eauto using Ptrofs.agree32_of_int).
+    eapply H1. repeat f_equal.
+    inv H0. exploit H3; eauto; intros. rewrite Heqv0 in H0. inv H0. unfold valueToPtr. auto.
+  Qed.
+
   Lemma le_in_range :
     forall a b c,
       c >= 0 ->
@@ -774,6 +805,16 @@ Section CORRECTNESS.
     now rewrite <- Z_div_mod_eq_full.
   Qed.
 
+  Lemma div_lt_mono2 :
+    forall a b c, c > 0 -> a mod c = 0 -> b mod c = 0 -> a / c < b / c -> a < b.
+  Proof.
+    intros * ? HY **.
+    assert (forall a b, c > 0 -> a < b -> c * a < c * b) by (intros; apply Zmult_lt_compat_l; lia).
+    apply H2 in H1; try lia.
+    assert (c * (a / c) + a mod c < c * (b / c) + b mod c) by lia.
+    now rewrite <- !Z_div_mod_eq_full in H3.
+  Qed.
+
   Lemma int_divu_cast:
     forall a,
       Ptrofs.unsigned a mod 4 = 0 ->
@@ -817,6 +858,117 @@ Section CORRECTNESS.
       replace 4 with (4 * 1) at 1 by lia. rewrite Z.mul_comm. rewrite Z_div_plus by lia.
       rewrite Z.mul_comm. rewrite Z.div_mul by lia. lia.
   Qed.
+
+  (* Lemma not_eq_pointer_to_addr' : *)
+  (*   forall ptr a, *)
+  (*     Ptrofs.unsigned a mod 4 = 0 -> *)
+  (*     ptr <> Int.unsigned (Int.divu (ptrToValue a) (ZToValue 4)) -> *)
+  (*     Ptrofs.unsigned (Ptrofs.repr (4 * ptr)) + 4 <= Ptrofs.unsigned a  *)
+  (*     \/ Ptrofs.unsigned a + 4 <= Ptrofs.unsigned (Ptrofs.repr (4 * ptr)). *)
+  (* Proof. *)
+  (*   intros * HMAX **. rewrite int_divu_cast in *; auto. *)
+  (*   rewrite !Ptrofs.add_zero_l. *)
+  (*   assert (4 * ptr <> Ptrofs.unsigned a). *)
+  (*   { unfold not; intros. apply H0. rewrite <- H1. rewrite Z.mul_comm. now rewrite Z.div_mul. } *)
+  (*   rewrite Ptrofs.unsigned_repr; auto. destruct (Z.lt_decidable ptr (Ptrofs.unsigned a / 4)). *)
+  (*   - left. apply le_div_implies_le with (c := 4); try lia. rewrite ZLib.mod_add_r by lia. *)
+  (*     now rewrite ZLib.Z_mod_mult'. *)
+  (*     rewrite Z.add_comm. rewrite Z.mul_comm. rewrite Z_div_plus by lia. rewrite Z_div_same by lia. *)
+  (*     lia. *)
+  (*   - right. apply le_div_implies_le with (c := 4); try lia. now rewrite ZLib.mod_add_r by lia.  *)
+  (*     now rewrite ZLib.Z_mod_mult'. *)
+  (*     replace 4 with (4 * 1) at 1 by lia. rewrite Z.mul_comm. rewrite Z_div_plus by lia. *)
+  (*     rewrite Z.mul_comm. rewrite Z.div_mul by lia. lia. *)
+  (* Qed. *)
+
+  Lemma out_of_range_of_load :
+    forall a b c,
+      c > 0 ->
+      a <> b ->
+      a mod c = 0 ->
+      b mod c = 0 ->
+      a + c <= b \/ b + c <= a.
+  Proof.
+    intros. 
+    assert (a < b \/ b < a) by lia.
+    inv H3; [left|right].
+    - apply le_div_implies_le with (c:=c); try lia.
+      rewrite ZLib.mod_add_r by lia. assumption.
+      replace c with (1 * c) at 1 by lia.
+      rewrite Z_div_plus by lia.
+      apply div_lt_mono with (c:=c) in H4; lia.
+    - apply le_div_implies_le with (c:=c); try lia.
+      rewrite ZLib.mod_add_r by lia. assumption.
+      replace c with (1 * c) at 1 by lia.
+      rewrite Z_div_plus by lia.
+      apply div_lt_mono with (c:=c) in H4; lia.
+  Qed.
+
+  Lemma forall_stack_based :
+    forall m v rs r m' sp' sz,
+      stack_based v sp' ->
+      stack_bounds (Values.Vptr sp' (Ptrofs.repr 0)) sz m ->
+      Mem.storev Mint32 m v rs !! r = Some m' ->
+      reg_stack_based_pointers sp' rs ->
+      arr_stack_based_pointers sp' m sz (Values.Vptr sp' (Ptrofs.repr 0)) ->
+      arr_stack_based_pointers sp' m' sz (Values.Vptr sp' (Ptrofs.repr 0)).
+  Proof.
+    intros * HSTACK HMEM **. unfold arr_stack_based_pointers in *; intros. pose proof H2 as Y.
+    eapply H1 in H2. unfold Mem.storev in *. repeat destr. subst. unfold Values.Val.offset_ptr in *; cbn in *.
+    subst. unfold stack_bounds in *.
+    destruct (Z.eq_dec (Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr 0) (Ptrofs.repr (4 * ptr)))) (Ptrofs.unsigned i)).
+    - rewrite e in *.
+      exploit Mem.load_store_same; eauto; intros HY. rewrite HY. cbn. destruct_match; cbn; auto.
+      replace Archi.ptr64 with false by auto. unfold reg_stack_based_pointers in H0. specialize (H0 r).
+      rewrite Heqv in H0. cbn in H0; subst. cbn; auto.
+    - exploit Mem.load_store_other; eauto.
+      2: { intros. rewrite H3; auto. }
+      right. cbn. eapply out_of_range_of_load; try lia.
+      + rewrite Ptrofs.add_zero_l. rewrite Ptrofs.unsigned_repr_eq.
+        rewrite <- Zmod_div_mod by crush. now rewrite ZLib.Z_mod_mult'.
+      + eauto using storev_mod_ok2.
+  Qed.
+
+
+  Transparent Mem.store.
+  Transparent Mem.load. 
+  Lemma forall_stack_bounds :
+    forall m v m' sp' sz ptr,
+      Mem.storev Mint32 m (Values.Val.offset_ptr (Values.Vptr sp' (Ptrofs.repr 0)) (Ptrofs.repr ptr)) v = Some m' ->
+      stack_bounds (Values.Vptr sp' (Ptrofs.repr 0)) sz m ->
+      stack_bounds (Values.Vptr sp' (Ptrofs.repr 0)) sz m'.
+  Proof.
+    unfold stack_bounds; intros. rename H into H0, H0 into H2, H1 into H3, H2 into H4.
+    assert (H: True) by auto. assert (H1: True) by auto.
+    unfold Mem.storev in H0. repeat destr.
+    assert (H2': forall (ptr : Z),
+       sz <= ptr <= Ptrofs.max_unsigned ->
+       ptr mod 4 = 0 ->
+       Mem.loadv Mint32 m (Values.Val.offset_ptr (Values.Vptr sp' (Ptrofs.repr 0)) (Ptrofs.repr ptr)) = None /\
+       (forall v, Mem.storev Mint32 m (Values.Val.offset_ptr (Values.Vptr sp' (Ptrofs.repr 0)) (Ptrofs.repr ptr)) v = None)).
+    { intros. specialize (H2 ptr1); split; intros; [specialize (H2 Values.Vundef)|specialize (H2 v1)]; tauto. }
+    specialize (H2' ptr0 H3 H4). inv H2'. split.
+    - cbn in *.
+      enough ((Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr 0) (Ptrofs.repr ptr0))) <> (Ptrofs.unsigned i)).
+      unfold Mem.load. destruct_match; auto. exfalso.
+      eapply Mem.store_valid_access_2 in H0; eauto.
+      unfold Mem.load in H5. destruct_match; try discriminate. eapply n.
+      eapply Mem.valid_access_implies; eauto. constructor.
+      unfold not; intros. rewrite <- H7 in *. eapply Mem.store_valid_access_3 in H0.
+      eapply Mem.valid_access_implies in H0. eapply Mem.valid_access_load in H0. destruct H0.
+      congruence. constructor.
+    - cbn in *.
+      enough ((Ptrofs.unsigned (Ptrofs.add (Ptrofs.repr 0) (Ptrofs.repr ptr0))) <> (Ptrofs.unsigned i)).
+      unfold Mem.store. destruct_match; auto. exfalso.
+      eapply Mem.store_valid_access_2 in H0; eauto. 
+      unfold Mem.load in H5. destruct_match; try discriminate. eapply n.
+      eapply Mem.valid_access_implies; eauto. constructor.
+      unfold not; intros. rewrite <- H7 in *. eapply Mem.store_valid_access_3 in H0.
+      eapply Mem.valid_access_implies in H0. eapply Mem.valid_access_load in H0. destruct H0.
+      congruence. constructor.
+  Qed.
+  Transparent Mem.load.
+  Transparent Mem.store.
 
   Lemma transl_store_correct :
     forall m0 a0 l f e asr0 asa0 asr asa next_p sp o m_ rs pr m r rs' pr' m' s pc s' a stmnt,
@@ -889,14 +1041,184 @@ Section CORRECTNESS.
                    rewrite e. pose proof (Z.le_max_l (fn_stacksize f / 4) 0). rewrite e in H3. 
                    pose proof (Z_div_nonneg_nonneg _ 4 STK1 ltac:(lia)). lia.
              ++ exploit Mem.load_store_other; eauto.
-                2: { intros HLOAD. rewrite HLOAD. admit. }
-                cbn. right. eapply not_eq_pointer_to_addr; eauto. admit. admit.
-         * admit.
-         * admit.
+                2: { intros HLOAD. rewrite HLOAD. rewrite get_mem_set_array_gso; auto. unfold not; intros. eapply n. unfold valueToNat in H.
+                     pose proof (Int.unsigned_range_2 ((Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.repr z)))) (ZToValue 4)))). lia. }
+                cbn. right. eapply not_eq_pointer_to_addr; eauto. enough (4 * ptr < fn_stacksize f). crush.
+                apply div_lt_mono2 with (c := 4); try lia. apply ZLib.Z_mod_mult'.
+                rewrite Z.mul_comm. rewrite Z_div_mult by lia. lia.
+                eapply storev_mod_ok2; eauto.
+         * eapply forall_stack_based. 3: { eassumption. } all: auto.
+           destruct (rs' !! r0) eqn:?; try discriminate. cbn in *. replace Archi.ptr64 with false in * by auto. cbn in *.
+           unfold reg_stack_based_pointers in *. specialize (RSBP r0). rewrite Heqv in RSBP. now cbn in RSBP.
+         * destruct (rs' !! r0) eqn:?; try discriminate. cbn in *. replace Archi.ptr64 with false in * by auto. unfold Ptrofs.add in MEMLOAD. cbn in *.
+           eapply forall_stack_bounds; cbn; try eassumption. rewrite Ptrofs.add_zero_l.
+           enough (sp' = b); subst. eassumption. eapply equiv_stack_pointer_reg_stack_based; eauto.
       + auto.
-    - admit.
-    - admit.
-  Admitted.
+    - inv HSTEP. rename H4 into HADDR, H12 into MEMLOAD, H13 into HTRUTHY'. clear HTRUTHY'.
+      2: { inv H3; cbn in *. inv HTRUTHY. congruence. }
+      unfold Op.eval_addressing in HADDR. replace Archi.ptr64 with false in HADDR by auto; cbn in *. inv HADDR.
+      exploit storev_exists_ptr; eauto. intros (sp0 & v' & HADD).
+      exists asr, (arr_assocmap_set m_.(DHTL.mod_stk) (valueToNat (Int.divu (ptrToValue v') (ZToValue 4))) (find_assocmap 32 (reg_enc r) asr) asa).
+      split; [|split].
+      + repeat (econstructor; try eassumption).
+        * eapply pred_expr_correct; intros. inv HMATCH. inv MASSOC. eapply H1; eauto. extlia.
+        * eapply pred_expr_correct; intros. inv HMATCH. inv MASSOC. eapply H1; eauto. destruct o. cbn in *.
+          eapply le_max_pred in HFRL. extlia. cbn in *. extlia.
+        * rewrite int_and_boolToValue. rewrite valueToBool_correct. rewrite HEVAL. now rewrite truthy_dflt. 
+        * cbn. inv HMATCH. exploit mk_ctrl_correct; eauto; simplify. rewrite H.
+          econstructor. eapply exec_expr_store_2; eauto; try extlia.
+          destruct (rs' !! r0) eqn:?; crush. destruct (rs' !! r1) eqn:?; crush. replace Archi.ptr64 with false in HADD by auto. destr. inv HADD.
+          unfold reg_stack_based_pointers in *. unfold stack_based in *. pose proof (RSBP r0). rewrite Heqv in H5.
+          now subst.
+      + inv HMATCH; econstructor; eauto.
+        * inv MARR. destruct H as (HARR1 & HARR2 & HARR3 & HARR4). econstructor.
+          repeat split.
+          -- erewrite arr_assocmap_set_gss by eassumption. eauto.
+          -- now rewrite <- array_set_len.
+          -- now rewrite <- array_set_len.
+          -- intros * HBOUND. rewrite <- array_set_len in HBOUND. pose proof HBOUND as HBOUND'. learn HBOUND'. apply HARR4 in HBOUND. 
+             unfold Mem.loadv, Mem.storev in *. move MEMLOAD after HBOUND. repeat destr.
+             destruct (rs' !! r0) eqn:?; crush; destruct (rs' !! r1) eqn:HXX; crush. try discriminate. replace Archi.ptr64 with false in Heqv0 by auto.
+             inv Heqv0. inv HADD. inv Heqv. 
+             exploit stack_correct_transl; eauto; intros (STK1 & STK2 & STK3).
+             destruct (Z.eq_dec ptr (Int.unsigned (Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.add (Int.mul i2 (Int.repr z)) (Int.repr z0))))) (ZToValue 4)))); subst.
+             ++ exploit Mem.load_store_same; eauto; intros.
+                pose proof (ptrofs_mod_4 _ _ _ _ H3) as HY.
+                pose proof (ptrofs_div_4 _ HY) as HYY.
+                assert (b = sp0) by (eapply equiv_stack_pointer_reg_stack_based; eauto); subst.
+                unfold valueToNat. rewrite get_mem_set_array_gss; try rewrite Ptrofs.add_zero_l in *.
+                ** rewrite HYY.
+                   subst. rewrite H3. cbn. destruct_match; econstructor; try solve [repeat econstructor].
+                   rewrite <- Heqv. inv MASSOC. eapply H4; extlia. replace Archi.ptr64 with false by auto. rewrite <- Heqv. 
+                   inv MASSOC. eapply H4; extlia.
+                ** unfold valueToNat. unfold Int.divu. unfold stack_bounds in *.
+                   enough ((0 <= (Int.unsigned (Int.repr (Int.unsigned (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.add (Int.mul i2 (Int.repr z)) (Int.repr z0))))) / Int.unsigned (ZToValue 4)))) < Z.of_nat (arr_length stack))); [lia|].
+                   repeat rewrite !Int.unsigned_repr; try now crush.
+                   2: { eapply le_in_range; eauto; try lia; eauto with int_ptrofs. }
+                   exploit storev_stack_bounds; eauto. rewrite <- HY. f_equal. apply agree32_ptrToValue.
+                   intros. rewrite HARR2. rewrite Z_to_nat_max.
+                   replace (Z.max (fn_stacksize f / 4) 0) with (fn_stacksize f / 4).
+                   pose proof (agree32_ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.add (Int.mul i2 (Int.repr z)) (Int.repr z0))))); unfold Ptrofs.agree32 in *.
+                   split. eapply Z_div_nonneg_nonneg; lia.
+                   eapply div_lt_mono; lia.
+                   destruct (Z.max_dec (fn_stacksize f / 4) 0). congruence.
+                   rewrite e. pose proof (Z.le_max_l (fn_stacksize f / 4) 0). rewrite e in H5. 
+                   pose proof (Z_div_nonneg_nonneg _ 4 STK1 ltac:(lia)). lia.
+             ++ exploit Mem.load_store_other; eauto.
+                2: { intros HLOAD. rewrite HLOAD. rewrite get_mem_set_array_gso; auto. unfold not; intros. eapply n. unfold valueToNat in H.
+                     pose proof (Int.unsigned_range_2 (Int.divu (ptrToValue (Ptrofs.add i1 (Ptrofs.of_int (Int.add (Int.mul i2 (Int.repr z)) (Int.repr z0))))) (ZToValue 4))). unfold valueToNat in *. lia. }
+                cbn. right. eapply not_eq_pointer_to_addr; eauto. enough (4 * ptr < fn_stacksize f). crush.
+                apply div_lt_mono2 with (c := 4); try lia. apply ZLib.Z_mod_mult'.
+                rewrite Z.mul_comm. rewrite Z_div_mult by lia. lia.
+                eapply storev_mod_ok2; eauto.
+         * eapply forall_stack_based. 3: { eassumption. } all: auto.
+           destruct (rs' !! r0) eqn:?; try discriminate; destruct (rs' !! r1) eqn:?; try discriminate; cbn in *. replace Archi.ptr64 with false in * by auto. cbn in *.
+           unfold reg_stack_based_pointers in *. pose proof RSBP as RSBP1. specialize (RSBP r0). specialize (RSBP1 r1). rewrite Heqv in RSBP. rewrite Heqv0 in RSBP1.  now cbn in RSBP.
+         * destruct (rs' !! r0) eqn:?; try discriminate; destruct (rs' !! r1) eqn:?; try discriminate. cbn in *. replace Archi.ptr64 with false in * by auto. unfold Ptrofs.add in MEMLOAD. cbn in *.
+           eapply forall_stack_bounds; cbn; try eassumption. rewrite Ptrofs.add_zero_l.
+           enough (sp' = b); subst. eassumption. eapply equiv_stack_pointer_reg_stack_based; eauto.
+      + auto.
+    - inv HSTEP. rename H4 into HADDR, H12 into MEMLOAD, H13 into HTRUTHY'. clear HTRUTHY'.
+      2: { inv H3; cbn in *. inv HTRUTHY. congruence. }
+      unfold Op.eval_addressing in HADDR. replace Archi.ptr64 with false in HADDR by auto; cbn in *. inv HADDR.
+      exploit storev_exists_ptr; eauto. intros (sp0 & v' & HADD).
+      exists asr, (arr_assocmap_set m_.(DHTL.mod_stk) (valueToNat (Int.divu (ptrToValue v') (ZToValue 4))) (find_assocmap 32 (reg_enc r) asr) asa).
+      split; [|split].
+      + repeat (econstructor; try eassumption).
+        * eapply pred_expr_correct; intros. inv HMATCH. inv MASSOC. eapply H1; eauto. extlia.
+        * eapply pred_expr_correct; intros. inv HMATCH. inv MASSOC. eapply H1; eauto. destruct o. cbn in *.
+          eapply le_max_pred in HFRL. extlia. cbn in *. extlia.
+        * rewrite int_and_boolToValue. rewrite valueToBool_correct. rewrite HEVAL. now rewrite truthy_dflt. 
+        * cbn. inv HMATCH. exploit mk_ctrl_correct; eauto; simplify. rewrite H.
+          econstructor. replace Archi.ptr64 with false in * by auto. inv HADD. 
+          unfold ZToValue. enough ((Int.divu (ptrToValue (Ptrofs.add (Ptrofs.repr 0) i)) (Int.repr 4)) = (Int.repr (Ptrofs.unsigned i / 4))).
+          rewrite H2. econstructor. rewrite Ptrofs.add_zero_l. unfold Int.divu, ptrToValue.
+          replace (Int.unsigned (Int.repr 4)) with 4 by auto. repeat f_equal.
+          symmetry; apply Ptrofs.agree32_to_int; auto.
+      + inv HMATCH; econstructor; eauto.
+        * inv MARR. destruct H as (HARR1 & HARR2 & HARR3 & HARR4). econstructor.
+          repeat split.
+          -- erewrite arr_assocmap_set_gss by eassumption. eauto.
+          -- now rewrite <- array_set_len.
+          -- now rewrite <- array_set_len.
+          -- intros * HBOUND. rewrite <- array_set_len in HBOUND. pose proof HBOUND as HBOUND'. learn HBOUND'. apply HARR4 in HBOUND. 
+             unfold Mem.loadv, Mem.storev in *. move MEMLOAD after HBOUND. repeat destr.
+             replace Archi.ptr64 with false in Heqv0 by auto.
+             inv Heqv0. inv HADD. inv Heqv. 
+             exploit stack_correct_transl; eauto; intros (STK1 & STK2 & STK3).
+             destruct (Z.eq_dec ptr (Int.unsigned (Int.divu (ptrToValue v') (ZToValue 4)))); subst.
+             ++ exploit Mem.load_store_same; eauto; intros.
+                pose proof (ptrofs_mod_4 _ _ _ _ H0) as HY.
+                pose proof (ptrofs_div_4 _ HY) as HYY.
+                inv Heqo0.
+                rewrite get_mem_set_array_gss; try rewrite Ptrofs.add_zero_l in *.
+                ** rewrite Ptrofs.add_zero_l. rewrite HYY.
+                   subst. rewrite H0. cbn. destruct_match; econstructor; try solve [repeat econstructor].
+                   rewrite <- Heqv. inv MASSOC. eapply H1; extlia. replace Archi.ptr64 with false by auto. rewrite <- Heqv. 
+                   inv MASSOC. eapply H1; extlia.
+                ** unfold valueToNat. unfold Int.divu. unfold stack_bounds in *.
+                   enough ((0 <= (Int.unsigned (Int.repr (Int.unsigned (ptrToValue i) / Int.unsigned (ZToValue 4)))) < Z.of_nat (arr_length stack))); [lia|].
+                   repeat rewrite !Int.unsigned_repr; try now crush.
+                   2: { eapply le_in_range; eauto; try lia; eauto with int_ptrofs. }
+                   exploit storev_stack_bounds; eauto. rewrite <- HY. f_equal. apply agree32_ptrToValue.
+                   intros. rewrite HARR2. rewrite Z_to_nat_max.
+                   replace (Z.max (fn_stacksize f / 4) 0) with (fn_stacksize f / 4).
+                   pose proof (agree32_ptrToValue i); unfold Ptrofs.agree32 in *.
+                   split. eapply Z_div_nonneg_nonneg; lia.
+                   eapply div_lt_mono; lia.
+                   destruct (Z.max_dec (fn_stacksize f / 4) 0). congruence.
+                   rewrite e. pose proof (Z.le_max_l (fn_stacksize f / 4) 0). rewrite e in H2. 
+                   pose proof (Z_div_nonneg_nonneg _ 4 STK1 ltac:(lia)). lia.
+             ++ exploit Mem.load_store_other; eauto.
+                2: { intros HLOAD. rewrite HLOAD. rewrite get_mem_set_array_gso; auto. unfold not; intros. eapply n. unfold valueToNat in H.
+                     pose proof (Int.unsigned_range_2 (Int.divu (ptrToValue v') (ZToValue 4))). unfold valueToNat in *. lia. }
+                cbn. right. eapply not_eq_pointer_to_addr; eauto. enough (4 * ptr < fn_stacksize f). crush.
+                apply div_lt_mono2 with (c := 4); try lia. apply ZLib.Z_mod_mult'.
+                rewrite Z.mul_comm. rewrite Z_div_mult by lia. lia.
+                eapply storev_mod_ok2; eauto.
+         * eapply forall_stack_based. 3: { eassumption. } all: auto.
+           replace Archi.ptr64 with false in * by auto. now cbn in *.
+         * replace Archi.ptr64 with false in * by auto. unfold Ptrofs.add in MEMLOAD. cbn in *.
+           eapply forall_stack_bounds; cbn; try eassumption. rewrite Ptrofs.add_zero_l. eassumption.
+      + auto.
+  Qed.
+
+  Lemma transl_setpred_correct : 
+    forall c l e b m_ asa asr asa0 asr0 next_p s f sp pc rs' pr m' s' o p a stmnt
+      (Heqr : translate_condition c l = OK e)
+      (HSTMNT : stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa))
+      (HEVAL : eval_predf pr next_p = true)
+      (HMATCH : match_states (GibleSubPar.State s f sp pc rs' pr m') (DHTL.State s' m_ pc asr asa))
+      (HSTEP : step_instr ge sp (Iexec {| is_rs := rs'; is_ps := pr; is_mem := m' |}) (RBsetpred o c l p)
+                (Iexec {| is_rs := rs'; is_ps := Registers.Regmap.set p b pr; is_mem := m' |}))
+      (HFRL1 : Forall (fun x : positive => Ple x (max_pred_function f)) (pred_uses (RBsetpred o c l p)))
+      (HPLE : Ple (max_predicate next_p) (max_pred_function f))
+      (HREGMAX : Ple (max_reg_instr a (RBsetpred o c l p)) (max_reg_function f))
+      (H2 : Op.eval_condition c (List.map (fun r : positive => rs' !! r) l) m' = Some b)
+      (H11 : truthy pr o)
+      (HPREDIN: ~ PredIn p next_p),
+      exists (asr' : AssocMap.t value) (asa' : AssocMap.t arr),
+        stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0)
+          (Vseq stmnt (translate_predicate Vblock (Some (Pand next_p (dfltp o))) (Vvar (pred_enc p)) e)) (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa') /\
+        match_states (GibleSubPar.State s f sp pc rs' (Registers.Regmap.set p b pr) m') (DHTL.State s' m_ pc asr' asa') /\ eval_predf (Registers.Regmap.set p b pr) next_p = true.
+  Proof.
+    intros. exploit eval_cond_correct; eauto. intros. cbn in *. pose proof (fold_left_max l v a ltac:(tauto)).
+    extlia. intros. do 2 eexists.
+    split; [|split].
+    - econstructor; eauto. inv HMATCH. eapply transl_predicate_correct2_true; eauto. cbn. 
+      destruct o; cbn in *. inv HFRL1. eapply le_max_pred in H4. extlia. extlia.
+      rewrite eval_predf_Pand. rewrite truthy_dflt. rewrite HEVAL. auto. auto.
+    - inv HMATCH; econstructor; eauto. inv MASSOC; econstructor; eauto. 
+      intros. rewrite assocmap_gso by eauto using pred_enc_reg_enc_ne. eauto.
+      intros. destruct (peq r p); subst. rewrite PMap.gss. now rewrite assocmap_gss.
+      rewrite PMap.gso by auto. rewrite assocmap_gso; eauto. eauto using pred_enc_inj.
+      unfold state_st_wf. rewrite AssocMap.gso; eauto. exploit mk_ctrl_correct; eauto; simplify. 
+      destruct o; inv HFRL1; eapply ple_pred_max_resource_function in H7; extlia.
+      exploit mk_ctrl_correct; eauto; simplify. pose proof (mod_ordering_wf m_). unfold module_ordering in H4. 
+      inv CONST. econstructor; rewrite AssocMap.gso; auto;
+      destruct o; inv HFRL1; eapply ple_pred_max_resource_function in H10; extlia.
+    - rewrite eval_predf_not_PredIn; auto.
+  Qed.
 
   Lemma transl_step_state_correct_single_instr :
     forall s f sp pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n i a,
@@ -915,7 +1237,8 @@ Section CORRECTNESS.
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' 
           (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
         /\ match_states (GibleSubPar.State s f sp pc rs' pr' m') (DHTL.State s' m_ pc asr' asa')
-        /\ eval_predf pr' next_p = true.
+        /\ eval_predf pr' next_p = true
+        /\ Ple (max_predicate next_p) (max_pred_function f).
   Proof.
     intros * HTRANSF HSTMNT HEVAL HSTEP HMATCH HFRL1 HPLE HREGMAX.
     unfold transf_instr, Errors.bind in HTRANSF. 
@@ -939,7 +1262,8 @@ Section CORRECTNESS.
         eapply unchanged_implies_match.
         split; [|split]; eauto. econstructor; eauto.
     - (* RBload *) inversion HSTEP; subst.
-      + exploit transl_load_correct; eauto.
+      + exploit transl_load_correct; eauto. intros (asr' & asa' & HS1 & HS2 & HS3). 
+        exists asr', asa'. eauto.
       + inv H3; cbn in *. 
         assert (eval_predf pr' (Pand next_p p) = false).
         { rewrite eval_predf_Pand. rewrite H0; auto with bool. }
@@ -950,8 +1274,35 @@ Section CORRECTNESS.
         exists asr'', asa. split; [|split]; auto. econstructor; eauto.
         eapply unchanged_implies_match.
         split; [|split]; eauto. econstructor; eauto.
-    - (* RBstore *)
-    - (* RBsetpred *) admit.
+    - (* RBstore *) inversion HSTEP; subst.
+      + exploit transl_store_correct; eauto. intros (asr' & asa' & HS1 & HS2 & HS3). 
+        exists asr', asa'. eauto.
+      + inv H3. cbn in *. exists asr, asa. split; [|split].
+        econstructor; eauto. eapply stmnt_runp_Vcond_false; eauto.
+        repeat econstructor. eapply pred_expr_correct.
+        inv HMATCH; inv MASSOC. intros; eapply H1; extlia.
+        repeat econstructor. eapply pred_expr_correct. 
+        inv HMATCH; inv MASSOC. intros. eapply H1. eapply le_max_pred in HFRL1; extlia.
+        rewrite int_and_boolToValue. rewrite valueToBool_correct. rewrite H0; auto with bool.
+        constructor. auto. auto.
+    - (* RBsetpred *)
+      inversion HSTEP; subst.
+      + exploit transl_setpred_correct; eauto. unfold assert_ in *. destr.
+        pose proof (negb_prop_elim (predin peq p next_p)). unfold not in *; intros.
+        eapply H. unfold Is_true. now rewrite Heqb0.
+        unfold Is_true. eapply predin_PredIn in H0. now rewrite H0.
+        intros (asr' & asa' & HS1 & HS2 & HS3). 
+        exists asr', asa'. eauto.
+      + inv H3; cbn in *.
+        assert (eval_predf pr' (Pand next_p p0) = false).
+        { rewrite eval_predf_Pand. rewrite H0; auto with bool. }
+        assert (Ple (max_predicate (Pand next_p p0)) (max_pred_function f)).
+        { cbn. inv HFRL1. eapply le_max_pred in H4. extlia. }
+        inv HMATCH. exploit transl_predicate_correct2; eauto.
+        intros (asr'' & HSTMNT' & HASR1 & HASR2).
+        exists asr'', asa. split; [|split]; auto. econstructor; eauto.
+        eapply unchanged_implies_match.
+        split; [|split]; eauto. econstructor; eauto.
     - (* RBexit *) inv HSTEP. 
         inv H3; cbn -[eval_predf] in *.
         assert (eval_predf pr' (Pand curr_p p) = false).
@@ -967,7 +1318,8 @@ Section CORRECTNESS.
           econstructor; eauto.
           eapply unchanged_implies_match; eauto.
           unfold unchanged. split; [|split]; eauto. econstructor; eauto.
-          rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. now rewrite H0.
+          rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. split. now rewrite H0.
+          eapply le_max_pred in HFRL1. rewrite max_predicate_negate. extlia.
         + unfold state_cond, state_goto in *. inv Heqr0.
           exploit transl_predicate_correct2; eauto.
           intros (asr' & HSTMNT' & HEQUIV & HFORALL).
@@ -994,7 +1346,8 @@ Section CORRECTNESS.
           econstructor. econstructor. eauto. eauto. eauto. 
           eapply unchanged_implies_match; eauto.
           rewrite eval_predf_Pand. rewrite eval_predf_negate.
-          rewrite HEVAL. now rewrite H0.
+          rewrite HEVAL. split. now rewrite H0.
+          eapply le_max_pred in HFRL1. rewrite max_predicate_negate. extlia.
         + unfold state_cond, state_goto in *. inv Heqr0.
           exploit transl_predicate_correct2; eauto.
           intros (asr' & HSTMNT' & HEQUIV & HFORALL).
@@ -1021,7 +1374,8 @@ Section CORRECTNESS.
           econstructor. econstructor. eauto. eauto. eauto. 
           eapply unchanged_implies_match; eauto.
           rewrite eval_predf_Pand. rewrite eval_predf_negate.
-          rewrite HEVAL. now rewrite H0.
+          rewrite HEVAL. split. now rewrite H0.
+          eapply le_max_pred in HFRL1. rewrite max_predicate_negate. extlia.
         + unfold state_cond, state_goto in *. inv Heqr0.
           exploit transl_predicate_correct2; eauto.
           intros (asr' & HSTMNT' & HEQUIV & HFORALL).
@@ -1029,14 +1383,17 @@ Section CORRECTNESS.
           econstructor; eauto.
           eapply unchanged_implies_match; eauto.
           unfold unchanged. split; [|split]; eauto. econstructor; eauto.
-          rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. now rewrite H0.
-  Admitted.
-      
-  Transparent translate_predicate.
-  Transparent translate_predicate_cond.
+          rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. split. now rewrite H0.
+          eapply le_max_pred in HFRL1. rewrite max_predicate_negate. extlia.
+          Unshelve. auto.
+  Qed.
+
+  Lemma OK_inj : 
+    forall A (a b: A), OK a = OK b -> a = b.
+  Proof. now inversion 1. Qed.
 
   Lemma transl_step_state_correct_single_instr_term :
-    forall s f sp pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n i cf pc',
+    forall s f sp pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n i cf pc' a,
       (* (fn_code f) ! pc = Some bb -> *)
       transf_instr n (mk_ctrl f) (curr_p, stmnt) i = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt 
@@ -1046,15 +1403,125 @@ Section CORRECTNESS.
              (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
       step_cf_instr ge (GibleSubPar.State s f sp pc rs' pr' m') cf Events.E0 (GibleSubPar.State s f sp pc' rs' pr' m') ->
       match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
+      Forall (fun x : positive => Ple x (max_pred_function f)) (pred_uses i) ->
+      Ple (max_predicate curr_p) (max_pred_function f) ->
+      Ple (max_reg_instr a i) (max_reg_function f) ->
       exists asr' asa',
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' 
           (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
         /\ match_states (GibleSubPar.State s f sp pc' rs' pr' m') (DHTL.State s' m_ pc' asr' asa')
         /\ eval_predf pr' next_p = false.
-  Proof. Admitted.
+  Proof. 
+    intros * HTRANS HSTMNT HEVAL HSTEP HSTEPCF HMATCH HPLE1 HPLE2 HPLE3.
+    inv HSTEP. inv HSTEPCF; cbn in *; unfold Errors.bind in *; repeat destruct_match; try discriminate; subst.
+    - inv Heqr1. apply OK_inj in Heqr0. apply OK_inj in HTRANS. inv HTRANS. unfold state_cond.
+      exploit eval_cond_correct; eauto. intros. pose proof (fold_left_max args v a ltac:(tauto)). extlia.
+      intros. 
+      eexists. exists asa. split; [|split].
+      econstructor; eauto. eapply transl_predicate_correct2_true; eauto.
+      4: { econstructor. eauto. econstructor. now rewrite valueToBool_correct. }
+      + instantiate (1 := max_pred_function f). cbn. eapply le_max_pred in HPLE1. extlia.
+      + inv HMATCH. eauto.
+      + rewrite eval_predf_Pand. rewrite HEVAL. now rewrite truthy_dflt.
+      + inv HMATCH. econstructor; eauto.
+        * inv MASSOC. econstructor; intros. pose proof (ple_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+          pose proof (ple_pred_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+        * unfold state_st_wf in *. exploit mk_ctrl_correct; eauto; intros. destruct H1. rewrite <- H1. cbn. now rewrite AssocMap.gss.
+        * inv CONST. exploit mk_ctrl_correct; eauto; intros. destruct H4. pose proof (mod_ordering_wf m_). unfold module_ordering in H6.
+          econstructor. cbn in *. now rewrite AssocMap.gso by lia. cbn in *. now rewrite AssocMap.gso by lia.
+      + rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. inv H3. rewrite H2. auto.
+    - inv Heqr1. apply OK_inj in Heqr0. apply OK_inj in HTRANS. inv HTRANS. unfold state_cond.
+      exploit eval_cond_correct; eauto. intros. pose proof (fold_left_max args v a ltac:(tauto)). extlia.
+      intros. 
+      eexists. exists asa. split; [|split].
+      econstructor; eauto. eapply transl_predicate_correct2_true; eauto.
+      4: { econstructor. eauto. econstructor. now rewrite valueToBool_correct. }
+      + instantiate (1 := max_pred_function f). cbn. extlia.
+      + inv HMATCH. eauto.
+      + rewrite eval_predf_Pand. rewrite HEVAL. now rewrite truthy_dflt.
+      + inv HMATCH. econstructor; eauto.
+        * inv MASSOC. econstructor; intros. pose proof (ple_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+          pose proof (ple_pred_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+        * unfold state_st_wf in *. exploit mk_ctrl_correct; eauto; intros. destruct H1. rewrite <- H1. cbn. now rewrite AssocMap.gss.
+        * inv CONST. exploit mk_ctrl_correct; eauto; intros. destruct H4. pose proof (mod_ordering_wf m_). unfold module_ordering in H6.
+          econstructor. cbn in *. now rewrite AssocMap.gso by lia. cbn in *. now rewrite AssocMap.gso by lia.
+      + rewrite eval_predf_Pand. rewrite HEVAL. cbn. auto.
+    - inv Heqr1. apply OK_inj in Heqr0. apply OK_inj in HTRANS. inv HTRANS. unfold state_cond.
+      exploit eval_cond_correct; eauto. intros. pose proof (fold_left_max args v a ltac:(tauto)). extlia.
+      intros. 
+      eexists. exists asa. split; [|split].
+      econstructor; eauto. eapply transl_predicate_correct2_true; eauto.
+      4: { eapply erun_Vternary_false. eauto. econstructor. now rewrite valueToBool_correct. }
+      + instantiate (1 := max_pred_function f). cbn. eapply le_max_pred in HPLE1. extlia.
+      + inv HMATCH. eauto.
+      + rewrite eval_predf_Pand. rewrite HEVAL. now rewrite truthy_dflt.
+      + inv HMATCH. econstructor; eauto.
+        * inv MASSOC. econstructor; intros. pose proof (ple_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+          pose proof (ple_pred_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+        * unfold state_st_wf in *. exploit mk_ctrl_correct; eauto; intros. destruct H1. rewrite <- H1. cbn. now rewrite AssocMap.gss.
+        * inv CONST. exploit mk_ctrl_correct; eauto; intros. destruct H4. pose proof (mod_ordering_wf m_). unfold module_ordering in H6.
+          econstructor. cbn in *. now rewrite AssocMap.gso by lia. cbn in *. now rewrite AssocMap.gso by lia.
+      + rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. inv H3. rewrite H2. auto.
+    - inv Heqr1. apply OK_inj in Heqr0. apply OK_inj in HTRANS. inv HTRANS. unfold state_cond.
+      exploit eval_cond_correct; eauto. intros. pose proof (fold_left_max args v a ltac:(tauto)). extlia.
+      intros. 
+      eexists. exists asa. split; [|split].
+      econstructor; eauto. eapply transl_predicate_correct2_true; eauto.
+      4: { eapply erun_Vternary_false. eauto. econstructor. now rewrite valueToBool_correct. }
+      + instantiate (1 := max_pred_function f). cbn. extlia.
+      + inv HMATCH. eauto.
+      + rewrite eval_predf_Pand. rewrite HEVAL. now rewrite truthy_dflt.
+      + inv HMATCH. econstructor; eauto.
+        * inv MASSOC. econstructor; intros. pose proof (ple_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+          pose proof (ple_pred_max_resource_function _ _ H4).
+          rewrite assocmap_gso by extlia. eauto.
+        * unfold state_st_wf in *. exploit mk_ctrl_correct; eauto; intros. destruct H1. rewrite <- H1. cbn. now rewrite AssocMap.gss.
+        * inv CONST. exploit mk_ctrl_correct; eauto; intros. destruct H4. pose proof (mod_ordering_wf m_). unfold module_ordering in H6.
+          econstructor. cbn in *. now rewrite AssocMap.gso by lia. cbn in *. now rewrite AssocMap.gso by lia.
+      + rewrite eval_predf_Pand. rewrite HEVAL. cbn. auto.
+    - unfold state_goto in *. inv HTRANS.
+      eexists. exists asa. split; [|split].
+      econstructor; eauto. eapply transl_predicate_correct2_true; eauto.
+      4: { econstructor. }
+      + instantiate (1 := max_pred_function f). cbn. eapply le_max_pred in HPLE1. extlia.
+      + inv HMATCH. eauto.
+      + rewrite eval_predf_Pand. rewrite HEVAL. inv H3. rewrite H0. auto.
+      + inv HMATCH. econstructor; eauto.
+        * inv MASSOC. econstructor; intros. pose proof (ple_max_resource_function _ _ H1).
+          rewrite assocmap_gso by extlia. eauto.
+          pose proof (ple_pred_max_resource_function _ _ H1).
+          rewrite assocmap_gso by extlia. eauto.
+        * unfold state_st_wf in *. exploit mk_ctrl_correct; eauto; intros. destruct H. rewrite <- H. cbn. now rewrite AssocMap.gss.
+        * inv CONST. exploit mk_ctrl_correct; eauto; intros. destruct H1. pose proof (mod_ordering_wf m_). unfold module_ordering in H4.
+          econstructor. cbn in *. now rewrite AssocMap.gso by lia. cbn in *. now rewrite AssocMap.gso by lia.
+      + rewrite eval_predf_Pand. rewrite HEVAL. rewrite eval_predf_negate. inv H3. rewrite H0. auto.
+       - unfold state_goto in *. inv HTRANS.
+      eexists. exists asa. split; [|split].
+      econstructor; eauto. eapply transl_predicate_correct2_true; eauto.
+      4: { econstructor. }
+      + instantiate (1 := max_pred_function f). cbn. extlia.
+      + inv HMATCH. eauto.
+      + rewrite eval_predf_Pand. rewrite HEVAL. inv H3. cbn. auto.
+      + inv HMATCH. econstructor; eauto.
+        * inv MASSOC. econstructor; intros. pose proof (ple_max_resource_function _ _ H1).
+          rewrite assocmap_gso by extlia. eauto.
+          pose proof (ple_pred_max_resource_function _ _ H1).
+          rewrite assocmap_gso by extlia. eauto.
+        * unfold state_st_wf in *. exploit mk_ctrl_correct; eauto; intros. destruct H. rewrite <- H. cbn. now rewrite AssocMap.gss.
+        * inv CONST. exploit mk_ctrl_correct; eauto; intros. destruct H1. pose proof (mod_ordering_wf m_). unfold module_ordering in H4.
+          econstructor. cbn in *. now rewrite AssocMap.gso by lia. cbn in *. now rewrite AssocMap.gso by lia.
+      + rewrite eval_predf_Pand. rewrite HEVAL. cbn. auto.
+  Qed.
 
   Lemma transl_step_state_correct_single_instr_term_return :
-    forall s f sp pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n i cf v m'',
+    forall s f sp pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n i cf v m'' a,
       (* (fn_code f) ! pc = Some bb -> *)
       transf_instr n (mk_ctrl f) (curr_p, stmnt) i = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt 
@@ -1064,6 +1531,9 @@ Section CORRECTNESS.
              (Iterm {| is_rs := rs'; is_ps := pr'; is_mem := m' |} cf) ->
       step_cf_instr ge (GibleSubPar.State s f sp pc rs' pr' m') cf Events.E0 (GibleSubPar.Returnstate s v m'') ->
       match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
+      Forall (fun x : positive => Ple x (max_pred_function f)) (pred_uses i) ->
+      Ple (max_predicate curr_p) (max_pred_function f) ->
+      Ple (max_reg_instr a i) (max_reg_function f) ->
       exists retval,
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' 
           (e_assoc (AssocMap.set m_.(DHTL.mod_st) (posToValue n) 
@@ -1071,7 +1541,94 @@ Section CORRECTNESS.
           (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa)
         /\ val_value_lessdef v retval
         /\ eval_predf pr' next_p = false.
-  Proof. Admitted.
+  Proof. 
+    intros * HTRANS HSTMNT HEVAL HSTEP HSTEPCF HMATCH HPLE1 HPLE2 HPLE3.
+    inv HSTEP. inv HSTEPCF; cbn in *; unfold Errors.bind in *; repeat destruct_match; try discriminate; subst.
+    - assert (Hple4: Ple (max_predicate (Pand curr_p p0)) (max_pred_function f)).
+      { cbn. eapply le_max_pred in HPLE1. extlia. }
+      assert (HEVAL2: eval_predf pr' (Pand curr_p p0) = true).
+      { rewrite eval_predf_Pand. inv H3. rewrite H0. rewrite HEVAL. auto. }
+      inv HMATCH. 
+      unfold state_goto in *. inv HTRANS. eexists; split; [|split].
+      econstructor; eauto. repeat (econstructor; eauto).
+      eapply transl_predicate_correct2_true; eauto.
+      econstructor.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. eauto.
+      unfold transl_module, Errors.bind, ret in *; repeat destr. inv TF; cbn.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. cbn.
+      assert (HPLE5: Ple r (max_reg_function f)) by extlia.
+      eapply ple_max_resource_function in HPLE5. rewrite assocmap_gso by extlia.
+      inv MASSOC. eapply H; try extlia.
+      rewrite eval_predf_Pand. rewrite eval_predf_negate. rewrite HEVAL. inv H3.
+      now rewrite H0.
+    - assert (Hple4: Ple (max_predicate (Pand curr_p Ptrue)) (max_pred_function f)).
+      { cbn. extlia. }
+      assert (HEVAL2: eval_predf pr' (Pand curr_p Ptrue) = true).
+      { rewrite eval_predf_Pand. rewrite HEVAL. auto. }
+      inv HMATCH. 
+      unfold state_goto in *. inv HTRANS. eexists; split; [|split].
+      econstructor; eauto. repeat (econstructor; eauto).
+      eapply transl_predicate_correct2_true; eauto.
+      econstructor.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. eauto.
+      unfold transl_module, Errors.bind, ret in *; repeat destr. inv TF; cbn.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. cbn.
+      assert (HPLE5: Ple r (max_reg_function f)) by extlia.
+      eapply ple_max_resource_function in HPLE5. rewrite assocmap_gso by extlia.
+      inv MASSOC. eapply H; try extlia.
+      rewrite eval_predf_Pand. auto with bool.
+    - assert (Hple4: Ple (max_predicate (Pand curr_p p0)) (max_pred_function f)).
+      { cbn. eapply le_max_pred in HPLE1. extlia. }
+      assert (HEVAL2: eval_predf pr' (Pand curr_p p0) = true).
+      { rewrite eval_predf_Pand. inv H3. rewrite H0. rewrite HEVAL. auto. }
+      inv HMATCH. 
+      unfold state_goto in *. inv HTRANS. eexists; split; [|split].
+      econstructor; eauto. repeat (econstructor; eauto).
+      eapply transl_predicate_correct2_true; eauto.
+      econstructor.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. eauto.
+      unfold transl_module, Errors.bind, ret in *; repeat destr. inv TF; cbn.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. cbn. constructor.
+      rewrite eval_predf_Pand. rewrite eval_predf_negate. rewrite HEVAL. inv H3.
+      now rewrite H0.
+    - assert (Hple4: Ple (max_predicate (Pand curr_p Ptrue)) (max_pred_function f)).
+      { cbn. extlia. }
+      assert (HEVAL2: eval_predf pr' (Pand curr_p Ptrue) = true).
+      { rewrite eval_predf_Pand. rewrite HEVAL. auto. }
+      inv HMATCH. 
+      unfold state_goto in *. inv HTRANS. eexists; split; [|split].
+      econstructor; eauto. repeat (econstructor; eauto).
+      eapply transl_predicate_correct2_true; eauto.
+      econstructor.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. eauto.
+      unfold transl_module, Errors.bind, ret in *; repeat destr. inv TF; cbn.
+      eapply transl_predicate_correct2_true; eauto.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      eapply regs_lessdef_add_greater; eauto. extlia.
+      econstructor. cbn.
+      constructor.
+      rewrite eval_predf_Pand. auto with bool.
+  Qed.
+
+  Transparent translate_predicate.
+  Transparent translate_predicate_cond.
 
   Lemma transl_step_state_correct_single_false_standard :
     forall ctrl bb curr_p next_p m_ stmnt stmnt' asr0 asa0 asr asa n max_reg max_pred rs ps,
@@ -1122,7 +1679,7 @@ Section CORRECTNESS.
       econstructor; eauto. crush. crush.
     - exfalso; eapply HNO_RBSTORE; auto.
     - cbn -[translate_predicate deep_simplify] in HTRANSF; unfold Errors.bind in HTRANSF.
-      destruct_match; try discriminate.
+      repeat (destruct_match; try discriminate).
       assert (forall A a b, @OK A a = OK b -> a = b) by now inversion 1. apply H in HTRANSF.
       assert (forall A B (a b: A) (c d: B), (a, c) = (b, d) -> a = b /\ c = d) by now inversion 1. 
       apply H0 in HTRANSF. destruct HTRANSF. rewrite H1 in *. rewrite <- H2 in *.
@@ -1512,8 +2069,290 @@ Section CORRECTNESS.
         split; [|split]; auto. constructor.
   Qed.
 
+  Lemma lt_check_step_cf_instr2 :
+    forall cf n,
+      check_cfi n cf = OK tt ->
+      Z.pos n <= Int.max_unsigned.
+  Proof.
+    intros.
+    destruct cf; cbn in *; try discriminate; unfold check_cfi, assert_, Errors.bind in *; 
+      repeat (destruct_match; try discriminate); simplify; try destruct_match; try lia.
+  Qed.
+
+Lemma max_pred_instr_lt :
+  forall y a,
+    (y <= max_pred_instr y a)%positive.
+Proof.
+  unfold max_pred_instr; intros.
+  destruct a; try destruct o; lia.
+Qed.
+
+Lemma max_pred_instr_fold_lt :
+  forall b y,
+    (y <= fold_left max_pred_instr b y)%positive.
+Proof.
+  induction b; crush.
+  transitivity (max_pred_instr y a); auto.
+  apply max_pred_instr_lt.
+Qed.
+
+Lemma max_pred_block_lt :
+  forall y a b,
+    (y <= max_pred_block y a b)%positive.
+Proof.
+  unfold max_pred_block, SubParBB.foldl; intros.
+  apply max_pred_instr_fold_lt.
+Qed.
+
+Lemma max_fold_left_initial :
+  forall l y,
+    (y <= fold_left (fun (a : positive) (p0 : positive * SubParBB.t) => max_pred_block a (fst p0) (snd p0)) l y)%positive.
+Proof.
+  induction l; crush.
+  transitivity (max_pred_block y (fst a) (snd a)); eauto.
+  apply max_pred_block_lt.
+Qed.
+
+Lemma max_pred_in_max :
+  forall y p i,
+    In p (pred_uses i) ->
+    (p <= max_pred_instr y i)%positive.
+Proof.
+  intros. unfold max_pred_instr. destruct i; try destruct o; cbn in *; try easy.
+  - eapply predicate_lt in H; lia.
+  - eapply predicate_lt in H; lia.
+  - eapply predicate_lt in H; lia.
+  - inv H; try lia. eapply predicate_lt in H0; lia.
+  - inv H; try lia.
+  - eapply predicate_lt in H; lia.
+Qed.
+
+Lemma fold_left_in_max :
+  forall bb p y i,
+    In i bb ->
+    In p (pred_uses i) ->
+    (p <= fold_left max_pred_instr bb y)%positive.
+Proof.
+  induction bb; crush. inv H; eauto.
+  transitivity (max_pred_instr y i); [|eapply max_pred_instr_fold_lt].
+  apply max_pred_in_max; auto.
+Qed.
+
+Lemma max_reg_cfi_lt :
+  forall y c, (y <= max_reg_cfi y c)%positive.
+Proof.
+  intros. destruct c; cbn; repeat destruct_match; try apply max_fold_lt; try lia.
+  now apply max_fold_lt.
+Qed.
+
+Lemma max_reg_lt :
+  forall y a,
+    (y <= max_reg_instr y a)%positive.
+Proof.
+  intros. destruct a; cbn; try apply max_fold_lt; try lia.
+  apply max_reg_cfi_lt.
+Qed.
+
+Lemma fold_left_max' :
+  forall l a b,
+    (a <= b)%positive ->
+    (fold_left Pos.max l a <= fold_left Pos.max l b)%positive.
+Proof.
+  induction l.
+  - intros. cbn. lia.
+  - intros. cbn. eapply IHl. lia.
+Qed.
+
+Lemma max_reg_lt'' :
+  forall y x a,
+    (x <= y)%positive ->
+    (max_reg_cfi x a <= max_reg_cfi y a)%positive.
+Proof.
+  intros. destruct a; cbn; repeat destruct_match; try apply fold_left_max'; try lia.
+  apply fold_left_max'. lia.
+Qed.
+
+Lemma max_reg_lt' :
+  forall y x a,
+    (x <= y)%positive ->
+    (max_reg_instr x a <= max_reg_instr y a)%positive.
+Proof.
+  intros. destruct a; cbn; try apply fold_left_max'; try lia.
+  now apply max_reg_lt''.
+Qed.
+
+Lemma max_pred_lt :
+  forall y x a,
+    (x <= y)%positive ->
+    (max_pred_instr x a <= max_pred_instr y a)%positive.
+Proof.
+  intros. destruct a; cbn; repeat destruct_match; try apply fold_left_max'; try lia.
+Qed.
+
+Lemma fold_left_in_max_reg' :
+  forall bb y,
+    (y <= fold_left max_reg_instr bb y)%positive.
+Proof.
+  induction bb.
+  - cbn. lia.
+  - cbn in *. intros. 
+    pose proof (IHbb (max_reg_instr y a)).
+    pose proof (max_reg_lt y a). lia.
+Qed.
+
+Lemma fold_left_in_max_reg :
+  forall bb y i,
+    In i bb ->
+    (max_reg_instr 1 i <= fold_left max_reg_instr bb y)%positive.
+Proof.
+  induction bb; crush. inv H; eauto.
+  pose proof (fold_left_in_max_reg' bb (max_reg_instr y i)).
+  enough ((max_reg_instr 1 i <= max_reg_instr y i)%positive). lia.
+  apply max_reg_lt'; lia.
+Qed.
+
+Lemma max_reg_instr_lt_fold :
+  forall bb x y,
+    (x <= y)%positive -> (fold_left max_reg_instr bb x <= fold_left max_reg_instr bb y)%positive.
+Proof.
+  induction bb; crush.
+  apply IHbb. now apply max_reg_lt'.
+Qed.
+
+Lemma fold_left_lt_block :
+  forall bb y,
+    (y <= fold_left (fun a el => max_reg_block a (fst el) (snd el)) bb y)%positive.
+Proof.
+  induction bb; crush.
+  specialize (IHbb (max_reg_block y (fst a) (snd a))).
+  enough (y <= max_reg_block y (fst a) (snd a))%positive; [lia|].
+  unfold max_reg_block, SubParBB.foldl. apply fold_left_in_max_reg'.
+Qed.
+
+Lemma fold_left_in_max_block :
+  forall bb y pc i,
+    In (pc, i) bb ->
+    (max_reg_block 1 pc i <= fold_left (fun a el => max_reg_block a (fst el) (snd el)) bb y)%positive.
+Proof.
+  induction bb; crush. inv H; eauto.
+  cbn.
+  pose proof (fold_left_lt_block bb (fold_left max_reg_instr (concat i) y)).
+  unfold max_reg_block, SubParBB.foldl in *.
+  enough (fold_left max_reg_instr (concat i) 1 <= fold_left max_reg_instr (concat i) y)%positive; [lia|].
+  apply max_reg_instr_lt_fold; lia.
+Qed.
+
+Lemma max_pred_instr_lt_fold :
+  forall bb x y,
+    (x <= y)%positive -> (fold_left max_pred_instr bb x <= fold_left max_pred_instr bb y)%positive.
+Proof.
+  induction bb; crush.
+  apply IHbb. now apply max_pred_lt.
+Qed.
+
+Lemma fold_left_lt_block_pred :
+  forall bb y,
+    (y <= fold_left (fun a el => max_pred_block a (fst el) (snd el)) bb y)%positive.
+Proof.
+  induction bb; crush.
+  specialize (IHbb (max_pred_block y (fst a) (snd a))).
+  enough (y <= max_pred_block y (fst a) (snd a))%positive; [lia|].
+  apply max_pred_block_lt.
+Qed.
+
+Lemma fold_left_in_max_pred_block :
+  forall bb y pc i,
+    In (pc, i) bb ->
+    (max_pred_block 1 pc i <= fold_left (fun a el => max_pred_block a (fst el) (snd el)) bb y)%positive.
+Proof.
+  induction bb; crush. inv H; eauto.
+  cbn.
+  pose proof (fold_left_lt_block_pred bb (fold_left max_pred_instr (concat i) y)).
+  unfold max_pred_block, SubParBB.foldl in *.
+  enough (fold_left max_pred_instr (concat i) 1 <= fold_left max_pred_instr (concat i) y)%positive; [lia|].
+  apply max_pred_instr_lt_fold; lia.
+Qed.
+
+Lemma max_pred_function_use' :
+  forall l pc bb p i y,
+    In (pc, bb) l ->
+    In i (concat bb) ->
+    In p (pred_uses i) ->
+    (p <= fold_left (fun (a : positive) (p0 : positive * SubParBB.t) => max_pred_block a (fst p0) (snd p0)) l y)%positive.
+Proof.
+  induction l; crush. inv H; eauto.
+  transitivity (max_pred_block y (fst (pc, bb)) (snd (pc, bb))); eauto;
+    [|eapply max_fold_left_initial].
+  cbn. unfold SubParBB.foldl.
+  eapply fold_left_in_max; eauto.
+Qed.
+
+Lemma max_pred_function_use :
+  forall f pc bb i p,
+    f.(fn_code) ! pc = Some bb ->
+    In i (concat bb) ->
+    In p (pred_uses i) ->
+    (p <= max_pred_function f)%positive.
+Proof.
+  unfold max_pred_function; intros.
+  rewrite PTree.fold_spec.
+  eapply max_pred_function_use'; eauto.
+  eapply PTree.elements_correct; eauto.
+Qed.
+
+  (* Lemma lt_max_resources_in_block : *)
+  (*   forall bb a pc x x0, *)
+  (*     In x (concat bb) -> *)
+  (*     In x0 (pred_uses x) -> *)
+  (*     Ple x0 (max_pred_block a pc bb). *)
+  (* Proof.  *)
+  (*   induction bb. *)
+  (*   - intros. cbn in *. inv H. *)
+  (*   - intros. cbn in *. *)
+
+  (* Lemma lt_max_resources_lt_a : *)
+  (*   forall bb x x0 a k v, *)
+  (*     In x (concat bb) -> *)
+  (*     In x0 (pred_uses x) -> *)
+  (*     Ple x0 a -> *)
+  (*     Ple x0 (max_pred_block a k v). *)
+  (* Proof. Admitted. *)
+
+  (* Definition inductive_p final fld := *)
+  (*   forall pc bb,  *)
+  (*     final ! pc = Some bb -> *)
+  (*     Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 fld) (pred_uses i0)) (concat bb). *)
+
+  (* Lemma lt_max_resource_predicate_Forall : *)
+  (*   forall f pc bb, *)
+  (*   f.(GibleSubPar.fn_code) ! pc = Some bb -> *)
+  (*   Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 (max_pred_function f)) (pred_uses i0)) (concat bb). *)
+  (* Proof. *)
+  (*   unfold max_pred_function. *)
+  (*   intro f.  *)
+  (*   match goal with |- ?g => replace g with (inductive_p (fn_code f) (PTree.fold max_pred_block (fn_code f) 1%positive)) by auto end. *)
+  (*   eapply PTree_Properties.fold_rec; unfold inductive_p; intros; cbn in *. *)
+  (*   - eapply H0. erewrite H. eauto. *)
+  (*   - now rewrite PTree.gempty in H. *)
+  (*   - destruct (peq k pc); subst. *)
+  (*     + rewrite PTree.gss in H2. inv H2. *)
+  (*       eapply Forall_forall; intros. eapply Forall_forall; intros. eauto using lt_max_resources_in_block. *)
+  (*     + rewrite PTree.gso in H2 by auto. *)
+  (*       eapply H1 in H2. eapply Forall_forall; intros. eapply Forall_forall; intros. *)
+  (*       eapply Forall_forall in H2; eauto. eapply Forall_forall in H2; eauto. *)
+  (*       eauto using lt_max_resources_lt_a. *)
+  (* Qed. *)
+
+  Lemma lt_max_resource_predicate_Forall :
+    forall f pc bb,
+    f.(GibleSubPar.fn_code) ! pc = Some bb ->
+    Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 (max_pred_function f)) (pred_uses i0)) (concat bb).
+  Proof.
+    intros. do 2 (eapply Forall_forall; intros). unfold Ple. eapply max_pred_function_use; eauto.
+  Qed.
+
   Lemma transl_step_state_correct_instr :
-    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n,
+    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n a b,
       (* (fn_code f) ! pc = Some bb -> *)
       mfold_left (transf_instr n (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt 
@@ -1522,20 +2361,30 @@ Section CORRECTNESS.
       SubParBB.step_instr_list ge sp (Iexec {| is_rs := rs; is_ps := pr; is_mem := m |}) bb
              (Iexec {| is_rs := rs'; is_ps := pr'; is_mem := m' |}) ->
       match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
+      Ple (fold_left max_pred_instr bb a) (max_pred_function f) ->
+      Ple (fold_left max_reg_instr bb b) (max_reg_function f) ->
+      Ple (max_predicate curr_p) (max_pred_function f) ->
       exists asr' asa',
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' 
           (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
         /\ match_states (GibleSubPar.State s f sp pc rs' pr' m') (DHTL.State s' m_ pc asr' asa')
-        /\ eval_predf pr' next_p = true.
+        /\ eval_predf pr' next_p = true
+        /\ Ple (max_predicate next_p) (max_pred_function f).
   Proof. 
-    induction bb; intros * HFOLD HSTMNT HEVAL HSUBPAR HMATCH.
+    induction bb; intros * HFOLD HSTMNT HEVAL HSUBPAR HMATCH HPLE1 HPLE2 HPLE3.
     - inv HSUBPAR. exists asr, asa. cbn in *. inv HFOLD. auto.
     - exploit mfold_left_cons; eauto.
       intros (x' & y' & HFOLD' & HTRANS & HINV). inv HINV. destruct y'. clear HFOLD.
       inv HSUBPAR. destruct i1; [|inv H5]. destruct i.
+      cbn in HPLE1, HPLE2 |-.
+      pose proof (max_pred_instr_fold_lt bb (max_pred_instr a0 a)).
       exploit transl_step_state_correct_single_instr; eauto.
-      intros (asr' & asa' & HSTMNT' & HMATCH' & HEVAL').
-      eauto.
+      + apply Forall_forall; intros. apply max_pred_in_max with (y := a0) in H0. extlia.
+      + instantiate (1:=1%positive). 
+        pose proof (fold_left_in_max_reg' bb (max_reg_instr b a)).
+        pose proof (max_reg_lt' b 1 a ltac:(lia)). extlia.
+      + intros (asr' & asa' & HSTMNT' & HMATCH' & HEVAL' & Htrue).
+        exploit IHbb; eauto.
   Qed.
 
   Lemma transl_step_state_correct_instr_false :
@@ -1569,7 +2418,7 @@ Section CORRECTNESS.
   Qed.
 
   Lemma transl_step_state_correct_instr_state :
-    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf pc' n,
+    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf pc' n a b,
       (* (fn_code f) ! pc = Some bb -> *)
       mfold_left (transf_instr n (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt 
@@ -1581,12 +2430,14 @@ Section CORRECTNESS.
       match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
       Forall (fun i0 : instr => Forall (fun x : positive => Ple x (max_pred_function f)) (pred_uses i0)) bb ->
       Ple (max_predicate curr_p) (max_pred_function f) ->
+      Ple (fold_left max_pred_instr bb a) (max_pred_function f) ->
+      Ple (fold_left max_reg_instr bb b) (max_reg_function f) ->
       exists asr' asa',
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' 
           (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
         /\ match_states (GibleSubPar.State s f sp pc' rs' pr' m') (DHTL.State s' m_ pc' asr' asa').
   Proof. 
-    intros * HFOLD HSTMNT HEVAL HSTEP HSTEPCF HMATCH HFRL HPLE.
+    intros * HFOLD HSTMNT HEVAL HSTEP HSTEPCF HMATCH HFRL HPLE HPLE1 HPLE2.
     exploit iterm_intermediate_state; eauto.
     intros (bb' & i & bb'' & HSTEP' & HSTEPINSTR & HBB). subst.
     exploit mfold_left_app; eauto. intros (y' & HFOLD1 & HFOLD2).
@@ -1594,21 +2445,38 @@ Section CORRECTNESS.
     inv HSUBST.
     destruct x'. destruct y_other.
     exploit transl_step_state_correct_instr; try eapply HFOLD1; eauto.
-    intros (asr' & asa' & HSTMNT' & HMATCH' & HNEXT).
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    (* pose proof (fold_left_in_max_reg' bb'' (max_reg_instr (fold_left max_reg_instr bb' b) i)). *)
+    (* pose proof (max_reg_lt (fold_left max_reg_instr bb' b) i). *)
+    pose proof (max_pred_instr_fold_lt bb'' (max_pred_instr (fold_left max_pred_instr bb' a) i)).
+    pose proof (max_pred_instr_lt (fold_left max_pred_instr bb' a) i). 
+    instantiate (1:=a). extlia.
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    pose proof (fold_left_in_max_reg' bb'' (max_reg_instr (fold_left max_reg_instr bb' b) i)).
+    pose proof (max_reg_lt (fold_left max_reg_instr bb' b) i).
+    instantiate (1:=b). extlia.
+    intros (asr' & asa' & HSTMNT' & HMATCH' & HNEXT & HPRED).
     exploit transl_step_state_correct_single_instr_term; eauto.
+    apply Forall_forall; intros.
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    pose proof (max_pred_instr_fold_lt bb'' (max_pred_instr (fold_left max_pred_instr bb' a) i)).
+    pose proof (max_pred_instr_lt (fold_left max_pred_instr bb' a) i). 
+    eapply max_pred_in_max with (y := (fold_left max_pred_instr bb' a)) in H. extlia.
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    pose proof (fold_left_in_max_reg' bb'' (max_reg_instr (fold_left max_reg_instr bb' b) i)).
+    instantiate (1:=(fold_left max_reg_instr bb' b)). extlia.
     intros (asr'0 & asa'0 & HSTMNT'' & HMATCH'' & HNEXT'').
     inv HMATCH''.
     exploit transl_step_state_correct_instr_false; eauto.
     { eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. }
-    { eapply all_le_max_predicate_instr; eauto. eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. 
-      eapply all_le_max_predicate; eauto. eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. }
+    { eapply all_le_max_predicate_instr; eauto. eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. }
     intros (asr'' & HSTMNT''' & HUNCHANGED & HEVAL' & HPLE').
     exists asr'', asa'0. split; auto.
     eapply unchanged_implies_match; eauto. econstructor; eauto.
   Qed.
 
   Lemma transl_step_state_correct_instr_return :
-    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf v m'' n,
+    forall s f sp bb pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa cf v m'' n a b,
       mfold_left (transf_instr n (mk_ctrl f)) bb (OK (curr_p, stmnt)) = OK (next_p, stmnt') ->
       stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt 
         (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
@@ -1619,6 +2487,8 @@ Section CORRECTNESS.
       match_states (GibleSubPar.State s f sp pc rs pr m) (DHTL.State s' m_ pc asr asa) ->
       Forall (fun i0 : instr => Forall (fun x : positive => Ple x (max_pred_function f)) (pred_uses i0)) bb ->
       Ple (max_predicate curr_p) (max_pred_function f) ->
+      Ple (fold_left max_pred_instr bb a) (max_pred_function f) ->
+      Ple (fold_left max_reg_instr bb b) (max_reg_function f) ->
       exists asr' asa' retval,
         stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt' 
           (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa')
@@ -1627,7 +2497,7 @@ Section CORRECTNESS.
         /\ asr'!(m_.(DHTL.mod_return)) = Some retval
         /\ asr'!(m_.(DHTL.mod_st)) = Some (posToValue n).
   Proof.
-    intros * HFOLD HSTMNT HEVAL HSTEP HSTEPCF HMATCH HFRL HPLE.
+    intros * HFOLD HSTMNT HEVAL HSTEP HSTEPCF HMATCH HFRL HPLE HPLE1 HPLE2.
     exploit iterm_intermediate_state; eauto.
     intros (bb' & i & bb'' & HSTEP' & HSTEPINSTR & HBB). subst.
     exploit mfold_left_app; eauto. intros (y' & HFOLD1 & HFOLD2).
@@ -1635,14 +2505,31 @@ Section CORRECTNESS.
     inv HSUBST.
     destruct x'. destruct y_other.
     exploit transl_step_state_correct_instr; try eapply HFOLD1; eauto.
-    intros (asr' & asa' & HSTMNT' & HMATCH' & HNEXT).
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    (* pose proof (fold_left_in_max_reg' bb'' (max_reg_instr (fold_left max_reg_instr bb' b) i)). *)
+    (* pose proof (max_reg_lt (fold_left max_reg_instr bb' b) i). *)
+    pose proof (max_pred_instr_fold_lt bb'' (max_pred_instr (fold_left max_pred_instr bb' a) i)).
+    pose proof (max_pred_instr_lt (fold_left max_pred_instr bb' a) i). 
+    instantiate (1:=a). extlia.
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    pose proof (fold_left_in_max_reg' bb'' (max_reg_instr (fold_left max_reg_instr bb' b) i)).
+    pose proof (max_reg_lt (fold_left max_reg_instr bb' b) i).
+    instantiate (1:=b). extlia.
+    intros (asr' & asa' & HSTMNT' & HMATCH' & HNEXT & HGT).
     exploit transl_step_state_correct_single_instr_term_return; eauto.
+    apply Forall_forall; intros.
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    pose proof (max_pred_instr_fold_lt bb'' (max_pred_instr (fold_left max_pred_instr bb' a) i)).
+    pose proof (max_pred_instr_lt (fold_left max_pred_instr bb' a) i). 
+    eapply max_pred_in_max with (y := (fold_left max_pred_instr bb' a)) in H. extlia.
+    rewrite fold_left_app in HPLE1, HPLE2 |-. cbn in HPLE1, HPLE2 |-.
+    pose proof (fold_left_in_max_reg' bb'' (max_reg_instr (fold_left max_reg_instr bb' b) i)).
+    instantiate (1:=(fold_left max_reg_instr bb' b)). extlia.
     intros (v' & HSTMNT'' & HEVAL2 & HEVAL3).
     inv HMATCH'.
     exploit transl_step_state_correct_instr_false; eauto.
     { eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. }
-    { eapply all_le_max_predicate_instr; eauto. eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. 
-      eapply all_le_max_predicate; eauto. eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. }
+    { eapply all_le_max_predicate_instr; eauto. eapply Forall_app in HFRL. inv HFRL. inv H0. eauto. }
     { unfold transl_module, Errors.bind, ret in TF. repeat (destruct_match; try discriminate; []).
       inv TF. repeat eapply regs_lessdef_add_greater; eauto; cbn; unfold Plt; lia. }
     intros (asr'' & HSTMNT''' & HUNCHANGED & HEVAL' & HPLE').
@@ -1860,152 +2747,6 @@ Section CORRECTNESS.
     (* eapply forallb_forall in Heqb; eauto. lia. *)
   Qed.
 
-  Lemma lt_check_step_cf_instr2 :
-    forall cf n,
-      check_cfi n cf = OK tt ->
-      Z.pos n <= Int.max_unsigned.
-  Proof.
-    intros.
-    destruct cf; cbn in *; try discriminate; unfold check_cfi, assert_, Errors.bind in *; 
-      repeat (destruct_match; try discriminate); simplify; try destruct_match; try lia.
-  Qed.
-
-Lemma max_pred_instr_lt :
-  forall y a,
-    (y <= max_pred_instr y a)%positive.
-Proof.
-  unfold max_pred_instr; intros.
-  destruct a; try destruct o; lia.
-Qed.
-
-Lemma max_pred_instr_fold_lt :
-  forall b y,
-    (y <= fold_left max_pred_instr b y)%positive.
-Proof.
-  induction b; crush.
-  transitivity (max_pred_instr y a); auto.
-  apply max_pred_instr_lt.
-Qed.
-
-Lemma max_pred_block_lt :
-  forall y a b,
-    (y <= max_pred_block y a b)%positive.
-Proof.
-  unfold max_pred_block, SubParBB.foldl; intros.
-  apply max_pred_instr_fold_lt.
-Qed.
-
-Lemma max_fold_left_initial :
-  forall l y,
-    (y <= fold_left (fun (a : positive) (p0 : positive * SubParBB.t) => max_pred_block a (fst p0) (snd p0)) l y)%positive.
-Proof.
-  induction l; crush.
-  transitivity (max_pred_block y (fst a) (snd a)); eauto.
-  apply max_pred_block_lt.
-Qed.
-
-Lemma max_pred_in_max :
-  forall y p i,
-    In p (pred_uses i) ->
-    (p <= max_pred_instr y i)%positive.
-Proof.
-  intros. unfold max_pred_instr. destruct i; try destruct o; cbn in *; try easy.
-  - eapply predicate_lt in H; lia.
-  - eapply predicate_lt in H; lia.
-  - eapply predicate_lt in H; lia.
-  - inv H; try lia. eapply predicate_lt in H0; lia.
-  - eapply predicate_lt in H; lia.
-Qed.
-
-Lemma fold_left_in_max :
-  forall bb p y i,
-    In i bb ->
-    In p (pred_uses i) ->
-    (p <= fold_left max_pred_instr bb y)%positive.
-Proof.
-  induction bb; crush. inv H; eauto.
-  transitivity (max_pred_instr y i); [|eapply max_pred_instr_fold_lt].
-  apply max_pred_in_max; auto.
-Qed.
-
-Lemma max_pred_function_use' :
-  forall l pc bb p i y,
-    In (pc, bb) l ->
-    In i (concat bb) ->
-    In p (pred_uses i) ->
-    (p <= fold_left (fun (a : positive) (p0 : positive * SubParBB.t) => max_pred_block a (fst p0) (snd p0)) l y)%positive.
-Proof.
-  induction l; crush. inv H; eauto.
-  transitivity (max_pred_block y (fst (pc, bb)) (snd (pc, bb))); eauto;
-    [|eapply max_fold_left_initial].
-  cbn. unfold SubParBB.foldl.
-  eapply fold_left_in_max; eauto.
-Qed.
-
-Lemma max_pred_function_use :
-  forall f pc bb i p,
-    f.(fn_code) ! pc = Some bb ->
-    In i (concat bb) ->
-    In p (pred_uses i) ->
-    (p <= max_pred_function f)%positive.
-Proof.
-  unfold max_pred_function; intros.
-  rewrite PTree.fold_spec.
-  eapply max_pred_function_use'; eauto.
-  eapply PTree.elements_correct; eauto.
-Qed.
-
-  (* Lemma lt_max_resources_in_block : *)
-  (*   forall bb a pc x x0, *)
-  (*     In x (concat bb) -> *)
-  (*     In x0 (pred_uses x) -> *)
-  (*     Ple x0 (max_pred_block a pc bb). *)
-  (* Proof.  *)
-  (*   induction bb. *)
-  (*   - intros. cbn in *. inv H. *)
-  (*   - intros. cbn in *. *)
-
-  (* Lemma lt_max_resources_lt_a : *)
-  (*   forall bb x x0 a k v, *)
-  (*     In x (concat bb) -> *)
-  (*     In x0 (pred_uses x) -> *)
-  (*     Ple x0 a -> *)
-  (*     Ple x0 (max_pred_block a k v). *)
-  (* Proof. Admitted. *)
-
-  (* Definition inductive_p final fld := *)
-  (*   forall pc bb,  *)
-  (*     final ! pc = Some bb -> *)
-  (*     Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 fld) (pred_uses i0)) (concat bb). *)
-
-  (* Lemma lt_max_resource_predicate_Forall : *)
-  (*   forall f pc bb, *)
-  (*   f.(GibleSubPar.fn_code) ! pc = Some bb -> *)
-  (*   Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 (max_pred_function f)) (pred_uses i0)) (concat bb). *)
-  (* Proof. *)
-  (*   unfold max_pred_function. *)
-  (*   intro f.  *)
-  (*   match goal with |- ?g => replace g with (inductive_p (fn_code f) (PTree.fold max_pred_block (fn_code f) 1%positive)) by auto end. *)
-  (*   eapply PTree_Properties.fold_rec; unfold inductive_p; intros; cbn in *. *)
-  (*   - eapply H0. erewrite H. eauto. *)
-  (*   - now rewrite PTree.gempty in H. *)
-  (*   - destruct (peq k pc); subst. *)
-  (*     + rewrite PTree.gss in H2. inv H2. *)
-  (*       eapply Forall_forall; intros. eapply Forall_forall; intros. eauto using lt_max_resources_in_block. *)
-  (*     + rewrite PTree.gso in H2 by auto. *)
-  (*       eapply H1 in H2. eapply Forall_forall; intros. eapply Forall_forall; intros. *)
-  (*       eapply Forall_forall in H2; eauto. eapply Forall_forall in H2; eauto. *)
-  (*       eauto using lt_max_resources_lt_a. *)
-  (* Qed. *)
-
-  Lemma lt_max_resource_predicate_Forall :
-    forall f pc bb,
-    f.(GibleSubPar.fn_code) ! pc = Some bb ->
-    Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 (max_pred_function f)) (pred_uses i0)) (concat bb).
-  Proof.
-    intros. do 2 (eapply Forall_forall; intros). unfold Ple. eapply max_pred_function_use; eauto.
-  Qed.
-
   Lemma transl_step_state_correct :
     forall s f sp pc rs rs' m m' bb pr pr' state cf t,
       (fn_code f) ! pc = Some bb ->
@@ -2033,7 +2774,11 @@ Qed.
     inv HEXISTS.
     - inv HPARSTATE. inv H. exploit transl_step_state_correct_instr_state; eauto.
       constructor. eapply lt_max_resource_predicate_Forall; eauto.
-      cbn; unfold Ple; lia. intros (asr' & asa' & HSTMNTRUN & HMATCH').
+      cbn; extlia. unfold max_pred_function. rewrite PTree.fold_spec.
+      unfold Ple in *. eapply fold_left_in_max_pred_block. apply PTree.elements_correct. eassumption.
+      intros.  exploit H.
+      unfold Ple in *. unfold max_reg_function. rewrite PTree.fold_spec. pose proof (fold_left_in_max_block (PTree.elements (fn_code f1)) 1 pc0 bb ltac:(apply PTree.elements_correct; eassumption)). unfold max_reg_block, SubParBB.foldl in *. instantiate (1:=1%positive). unfold Gible.node in *. lia. clear H. 
+      intros (asr' & asa' & HSTMNTRUN & HMATCH').
       do 2 apply match_states_merge_empty_all in HMATCH'.
       eexists. split; eauto. inv HMATCH. inv CONST.
       apply Smallstep.plus_one. econstructor; eauto.
@@ -2043,6 +2788,11 @@ Qed.
     - inv HPARSTATE; simplify. exploit transl_step_state_correct_instr_return; eauto.
       constructor. eapply lt_max_resource_predicate_Forall; eauto.
       cbn; unfold Ple; lia.
+      intros.  exploit H0.
+      unfold max_pred_function. rewrite PTree.fold_spec.
+      unfold Ple in *. eapply fold_left_in_max_pred_block. apply PTree.elements_correct. eassumption.
+      intros.
+      unfold Ple in *. unfold max_reg_function. rewrite PTree.fold_spec. pose proof (fold_left_in_max_block (PTree.elements (fn_code f1)) 1 pc0 bb ltac:(apply PTree.elements_correct; eassumption)). unfold max_reg_block, SubParBB.foldl in *. instantiate (1:=1%positive). unfold Gible.node in *. lia. clear H. 
       intros (asr' & asa' & retval & HSTMNT_RUN & HVAL & HASR1 & HASR2 & HASR3).
       inv HMATCH. inv CONST.
       econstructor. split.

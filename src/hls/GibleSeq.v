@@ -193,6 +193,7 @@ Proof.
   - eapply predicate_lt in H; lia.
   - eapply predicate_lt in H; lia.
   - inv H; try lia. eapply predicate_lt in H0; lia.
+  - inv H; try lia.
   - eapply predicate_lt in H; lia.
 Qed.
 

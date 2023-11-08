@@ -148,6 +148,7 @@ Definition max_pred_instr (m: positive) (i: instr) :=
   | RBload (Some p) chunk addr args dst => Pos.max m (max_predicate p)
   | RBstore (Some p) chunk addr args src => Pos.max m (max_predicate p)
   | RBsetpred (Some p') c args p => Pos.max m (Pos.max p (max_predicate p'))
+  | RBsetpred None c args p => Pos.max m p
   | RBexit (Some p) c => Pos.max m (max_predicate p)
   | _ => m
   end.
@@ -922,6 +923,7 @@ type ~genv~ which was declared earlier.
       | RBstore (Some p) _ _ _ _
       | RBexit (Some p) _ => predicate_use p
       | RBsetpred (Some p) _ _ p' => p' :: predicate_use p
+      | RBsetpred None _ _ p' => p' :: nil
       | _ => nil
       end.
 
