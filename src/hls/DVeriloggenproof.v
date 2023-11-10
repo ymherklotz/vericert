@@ -397,111 +397,107 @@ Section CORRECTNESS.
       unfold_replace. assumption. unfold_replace. assumption.
       unfold_replace. eassumption. apply valueToPos_posToValue.
       split. lia.
-  (*     eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
-  (*     split. lia. apply HP. eassumption. eassumption. *)
-  (*     unfold_replace. *)
-  (*     econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor. *)
-  (*     simpl. unfold find_assocmap. unfold AssocMapExt.get_default. *)
-  (*     rewrite H. trivial. *)
+      eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP.
+      split. lia. apply HP. eassumption. eassumption.
+      unfold_replace.
+      econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor.
+      simpl. unfold find_assocmap. unfold AssocMapExt.get_default.
+      rewrite H. trivial.
 
-  (*     econstructor. simpl. auto. auto. *)
+      econstructor. simpl. auto. auto.
 
-  (*     eapply transl_list_correct. *)
-  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. auto. *)
-  (*     apply Maps.PTree.elements_keys_norepet. eassumption. *)
-  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
-  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. *)
-  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
-  (*          destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
-  (*     } *)
-  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
+      eapply transl_list_correct.
+      intros. split. lia. pose proof (DHTL.mod_wf m) as HP. auto.
+      apply Maps.PTree.elements_keys_norepet. eassumption.
+      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
+           eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP.
+           split. lia. apply HP. eassumption. eassumption.
+           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP.
+           split. lia. apply HP. eassumption. eassumption. trivial.
+      }
+      apply Maps.PTree.elements_correct. eassumption. eassumption.
 
-  (*     econstructor. econstructor. *)
+      econstructor. econstructor.
 
-  (*     eapply transl_list_correct. *)
-  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [_ HP]. *)
-  (*     auto. apply Maps.PTree.elements_keys_norepet. eassumption. *)
-  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
-  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. *)
-  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
-  (*          destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
-  (*     } *)
-  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
-  (*     econstructor. econstructor. *)
-  (*     apply mis_stepp_decl. simplify. unfold_replace. simplify. *)
-  (*     econstructor. econstructor. econstructor. econstructor. *)
-  (*     econstructor. *)
-  (*     apply ram_exec_match. eauto. *)
-  (*     apply mis_stepp_negedge_decl. simplify. auto. auto. *)
-  (*     rewrite_eq. eauto. auto. *)
-  (*     rewrite valueToPos_posToValue. econstructor. auto. *)
-  (*     simplify; lia. *)
-  (*   - inv H7. econstructor; split. apply Smallstep.plus_one. econstructor. *)
-  (*     unfold_replace. assumption. unfold_replace. assumption. *)
-  (*     unfold_replace. eassumption. apply valueToPos_posToValue. *)
-  (*     split. lia. *)
-  (*     eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
-  (*     split. lia. apply HP. eassumption. eassumption. *)
-  (*     unfold_replace. *)
-  (*     econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor. *)
-  (*     simpl. unfold find_assocmap. unfold AssocMapExt.get_default. *)
-  (*     rewrite H. trivial. *)
+      (* eapply transl_list_correct. *)
+      (* intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [_ HP]. *)
+      (* auto. apply Maps.PTree.elements_keys_norepet. eassumption. *)
+      (* 2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
+      (*      eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+      (*      split. lia. apply HP. eassumption. eassumption. *)
+      (*      apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
+      (*      destruct HP as [HP _]. *)
+      (*      split. lia. apply HP. eassumption. eassumption. trivial. *)
+      (* } *)
+      (* apply Maps.PTree.elements_correct. eassumption. eassumption. *)
+      (* econstructor. econstructor. *)
+      apply mis_stepp_decl. unfold transl_module; cbn -[map]. rewrite Heqo. cbn -[map].
+      econstructor. econstructor. econstructor. apply ram_exec_match. eauto.
+      apply mis_stepp_negedge_decl. simplify. auto. auto.
+      rewrite_eq. eauto. auto.
+      rewrite valueToPos_posToValue. econstructor. auto.
+      simplify; lia.
+    - inv H4. econstructor; split. apply Smallstep.plus_one. econstructor.
+      unfold_replace. assumption. unfold_replace. assumption.
+      unfold_replace. eassumption. apply valueToPos_posToValue.
+      split. lia.
+      eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP.
+      split. lia. apply HP. eassumption. eassumption.
+      unfold_replace.
+      econstructor. econstructor. eapply stmnt_runp_Vcond_false. econstructor. econstructor.
+      simpl. unfold find_assocmap. unfold AssocMapExt.get_default.
+      rewrite H. trivial.
 
-  (*     econstructor. simpl. auto. auto. *)
+      econstructor. simpl. auto. auto.
 
-  (*     eapply transl_list_correct. *)
-  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. auto. *)
-  (*     apply Maps.PTree.elements_keys_norepet. eassumption. *)
-  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
-  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. *)
-  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
-  (*          destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
-  (*     } *)
-  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
+      eapply transl_list_correct.
+      intros. split. lia. pose proof (DHTL.mod_wf m) as HP. auto.
+      apply Maps.PTree.elements_keys_norepet. eassumption.
+      2: { apply valueToPos_inj. apply unsigned_posToValue_le.
+           eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP.
+           split. lia. apply HP. eassumption. eassumption.
+           apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP.
+           split. lia. apply HP. eassumption. eassumption. trivial.
+      }
+      apply Maps.PTree.elements_correct. eassumption. eassumption.
 
-  (*     econstructor. econstructor. *)
+      (* econstructor. econstructor. *)
 
-  (*     eapply transl_list_correct. *)
-  (*     intros. split. lia. pose proof (DHTL.mod_wf m) as HP. *)
-  (*     destruct HP as [_ HP]; auto. *)
-  (*     apply Maps.PTree.elements_keys_norepet. eassumption. *)
-  (*     2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
-  (*          eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. *)
-  (*          apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
-  (*          destruct HP as [HP _]. *)
-  (*          split. lia. apply HP. eassumption. eassumption. trivial. *)
-  (*     } *)
-  (*     apply Maps.PTree.elements_correct. eassumption. eassumption. *)
+      (* eapply transl_list_correct. *)
+      (* intros. split. lia. pose proof (DHTL.mod_wf m) as HP. *)
+      (* destruct HP as [_ HP]; auto. *)
+      (* apply Maps.PTree.elements_keys_norepet. eassumption. *)
+      (* 2: { apply valueToPos_inj. apply unsigned_posToValue_le. *)
+      (*      eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. destruct HP as [HP _]. *)
+      (*      split. lia. apply HP. eassumption. eassumption. *)
+      (*      apply unsigned_posToValue_le. eapply pc_wf. intros. pose proof (DHTL.mod_wf m) as HP. *)
+      (*      destruct HP as [HP _]. *)
+      (*      split. lia. apply HP. eassumption. eassumption. trivial. *)
+      (* } *)
+      (* apply Maps.PTree.elements_correct. eassumption. eassumption. *)
 
-  (*     apply mis_stepp_decl. simplify. *)
-  (*     unfold_replace. *)
-  (*     repeat econstructor. apply mis_stepp_negedge_decl. trivial. trivial. *)
-  (*     simpl. unfold_replace. eassumption. auto. simplify. *)
-  (*     rewrite valueToPos_posToValue. constructor; eassumption. simplify; lia. *)
-  (*   - econstructor; split. apply Smallstep.plus_one. apply step_finish. *)
-  (*     rewrite_eq. assumption. *)
-  (*     rewrite_eq. eassumption. *)
-  (*     econstructor; auto. *)
-  (*   - econstructor; split. apply Smallstep.plus_one. apply step_finish. *)
-  (*     unfold transl_module. rewrite Heqo. simplify. *)
-  (*     assumption. unfold_replace. eassumption. *)
-  (*     constructor; assumption. *)
-  (*   - econstructor; split. apply Smallstep.plus_one. constructor. *)
-  (*     repeat rewrite_eq. constructor. constructor. *)
-  (*   - econstructor; split. apply Smallstep.plus_one. constructor. *)
-  (*     repeat rewrite_eq. constructor. constructor. *)
-  (*   - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial. *)
-  (*     repeat rewrite_eq. apply match_state. assumption. *)
-  (*   - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial. *)
-  (*     repeat rewrite_eq. apply match_state. assumption. *)
-  (* Qed. *) Admitted.
+      apply mis_stepp_decl. simplify.
+      unfold_replace. cbn -[map].
+      repeat econstructor. apply mis_stepp_negedge_decl. trivial. trivial.
+      simpl. unfold_replace. eassumption. auto. simplify.
+      rewrite valueToPos_posToValue. constructor; eassumption. simplify; lia.
+    - econstructor; split. apply Smallstep.plus_one. apply step_finish.
+      rewrite_eq. assumption.
+      rewrite_eq. eassumption.
+      econstructor; auto.
+    - econstructor; split. apply Smallstep.plus_one. apply step_finish.
+      unfold transl_module. rewrite Heqo. simplify.
+      assumption. unfold_replace. eassumption.
+      constructor; assumption.
+    - econstructor; split. apply Smallstep.plus_one. constructor.
+      repeat rewrite_eq. constructor. constructor.
+    - econstructor; split. apply Smallstep.plus_one. constructor.
+      repeat rewrite_eq. constructor. constructor.
+    - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
+      repeat rewrite_eq. apply match_state. assumption.
+    - inv H3. econstructor; split. apply Smallstep.plus_one. constructor. trivial.
+      repeat rewrite_eq. apply match_state. assumption.
+  Qed.
   #[local] Hint Resolve transl_step_correct : verilogproof.
 
   Lemma transl_initial_states :

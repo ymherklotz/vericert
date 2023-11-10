@@ -43,13 +43,13 @@ Definition arr_to_Vdeclarr_fun (a : reg * (option io * arr_decl)) :=
 Definition arr_to_Vdeclarr arrdecl := map arr_to_Vdeclarr_fun arrdecl.
 
 Definition declare_all (start reset clk finish ret st stk: reg) (stk_len: nat) (body: list module_item) :=
-  Vdeclaration (Vdecl (Some Vinput) start 1)
-  :: Vdeclaration (Vdecl (Some Vinput) reset 1)
-  :: Vdeclaration (Vdecl (Some Vinput) clk 1)
-  :: Vdeclaration (Vdecl (Some Voutput) finish 1)
-  :: Vdeclaration (Vdecl (Some Voutput) ret 32)
-  :: Vdeclaration (Vdecl None st 32)
-  :: Vdeclaration (Vdeclarr None stk 32 stk_len)
+  (Vdecl (Some Vinput) start 1)
+  :: (Vdecl (Some Vinput) reset 1)
+  :: (Vdecl (Some Vinput) clk 1)
+  :: (Vdecl (Some Voutput) finish 1)
+  :: (Vdecl (Some Voutput) ret 32)
+  :: (Vdecl None st 32)
+  :: (Vdeclarr None stk 32 stk_len)
   :: (all_reg_declarations (start::reset::clk::finish::ret::st::stk::nil) body).
 
 Definition inst_ram clk ram :=
@@ -85,14 +85,14 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
                      m.(DHTL.mod_stk)
                      m.(DHTL.mod_stk_len)
                      m.(DHTL.mod_params)
-                     (body ++ declare_all m.(DHTL.mod_start)
+                     (body ++ List.map Vdeclaration (declare_all m.(DHTL.mod_start)
                      m.(DHTL.mod_reset)
                      m.(DHTL.mod_clk)
                      m.(DHTL.mod_finish)
                      m.(DHTL.mod_return)
                      m.(DHTL.mod_st)
                      m.(DHTL.mod_stk)
-                     m.(DHTL.mod_stk_len) body)
+                     m.(DHTL.mod_stk_len) body))
                      m.(DHTL.mod_entrypoint)
   | None =>
     let body :=
@@ -112,14 +112,14 @@ Definition transl_module (m : DHTL.module) : Verilog.module :=
                      m.(DHTL.mod_stk)
                      m.(DHTL.mod_stk_len)
                      m.(DHTL.mod_params)
-                     (body ++ declare_all m.(DHTL.mod_start)
+                     (body ++ List.map Vdeclaration (declare_all m.(DHTL.mod_start)
                      m.(DHTL.mod_reset)
                      m.(DHTL.mod_clk)
                      m.(DHTL.mod_finish)
                      m.(DHTL.mod_return)
                      m.(DHTL.mod_st)
                      m.(DHTL.mod_stk)
-                     m.(DHTL.mod_stk_len) body)
+                     m.(DHTL.mod_stk_len) body))
                      m.(DHTL.mod_entrypoint)
   end.
 

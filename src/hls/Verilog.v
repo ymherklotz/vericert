@@ -968,8 +968,8 @@ Definition all_reg_module_item (m: module_item): PTree.t unit :=
 Definition all_reg_module_item_l (ml: list module_item): PTree.t unit :=
   List.fold_left (fun a b => PTree.combine combine_reg a (all_reg_module_item b)) ml (PTree.empty _).
 
-Definition all_reg_to_declaration (tree: PTree.t unit): list module_item :=
-  PTree.fold (fun ml p _ => Vdeclaration (Vdecl None p 32) :: ml) tree nil.
+Definition all_reg_to_declaration (tree: PTree.t unit): list declaration :=
+  PTree.fold (fun ml p _ => Vdecl None p 32 :: ml) tree nil.
 
-Definition all_reg_declarations (rem: list positive) (ml: list module_item): list module_item :=
+Definition all_reg_declarations (rem: list positive) (ml: list module_item): list declaration :=
   all_reg_to_declaration (List.fold_left (fun a b => PTree.remove b a) rem (all_reg_module_item_l ml)).
