@@ -358,3 +358,10 @@ Ltac array :=
       | |- context[nth_error (list_repeat ?x _) _ = Some ?x] =>
         apply list_repeat_lookup
       end.
+
+Lemma array_contents_ext :
+  forall A a b, @arr_contents A a = arr_contents b -> a = b.
+Proof.
+  destruct a, b; intros. cbn in *. subst. f_equal.
+Qed.
+

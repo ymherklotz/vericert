@@ -42,12 +42,28 @@ Import OptionExtra.
 
 Definition pred := positive.
 
+Fixpoint check_excluded (r: reg) (e: expr) :=
+  match e with
+  | Vlit v => true
+  | Vvar r' => negb (Pos.eqb r r')
+  | Vvari r' e => (negb (Pos.eqb r r')) && (check_excluded r e)
+  | Vrange r' e1 e2 => (negb (Pos.eqb r r')) && (check_excluded r e1) && (check_excluded r e2)
+  | Vinputvar r' => negb (Pos.eqb r r')
+  | Vbinop _ e1 e2 => (check_excluded r e1) && (check_excluded r e2)
+  | Vunop _ e1 => (check_excluded r e1)
+  | Vternary e1 e2 e3 => (check_excluded r e1) && (check_excluded r e2) && (check_excluded r e3)
+  end.
+
 Definition transf_maps (d: stmnt) :=
   match d with
-  | Vseq (Vseq Vskip (Vblock (Vvari r e1) e2)) ((Vblock (Vvar _) _) as rest) =>
-    Vseq rest (Vnonblock (Vvari r e1) e2)
-  | Vseq (Vseq Vskip (Vblock (Vvar e1) (Vvari r e2))) (Vblock (Vvar st') e3) =>
-    Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vvari r e2))
+  | Vseq (Vseq Vskip (Vblock (Vvari r e1) e2)) ((Vblock (Vvar r2) e3) as rest) as orig =>
+    if (check_excluded r e3) && (check_excluded r2 e1) && (check_excluded r2 e2) && (negb (Pos.eqb r2 r)) then
+      Vseq rest (Vnonblock (Vvari r e1) e2)
+    else orig
+  | Vseq (Vseq Vskip (Vblock (Vvar r1) (Vvari r e2))) (Vblock (Vvar st') e3) as orig =>
+    if (check_excluded r1 e3) && (check_excluded st' e2) && (negb (Pos.eqb r1 r)) && (negb (Pos.eqb r1 st')) && (negb (Pos.eqb r st')) then
+      Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar r1) (Vvari r e2))
+    else orig
   | _ => d
   end.
 
@@ -71,7 +87,12 @@ Program Definition transf_module (m: DHTL.module) : DHTL.module :=
       m.(mod_ram_wf)
       m.(mod_params_wf).
 Next Obligation.
-Admitted.
+  unfold map_well_formed; intros. apply AssocMapExt.elements_iff in H. simplify.
+  rewrite PTree.gmap1 in H0.
+  pose proof (mod_wf m). unfold map_well_formed in *.
+  unfold option_map in *. destruct_match; try discriminate. 
+  eapply H. apply AssocMapExt.elements_iff. eauto.
+Qed.
 
 Definition transf_fundef := transf_fundef transf_module.
 
