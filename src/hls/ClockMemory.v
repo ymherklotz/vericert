@@ -54,14 +54,23 @@ Fixpoint check_excluded (r: reg) (e: expr) :=
   | Vternary e1 e2 e3 => (check_excluded r e1) && (check_excluded r e2) && (check_excluded r e3)
   end.
 
-Definition transf_maps (d: stmnt) :=
+Definition transf_maps st (d: stmnt) :=
   match d with
   | Vseq (Vseq Vskip (Vblock (Vvari r e1) e2)) ((Vblock (Vvar r2) e3) as rest) as orig =>
-    if (check_excluded r e3) && (check_excluded r2 e1) && (check_excluded r2 e2) && (negb (Pos.eqb r2 r)) then
+    if (check_excluded r e3) 
+    && (check_excluded r2 e1) 
+    && (check_excluded r2 e2) 
+    && (negb (Pos.eqb r2 r)) 
+    && (Pos.eqb r st) then
       Vseq rest (Vnonblock (Vvari r e1) e2)
     else orig
   | Vseq (Vseq Vskip (Vblock (Vvar r1) (Vvari r e2))) (Vblock (Vvar st') e3) as orig =>
-    if (check_excluded r1 e3) && (check_excluded st' e2) && (negb (Pos.eqb r1 r)) && (negb (Pos.eqb r1 st')) && (negb (Pos.eqb r st')) then
+    if (check_excluded r1 e3) 
+    && (check_excluded st' e2) 
+    && (negb (Pos.eqb r1 r)) 
+    && (negb (Pos.eqb r1 st')) 
+    && (negb (Pos.eqb r st')) 
+    && (Pos.eqb r st) then
       Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar r1) (Vvari r e2))
     else orig
   | _ => d
@@ -69,7 +78,7 @@ Definition transf_maps (d: stmnt) :=
 
 Program Definition transf_module (m: DHTL.module) : DHTL.module :=
   mkmodule m.(mod_params)
-      (PTree.map1 transf_maps m.(mod_datapath))
+      (PTree.map1 (transf_maps m.(mod_stk)) m.(mod_datapath))
       m.(mod_entrypoint)
       m.(mod_st)
       m.(mod_stk)
