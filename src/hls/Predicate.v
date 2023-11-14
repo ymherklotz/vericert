@@ -1067,7 +1067,7 @@ Proof.
     destruct l1, l0; cbn in *.
     apply sat_formula_concat; [|apply sat_formula_concat].
     + eapply stseytin_and_correct3; eauto; split; intros.
-      * Admitted.
+      * Abort.
 
 Lemma xtseytin_correct'_unsat :
   forall p next l n fm,
@@ -1142,7 +1142,7 @@ Proof.
     (*     do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE2'; eauto). lia. *)
     (* + specialize (IHp2 _ _ _ _ HMAX2 Heqp3 _ H2). *)
     (*   pose proof (xtseytin_range _ _ _ _ _ Heqp3) as RANGE2. inversion RANGE2 as [RANGE2' RANGE2'']. clear RANGE2. *)
-    (*   destruct l1 as [l1l l1r]. cbn in *. *) Admitted.
+    (*   destruct l1 as [l1l l1r]. cbn in *. *) Abort.
     Transparent stseytin_and.
 
 Lemma xtseytin_correct'_unsat' :
@@ -1167,7 +1167,7 @@ Proof.
     specialize (IHp1 _ _ _ _ HMAX1 Heqp).
     specialize (IHp2 _ _ _ _ HMAX2 Heqp3).
     destruct (c p4) eqn:C1. specialize H1 with c.
-    exploit IHp1; eauto. Admitted.
+    exploit IHp1; eauto. Abort.
 
 (* Definition tseytin' (p: pred_op) : *)
 (*   {fm: formula | forall a, *)
@@ -1195,30 +1195,47 @@ Proof.
        end) (eq_refl (xtseytin (max_predicate p + 1) p))).
   intros. split; intros.
   - case_eq (sat_predicate p c); auto; intros. exfalso. 
-    exploit xtseytin_correct'_unsat; eauto. lia. simplify. inv H2; eauto.
-    eapply H0; split; eauto.
-  - eapply xtseytin_correct'; eauto; lia.
-Defined.
+    (* exploit xtseytin_correct'_unsat; eauto. lia. simplify. inv H2; eauto. *)
+(*     eapply H0; split; eauto. *)
+(*   - eapply xtseytin_correct'; eauto; lia. *)
+(* Defined. *) Abort.
 
 Definition tseytin_simple (p: pred_op) : formula :=
   let m := (max_predicate p + 1)%positive in
   let '(m, n, fm) := xtseytin m p in
   (n::nil) :: fm.
 
+(* Definition sat_pred_tseytin (p: pred_op) : *)
+(*   ({al : alist | sat_predicate p (interp_alist al) = true} *)
+(*    + {forall a : asgn, sat_predicate p a = false}). *)
+(* Proof. *)
+(*   refine *)
+(*     ( match tseytin p with *)
+(*       | exist _ fm _ => *)
+(*           match sat_solve fm with *)
+(*           | inleft (exist _ a _) => inleft (exist _ a _) *)
+(*           | inright _ => inright _ *)
+(*           end *)
+(*       end ). *)
+(*   - inv a0. eapply H0; auto. *)
+(*   - inv a. eapply H. eauto. *)
+(* Defined. *)
+
 Definition sat_pred_tseytin (p: pred_op) :
   ({al : alist | sat_predicate p (interp_alist al) = true}
    + {forall a : asgn, sat_predicate p a = false}).
-Proof.
   refine
-    ( match tseytin p with
+    ( match trans_pred p with
       | exist _ fm _ =>
           match sat_solve fm with
           | inleft (exist _ a _) => inleft (exist _ a _)
           | inright _ => inright _
           end
       end ).
-  - inv a0. eapply H0; auto.
-  - inv a. eapply H. eauto.
+  - apply i in s0. auto.
+  - intros. specialize (n a). specialize (i a).
+    destruct (sat_predicate p a). exfalso.
+    apply n. apply i. auto. auto.
 Defined.
 
 Definition sat_pred_simple (p: pred_op) : option alist :=

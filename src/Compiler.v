@@ -57,29 +57,59 @@ Require Import compcert.common.Smallstep.
 Require Import compcert.lib.Coqlib.
 Require Import compcert.lib.Maps.
 
+Require SimplExprproof.
+Require SimplLocalsproof.
+Require Cshmgenproof.
+Require Cminorgenproof.
+Require Selectionproof.
+Require RTLgenproof.
+Require Tailcallproof.
+Require Inliningproof.
+Require Renumberproof.
+Require Constpropproof.
+Require CSEproof.
+Require Deadcodeproof.
+Require Unusedglobproof.
+Require Allocproof.
+Require Tunnelingproof.
+Require Linearizeproof.
+Require CleanupLabelsproof.
+Require Debugvarproof.
+Require Stackingproof.
+Require Asmgenproof.
 Require vericert.hls.Verilog.
 Require vericert.hls.Veriloggen.
 Require vericert.hls.Veriloggenproof.
 Require vericert.hls.HTLgen.
 Require vericert.hls.GibleSeq.
 Require vericert.hls.GibleSeqgen.
+Require vericert.hls.GibleSeqgenproof.
 Require vericert.hls.GiblePargen.
+Require vericert.hls.GiblePargenproof.
 Require vericert.hls.GibleSubPargen.
+Require vericert.hls.GibleSubPargenproof.
 Require vericert.hls.HTLPargen.
 Require vericert.hls.DHTLgen.
 Require vericert.hls.DVeriloggen.
+Require vericert.hls.DVeriloggenproof.
 (*Require vericert.hls.Pipeline.*)
 Require vericert.hls.IfConversion.
+Require vericert.hls.IfConversionproof.
 Require vericert.hls.CondElim.
+Require vericert.hls.CondElimproof.
 Require vericert.hls.DeadBlocks.
+Require vericert.hls.DeadBlocksproof.
 (*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.
 Require vericert.hls.Memorygen.
 Require vericert.hls.DMemorygen.
 Require vericert.hls.ClockRegisters.
 Require vericert.hls.ClockMemory.
+Require vericert.hls.ClockRegistersproof.
+Require vericert.hls.ClockMemoryproof.
 
-Require Import vericert.hls.HTLgenproof.
+Require Import vericert.hls.DHTLgenproof0.
+Require Import vericert.hls.DHTLgenproof.
 
 (*|
 Declarations
@@ -152,16 +182,25 @@ Definition match_rep {A: Type} (R: A -> A -> Prop): A -> A -> Prop :=
   Relation_Operators.clos_refl_trans A R.
 
 Global Instance TransfIfLink {A: Type} {LA: Linker A}
-                      (transf: A -> A -> Prop) (TL: TransfLink transf)
-                      : TransfLink (match_rep transf).
-Admitted.
+                      (flag: unit -> bool) (transf: A -> A -> Prop) (TL: TransfLink transf)
+                      : TransfLink (match_if flag transf).
+Proof.
+  unfold match_if. destruct (flag tt).
+- auto.
+- red; intros. subst tp1 tp2. exists p; auto.
+Qed.
 
-Lemma total_rep_match:
-  forall (A B: Type) (n: list B) (f: A -> B -> A)
-         (rel: A -> A -> Prop) (prog: A),
-    (forall b p, rel p (f p b)) ->
-  match_rep rel prog (fold_left f n prog).
-Proof. Admitted.
+(* Global Instance TransfIfLink {A: Type} {LA: Linker A} *)
+(*                       (transf: A -> A -> Prop) (TL: TransfLink transf) *)
+(*                       : TransfLink (match_rep transf). *)
+(* Admitted. *)
+
+(* Lemma total_rep_match: *)
+(*   forall (A B: Type) (n: list B) (f: A -> B -> A) *)
+(*          (rel: A -> A -> Prop) (prog: A), *)
+(*     (forall b p, rel p (f p b)) -> *)
+(*   match_rep rel prog (fold_left f n prog). *)
+(* Proof. Admitted. *)
 
 Lemma total_if_match:
   forall (A: Type) (flag: unit -> bool) (f: A -> A)
@@ -244,7 +283,7 @@ The transformation functions from RTL to Verilog are then added to the backend
 of the CompCert transformations from Clight to RTL.
 |*)
 
-Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
+Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
   OK p
   @@@ SimplExpr.transl_program
   @@@ SimplLocals.transf_program
@@ -259,14 +298,43 @@ Definition transf_hls (p : Csyntax.program) : res Verilog.program :=
 This is an unverified version of transf_hls with some experimental additions
 such as scheduling that aren't completed yet.
 |*)
-Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
+
+Definition transf_hls3 p :=
   OK p
-  @@@ SimplExpr.transl_program
-  @@@ SimplLocals.transf_program
-  @@@ Cshmgen.transl_program
-  @@@ Cminorgen.transl_program
-  @@@ Selection.sel_program
-  @@@ RTLgen.transl_program
+  @@@ GibleSubPargen.transl_program
+   @@ print (print_GibleSubPar 0)
+  (* @@@ HTLPargen.transl_program *)
+  @@@ DHTLgen.transl_program
+   @@ print (print_DHTL 0)
+   @@ ClockMemory.transf_program
+   @@ print (print_DHTL 1)
+   @@ DMemorygen.transf_program
+   @@ print (print_DHTL 2)
+  @@@ ClockRegisters.transf_program
+   @@ print (print_DHTL 3)
+   @@ DVeriloggen.transl_program.
+
+Definition transf_hls2 (p : RTL.program) : res Verilog.program :=
+  OK p
+  @@@ GibleSeqgen.transl_program
+   @@ print (print_GibleSeq 0)
+   @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
+   @@ print (print_GibleSeq 1)
+   (* @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil)) *)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
+   @@ print (print_GibleSeq 2)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
+   @@ print (print_GibleSeq 3)
+   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program)
+   @@ print (print_GibleSeq 4)
+  @@@ DeadBlocks.transf_program
+   @@ print (print_GibleSeq 5)
+  @@@ time "Scheduling" GiblePargen.transl_program
+   @@ print (print_GiblePar 0)
+  @@@ transf_hls3.
+
+Definition transf_hls1 (p : RTL.program) :=
+  OK p
   @@@ Inlining.transf_program
    @@ print (print_RTL 1)
    @@ Renumber.transf_program
@@ -284,33 +352,17 @@ Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
    @@ print (print_RTL 6)
   @@@ time "Unused globals" Unusedglob.transform_program
    @@ print (print_RTL 7)
-  @@@ GibleSeqgen.transl_program
-   @@ print (print_GibleSeq 0)
-   @@ total_if HLSOpts.optim_if_conversion CondElim.transf_program
-   @@ print (print_GibleSeq 1)
-   (* @@ total_if HLSOpts.optim_if_conversion (fold_left (fun a b => IfConversion.transf_program b a) (PTree.empty _ :: PTree.empty _ :: nil)) *)
-   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
-   @@ print (print_GibleSeq 2)
-   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
-   @@ print (print_GibleSeq 3)
-   @@ total_if HLSOpts.optim_if_conversion (IfConversion.transf_program (PTree.empty _))
-   @@ print (print_GibleSeq 4)
-  @@@ DeadBlocks.transf_program
-   @@ print (print_GibleSeq 5)
-  @@@ time "Scheduling" GiblePargen.transl_program
-   @@ print (print_GiblePar 0)
-  @@@ GibleSubPargen.transl_program
-   @@ print (print_GibleSubPar 0)
-  (* @@@ HTLPargen.transl_program *)
-  @@@ DHTLgen.transl_program
-   @@ print (print_DHTL 0)
-   @@ ClockMemory.transf_program
-   @@ print (print_DHTL 1)
-   @@ DMemorygen.transf_program
-   @@ print (print_DHTL 2)
-  @@@ ClockRegisters.transf_program
-   @@ print (print_DHTL 3)
-   @@ DVeriloggen.transl_program.
+  @@@ transf_hls2.
+
+Definition transf_hls (p: Csyntax.program) :=
+  OK p
+  @@@ SimplExpr.transl_program
+  @@@ SimplLocals.transf_program
+  @@@ Cshmgen.transl_program
+  @@@ Cminorgen.transl_program
+  @@@ Selection.sel_program
+  @@@ RTLgen.transl_program
+  @@@ transf_hls1.
 
 (*|
 Correctness Proof
@@ -336,10 +388,20 @@ Definition CompCert's_passes :=
   ::: mkpass (match_if Compopts.optim_CSE CSEproof.match_prog)
   ::: mkpass (match_if Compopts.optim_redundancy Deadcodeproof.match_prog)
   ::: mkpass Unusedglobproof.match_prog
-  ::: (@mkpass _ _ HTLgenproof.match_prog
-               (HTLgenproof.TransfHTLLink HTLgen.transl_program))
-  ::: mkpass (match_if HLSOpts.optim_ram Memorygen.match_prog)
-  ::: mkpass Veriloggenproof.match_prog
+  ::: mkpass GibleSeqgenproof.match_prog
+  ::: mkpass (match_if HLSOpts.optim_if_conversion CondElimproof.match_prog)
+  ::: mkpass (match_if HLSOpts.optim_if_conversion IfConversionproof.match_prog)
+  ::: mkpass (match_if HLSOpts.optim_if_conversion IfConversionproof.match_prog)
+  ::: mkpass (match_if HLSOpts.optim_if_conversion IfConversionproof.match_prog)
+  ::: mkpass DeadBlocksproof.match_prog
+  ::: mkpass GiblePargenproof.match_prog
+  ::: mkpass GibleSubPargenproof.match_prog
+  ::: (@mkpass _ _ DHTLgenproof0.match_prog
+               (DHTLgenproof0.TransfHTLLink DHTLgen.transl_program))
+  ::: mkpass ClockMemoryproof.match_prog
+  ::: mkpass DMemorygen.match_prog
+  ::: mkpass ClockRegistersproof.match_prog
+  ::: mkpass DVeriloggenproof.match_prog
   ::: pass_nil _.
 
 (*|
@@ -361,9 +423,9 @@ Theorem transf_hls_match:
     match_prog p tp.
 Proof.
   intros p tp T.
-  unfold transf_hls, time in T. simpl in T.
+  unfold transf_hls, time in T. simpl in *.
   destruct (SimplExpr.transl_program p) as [p1|e] eqn:P1;
-    simpl in T; try discriminate.
+    cbn in T; try discriminate.
   destruct (SimplLocals.transf_program p1) as [p2|e] eqn:P2;
     simpl in T; try discriminate.
   destruct (Cshmgen.transl_program p2) as [p3|e] eqn:P3;
@@ -372,11 +434,9 @@ Proof.
     simpl in T; try discriminate.
   destruct (Selection.sel_program p4) as [p5|e] eqn:P5;
     simpl in T; try discriminate.
-  rewrite ! compose_print_identity in T.
   destruct (RTLgen.transl_program p5) as [p6|e] eqn:P6;
     simpl in T; try discriminate.
-  unfold transf_backend, time in T. simpl in T.
-  rewrite ! compose_print_identity in T.
+  unfold transf_hls1, time in T. simpl in T. rewrite ! compose_print_identity in T.
   destruct (Inlining.transf_program p6) as [p7|e] eqn:P7;
     simpl in T; try discriminate.
   set (p8 := Renumber.transf_program p7) in *.
@@ -390,10 +450,31 @@ Proof.
     as [p12|e] eqn:P12; simpl in T; try discriminate.
   destruct (Unusedglob.transform_program p12) as [p13|e] eqn:P13;
     simpl in T; try discriminate.
-  destruct (HTLgen.transl_program p13) as [p14|e] eqn:P14;
+  unfold transf_hls2, time in *. simpl in T. rewrite ! compose_print_identity in T.
+  destruct (GibleSeqgen.transl_program p13) as [p14|e] eqn:P14;
     simpl in T; try discriminate.
-  set (p15 := total_if HLSOpts.optim_ram Memorygen.transf_program p14) in *.
-  set (p16 := Veriloggen.transl_program p15) in *.
+  set (p15 := total_if HLSOpts.optim_if_conversion
+                       CondElim.transf_program p14) in *.
+  set (p16 := total_if HLSOpts.optim_if_conversion
+                       IfConversion.transf_program p15) in *.
+  set (p17 := total_if HLSOpts.optim_if_conversion
+                       IfConversion.transf_program p16) in *.
+  set (p18 := total_if HLSOpts.optim_if_conversion
+                       IfConversion.transf_program p17) in *.
+  destruct (DeadBlocks.transf_program p18) as [p19|e] eqn:P19;
+    simpl in T; try discriminate.
+  destruct (GiblePargen.transl_program p19) as [p20|e] eqn:P20;
+    simpl in T; try discriminate.
+  unfold transf_hls3, time in T. simpl in T. rewrite ! compose_print_identity in T.
+  destruct (GibleSubPargen.transl_program p20) as [p21|e] eqn:P21;
+    simpl in T; try discriminate.
+  destruct (DHTLgen.transl_program p21) as [p22|e] eqn:P22;
+    simpl in T; try discriminate.
+  set (p23 := ClockMemory.transf_program p22) in *.
+  set (p24 := DMemorygen.transf_program p23) in *.
+  destruct (ClockRegisters.transf_program p24) as [p25|e] eqn:P25;
+    simpl in T; try discriminate.
+  set (p26 := DVeriloggen.transl_program p25) in *. inv T.
   unfold match_prog; simpl.
   exists p1; split. apply SimplExprproof.transf_program_match; auto.
   exists p2; split. apply SimplLocalsproof.match_transf_program; auto.
@@ -412,11 +493,24 @@ Proof.
   exists p12; split. eapply partial_if_match; eauto.
   apply Deadcodeproof.transf_program_match.
   exists p13; split. apply Unusedglobproof.transf_program_match; auto.
-  exists p14; split. apply HTLgenproof.transf_program_match; auto.
-  exists p15; split. apply total_if_match.
-    apply Memorygen.transf_program_match; auto.
-  exists p16; split. apply Veriloggenproof.transf_program_match; auto.
-  inv T. reflexivity.
+  exists p14; split. apply GibleSeqgenproof.transf_program_match; auto.
+  exists p15; split. eapply total_if_match; eauto.
+  apply CondElimproof.transf_program_match; auto.
+  exists p16; split. eapply total_if_match; eauto.
+  apply IfConversionproof.transf_program_match; auto.
+  exists p17; split. eapply total_if_match; eauto.
+  apply IfConversionproof.transf_program_match; auto.
+  exists p18; split. eapply total_if_match; eauto.
+  apply IfConversionproof.transf_program_match; auto.
+  exists p19; split. apply DeadBlocksproof.transf_program_match; auto.
+  exists p20; split. apply GiblePargenproof.transf_program_match; auto.
+  exists p21; split. apply GibleSubPargenproof.transf_program_match; auto.
+  exists p22; split. apply DHTLgenproof0.transf_program_match; auto.
+  exists p23; split. apply ClockMemoryproof.transf_program_match; auto.
+  exists p24; split. apply DMemorygen.transf_program_match; auto.
+  exists p25; split. apply ClockRegistersproof.transf_program_match; auto.
+  exists p26; split. apply DVeriloggenproof.transf_program_match; auto.
+  reflexivity.
 Qed.
 
 Theorem cstrategy_semantic_preservation:
@@ -435,7 +529,7 @@ Ltac DestructM :=
   end.
   repeat DestructM. subst tp.
   assert (F: forward_simulation (Cstrategy.semantics p)
-                                (Verilog.semantics p16)).
+                                (Verilog.semantics p26)).
   {
   eapply compose_forward_simulations.
     eapply SimplExprproof.transl_program_correct; eassumption.
@@ -468,11 +562,34 @@ Ltac DestructM :=
   eapply compose_forward_simulations.
     eapply Unusedglobproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
-    eapply HTLgenproof.transf_program_correct. eassumption.
+    eapply GibleSeqgenproof.transf_program_correct; eassumption.
   eapply compose_forward_simulations.
     eapply match_if_simulation. eassumption.
-    exact Memorygen.transf_program_correct; eassumption.
-  eapply Veriloggenproof.transf_program_correct; eassumption.
+    exact CondElimproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption.
+    exact IfConversionproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption.
+    exact IfConversionproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply match_if_simulation. eassumption.
+    exact IfConversionproof.transf_program_correct.
+  eapply compose_forward_simulations.
+    eapply DeadBlocksproof.transf_program_correct. eassumption.
+  eapply compose_forward_simulations.
+    eapply GiblePargenproof.transf_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply GibleSubPargenproof.transl_program_correct; eassumption.
+  eapply compose_forward_simulations.
+    eapply DHTLgenproof.transf_program_correct. eassumption.
+  eapply compose_forward_simulations.
+    eapply ClockMemoryproof.transf_program_correct. eassumption.
+  eapply compose_forward_simulations.
+    eapply DMemorygen.transf_program_correct. eassumption.
+  eapply compose_forward_simulations.
+    eapply ClockRegistersproof.transf_program_correct. eassumption.
+  eapply DVeriloggenproof.transf_program_correct; eassumption.
   }
   split. auto.
   apply forward_to_backward_simulation.

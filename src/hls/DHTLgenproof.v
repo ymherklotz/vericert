@@ -1,3 +1,21 @@
+(*
+ * Vericert: Verified high-level synthesis.
+ * Copyright (C) 2023 Yann Herklotz <yann@yannherklotz.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *)
+
 Require Import Coq.micromega.Lia.
 
 Require Import compcert.lib.Maps.
@@ -1220,6 +1238,49 @@ Section CORRECTNESS.
     - rewrite eval_predf_not_PredIn; auto.
   Qed.
 
+  Opaque deep_simplify.
+
+  Lemma stmnt_run_store_patch :
+    forall m_ asr0 p r e asa0 stmnt asa' asr' s f sp pc rs' pr' m s' asr asa,
+    stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0)
+          (Vseq stmnt (Vcond (pred_expr p) (Vblock e (Vvar (reg_enc r))) Vskip))
+          (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa') ->
+    match_states (GibleSubPar.State s f sp pc rs' pr' m) (DHTL.State s' m_ pc asr asa) ->
+    stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0) stmnt 
+             (e_assoc asr) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa) ->
+    Ple (max_predicate p) (max_pred_function f) ->
+    stmnt_runp tt (e_assoc asr0) (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa0)
+      (Vseq stmnt (translate_predicate_cond' (Some p) (Vblock e (Vvar (reg_enc r)))))
+      (e_assoc asr') (e_assoc_arr (DHTL.mod_stk m_) (DHTL.mod_stk_len m_) asa').
+  Proof.
+    intros. inv H. exploit stmnt_runp_determinate. eapply H1. eapply H8. simplify.
+    inv H11; cbn in *.
+    - inv H0. inv MASSOC. exploit pred_expr_correct. intros. eapply H0. instantiate (1 := p) in H3.
+      extlia. intros.
+      exploit expr_runp_determinate. eapply H9. eapply H3. intros.
+      rewrite <- H4 in H13. rewrite valueToBool_correct in H13.
+      econstructor; eauto. destruct_match. unfold sat_pred_simple in Heqo.
+      repeat (destruct_match; try discriminate; []). inv Heqo.
+      econstructor; eauto. rewrite valueToBool_correct. auto.
+      unfold sat_pred_simple in *. repeat (destruct_match; try discriminate).
+      eauto.
+    - inv H0. inv MASSOC. exploit pred_expr_correct. intros. eapply H0. instantiate (1 := p) in H3.
+      extlia. intros.
+      exploit expr_runp_determinate. eapply H9. eapply H3. intros.
+      rewrite <- H4 in H13. rewrite valueToBool_correct in H13.
+      econstructor; eauto. destruct_match. unfold sat_pred_simple in Heqo.
+      repeat (destruct_match; try discriminate; []). inv Heqo.
+      eapply stmnt_runp_Vcond_false; eauto.
+      rewrite valueToBool_correct. eauto.
+      unfold sat_pred_simple in Heqo. 
+      repeat (destruct_match; try discriminate).
+      unfold eval_predf in *.
+      clear Heqs0. specialize (e0 (fun x : Sat.var => pr' !! x)).
+      rewrite negate_correct in e0.
+      rewrite deep_simplify_correct in e0. rewrite H13 in e0. cbn in *. discriminate.
+  Qed.
+
+  Opaque translate_predicate_cond'.
   Lemma transl_step_state_correct_single_instr :
     forall s f sp pc curr_p next_p rs rs' m m' pr pr' m_ s' stmnt stmnt' asr0 asa0 asr asa n i a,
       (* (fn_code f) ! pc = Some bb -> *)
@@ -1275,16 +1336,19 @@ Section CORRECTNESS.
         eapply unchanged_implies_match.
         split; [|split]; eauto. econstructor; eauto.
     - (* RBstore *) inversion HSTEP; subst.
-      + exploit transl_store_correct; eauto. intros (asr' & asa' & HS1 & HS2 & HS3). 
-        exists asr', asa'. eauto.
-      + inv H3. cbn in *. exists asr, asa. split; [|split].
-        econstructor; eauto. eapply stmnt_runp_Vcond_false; eauto.
-        repeat econstructor. eapply pred_expr_correct.
-        inv HMATCH; inv MASSOC. intros; eapply H1; extlia.
-        repeat econstructor. eapply pred_expr_correct. 
-        inv HMATCH; inv MASSOC. intros. eapply H1. eapply le_max_pred in HFRL1; extlia.
-        rewrite int_and_boolToValue. rewrite valueToBool_correct. rewrite H0; auto with bool.
-        constructor. auto. auto.
+      + exploit transl_store_correct; eauto. intros (asr' & asa' & HS1 & HS2 & HS3).
+        exists asr', asa'. split. eapply stmnt_run_store_patch. 3: { eapply HSTMNT. } eauto. eauto. 
+        cbn in *. destruct o; cbn. eapply le_max_pred in HFRL1. extlia. extlia. eauto.
+      + inv H3; cbn in *. 
+        assert (eval_predf pr' (Pand next_p p) = false).
+        { rewrite eval_predf_Pand. rewrite H0; auto with bool. }
+        assert (Ple (max_predicate (Pand next_p p)) (max_pred_function f)).
+        { cbn. eapply le_max_pred in HFRL1. extlia. }
+        inv HMATCH. exploit transl_predicate_cond_correct_arr2'; eauto.
+        intros.
+        exists asr, asa. split; [|split]; auto. econstructor; eauto.
+        eapply unchanged_implies_match.
+        split; [|split]; eauto. econstructor; eauto.
     - (* RBsetpred *)
       inversion HSTEP; subst.
       + exploit transl_setpred_correct; eauto. unfold assert_ in *. destr.
@@ -1761,7 +1825,7 @@ Section CORRECTNESS.
     cbn -[translate_predicate_cond] in *.
     assert (X: Ple (max_predicate (Pand next_p (dfltp p))) max_pred).
     { unfold Ple; cbn. destruct p; cbn. apply le_max_pred in HFRL. unfold Ple in *. lia. unfold Ple in *. lia. }
-    exploit transl_predicate_cond_correct_arr2; eauto.
+    exploit transl_predicate_cond_correct_arr2'; eauto.
     rewrite eval_predf_Pand. now rewrite HEVAL.
     intros HSTMNT'. exists asr. 
     split; [|split; [|split]].

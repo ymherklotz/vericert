@@ -247,7 +247,7 @@ Definition ifconv_list (headers: list node) (c: code) :=
 Definition if_convert_code (c: code) iflist :=
   fold_left (fun s n => if_convert c s (fst n) (snd n)) iflist c.
 
-Definition transf_function (l: option if_conv_t) (f: function) : function :=
+Definition transf_function (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
   let iflist := ifconv_list b' f.(fn_code) in
@@ -274,8 +274,8 @@ Section TRANSF_PROGRAM.
 
 End TRANSF_PROGRAM.
 
-Definition transf_fundef (l: option if_conv_t) (fd: fundef) : fundef :=
-  transf_fundef (transf_function l) fd.
+Definition transf_fundef (fd: fundef) : fundef :=
+  transf_fundef transf_function fd.
 
-Definition transf_program (l: PTree.t if_conv_t) (p: program) : program :=
-  transform_program_data transf_fundef l p.
+Definition transf_program (p: program) : program :=
+  transform_program transf_fundef p.

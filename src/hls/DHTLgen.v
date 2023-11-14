@@ -110,6 +110,17 @@ Definition translate_predicate_cond (p: option pred_op) (s: stmnt) :=
   | Some pos => Vcond (pred_expr pos) s Vskip
   end.
 
+Definition translate_predicate_cond' (p: option pred_op) (s: stmnt) :=
+  match p with
+  | None => s
+  | Some pos => 
+    let pos' := deep_simplify peq pos in
+    match sat_pred_simple (negate pos') with
+    | None => s
+    | Some _ => Vcond (pred_expr pos) s Vskip
+    end
+  end.
+
 Definition state_goto (p: option pred_op) (st : reg) (n : node) : stmnt :=
   translate_predicate Vblock p (Vvar st) (Vlit (posToValue n)).
 
@@ -360,7 +371,7 @@ Definition transf_instr n (ctrl: control_regs) (dc: pred_op * stmnt) (i: instr)
   | RBstore p mem addr args src =>
     do dst <- translate_arr_access mem addr args ctrl.(ctrl_stack);
     let stmnt := Vblock dst (Vvar (reg_enc src)) in
-    Errors.OK (curr_p, Vseq d (translate_predicate_cond (npred p) stmnt))
+    Errors.OK (curr_p, Vseq d (translate_predicate_cond' (npred p) stmnt))
   | RBsetpred p' cond args p =>
     do _check <- assert_ (negb (predin peq p curr_p)) "DHTLgen: Predicate being reassigned";
     do cond' <- translate_condition cond args;

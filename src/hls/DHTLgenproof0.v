@@ -1866,6 +1866,39 @@ Opaque Mem.alloc.
     eapply stmnt_runp_Vcond_false; eauto. constructor.
   Qed.
 
+  Lemma transl_predicate_cond_correct_arr2' :
+    forall asr asa a b p max_pred max_reg rs ps s,
+      Ple (max_predicate p) max_pred ->
+      match_assocmaps max_reg max_pred rs ps asr ->
+      eval_predf ps p = false ->
+      stmnt_runp tt (e_assoc asr) (e_assoc_arr a b asa) (translate_predicate_cond' (Some p) s) (e_assoc asr) (e_assoc_arr a b asa).
+  Proof.
+    intros * HPLE HMATCH HEVAL.
+    unfold translate_predicate_cond'. inv HMATCH. destruct_match.
+    exploit pred_expr_correct. intros; eapply H0. unfold Ple in *. instantiate (1:=p) in H1. lia.
+    intros. rewrite HEVAL in H1. unfold boolToValue, natToValue in H1. cbn in H1.
+    eapply stmnt_runp_Vcond_false; eauto. constructor.
+    unfold sat_pred_simple in Heqo. repeat (destruct_match; try discriminate).
+    unfold eval_predf in *. clear Heqs0. specialize (e (fun x : Sat.var => ps !! x)).
+    rewrite negate_correct in e. rewrite deep_simplify_correct in e.
+    rewrite HEVAL in e. cbn in *. discriminate.
+  Qed.
+
+  Lemma transl_predicate_cond_correct_arr2'_true :
+    forall asr asa a b p max_pred max_reg rs ps s asr' asa',
+      Ple (max_predicate p) max_pred ->
+      match_assocmaps max_reg max_pred rs ps asr ->
+      eval_predf ps p = true ->
+      stmnt_runp tt (e_assoc asr) (e_assoc_arr a b asa) s (e_assoc asr') (e_assoc_arr a b asa') ->
+      stmnt_runp tt (e_assoc asr) (e_assoc_arr a b asa) (translate_predicate_cond' (Some p) s) (e_assoc asr') (e_assoc_arr a b asa').
+  Proof.
+    intros * HPLE HMATCH HEVAL.
+    unfold translate_predicate_cond'. inv HMATCH. destruct_match; auto.
+    exploit pred_expr_correct. intros; eapply H0. unfold Ple in *. instantiate (1:=p) in H1. lia.
+    intros. rewrite HEVAL in H1. unfold boolToValue, natToValue in H1. cbn in H1.
+    eapply stmnt_runp_Vcond_true; eauto.
+  Qed.
+
   Definition unchanged (asr : assocmap) asa asr' asa' :=
     (forall x n, asr # (x, n) = asr' # (x, n))
     /\ (forall x y, asr ! x = Some y -> asr' ! x = Some y)

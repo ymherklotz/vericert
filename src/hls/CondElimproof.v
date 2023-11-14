@@ -310,6 +310,13 @@ Qed.
 Definition match_prog (p: program) (tp: program) :=
   Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
 
+Lemma transf_program_match:
+  forall p, match_prog p (transf_program p).
+Proof.
+  intros. unfold transf_program, match_prog.
+  apply Linking.match_transform_program.
+Qed.
+
 Section CORRECTNESS.
 
   Context (prog tprog : program).

@@ -68,6 +68,13 @@ Require Import Lia.
   Definition match_prog (p: GiblePar.program) (tp: GibleSubPar.program) :=
     Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
 
+Lemma transf_program_match:
+  forall p tp, transl_program p = OK tp -> match_prog p tp.
+Proof.
+  intros. unfold transl_program, match_prog.
+  eapply Linking.match_transform_partial_program; auto.
+Qed.
+
 Section CORRECTNESS.
 
   Context (prog : GiblePar.program).
