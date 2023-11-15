@@ -631,6 +631,23 @@ Proof.
     + destruct (bool_eq_dec (c v1) b1); subst; firstorder.
 Qed.
 
+Lemma stseytin_or_correct3 :
+  forall cur p1 p2 c,
+    sat_lit cur c <-> sat_lit p1 c \/ sat_lit p2 c ->
+    sat_formula (stseytin_or cur p1 p2) c.
+Proof.
+  intros. split; intros; unfold stseytin_or in *;
+  assert (forall a b, a <> b -> a = negb b) by (destruct a, b; eauto with bool; try contradiction).
+  - inv H. cbn. destruct cur, p1, p2; unfold sat_lit in *. cbn in *.
+    destruct (bool_eq_dec (c v0) b0); subst;
+    destruct (bool_eq_dec (c v1) b1); subst; firstorder.
+  - cbn in *; split; [|split]; auto; inv H; unfold sat_lit in *; destruct cur, p1, p2; cbn in *;
+    destruct (bool_eq_dec (c v) b); subst; try tauto.
+    + destruct (bool_eq_dec (c v0) b0); subst; try tauto. 
+      firstorder.
+    + destruct (bool_eq_dec (c v1) b1); subst; firstorder.
+Qed.
+
 Lemma stseytin_or_correct :
   forall cur p1 p2 fm c,
     stseytin_or cur p1 p2 = fm ->
@@ -1063,11 +1080,71 @@ Proof.
     pose proof (IHp2 p0 _ _ _ ltac:(lia) Heqp3 c).
     destruct H0 as [c1 SAT1].
     destruct H1 as [c2 SAT2].
-    exists (merge_asgn p0 c1 (merge_asgn p4 c2 (fun _ => ((merge_asgn next c c1) (snd l0) == (fst l0)) && ((merge_asgn p0 c c2) (snd l1) == (fst l1))))).
+    exists (merge_asgn p0 c1 (merge_asgn p4 c2 (fun _ => (eqb ((merge_asgn next c c1) (snd l0)) (fst l0)) && (eqb ((merge_asgn p0 c c2) (snd l1)) (fst l1))))).
     destruct l1, l0; cbn in *.
     apply sat_formula_concat; [|apply sat_formula_concat].
     + eapply stseytin_and_correct3; eauto; split; intros.
-      * Abort.
+      * repeat rewrite sat_lit_merge_right in H0 by (cbn; lia).
+        unfold sat_lit in H0. cbn in *. eapply andb_true_iff in H0.
+        inv H0. eapply eqb_prop in H1. eapply eqb_prop in H2.
+        split.
+        -- unfold sat_lit. cbn. rewrite merge_asgn_middle; auto.
+           exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+           lia.
+        -- exploit xtseytin_range. eapply Heqp3. intros.
+           inv H0. cbn in *. unfold sat_lit. cbn. rewrite sat_lit_merge5; auto. lia.
+      * inv H0. exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+        exploit xtseytin_range. eapply Heqp3. intros. inv H0. cbn in *.
+        repeat rewrite sat_lit_merge_right by (cbn; lia).
+        unfold sat_lit. cbn.
+        unfold sat_lit in H1. cbn. rewrite merge_asgn_middle in H1; auto. cbn in *. rewrite H1.
+        unfold sat_lit in H2. cbn. rewrite sat_lit_merge5 in H2; auto. cbn in *. rewrite H2.
+        rewrite !eqb_reflx. auto. cbn in *; lia. cbn in *; lia.
+    + exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+      rewrite sat_formula_merge2; auto. 
+      do 2 (eapply Forall_forall; intros). do 2 (eapply Forall_forall in H1; eauto). lia.
+    + exploit xtseytin_range. eapply Heqp3. intros. inv H0. cbn in *.
+      rewrite sat_formula_merge3; auto.
+      do 2 (eapply Forall_forall; intros). do 2 (eapply Forall_forall in H1; eauto). lia.
+  - intros. cbn in *. repeat (destruct_match; try discriminate; []). inv H0. subst. cbn.
+    pose proof (xtseytin_gt _ _ _ _ _ Heqp) as MAX.
+    pose proof (xtseytin_gt _ _ _ _ _ Heqp3) as MAX2.
+    pose proof (IHp1 next _ _ _ ltac:(lia) Heqp c).
+    pose proof (IHp2 p0 _ _ _ ltac:(lia) Heqp3 c).
+    destruct H0 as [c1 SAT1].
+    destruct H1 as [c2 SAT2].
+    exists (merge_asgn p0 c1 (merge_asgn p4 c2 (fun _ => (eqb ((merge_asgn next c c1) (snd l0)) (fst l0)) || (eqb ((merge_asgn p0 c c2) (snd l1)) (fst l1))))).
+    destruct l1, l0; cbn in *.
+    apply sat_formula_concat; [|apply sat_formula_concat].
+    + eapply stseytin_or_correct3; eauto; split; intros.
+      * repeat rewrite sat_lit_merge_right in H0 by (cbn; lia).
+        unfold sat_lit in H0. cbn in *. eapply orb_true_iff in H0.
+        inv H0; eapply eqb_prop in H1.
+        -- unfold sat_lit. cbn. rewrite merge_asgn_middle; auto.
+           exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+           lia.
+        -- right. exploit xtseytin_range. eapply Heqp3. intros.
+           inv H0. cbn in *. unfold sat_lit. cbn. rewrite sat_lit_merge5; auto. lia.
+      * inv H0. 
+        -- exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+        exploit xtseytin_range. eapply Heqp3. intros. inv H0. cbn in *.
+        repeat rewrite sat_lit_merge_right by (cbn; lia).
+        unfold sat_lit. cbn.
+        unfold sat_lit in H1. cbn. rewrite merge_asgn_middle in H1; auto. cbn in *. rewrite H1.
+        rewrite !eqb_reflx. auto. cbn in *; lia.
+        -- exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+        exploit xtseytin_range. eapply Heqp3. intros. inv H0. cbn in *.
+        repeat rewrite sat_lit_merge_right by (cbn; lia).
+        unfold sat_lit. cbn.
+        unfold sat_lit in H1. cbn. rewrite sat_lit_merge5 in H1; auto. cbn in *. rewrite H1.
+        rewrite !eqb_reflx. auto. cbn in *; lia. cbn. lia.
+    + exploit xtseytin_range. eapply Heqp. intros. inv H0. cbn in *.
+      rewrite sat_formula_merge2; auto. 
+      do 2 (eapply Forall_forall; intros). do 2 (eapply Forall_forall in H1; eauto). lia.
+    + exploit xtseytin_range. eapply Heqp3. intros. inv H0. cbn in *.
+      rewrite sat_formula_merge3; auto.
+      do 2 (eapply Forall_forall; intros). do 2 (eapply Forall_forall in H1; eauto). lia.
+Qed.
 
 Lemma xtseytin_correct'_unsat :
   forall p next l n fm,
@@ -1123,8 +1200,10 @@ Proof.
     assert (HMAX2: (max_predicate p2 < p0)%positive) by lia.
     apply orb_prop in H1. inv H1.
     + specialize (IHp1 _ _ _ _ HMAX1 Heqp _ H0). simplify. inv H2; try contradiction.
-      exists (merge_asgn p0 x (fun _ => true)).
+      exploit exists_xtseytin_form_correct; try eapply Heqp3; eauto. simplify.
+      exists ((merge_asgn p0 x (merge_asgn p4 x0 (fun _ => true)))).
       pose proof (xtseytin_range _ _ _ _ _ Heqp) as RANGE1. inversion RANGE1 as [RANGE1' RANGE1'']. clear RANGE1.
+      pose proof (xtseytin_range _ _ _ _ _ Heqp3) as RANGE2. inversion RANGE2 as [RANGE2' RANGE2'']. clear RANGE2.
       destruct l0 as [l0l l0r]. cbn in *.
       split; [|apply sat_formula_concat; [| apply sat_formula_concat]].
       * left. repeat rewrite sat_lit_merge_right by (cbn; lia). unfold sat_lit; auto.
@@ -1132,17 +1211,31 @@ Proof.
         ++ repeat rewrite sat_lit_merge_right by (cbn; lia). unfold sat_lit; auto.
         ++ inv RANGE1''.
            -- repeat rewrite sat_lit_merge_left by (cbn; lia). now rewrite sat_lit_merge_left in H1 by (cbn; lia).
-           -- repeat rewrite sat_lit_merge_right by (cbn; lia). repeat rewrite sat_lit_merge_left by (cbn; lia). 
+           -- repeat rewrite sat_lit_merge_right by (cbn; lia). repeat rewrite sat_lit_merge_left by (cbn; lia).
               now rewrite sat_lit_merge_right in H1 by (cbn; lia).
-      * admit.
-      * admit.
-    (*   + rewrite sat_formula_merge2. auto. lia. *)
-    (*     do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE1'; eauto). lia. *)
-    (*   + rewrite sat_formula_merge3. auto. lia. *)
-    (*     do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE2'; eauto). lia. *)
-    (* + specialize (IHp2 _ _ _ _ HMAX2 Heqp3 _ H2). *)
-    (*   pose proof (xtseytin_range _ _ _ _ _ Heqp3) as RANGE2. inversion RANGE2 as [RANGE2' RANGE2'']. clear RANGE2. *)
-    (*   destruct l1 as [l1l l1r]. cbn in *. *) Abort.
+      * rewrite sat_formula_merge2. auto. lia.
+        do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE1'; eauto). lia.
+      * rewrite sat_formula_merge3. eauto. lia.
+        do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE2'; eauto). lia.
+    + specialize (IHp2 _ _ _ _ HMAX2 Heqp3 _ H0). simplify. inv H2; try contradiction.
+      exploit exists_xtseytin_form_correct; try eapply Heqp; eauto. simplify.
+      exists ((merge_asgn p0 x0 (merge_asgn p4 x (fun _ => true)))).
+      pose proof (xtseytin_range _ _ _ _ _ Heqp) as RANGE1. inversion RANGE1 as [RANGE1' RANGE1'']. clear RANGE1.
+      pose proof (xtseytin_range _ _ _ _ _ Heqp3) as RANGE2. inversion RANGE2 as [RANGE2' RANGE2'']. clear RANGE2.
+      destruct l1 as [l1l l1r]. cbn in *.
+      split; [|apply sat_formula_concat; [| apply sat_formula_concat]].
+      * left. repeat rewrite sat_lit_merge_right by (cbn; lia). unfold sat_lit; auto.
+      * eapply stseytin_or_correct; eauto; cbn in *; try right.
+        ++ repeat rewrite sat_lit_merge_right by (cbn; lia). unfold sat_lit; auto.
+        ++ inv RANGE2''.
+           -- repeat rewrite sat_lit_merge_left by (cbn; lia). now rewrite sat_lit_merge_left in H1 by (cbn; lia).
+           -- repeat rewrite sat_lit_merge_right by (cbn; lia). repeat rewrite sat_lit_merge_left by (cbn; lia).
+              now rewrite sat_lit_merge_right in H1 by (cbn; lia).
+      * rewrite sat_formula_merge2. eauto. lia.
+        do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE1'; eauto). lia.
+      * rewrite sat_formula_merge3. eauto. lia.
+        do 2 (apply Forall_forall; intros). do 2 (eapply Forall_forall in RANGE2'; eauto). lia.
+  Qed.
     Transparent stseytin_and.
 
 Lemma xtseytin_correct'_unsat' :
@@ -1195,48 +1288,48 @@ Proof.
        end) (eq_refl (xtseytin (max_predicate p + 1) p))).
   intros. split; intros.
   - case_eq (sat_predicate p c); auto; intros. exfalso. 
-    (* exploit xtseytin_correct'_unsat; eauto. lia. simplify. inv H2; eauto. *)
-(*     eapply H0; split; eauto. *)
-(*   - eapply xtseytin_correct'; eauto; lia. *)
-(* Defined. *) Abort.
+    exploit xtseytin_correct'_unsat; eauto. lia. simplify. inv H2; eauto.
+    eapply H0; split; eauto.
+  - eapply xtseytin_correct'; eauto; lia.
+Defined.
 
 Definition tseytin_simple (p: pred_op) : formula :=
   let m := (max_predicate p + 1)%positive in
   let '(m, n, fm) := xtseytin m p in
   (n::nil) :: fm.
 
-(* Definition sat_pred_tseytin (p: pred_op) : *)
-(*   ({al : alist | sat_predicate p (interp_alist al) = true} *)
-(*    + {forall a : asgn, sat_predicate p a = false}). *)
-(* Proof. *)
-(*   refine *)
-(*     ( match tseytin p with *)
-(*       | exist _ fm _ => *)
-(*           match sat_solve fm with *)
-(*           | inleft (exist _ a _) => inleft (exist _ a _) *)
-(*           | inright _ => inright _ *)
-(*           end *)
-(*       end ). *)
-(*   - inv a0. eapply H0; auto. *)
-(*   - inv a. eapply H. eauto. *)
-(* Defined. *)
-
 Definition sat_pred_tseytin (p: pred_op) :
   ({al : alist | sat_predicate p (interp_alist al) = true}
    + {forall a : asgn, sat_predicate p a = false}).
+Proof.
   refine
-    ( match trans_pred p with
+    ( match tseytin p with
       | exist _ fm _ =>
           match sat_solve fm with
           | inleft (exist _ a _) => inleft (exist _ a _)
           | inright _ => inright _
           end
       end ).
-  - apply i in s0. auto.
-  - intros. specialize (n a). specialize (i a).
-    destruct (sat_predicate p a). exfalso.
-    apply n. apply i. auto. auto.
+  - inv a0. eapply H0; auto.
+  - inv a. eapply H. eauto.
 Defined.
+
+(* Definition sat_pred_tseytin (p: pred_op) : *)
+(*   ({al : alist | sat_predicate p (interp_alist al) = true} *)
+(*    + {forall a : asgn, sat_predicate p a = false}). *)
+(*   refine *)
+(*     ( match trans_pred p with *)
+(*       | exist _ fm _ => *)
+(*           match sat_solve fm with *)
+(*           | inleft (exist _ a _) => inleft (exist _ a _) *)
+(*           | inright _ => inright _ *)
+(*           end *)
+(*       end ). *)
+(*   - apply i in s0. auto. *)
+(*   - intros. specialize (n a). specialize (i a). *)
+(*     destruct (sat_predicate p a). exfalso. *)
+(*     apply n. apply i. auto. auto. *)
+(* Defined. *)
 
 Definition sat_pred_simple (p: pred_op) : option alist :=
   match sat_pred_tseytin p with
