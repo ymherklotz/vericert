@@ -88,7 +88,6 @@ Require vericert.hls.GiblePargen.
 Require vericert.hls.GiblePargenproof.
 Require vericert.hls.GibleSubPargen.
 Require vericert.hls.GibleSubPargenproof.
-Require vericert.hls.HTLPargen.
 Require vericert.hls.DHTLgen.
 Require vericert.hls.DVeriloggen.
 Require vericert.hls.DVeriloggenproof.

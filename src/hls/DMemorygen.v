@@ -164,28 +164,15 @@ Definition transf_maps state ram in_ (d: PTree.t stmnt) :=
   | (i, n) =>
     match PTree.get i d with
     (* Conditional store *)
-    (* | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) (Vternary cond e2 (Vvari r' e1')))) => *)
-    (*   if (r =? (ram_mem ram)) && (r =? r') && (expr_eqb e1 e1') then *)
-    (*     let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vternary cond (Vunop Vnot (Vvar (ram_u_en ram))) (Vvar (ram_u_en ram)))) *)
-    (*                    (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1))) *)
-    (*                          (Vseq (Vblock (Vvar (ram_d_in ram)) e2) *)
-    (*                                (Vblock (Vvar (ram_addr ram)) e1))) *)
-    (*     in *)
-    (*     PTree.set i (Vseq rest nd) d *)
-    (*   else d *)
-    (* | Some (Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vternary cond (Vvari r e2) edef))) => *)
-    (*   if (r =? (ram_mem ram)) && (st' =? state) && (Z.pos n <=? Int.max_unsigned)%Z *)
-    (*      && (e1 <? state) && (max_reg_expr e2 <? state) && (max_reg_expr e3 <? state) *)
-    (*   then *)
-    (*     let nd := *)
-    (*         Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram)))) *)
-    (*              (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0))) *)
-    (*                    (Vblock (Vvar (ram_addr ram)) e2)) *)
-    (*     in *)
-    (*     let aout := Vblock (Vvar e1) (Vternary cond (Vvar (ram_d_out ram)) edef) in *)
-    (*     let redirect := Vblock (Vvar state) (Vlit (posToValue n)) in *)
-    (*     (PTree.set i (Vseq redirect nd) (PTree.set n (Vseq (Vblock (Vvar st') e3) aout) d)) *)
-    (*   else d *)
+    | Some (Vseq (Vseq Vskip (Vcond ec (Vblock (Vvari r e1) e2) Vskip)) (Vblock (Vvar state') (Vlit y))) =>
+      if (r =? (ram_mem ram)) && (state' =? state) then
+        let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vbinop Vxor (Vunop Vneg (Vbinop Vne ec (Vlit (ZToValue 0)))) (Vvar (ram_u_en ram))))
+                       (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+                             (Vseq (Vblock (Vvar (ram_d_in ram)) (Vternary ec e2 (Vvar (ram_d_in ram))))
+                                   (Vblock (Vvar (ram_addr ram)) (Vternary ec e1 (Vvar (ram_addr ram))))))
+        in
+        PTree.set i (Vseq nd (Vblock (Vvar state') (Vlit y))) d
+      else d
     | Some (Vseq ((Vblock (Vvar _) _) as rest) (Vnonblock (Vvari r e1) e2)) =>
       if r =? (ram_mem ram) then
         let nd := Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
@@ -194,6 +181,20 @@ Definition transf_maps state ram in_ (d: PTree.t stmnt) :=
                                    (Vblock (Vvar (ram_addr ram)) e1)))
         in
         PTree.set i (Vseq rest nd) d
+      else d
+    | Some (Vseq (Vseq Vskip (Vblock (Vvar e1) (Vternary ec (Vvari r e2) (Vvar e4)))) (Vblock (Vvar st') (Vlit e3))) =>
+      if (r =? (ram_mem ram)) && (st' =? state) && (Z.pos n <=? Int.max_unsigned)%Z
+         && (e1 <? state) && (max_reg_expr e2 <? state) && (max_reg_expr (Vlit e3) <? state)
+         && (max_reg_expr ec <? state) && (e1 =? e4)
+      then
+        let nd :=
+            Vseq (Vblock (Vvar (ram_u_en ram)) (Vbinop Vxor (Vunop Vneg (Vbinop Vne ec (Vlit (ZToValue 0)))) (Vvar (ram_u_en ram))))
+                 (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                       (Vblock (Vvar (ram_addr ram)) (Vternary ec e2 (Vvar (ram_addr ram)))))
+        in
+        let aout := Vblock (Vvar e1) (Vternary ec (Vvar (ram_d_out ram)) (Vvar e4)) in
+        let redirect := Vblock (Vvar state) (Vlit (posToValue n)) in
+        (PTree.set i (Vseq redirect nd) (PTree.set n (Vseq (Vblock (Vvar st') (Vlit e3)) aout) d))
       else d
     | Some (Vseq (Vblock (Vvar st') e3) (Vnonblock (Vvar e1) (Vvari r e2))) =>
       if (r =? (ram_mem ram)) && (st' =? state) && (Z.pos n <=? Int.max_unsigned)%Z
@@ -222,24 +223,45 @@ Proof.
   try match goal with
   | H: (_, _) = (_, _) |- _ => inv H
   end; auto.
-  unfold map_well_formed.
-  simplify; intros.
-  destruct (Pos.eq_dec p0 p1); subst; auto.
-  destruct (Pos.eq_dec p p1); subst. unfold map_well_formed in *.
-  apply AssocMap.elements_correct in Heqo.
-  eapply in_map with (f := fst) in Heqo. simplify.
-  apply AssocMapExt.elements_iff in H0. inv H0.
-  rewrite AssocMap.gss in H3. inv H3; auto.
-  apply AssocMapExt.elements_iff in H0. inv H0.
-  repeat rewrite AssocMap.gso in H3 by lia. unfold map_well_formed in H.
-  eapply H. eapply AssocMapExt.elements_iff; eauto.
-  unfold map_well_formed in *; intros.
-  apply AssocMapExt.elements_iff in H0. inv H0.
-  destruct (peq p p1); subst.
-  + rewrite PTree.gss in H1.
+  - unfold map_well_formed.
+    simplify; intros.
+    destruct (Pos.eq_dec p p1); subst; auto.
+    unfold map_well_formed in *.
+    apply AssocMap.elements_correct in Heqo.
+    eapply in_map with (f := fst) in Heqo. simplify.
+    apply AssocMapExt.elements_iff in H0. inv H0.
+    rewrite AssocMap.gss in H3. inv H3; auto.
+    apply AssocMapExt.elements_iff in H0. inv H0.
+    repeat rewrite AssocMap.gso in H3 by lia. unfold map_well_formed in H.
     eapply H. eapply AssocMapExt.elements_iff; eauto.
-  + rewrite PTree.gso in H1 by auto. eapply H.
-    eapply AssocMapExt.elements_iff; eauto.
+  - unfold map_well_formed in *; intros.
+    apply AssocMapExt.elements_iff in H0. inv H0.
+    destruct (peq p p1); subst.
+    + rewrite PTree.gss in H1.
+      eapply H. eapply AssocMapExt.elements_iff; eauto.
+    + rewrite PTree.gso in H1 by auto. destruct (peq p1 p0); subst.
+      -- simplify. eauto.
+      -- rewrite PTree.gso in H1 by auto. eapply H. eapply AssocMapExt.elements_iff; eauto.
+  - unfold map_well_formed in *; intros.
+    apply AssocMapExt.elements_iff in H0. inv H0.
+    destruct (peq p p1); subst.
+    + rewrite PTree.gss in H1.
+      eapply H. eapply AssocMapExt.elements_iff; eauto.
+    + rewrite PTree.gso in H1 by auto. destruct (peq p1 p0); subst.
+      -- simplify. eauto.
+      -- rewrite PTree.gso in H1 by auto. eapply H. eapply AssocMapExt.elements_iff; eauto.
+  - unfold map_well_formed.
+    simplify; intros.
+    destruct (Pos.eq_dec p p1); subst; auto.
+    unfold map_well_formed in *.
+    apply AssocMap.elements_correct in Heqo.
+    eapply in_map with (f := fst) in Heqo. simplify.
+    apply AssocMapExt.elements_iff in H0. inv H0.
+    rewrite AssocMap.gss in H1. inv H1; auto.
+    apply AssocMapExt.elements_iff in H0. inv H0.
+    repeat rewrite AssocMap.gso in H3 by lia. unfold map_well_formed in H.
+    eapply H. eapply AssocMapExt.elements_iff; eauto.
+    rewrite PTree.gso in H1; eauto.
 Qed.
 
 Definition max_pc {A: Type} (m: PTree.t A) :=
@@ -1075,6 +1097,8 @@ Lemma transf_not_changed :
   forall state ram n d i d_s,
     (forall e1 e2 e3 e4 r, d_s <> (Vseq (Vblock (Vvar e1) e2) (Vnonblock (Vvari r e3) e4))) ->
     (forall e1 e2 e3 e4 r, d_s <> (Vseq (Vblock (Vvar e1) e2) (Vnonblock e3 (Vvari r e4)))) ->
+    (forall e1 e2 e3 r state' ec, d_s <> (Vseq (Vseq Vskip (Vcond ec (Vblock (Vvari r e1) e2) Vskip)) (Vblock (Vvar state') e3))) ->
+    (forall e1 ec r e2 e4 st' e3, d_s <> (Vseq (Vseq Vskip (Vblock (Vvar e1) (Vternary ec (Vvari r e2) (Vvar e4)))) (Vblock (Vvar st') e3))) ->
     d!i = Some d_s ->
     transf_maps state ram (i, n) d = d.
 Proof. intros; unfold transf_maps; repeat destruct_match; mgen_crush. Qed.
@@ -2222,6 +2246,14 @@ Proof. unfold empty_stack, transf_module; intros; repeat destruct_match; crush. 
 
 Definition alt_unchanged (d d': AssocMap.t stmnt) i := d ! i = d' ! i.
 
+Definition alt_store_cond ram (d d': AssocMap.t stmnt) i :=
+  exists e1 e2 y ec state',
+    d' ! i = Some (Vseq (Vseq (Vblock (Vvar (ram_u_en ram)) (Vbinop Vxor (Vunop Vneg (Vbinop Vne ec (Vlit (ZToValue 0)))) (Vvar (ram_u_en ram))))
+                       (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 1)))
+                             (Vseq (Vblock (Vvar (ram_d_in ram)) (Vternary ec e2 (Vvar (ram_d_in ram))))
+                                   (Vblock (Vvar (ram_addr ram)) (Vternary ec e1 (Vvar (ram_addr ram))))))) (Vblock (Vvar state') (Vlit y)))
+    /\ d ! i = Some (Vseq (Vseq Vskip (Vcond ec (Vblock (Vvari (ram_mem ram) e1) e2) Vskip)) (Vblock (Vvar state') (Vlit y))).
+
 Definition alt_store ram (d d': AssocMap.t stmnt) i :=
   exists e1 e2 rest,
     d' ! i = Some (Vseq rest (Vseq (Vblock (Vvar (ram_u_en ram)) (Vunop Vnot (Vvar (ram_u_en ram))))
@@ -2229,6 +2261,19 @@ Definition alt_store ram (d d': AssocMap.t stmnt) i :=
                               (Vseq (Vblock (Vvar (ram_d_in ram)) e2)
                                     (Vblock (Vvar (ram_addr ram)) e1)))))
     /\ d ! i = Some (Vseq rest (Vnonblock (Vvari (ram_mem ram) e1) e2)).
+
+Definition alt_load_cond state ram (d d': AssocMap.t stmnt) i n :=
+  exists ns e1 e2 ec,
+    d' ! i = Some (Vseq (Vblock (Vvar state) (Vlit (posToValue n))) (Vseq (Vblock (Vvar (ram_u_en ram)) (Vbinop Vxor (Vunop Vneg (Vbinop Vne ec (Vlit (ZToValue 0)))) (Vvar (ram_u_en ram))))
+                 (Vseq (Vblock (Vvar (ram_wr_en ram)) (Vlit (ZToValue 0)))
+                       (Vblock (Vvar (ram_addr ram)) (Vternary ec e2 (Vvar (ram_addr ram)))))))
+    /\ d' ! n = Some (Vseq (Vblock (Vvar state) (Vlit ns)) (Vblock (Vvar e1) (Vternary ec (Vvar (ram_d_out ram)) (Vvar e1))))
+    /\ d ! i = Some (Vseq (Vseq Vskip (Vblock (Vvar e1) (Vternary ec (Vvari (ram_mem ram) e2) (Vvar e1)))) (Vblock (Vvar state) (Vlit ns)))
+    /\ e1 < state
+    /\ max_reg_expr e2 < state
+    /\ max_reg_expr (Vlit ns) < state
+    /\ max_reg_expr ec < state
+    /\ (Z.pos n <= Int.max_unsigned)%Z.
 
 Definition alt_load state ram (d d': AssocMap.t stmnt) i n :=
   exists ns e1 e2,
@@ -2245,7 +2290,9 @@ Definition alt_load state ram (d d': AssocMap.t stmnt) i n :=
 Definition alternatives state ram d d' i n :=
   alt_unchanged d d' i
   \/ alt_store ram d d' i
-  \/ alt_load state ram d d' i n.
+  \/ alt_load state ram d d' i n
+  \/ alt_store_cond ram d d' i
+  \/ alt_load_cond state ram d d' i n.
 
 Lemma transf_alternatives :
   forall ram n d state i d',
@@ -2259,17 +2306,14 @@ Proof.
                          end; try solve [left; econstructor; crush]; simplify;
   repeat match goal with
   | H: (_ =? _) = true |- _ => apply Peqb_true_eq in H; subst
-  end; unfold alternatives; right;
-  match goal with
-  | H: context[Vnonblock (Vvari _ _) _] |- _ => left
-  | _ => right
-  end; repeat econstructor; simplify;
+  end; unfold alternatives;
+  intuition (repeat econstructor; simplify;
   repeat match goal with
          | |- ( _ # ?s <- _ ) ! ?s = Some _ => apply AssocMap.gss
          | |- ( _ # ?s <- _ ) ! ?r = Some _ => rewrite AssocMap.gso by lia
          | |- _ = None => apply max_index_2; lia
          | H: context[_ <? _] |- _ => apply Pos.ltb_lt in H
-         end; auto.
+         end; auto).
 Qed.
 
 Lemma transf_alternatives_neq :
@@ -2280,15 +2324,15 @@ Lemma transf_alternatives_neq :
     alternatives state ram d'' d i n' ->
     alternatives state ram d'' d' i n'.
 Proof.
-  unfold alternatives, alt_unchanged, alt_store, alt_load, transf_maps; intros;
+  unfold alternatives, alt_unchanged, alt_store, alt_load, alt_store_cond, alt_load_cond, transf_maps; intros;
   repeat match goal with H: _ \/ _ |- _ => inv H | H: _ /\ _ |- _ => destruct H end;
-  [left | right; left | right; right];
-  repeat inv_exists; simplify;
+  intuition
+  (repeat inv_exists; simplify;
   repeat destruct_match;
   repeat match goal with
          | H: (_, _) = (_, _) |- _ => inv H
          | |- exists _, _ => econstructor
-         end; repeat split; repeat rewrite AssocMap.gso by lia; eauto; lia.
+         end; repeat split; repeat rewrite AssocMap.gso by lia; eauto; lia).
 Qed.
 
 Lemma transf_alternatives_neq2 :
@@ -2298,15 +2342,15 @@ Lemma transf_alternatives_neq2 :
     alternatives state ram d d'' i n' ->
     alternatives state ram d' d'' i n'.
 Proof.
-  unfold alternatives, alt_unchanged, alt_store, alt_load, transf_maps; intros;
+  unfold alternatives, alt_unchanged, alt_store, alt_load, alt_store_cond, alt_load_cond, transf_maps; intros;
   repeat match goal with H: _ \/ _ |- _ => inv H | H: _ /\ _ |- _ => destruct H end;
-  [left | right; left | right; right];
-  repeat inv_exists; simplify;
+  intuition 
+  (repeat inv_exists; simplify;
   repeat destruct_match;
   repeat match goal with
          | H: (_, _) = (_, _) |- _ => inv H
          | |- exists _, _ => econstructor
-         end; repeat split; repeat rewrite AssocMap.gso in * by lia; eauto; lia.
+         end; repeat split; repeat rewrite AssocMap.gso in * by lia; eauto; lia).
 Qed.
 
 Lemma transf_alt_unchanged_neq :
@@ -2773,7 +2817,7 @@ Proof.
   econstructor. econstructor. econstructor. econstructor. econstructor.
   auto. auto. auto. econstructor. econstructor. econstructor.
   econstructor. econstructor. econstructor. econstructor.
-  eapply expr_runp_matches2. eassumption. 
+  eapply expr_runp_matches2. eassumption.
   2: { cbn. instantiate (1 := max_reg_module m + 1). repeat (apply match_assocmaps_gt; [lia|]).
        assumption. }
   { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
@@ -3196,7 +3240,852 @@ Proof.
         now repeat rewrite AssocMap.gso by lia.
         apply AssocMap.gss.
 Qed.
-        
+
+  Lemma arr_assocmap_set_gss :
+    forall r i v asa ar,
+      asa ! r = Some ar ->
+      (arr_assocmap_set r i v asa) ! r = Some (array_set i (Some v) ar).
+  Proof.
+    unfold arr_assocmap_set.
+    intros. rewrite H. rewrite PTree.gss. auto.
+  Qed.
+
+  Lemma arr_assocmap_set_gso :
+    forall r x i v asa ar,
+      asa ! x = Some ar ->
+      r <> x ->
+      (arr_assocmap_set r i v asa) ! x = asa ! x.
+  Proof.
+    unfold arr_assocmap_set. intros. 
+    destruct (asa!r) eqn:?; auto; now rewrite PTree.gso by auto.
+  Qed.
+
+  Lemma arr_assocmap_set_gs2 :
+    forall r x i v asa,
+      asa ! x = None ->
+      (arr_assocmap_set r i v asa) ! x = None.
+  Proof.
+    unfold arr_assocmap_set. intros. 
+    destruct (peq r x); subst; [now rewrite H|].
+    destruct (asa!r) eqn:?; auto.
+    now rewrite PTree.gso by auto.
+  Qed.
+
+Lemma match_arrs_trans :
+  forall asa1 asa2 asa3, 
+    match_arrs asa1 asa2 -> match_arrs asa2 asa3 -> match_arrs asa1 asa3.
+Proof.
+  inversion 1. inversion 1; subst.
+  econstructor; eauto.
+  intros. eapply H0 in H2. simplify. eapply H5 in H2; simplify.
+  econstructor; split; eauto. split; congruence.
+Qed.
+
+  Lemma arr_assocmap_set_gs2' :
+    forall r x i v asa,
+      (arr_assocmap_set r i v asa) ! x = None ->
+      asa ! x = None.
+  Proof.
+    unfold arr_assocmap_set. intros. destruct_match; auto.
+    destruct (peq r x); subst.
+    - rewrite PTree.gss in H. inv H.
+    - now rewrite PTree.gso in H by auto.
+  Qed.
+
+Lemma merge_arr_empty3 :
+  forall m ar ar' n v,
+    match_empty_size m ar ->
+    match_arrs (merge_arrs (arr_assocmap_set m.(mod_stk) n v (empty_stack (mod_stk m) (mod_stk_len m))) ar) ar' ->
+    match_arrs (arr_assocmap_set m.(mod_stk) n v ar) ar'.
+Proof.
+  intros. eapply match_arrs_trans; eauto. clear H0. inversion H; subst.
+  econstructor; intros.
+  2: { pose proof H3 as H3'. eapply arr_assocmap_set_gs2' in H3. unfold merge_arrs. rewrite PTree.gcombine by auto.
+       rewrite H3. rewrite arr_assocmap_set_gs2; auto. now eapply H2. }
+  destruct (peq s (mod_stk m)); subst.
+  2: { assert ((empty_stack (mod_stk m) (mod_stk_len m)) ! s = None).
+       unfold empty_stack. rewrite PTree.gso by auto. auto. 
+       pose proof H4 as H4'. eapply H2 in H4.
+       eapply arr_assocmap_set_gs2 in H4. rewrite H4 in H3. discriminate.
+       }
+  assert ((empty_stack (mod_stk m) (mod_stk_len m)) ! (mod_stk m) = Some (arr_repeat None (mod_stk_len m))).
+  { unfold empty_stack. rewrite PTree.gss. auto. }
+  eapply H0 in H4. simplify.
+  erewrite arr_assocmap_set_gss in H3 by eauto. inv H3. eexists; split; [|split].
+  - unfold merge_arrs. rewrite PTree.gcombine by auto.
+    setoid_rewrite H4.
+    erewrite arr_assocmap_set_gss.
+    2: { unfold empty_stack. rewrite PTree.gss; eauto. }
+    cbn. eauto.
+  - intros. destruct (Nat.eq_dec addr n); subst.
+    destruct (dec_lt n (arr_length x)).
+    + rewrite array_get_error_set_bound by auto.
+      erewrite combine_lookup_second; eauto.
+      rewrite array_get_error_set_bound; auto.
+      cbn in *. lia.
+    + rewrite !array_get_error_bound_gt; auto.
+      rewrite combine_length. rewrite <- array_set_len. cbn; lia.
+      rewrite <- array_set_len. cbn. lia. rewrite <- array_set_len.
+      lia.
+    + rewrite array_gso by auto. rewrite combine_array_set.
+      rewrite array_gso by auto. rewrite combine_none2. auto. 
+      rewrite list_repeat_len in H6. auto. cbn. auto.
+  - rewrite <- array_set_len. rewrite combine_length. rewrite <- array_set_len. cbn; lia.
+    rewrite <- array_set_len. cbn; lia.
+Qed.
+      
+#[local] Hint Resolve merge_arr_empty2 : mgen.
+
+Lemma translation_correct_store_cond :
+    forall (m : module)
+  (asr : AssocMap.tree value)
+  (basr2 nasr2 : AssocMap.t value)
+  (nasa2 basa2 : AssocMap.t arr)
+  (asr'0 : assocmap_reg)
+  (asa'0 : assocmap_arr)
+  (res' : list stackframe)
+  (st : positive)
+  (tge : genv)
+  (pstval : positive)
+  (sf : list stackframe)
+  (asa : AssocMap.t arr)
+  (data : stmnt)
+  (f : fext)
+  (H : asr ! (mod_reset m) = Some (ZToValue 0))
+  (H0 : asr ! (mod_finish m) = Some (ZToValue 0))
+  (H1 : asr ! (mod_st m) = Some (posToValue st))
+  (H2 : (mod_datapath m) ! st = Some data)
+  (H3 : stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
+         {| assoc_blocking := asa; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} data
+         {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
+         {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |})
+  (H5 : (merge_regs empty_assocmap (merge_regs nasr2 basr2)) ! (mod_st m) = Some (posToValue pstval))
+  (H6 : (Z.pos pstval <= 4294967295)%Z)
+  (H8 : mod_ram m = None)
+  (ASSOC : match_assocmaps (max_reg_module m + 1) asr asr'0)
+  (ARRS : match_arrs asa asa'0)
+  (STACKS : list_forall2 match_stackframes sf res')
+  (ARRS_SIZE : match_empty_size m asa)
+  (ARRS_SIZE2 : match_empty_size m asa'0)
+  (DISABLE_RAM : disable_ram (mod_ram (transf_module m)) asr'0)
+  (Learn : Learnt H8)
+  (x : positive)
+  (H4 : alt_store_cond
+         {|
+           ram_size := mod_stk_len m;
+           ram_mem := mod_stk m;
+           ram_en := max_reg_module m + 2;
+           ram_u_en := max_reg_module m + 6;
+           ram_addr := max_reg_module m + 1;
+           ram_wr_en := max_reg_module m + 5;
+           ram_d_in := max_reg_module m + 3;
+           ram_d_out := max_reg_module m + 4;
+           ram_ordering := ram_wf (max_reg_module m)
+         |} (mod_datapath m) (mod_datapath (transf_module m)) st),
+  exists R2 : state,
+    Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
+    match_states
+      (State sf m pstval (merge_regs empty_assocmap (merge_regs nasr2 basr2))
+         (merge_arrs (empty_stack (mod_stk m) (mod_stk_len m)) (merge_arrs nasa2 basa2))) R2.
+Proof.
+  intros.
+  unfold alt_store_cond in *; simplify_local. inv H3. inv H17. 2: { inv H16. } inv H18. simplify_local.
+  inv H14. inv H13. inv H17.
+  - inv H20. inv H16. inv H16. cbn in *. econstructor; split.
+    + apply Smallstep.plus_one. econstructor. solve [eauto with mgen]. solve [eauto with mgen]. solve [eauto with mgen]. solve [eauto with mgen]. econstructor. econstructor. econstructor. econstructor. econstructor. econstructor.
+    econstructor.
+    cbn. eapply expr_runp_matches2; eauto.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } econstructor. cbn. eauto. cbn. econstructor. eauto. cbn. eauto.
+    econstructor. econstructor. econstructor. econstructor. econstructor. econstructor.
+    econstructor. econstructor. econstructor. econstructor. econstructor.
+    cbn. eapply expr_runp_matches2; eauto.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto. cbn.
+  cbn. eapply expr_runp_matches2; eauto.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto. eauto.
+  econstructor. econstructor. econstructor.
+  cbn. eapply expr_runp_matches2; eauto.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto.
+  cbn. eapply expr_runp_matches2; eauto.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto. eauto.
+  econstructor. econstructor. cbn. inv H19. econstructor.
+
+  rewrite empty_stack_transf.
+  unfold transf_module; repeat destruct_match; try discriminate; []; cbn in *.
+  eapply exec_ram_Some_write.
+  3: { cbn.
+    assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. } 
+    rewrite merge_find_assocmap by (unfold empty_assocmap; apply PTree.gempty).
+    rewrite !assocmap_gso by lia. eauto. }
+    3: { cbn.
+      assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. }
+    unfold merge_regs, AssocMapExt.merge, empty_assocmap. rewrite PTree.gcombine by auto; cbn.
+    rewrite PTree.gempty. cbn. rewrite !PTree.gso by lia. rewrite PTree.gss. eauto. }
+    3: { cbn.
+      assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. }
+    unfold merge_regs, AssocMapExt.merge, empty_assocmap. rewrite PTree.gcombine by auto; cbn.
+    rewrite PTree.gempty. cbn. rewrite !PTree.gso by lia. rewrite PTree.gss. eauto. }
+3: { cbn.
+      assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. }
+    unfold merge_regs, AssocMapExt.merge, empty_assocmap. rewrite PTree.gcombine by auto; cbn.
+    rewrite PTree.gempty. cbn. rewrite !PTree.gso by lia. rewrite PTree.gss. eauto. }
+    3: { cbn.
+      assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. }
+    unfold merge_regs, AssocMapExt.merge, empty_assocmap. rewrite PTree.gcombine by auto; cbn.
+    rewrite PTree.gempty. cbn. rewrite !PTree.gso by lia. rewrite PTree.gss. eauto. }
+    assert ((Int.eq vc (ZToValue 0)) = false).
+    { unfold valueToBool in *. destruct_match; try discriminate.
+      eapply Z.eqb_neq in Heqb. unfold uvalueToZ in *. 
+      unfold Int.eq. destruct_match; auto. exfalso. unfold ZToValue in *. eapply Heqb.
+      clear Heqs.
+      rewrite Int.unsigned_repr in e by crush. auto. }
+      rewrite H3. cbn. unfold boolToValue, natToValue. unfold Int.xor.
+      unfold Int.neg.
+      replace (Int.unsigned (Int.repr (Z.of_nat 1))) with 1%Z by auto. cbn.
+      replace (Int.repr (-1)) with Int.mone by auto.
+      rewrite Z.lxor_comm.
+      replace (Int.repr (Z.lxor (Int.unsigned (find_assocmap 32 (max_reg_module m + 6) asr'0)) (Int.unsigned Int.mone))) with
+      (Int.not (find_assocmap 32 (max_reg_module m + 6) asr'0)) by auto.
+      apply int_eq_not. 
+      unfold disable_ram in DISABLE_RAM.
+  unfold transf_module in *; repeat destruct_match; try discriminate. auto. cbn in *.
+  inv Heqo1. cbn in *; assumption. auto.
+    cbn. auto. cbn. auto.
+    eapply mod_st_modify; eauto.
+    assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. }
+    eapply match_assocmaps_merge. repeat (eapply match_assocmaps_gt; [lia|]).
+  eapply match_assocmaps_equiv. eapply match_assocmaps_merge.
+  eapply match_assocmaps_equiv.
+  eapply match_assocmaps_gss.
+  repeat (eapply match_assocmaps_gt; [lia|]). eauto. auto.
+    + econstructor.
+      * eapply match_assocmaps_merge. repeat (eapply match_assocmaps_gt; [lia|]).
+  eapply match_assocmaps_equiv. eapply match_assocmaps_merge.
+  eapply match_assocmaps_equiv.
+  eapply match_assocmaps_gss.
+  repeat (eapply match_assocmaps_gt; [lia|]). eauto.
+      * eapply merge_arr_empty. eapply merge_arr_empty_match; eauto. 
+        eapply match_empty_assocmap_set; eauto. eapply merge_arr_empty.
+        eapply match_empty_assocmap_set; eauto.
+        eapply merge_arr_empty3. eauto. eapply match_arrs_merge_set2; eauto.
+        eapply match_arrs_size_equiv. eapply match_arrs_size_equiv. 
+        eapply match_arrs_equiv.
+      * eauto.
+      * eapply match_empty_size_merge. eapply match_arrs_size_equiv.
+        eapply match_empty_size_merge. eapply match_arrs_size_equiv.
+        eapply match_empty_assocmap_set; eauto.
+      * eapply match_empty_size_merge. eapply match_empty_assocmap_set; eauto. 
+        eapply match_arrs_size_equiv.
+        eapply match_empty_size_merge. eapply match_arrs_size_equiv. eauto.
+      * unfold disable_ram in *.
+        unfold transf_module in *; repeat destruct_match; try discriminate. auto. cbn in *.
+        inv Heqo. cbn.
+        assert (r < max_reg_module m + 1).
+        { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+          transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+          cbn; lia. 
+          eapply max_reg_stmnt_le_stmnt_tree; eauto.
+          apply max_module_stmnts. }
+        unfold find_assocmap, AssocMapExt.get_default.
+        unfold merge_regs, empty_assocmap, AssocMapExt.merge.
+        rewrite !PTree.gcombine by auto.
+        rewrite !PTree.gss.
+        rewrite !PTree.gso by lia.
+        rewrite !PTree.gss.
+        cbn. rewrite !PTree.gempty. cbn.
+        assert ((Int.eq vc (ZToValue 0)) = false).
+    { unfold valueToBool in *. destruct_match; try discriminate.
+      eapply Z.eqb_neq in Heqb. unfold uvalueToZ in *. 
+      unfold Int.eq. destruct_match; auto. exfalso. unfold ZToValue in *. eapply Heqb.
+      clear Heqs.
+      rewrite Int.unsigned_repr in e by crush. auto. } rewrite H7. cbn. unfold boolToValue.
+      apply Int.eq_true.
+  - inv H20. cbn in *. econstructor. split.
+    + apply Smallstep.plus_one. econstructor. solve [eauto with mgen]. solve [eauto with mgen]. solve [eauto with mgen]. solve [eauto with mgen]. econstructor. econstructor. econstructor. econstructor. econstructor.
+    econstructor. econstructor.
+    cbn. eapply expr_runp_matches2; eauto.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } econstructor. cbn. eauto.
+  econstructor. econstructor. econstructor. econstructor. econstructor. econstructor.
+  econstructor. cbn. econstructor. econstructor. econstructor. econstructor. econstructor. cbn.
+  eapply erun_Vternary_false. cbn.
+  eapply expr_runp_matches2. eassumption.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto. eauto.
+  econstructor. eauto. eauto. 
+  econstructor. econstructor. cbn. 
+  eapply erun_Vternary_false.
+  eapply expr_runp_matches2. eassumption.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto. eauto.
+  econstructor. eauto. eauto. econstructor. cbn. econstructor.
+  cbn.
+eapply expr_runp_matches2. eassumption.
+    { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts.
+  } repeat (apply match_assocmaps_gt; [lia|]). eauto. eauto.
+  cbn. 
+
+  rewrite empty_stack_transf.
+  unfold transf_module; repeat destruct_match; try discriminate. cbn.
+  
+  eapply exec_ram_Some_idle; cbn. 
+  rewrite !merge_get_default2 by (unfold empty_assocmap; apply PTree.gempty).
+  assert (r < max_reg_module m + 1).
+  { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+    transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+    cbn; lia. 
+    eapply max_reg_stmnt_le_stmnt_tree; eauto.
+    apply max_module_stmnts. }
+  rewrite !find_assocmap_gso by lia.
+  rewrite find_assocmap_gss.
+  unfold valueToBool in H18. destruct_match; try discriminate. eapply Z.eqb_eq in Heqb. 
+  unfold uvalueToZ in Heqb. unfold ZToValue, boolToValue, Int.eq. rewrite Heqb.
+  rewrite Int.unsigned_repr by crush. cbn. unfold natToValue.
+  unfold Int.xor. cbn. replace (Int.unsigned (Int.repr 0)) with 0%Z by auto.
+  rewrite Z.lxor_0_l. rewrite Int.repr_unsigned.
+  unfold disable_ram in DISABLE_RAM.
+  unfold transf_module in *; repeat destruct_match; try discriminate. auto. cbn in *.
+  inv Heqo1. cbn in *. unfold Int.eq in *. destruct_match; discriminate.
+  eauto. eauto. pose proof (mod_st_lt m).
+  eapply mod_st_modify; eauto. eapply match_assocmaps_merge.
+  eapply match_assocmaps_equiv. eapply match_assocmaps_merge.
+  eapply match_assocmaps_equiv.
+  eapply match_assocmaps_gss.
+  repeat (eapply match_assocmaps_gt; [lia|]). eauto. eauto.
+  + econstructor; eauto.
+    -- eapply match_assocmaps_merge.
+       eapply match_assocmaps_equiv. eapply match_assocmaps_merge.
+       eapply match_assocmaps_equiv.
+       eapply match_assocmaps_gss.
+       repeat (eapply match_assocmaps_gt; [lia|]). eauto.
+    -- eapply match_arrs_merge.
+       eapply merge_arr_empty_match; eauto.
+       eapply match_arrs_equiv.
+       eapply match_arrs_merge. eauto.
+       eapply match_arrs_equiv. eauto.
+    -- eapply merge_arr_empty_match; eauto. eapply merge_arr_empty_match; eauto.
+    -- eapply merge_arr_empty_match; eauto. eapply merge_arr_empty_match; eauto.
+    -- unfold transf_module in *; repeat destruct_match; try discriminate. auto. cbn in *.
+       unfold empty_assocmap. rewrite !merge_find_assocmap by (eapply PTree.gempty).
+       assert (r < max_reg_module m + 1).
+       { apply Pos.le_lt_trans with (m := max_stmnt_tree (mod_datapath m)).
+         transitivity (max_reg_stmnt (Vseq (Vseq Vskip (Vcond x3 (Vblock (Vvari (mod_stk m) x0) x1) Vskip)) (Vblock (Vvar r) (Vlit x2)))).
+         cbn; lia. 
+         eapply max_reg_stmnt_le_stmnt_tree; eauto.
+         apply max_module_stmnts. }
+         rewrite !find_assocmap_gso by lia.
+         rewrite !find_assocmap_gss by lia.
+         unfold valueToBool in H18. destruct_match; try discriminate. eapply Z.eqb_eq in Heqb. 
+         unfold uvalueToZ in Heqb. unfold ZToValue, boolToValue, natToValue. unfold Int.eq at 2. rewrite Heqb.
+         rewrite Int.unsigned_repr by crush. cbn. unfold natToValue.
+         unfold Int.xor. cbn. replace (Int.unsigned (Int.repr 0)) with 0%Z by auto.
+         rewrite Z.lxor_0_l. rewrite Int.repr_unsigned. eauto.
+Qed.        
+
+Lemma translation_correct_load_cond :
+  forall 
+      (m : module)
+  (asr : AssocMap.tree value)
+  (basr2 nasr2 : AssocMap.t value)
+  (nasa2 basa2 : AssocMap.t arr)
+  (asr'0 : assocmap_reg)
+  (asa'0 : assocmap_arr)
+  (res' : list stackframe)
+  (st : positive)
+  (tge : genv)
+  (pstval : positive)
+  (sf : list stackframe)
+  (asa : AssocMap.t arr)
+  (data : stmnt)
+  (f : fext)
+  (H : asr ! (mod_reset m) = Some (ZToValue 0))
+  (H0 : asr ! (mod_finish m) = Some (ZToValue 0))
+  (H1 : asr ! (mod_st m) = Some (posToValue st))
+  (H2 : (mod_datapath m) ! st = Some data)
+  (H3 : stmnt_runp f {| assoc_blocking := asr; assoc_nonblocking := empty_assocmap |}
+         {| assoc_blocking := asa; assoc_nonblocking := empty_stack (mod_stk m) (mod_stk_len m) |} data
+         {| assoc_blocking := basr2; assoc_nonblocking := nasr2 |}
+         {| assoc_blocking := basa2; assoc_nonblocking := nasa2 |})
+  (H5 : (merge_regs empty_assocmap (merge_regs nasr2 basr2)) ! (mod_st m) = Some (posToValue pstval))
+  (H6 : (Z.pos pstval <= 4294967295)%Z)
+  (H8 : mod_ram m = None)
+  (ASSOC : match_assocmaps (max_reg_module m + 1) asr asr'0)
+  (ARRS : match_arrs asa asa'0)
+  (STACKS : list_forall2 match_stackframes sf res')
+  (ARRS_SIZE : match_empty_size m asa)
+  (ARRS_SIZE2 : match_empty_size m asa'0)
+  (DISABLE_RAM : disable_ram (mod_ram (transf_module m)) asr'0)
+  (Learn : Learnt H8)
+  (x : positive)
+  (H4 : alt_load_cond (mod_st m)
+         {|
+           ram_size := mod_stk_len m;
+           ram_mem := mod_stk m;
+           ram_en := max_reg_module m + 2;
+           ram_u_en := max_reg_module m + 6;
+           ram_addr := max_reg_module m + 1;
+           ram_wr_en := max_reg_module m + 5;
+           ram_d_in := max_reg_module m + 3;
+           ram_d_out := max_reg_module m + 4;
+           ram_ordering := ram_wf (max_reg_module m)
+         |} (mod_datapath m) (mod_datapath (transf_module m)) st x),
+  exists R2 : state,
+    Smallstep.plus step tge (State res' (transf_module m) st asr'0 asa'0) Events.E0 R2 /\
+    match_states
+      (State sf m pstval (merge_regs empty_assocmap (merge_regs nasr2 basr2))
+         (merge_arrs (empty_stack (mod_stk m) (mod_stk_len m)) (merge_arrs nasa2 basa2))) R2.
+Proof.
+  intros.
+  unfold alt_load_cond in *; simplify_local. inv H3. inv H23.
+    2: { match goal with H: context[location_is] |- _ => inv H end. }
+    match goal with H: context[location_is] |- _ => inv H end.
+    inv H20. inv H19. inv H25. inv H23. 2: { match goal with H: context[location_is] |- _ => inv H end. }
+    match goal with H: context[location_is] |- _ => inv H end.
+    inv H24.
+  - inv H22. simplify_local.
+    do 2 econstructor. eapply Smallstep.plus_two.
+    + econstructor. mgen_crush. mgen_crush. mgen_crush. eassumption.
+    econstructor. econstructor. simplify_local. econstructor. cbn. econstructor.
+    econstructor. econstructor. cbn; econstructor.
+    cbn; econstructor. econstructor. auto. auto. auto.
+    econstructor. 
+    eapply expr_runp_matches2 with (p := mod_st m); auto. eassumption.
+    pose proof (mod_st_lt m).
+    repeat (apply match_assocmaps_gt; [lia|]).
+    repeat (apply match_assocmaps_gt2; [lia|]).
+    eapply match_assocmaps_ge. eauto. lia.
+    auto. econstructor. cbn. eauto. eauto. eauto. 
+    econstructor. cbn. pose proof (mod_st_lt m). rewrite assocmap_gso by lia. eauto.
+    cbn. eauto. econstructor.
+    cbn; econstructor. econstructor. econstructor.  econstructor.  econstructor. 
+    econstructor. 
+    eapply expr_runp_matches2 with (p := mod_st m); auto. eassumption.
+    pose proof (mod_st_lt m).
+    repeat (apply match_assocmaps_gt; [lia|]).
+    repeat (apply match_assocmaps_gt2; [lia|]).
+    eapply match_assocmaps_ge. eauto. lia.
+    auto.
+    eapply expr_runp_matches2 with (p := mod_st m); auto. eassumption.
+    pose proof (mod_st_lt m).
+    repeat (apply match_assocmaps_gt; [lia|]).
+    repeat (apply match_assocmaps_gt2; [lia|]).
+    eapply match_assocmaps_ge. eauto. lia.
+    auto. eauto.
+
+    simplify_local. rewrite empty_stack_transf. unfold transf_module; repeat destruct_match; crush_local.
+    eapply exec_ram_Some_read; simplify_local.
+    2: {
+      pose proof (mod_st_lt m).
+      unfold merge_regs, empty_assocmap. repeat rewrite find_assocmap_gso by lia.
+      rewrite merge_get_default2 by auto.
+      repeat rewrite find_assocmap_gso by lia. auto.
+    }
+    2: {
+      pose proof (mod_st_lt m).
+      unfold merge_regs, empty_assocmap. repeat rewrite find_assocmap_gso by lia.
+      rewrite merge_get_default3 by auto.
+      repeat rewrite AssocMap.gso by lia.
+      rewrite AssocMap.gss. auto.
+    }
+    { unfold disable_ram, transf_module in DISABLE_RAM;
+      repeat destruct_match; try discriminate. simplify.
+      assert ((Int.eq vc (ZToValue 0)) = false). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_neq in Heqb. rewrite e in Heqb.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in Heqb by auto. lia. }
+      rewrite H3. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 1))) with (Int.mone) by auto.
+      rewrite Int.xor_commut.
+      apply int_eq_not. auto. }
+    { pose proof (mod_st_lt m).
+      unfold merge_regs, empty_assocmap. repeat rewrite find_assocmap_gso by lia.
+      rewrite merge_get_default3 by auto.
+      repeat rewrite AssocMap.gso by lia.
+      rewrite AssocMap.gss. auto. }
+    { pose proof (mod_st_lt m).
+      unfold merge_regs, empty_assocmap. repeat rewrite find_assocmap_gso by lia.
+      rewrite merge_get_default3 by auto.
+      repeat rewrite AssocMap.gso by lia.
+      rewrite AssocMap.gss. auto. }
+    { eapply match_arrs_read. eauto. apply merge_arr_empty2; auto.
+    }
+    { cbn. unfold merge_regs. auto. }
+    { auto. }
+    { cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+      pose proof (mod_st_lt m).
+      rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+      rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+      apply AssocMap.gss.
+    }
+    auto.
+    + econstructor.
+      * pose proof (mod_reset_lt m).
+        pose proof (mod_ordering_wf m).
+        unfold module_ordering in H14.
+        cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+        rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+        inv ASSOC. now rewrite <- H16 by lia.
+      * pose proof (mod_reset_lt m).
+        pose proof (mod_ordering_wf m).
+        unfold module_ordering in H14.
+        cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+        rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+        inv ASSOC. now rewrite <- H16 by lia.
+      * pose proof (mod_reset_lt m).
+        pose proof (mod_ordering_wf m).
+        unfold module_ordering in H14.
+        cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+        rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+        apply AssocMap.gss.
+      * eassumption.
+      * econstructor. econstructor. cbn. econstructor. econstructor.
+        econstructor. cbn. econstructor. econstructor; eauto.
+        cbn. eapply expr_runp_matches. eassumption.
+        pose proof (mod_st_lt m).
+        { constructor; intros.
+          rewrite AssocMap.gso by lia.
+          rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+          rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+          inv ASSOC. apply H16. lia.
+        }
+        { repeat apply merge_arr_empty2; auto.
+          apply match_empty_size_merge; auto.
+          mgen_crush_local.
+        }
+        cbn.
+        econstructor. econstructor.
+      * cbn.
+        simplify_local. rewrite empty_stack_transf.
+        unfold transf_module; repeat destruct_match; try discriminate; cbn.
+        econstructor. cbn.
+        pose proof (mod_st_lt m).
+        rewrite ! merge_get_default2 by auto.
+        repeat rewrite find_assocmap_gso by lia.
+        rewrite merge_get_default with (x := (Int.not (find_assocmap 32 (max_reg_module m + 6) asr'0))).
+        rewrite ! merge_get_default2.
+        repeat rewrite find_assocmap_gso by lia.
+        rewrite find_assocmap_gss.
+        assert ((Int.eq vc (ZToValue 0)) = false). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_neq in Heqb. rewrite e in Heqb.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in Heqb by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 1))) with (Int.mone) by auto.
+      rewrite Int.xor_commut.
+        apply Int.eq_true.
+        auto.
+        now repeat rewrite AssocMap.gso by lia.
+        rewrite AssocMap.gss. 
+        assert ((Int.eq vc (ZToValue 0)) = false). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_neq in Heqb. rewrite e in Heqb.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in Heqb by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 1))) with (Int.mone) by auto.
+      rewrite Int.xor_commut. auto.
+      * auto.
+      * auto.
+      * unfold transf_module; destruct_match; try discriminate; cbn.
+        pose proof (mod_st_lt m).
+        repeat unfold_merge.
+        repeat rewrite PTree.gso by lia.
+        rewrite PTree.gss.
+        rewrite merge_get_default3 in H5 by auto.
+        rewrite merge_get_default3 in H5 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite AssocMap.gss in H5. inv H5. auto.
+      * auto.
+    + auto.
+    + econstructor.
+      * constructor; intros.
+        unfold merge_regs.
+        repeat rewrite ! merge_get_default3 by auto.
+        symmetry; repeat rewrite ! merge_get_default3 by auto. symmetry.
+        pose proof (mod_st_lt m).
+        destruct (peq r0 r); subst.
+        { rewrite PTree.gss. unfold AssocMapExt.merge. rewrite !PTree.gso by lia. rewrite PTree.gss. 
+          unfold find_assocmap, AssocMapExt.get_default, empty_assocmap.
+          rewrite !PTree.gso by lia.
+          rewrite PTree.gcombine by auto.
+          rewrite !PTree.gso by lia. rewrite PTree.gss. now cbn. }
+        repeat rewrite PTree.gso by lia.
+        destruct (peq r0 (mod_st m)); subst.
+        { rewrite PTree.gss. rewrite !PTree.gso by lia.
+          rewrite PTree.gss. auto. }
+        repeat rewrite PTree.gso by lia.
+        repeat rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        repeat rewrite PTree.gso by lia. inv ASSOC.
+        apply H16. lia.
+      * repeat apply merge_arr_empty2; mgen_crush_local.
+      * auto.
+      * mgen_crush_local.
+      * mgen_crush_local.
+      * unfold disable_ram. unfold transf_module; destruct_match; try discriminate; cbn in *.
+        rewrite H8 in *. cbn in *. inv Heqo. cbn. 2: { auto. }
+        pose proof (mod_st_lt m).
+        rewrite ! merge_get_default2 by auto.
+        repeat rewrite find_assocmap_gso by lia.
+        rewrite merge_get_default with (x := (Int.not (find_assocmap 32 (max_reg_module m + 6) asr'0))).
+        rewrite ! merge_get_default2.
+        repeat rewrite find_assocmap_gso by lia.
+        rewrite find_assocmap_gss.
+        assert ((Int.eq vc (ZToValue 0)) = false). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_neq in Heqb. rewrite e in Heqb.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in Heqb by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 1))) with (Int.mone) by auto.
+      rewrite Int.xor_commut.
+        apply Int.eq_true.
+        auto.
+        now repeat rewrite AssocMap.gso by lia.
+        rewrite AssocMap.gss. 
+        assert ((Int.eq vc (ZToValue 0)) = false). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_neq in Heqb. rewrite e in Heqb.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in Heqb by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 1))) with (Int.mone) by auto.
+      rewrite Int.xor_commut. auto.
+  - inv H22. simplify_local.
+    do 2 econstructor. eapply Smallstep.plus_two.
+    + econstructor. mgen_crush. mgen_crush. mgen_crush. eassumption.
+    econstructor. econstructor. simplify_local. econstructor. cbn. econstructor.
+    econstructor. econstructor. cbn; econstructor.
+    cbn; econstructor. econstructor. econstructor. 
+    eapply expr_runp_matches2 with (p := mod_st m); auto. eassumption.
+    pose proof (mod_st_lt m).
+    repeat (apply match_assocmaps_gt; [lia|]).
+    repeat (apply match_assocmaps_gt2; [lia|]).
+    eapply match_assocmaps_ge. eauto. lia. auto.
+    econstructor. cbn. eauto. eauto. eauto.
+    econstructor. pose proof (mod_st_lt m).
+    rewrite assocmap_gso by lia. auto. cbn. eauto.
+    econstructor. econstructor. cbn. econstructor.
+    cbn; econstructor. econstructor. cbn; econstructor. cbn.
+    eapply erun_Vternary_false.
+    eapply expr_runp_matches2 with (p := mod_st m); auto. eassumption.
+    pose proof (mod_st_lt m).
+    repeat (apply match_assocmaps_gt; [lia|]).
+    repeat (apply match_assocmaps_gt2; [lia|]).
+    eapply match_assocmaps_ge. eauto. lia.
+    auto. econstructor. pose proof (mod_st_lt m). rewrite !assocmap_gso by lia. eauto. eauto.
+
+    simplify_local. rewrite empty_stack_transf. unfold transf_module; repeat destruct_match; crush_local.
+    eapply exec_ram_Some_idle; simplify_local.
+    * unfold empty_assocmap. rewrite !merge_find_assocmap by (apply PTree.gempty).
+      rewrite !assocmap_gso by lia. pose proof (mod_st_lt m). 
+      rewrite !assocmap_gso by lia. rewrite assocmap_gss.
+      assert ((Int.eq vc (ZToValue 0)) = true). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_eq in Heqb. clear Heqs. rewrite Heqb in n.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in n by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue.
+      replace (Int.neg (Int.repr (Z.of_nat 0))) with (Int.repr 0) by auto.
+      rewrite Int.xor_zero_l. unfold disable_ram, transf_module in *.
+      repeat destruct_match; try discriminate.  cbn in *. inv Heqo1. cbn in *. eassumption.
+    * eauto.
+    * eauto.
+    * { cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+      pose proof (mod_st_lt m).
+      rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+      rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+      apply AssocMap.gss.
+      }
+    * eauto.
++ econstructor.
+      * pose proof (mod_reset_lt m).
+        pose proof (mod_ordering_wf m).
+        unfold module_ordering in H14.
+        cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+        rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+        inv ASSOC. now rewrite <- H16 by lia.
+      * pose proof (mod_reset_lt m).
+        pose proof (mod_ordering_wf m).
+        unfold module_ordering in H14.
+        cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+        rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+        inv ASSOC. now rewrite <- H16 by lia.
+      * pose proof (mod_reset_lt m).
+        pose proof (mod_ordering_wf m).
+        unfold module_ordering in H14.
+        cbn. unfold transf_module; destruct_match; try discriminate; cbn.
+        rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+        apply AssocMap.gss.
+      * eassumption.
+      * econstructor. econstructor. cbn. econstructor. econstructor.
+        econstructor. cbn. econstructor. eapply erun_Vternary_false; eauto.
+        cbn. eapply expr_runp_matches. eassumption.
+        pose proof (mod_st_lt m).
+        { constructor; intros.
+          rewrite AssocMap.gso by lia.
+          rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+          rewrite merge_get_default3 by auto. repeat rewrite AssocMap.gso by lia.
+          inv ASSOC. apply H16. lia.
+        }
+        { repeat apply merge_arr_empty2; auto.
+          apply match_empty_size_merge; auto.
+          mgen_crush_local.
+        }
+        cbn.
+        econstructor. econstructor.
+      * cbn.
+        simplify_local. rewrite empty_stack_transf.
+        unfold transf_module; repeat destruct_match; try discriminate; cbn.
+        econstructor. cbn.
+        pose proof (mod_st_lt m).
+        rewrite ! merge_get_default2 by auto.
+        repeat rewrite find_assocmap_gso by lia.
+        unfold empty_assocmap.
+        rewrite !merge_get_default2; auto.
+        rewrite !assocmap_gso by lia. rewrite assocmap_gss.
+        assert ((Int.eq vc (ZToValue 0)) = true). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_eq in Heqb. clear Heqs. rewrite Heqb in n.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in n by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 0))) with (Int.zero) by auto.
+      rewrite Int.xor_commut. rewrite Int.xor_zero.
+      unfold disable_ram, transf_module in DISABLE_RAM;
+      repeat destruct_match; try discriminate. cbn in *. inv Heqo0. assumption.
+      * auto.
+      * auto.
+      * unfold transf_module; destruct_match; try discriminate; cbn.
+        pose proof (mod_st_lt m).
+        repeat unfold_merge.
+        repeat rewrite PTree.gso by lia.
+        rewrite PTree.gss.
+        rewrite merge_get_default3 in H5 by auto.
+        rewrite merge_get_default3 in H5 by (now repeat rewrite AssocMap.gso by lia).
+        rewrite AssocMap.gss in H5. inv H5. auto.
+      * auto.
+    + auto.
+    + econstructor.
+      * constructor; intros.
+        unfold merge_regs.
+        repeat rewrite ! merge_get_default3 by auto.
+        symmetry; repeat rewrite ! merge_get_default3 by auto. symmetry.
+        pose proof (mod_st_lt m).
+        destruct (peq r0 r); subst.
+        { rewrite PTree.gss. unfold AssocMapExt.merge. rewrite !PTree.gso by lia. rewrite PTree.gss. 
+          unfold find_assocmap, AssocMapExt.get_default, empty_assocmap.
+          rewrite !PTree.gso by lia.
+          rewrite !PTree.gcombine by auto. rewrite !PTree.gempty. cbn.
+          rewrite !PTree.gso by lia. inv ASSOC. rewrite H16 by lia. now cbn. }
+        repeat rewrite PTree.gso by lia.
+        destruct (peq r0 (mod_st m)); subst.
+        { rewrite PTree.gss. rewrite !PTree.gso by lia.
+          rewrite PTree.gss. auto. }
+        repeat rewrite PTree.gso by lia.
+        repeat rewrite merge_get_default3 by (now repeat rewrite AssocMap.gso by lia).
+        repeat rewrite PTree.gso by lia. inv ASSOC.
+        apply H16. lia.
+      * repeat apply merge_arr_empty2; mgen_crush_local.
+      * auto.
+      * mgen_crush_local.
+      * mgen_crush_local.
+      * unfold disable_ram. unfold transf_module; destruct_match; try discriminate; cbn in *.
+        rewrite H8 in *. cbn in *. inv Heqo. cbn. 2: { auto. }
+        pose proof (mod_st_lt m).
+        rewrite ! merge_get_default2 by auto.
+        repeat rewrite find_assocmap_gso by lia.
+        unfold empty_assocmap.
+        rewrite !merge_get_default2; auto.
+        rewrite !assocmap_gso by lia. rewrite assocmap_gss.
+        assert ((Int.eq vc (ZToValue 0)) = true). {
+      unfold Int.eq.
+      unfold valueToBool, uvalueToZ in *. destruct_match; try discriminate; auto. 
+      destruct_match; try discriminate. eapply Z.eqb_eq in Heqb. clear Heqs. rewrite Heqb in n.
+      replace (Int.unsigned (ZToValue 0)) with 0%Z in n by auto. lia. }
+      rewrite H14. cbn. unfold boolToValue, natToValue. cbn. unfold Int.neg.
+      replace (Int.repr (- Int.unsigned (Int.repr 0))) with (Int.zero) by auto.
+      rewrite Int.xor_commut. rewrite Int.xor_zero.
+      unfold disable_ram, transf_module in DISABLE_RAM;
+      repeat destruct_match; try discriminate. cbn in *. inv Heqo. assumption.
+Qed.
+
 
 Lemma translation_correct :
   forall m asr basr2 nasr2 nasa2 basa2 nasr3 basr3
@@ -3233,6 +4122,8 @@ Proof.
   - eapply translation_correct_unchanged; eassumption.
   - eapply translation_correct_store; eassumption.
   - eapply translation_correct_load; eassumption.
+  - eapply translation_correct_store_cond; eassumption.
+  - eapply translation_correct_load_cond; eassumption.
 Qed.
 
 Lemma exec_ram_resets_en :

@@ -1,4 +1,4 @@
-VERICERT ?= vericert
+VERICERT ?= /Users/ymherklotz/projects/vericert/bin/vericert
 VERICERT_OPTS ?= -DSYNTHESIS -fschedule -fif-conv -dgblseq -dgblpar
 
 IVERILOG ?= iverilog

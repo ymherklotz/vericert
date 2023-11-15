@@ -120,7 +120,7 @@ Definition distinct_lists (l1 l2: list positive): bool :=
   forallb (fun x => negb (existsb (Pos.eqb x) l2)) l1.
 
 Definition decide_if_convert b_main b_next :=
-  (length b_next <=? 50)%nat && no_predicated_store b_next
+  (length b_next <=? 50)%nat (* && no_predicated_store b_next *)
   && distinct_lists (gather_all_set_predicate b_main) (gather_all_set_predicate b_next)
   && distinct_lists (gather_all_rbgoto b_main) (gather_all_rbgoto b_next).
 
