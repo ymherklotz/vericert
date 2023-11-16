@@ -110,9 +110,10 @@ let print_instr = function
   | RBload (_, _, _, _, r) -> sprintf "load(%s)" (reg r)
   | RBstore (_, _, _, _, r) -> sprintf "store(%s)" (reg r)
   | RBsetpred (_, _, _, p) -> sprintf "setpred(%s)" (print_pred p)
+  | RBexit _ -> sprintf "exit"
   | RBop (_, op, args, d) ->
     (match op, args with
-    | Omove, _ -> "mov"
+    | Omove, [r1] -> sprintf "%s=%s" (reg d) (reg r1)
     | Ointconst n, _ -> sprintf "%s=%ld" (reg d) (camlint_of_coqint n)
     | Olongconst n, _ -> sprintf "%s=%LdL" (reg d) (camlint64_of_coqint n)
     | Ofloatconst n, _ -> sprintf "%s=%.15F" (reg d) (camlfloat_of_coqfloat n)
@@ -148,7 +149,9 @@ let print_instr = function
     | Oshruimm n, [r1] -> sprintf "%s=%s >>u %ld" (reg d) (reg r1) (camlint_of_coqint n)
     | Ororimm n, [r1] -> sprintf "%s=%s ror %ld" (reg d) (reg r1) (camlint_of_coqint n)
     | Oshldimm n, [r1;r2] -> sprintf "%s=(%s, %s) << %ld" (reg d) (reg r1) (reg r2) (camlint_of_coqint n)
-    | Olea addr, args -> sprintf "%s=addr" (reg d)
+    | Olea addr, [r1] -> sprintf "%s=addr[%s]" (reg d) (reg r1)
+    | Olea addr, [r1;r2] -> sprintf "%s=addr[%s,%s]" (reg d) (reg r1) (reg r2)
+    | Olea addr, [r1;r2;r3] -> sprintf "%s=addr[%s,%s,%s]" (reg d) (reg r1) (reg r2) (reg r3)
     | Omakelong, [r1;r2] -> sprintf "%s=makelong(%s,%s)" (reg d) (reg r1) (reg r2)
     | Olowlong, [r1] -> sprintf "%s=lowlong(%s)" (reg d) (reg r1)
     | Ohighlong, [r1] -> sprintf "%s=highlong(%s)" (reg d) (reg r1)
@@ -262,24 +265,24 @@ let read_process command =
   Buffer.contents buffer
 
 let comb_delay = function
-  | RBnop -> 1
+  | RBnop -> 0
   | RBop (Some _, op, _, _) ->
      (match op with
-      | Omove -> 64
-      | Ointconst _ -> 1
-      | Olongconst _ -> 1
-      | Ocast8signed -> 1
-      | Ocast8unsigned -> 1
-      | Ocast16signed -> 1
-      | Ocast16unsigned -> 1
-      | Oneg -> 1
-      | Onot -> 1
-      | Oor -> 64
-      | Oorimm _ -> 64
-      | Oand -> 64
-      | Oandimm _ -> 64
-      | Oxor -> 64
-      | Oxorimm _ -> 33
+      | Omove -> 32
+      | Ointconst _ -> 32
+      | Olongconst _ -> 32
+      | Ocast8signed -> 32
+      | Ocast8unsigned -> 32
+      | Ocast16signed -> 32
+      | Ocast16unsigned -> 32
+      | Oneg -> 32
+      | Onot -> 32
+      | Oor -> 32
+      | Oorimm _ -> 32
+      | Oand -> 32
+      | Oandimm _ -> 32
+      | Oxor -> 32
+      | Oxorimm _ -> 32
       | Omul -> 64
       | Omulimm _ -> 64
       | Omulhs -> 64
@@ -306,10 +309,10 @@ let comb_delay = function
      | Oandimm _ -> 4
      | Oxor -> 16
      | Oxorimm _ -> 4
-     | Omul -> 56
-     | Omulimm _ -> 56
-     | Omulhs -> 56
-     | Omulhu -> 56
+     | Omul -> 64
+     | Omulimm _ -> 48
+     | Omulhs -> 48
+     | Omulhu -> 48
      | Odiv -> 576
      | Odivu -> 576
      | Omod -> 576
@@ -628,7 +631,7 @@ let get_pred = function
   | RBstore (op, _, _, _, _) -> op
   (* | RBexit (op, _) -> op *)
   | RBexit (op, _) -> None
-  | RBsetpred (_, _, _, _) -> None
+  | RBsetpred (op, _, _, _) -> op
 
 let independant_pred p p' =
   match sat_pred_simple (Pand (p, p')) with
@@ -740,17 +743,20 @@ let add_cycle_constr maxf n dfg constr =
       else g) dfg 0 in
   let longest_path v = BFDFG.all_shortest_paths negated_dfg v
                        |> BFDFG.H.to_seq |> List.of_seq
-                       |> List.map (function (x, y) -> (x, y - max_initial_del)) in
-  let constrained_paths = List.filter (function (_, m) -> - m > maxf) in
+                       |> List.map (function (x, y) -> (x, y - (comb_delay (snd v)) (* - max_initial_del *))) in
+  let constrained_paths = List.filter (function (_, m) -> - m + 1 > maxf) in
+  (* Printf.printf "########## %d ##########\n" n; *)
+  (* let graph = open_out (sprintf "constr_graph_%d.dot" n) in *)
+  (* fprintf graph "%a\n" print_dfg dfg; *)
+  (* close_out graph; *)
   List.fold_left (fun g -> function (v, v', w) ->
       G.add_edge_e g (encode_var n (fst v) 0,
                       - (int_of_float (Float.ceil (Float.div (float_of_int w) (float_of_int maxf))) - 1),
                       encode_var n (fst v') 0)
     ) constr (DFG.fold_vertex (fun v l ->
-      List.append l (longest_path v (*|> (function l -> List.iter (function (a, x) ->
-          printf "c: %d %d\n" (fst a) x) l; l)*) |> constrained_paths (* |> (function l -> List.iter (function (a, x) ->
-          printf "%d %d\n" (fst a) x) l; l)*)
-                     |> List.map (function (v', w) -> (v, v', - w)))
+      List.append l (longest_path v |> (* (function l -> printf "path::\n"; List.iter (function (a, x) -> *)
+          (* printf "%s -(%d)-> %s\n" (print_instr (snd v)) (-x) (print_instr (snd a))) l; l) |> *) constrained_paths |>
+                     List.map (function (v', w) -> (v, v', - w)))
     ) dfg [])
 
 type resource =
