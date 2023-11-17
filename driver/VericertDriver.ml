@@ -97,7 +97,7 @@ let compile_c_file sourcename ifile ofile =
     let verilog =
       let translation = if !option_hls_schedule
                         then Vericert.Compiler0.transf_hls
-                        else Vericert.Compiler0.transf_hls
+                        else Vericert.Compiler0.transf_hls_temp
       in
       (* let _ = Vericert.Smtpredicate.check_smt (Vericert.Predicate0.Pimp ((Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)),(Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)))) in *)
       match translation csyntax with

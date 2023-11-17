@@ -212,11 +212,11 @@ let print_instr = function
 module DFGDot = Graph.Graphviz.Dot(struct
     let graph_attributes _ = []
     let default_vertex_attributes _ = []
-    let vertex_name = function (i, instr) -> sprintf "\"%d:%s\"" i (print_instr instr)
+    let vertex_name (i, instr) = sprintf "\"%d:%s\"" i (print_instr instr)
     let vertex_attributes _ = []
     let get_subgraph _ = None
     let default_edge_attributes _ = []
-    let edge_attributes _ = []
+    let edge_attributes (_, e, _) = [`Label (string_of_int e)]
 
     include DFG
   end)
@@ -264,77 +264,107 @@ let read_process command =
   ignore (Unix.close_process_in in_channel);
   Buffer.contents buffer
 
+let multiply_dest = ref SS.empty
+
 let comb_delay = function
   | RBnop -> 0
-  | RBop (Some _, op, _, _) ->
-     (match op with
-      | Omove -> 32
-      | Ointconst _ -> 32
-      | Olongconst _ -> 32
-      | Ocast8signed -> 32
-      | Ocast8unsigned -> 32
-      | Ocast16signed -> 32
-      | Ocast16unsigned -> 32
-      | Oneg -> 32
-      | Onot -> 32
-      | Oor -> 32
-      | Oorimm _ -> 32
-      | Oand -> 32
-      | Oandimm _ -> 32
-      | Oxor -> 32
-      | Oxorimm _ -> 32
-      | Omul -> 64
-      | Omulimm _ -> 64
-      | Omulhs -> 64
-      | Omulhu -> 64
-      | Odiv -> 576
-      | Odivu -> 576
-      | Omod -> 576
-      | Omodu -> 576
-      | _ -> 64)
-  | RBop (_, op, _, _) ->
-    (match op with
-     | Omove -> 16
-     | Ointconst _ -> 1
-     | Olongconst _ -> 1
-     | Ocast8signed -> 1
-     | Ocast8unsigned -> 1
-     | Ocast16signed -> 1
-     | Ocast16unsigned -> 1
-     | Oneg -> 1
-     | Onot -> 1
-     | Oor -> 16
-     | Oorimm _ -> 16
-     | Oand -> 16
-     | Oandimm _ -> 4
-     | Oxor -> 16
-     | Oxorimm _ -> 4
-     | Omul -> 64
-     | Omulimm _ -> 48
-     | Omulhs -> 48
-     | Omulhu -> 48
-     | Odiv -> 576
-     | Odivu -> 576
-     | Omod -> 576
-     | Omodu -> 576
-     | _ -> 16)
-  | RBexit _ -> 64
-(** Because of the limiations of memory generation we add a large combinational
-    delay for loads and stores. *)
+  | RBop (_, op, args, d) ->
+     (if SS.mem d !multiply_dest || List.exists (fun x -> SS.mem x !multiply_dest) args (* false *) then
+        (match op with
+         | Odiv | Odivu | Omod | Omodu -> 576
+         | _ -> 48)
+      else
+        (match op with
+         | Omove -> 16
+
+         | Ointconst _
+           | Olongconst _ -> 16
+
+         | Ocast8signed
+           | Ocast8unsigned
+           | Ocast16signed
+           | Ocast16unsigned -> 16
+
+         | Oneg
+           | Onot -> 16
+
+         | Oor
+           | Oand
+           | Oxor -> 16
+
+         | Oorimm _
+           | Oandimm _
+           | Oxorimm _ -> 16
+
+         | Omul
+           | Omulimm _
+           | Omulhs
+           | Omulhu -> 48
+
+         | Odiv
+           | Odivu
+           | Omod
+           | Omodu -> 576
+
+         | _ -> 16))
+  (* | RBop (_, op, args, d) -> *)
+  (*    (if SS.mem d !multiply_dest || List.exists (fun x -> SS.mem x !multiply_dest) args (\* false *\) then *)
+  (*       (match op with *)
+  (*        | Odiv | Odivu | Omod | Omodu -> 576 *)
+  (*        | _ -> 48) *)
+  (*     else *)
+  (*       (match op with *)
+  (*        | Omove -> 1 *)
+
+  (*        | Ointconst _ *)
+  (*          | Olongconst _ -> 1 *)
+
+  (*        | Ocast8signed *)
+  (*          | Ocast8unsigned *)
+  (*          | Ocast16signed *)
+  (*          | Ocast16unsigned -> 8 *)
+
+  (*        | Oneg *)
+  (*          | Onot -> 8 *)
+
+  (*        | Oor *)
+  (*          | Oand *)
+  (*          | Oxor -> 8 *)
+
+  (*        | Oorimm _ *)
+  (*          | Oandimm _ *)
+  (*          | Oxorimm _ -> 8 *)
+
+  (*        | Omul *)
+  (*          | Omulimm _ *)
+  (*          | Omulhs *)
+  (*          | Omulhu -> 32 *)
+
+  (*        | Odiv *)
+  (*          | Odivu *)
+  (*          | Omod *)
+  (*          | Omodu -> 576 *)
+
+  (*        | _ -> 8)) *)
+  | RBexit (Some _, _) -> 16
+  | RBexit _ -> 4
+  (** Because of the limiations of memory generation we add a large combinational
+      delay for loads and stores. *)
   | RBload _ -> 64
   | RBstore _ -> 64
-  | _ -> 8
+  | RBsetpred (Some _op, _, _, _) -> 16
+  | RBsetpred (None, _, _, _) -> 8
 
 let pipeline_stages = function
   | RBload _ -> 1 (* TODO: Set back to 2 when memory inferrence is fixed. *)
   | RBstore _ -> 1
   | RBop (_, op, _, _) ->
-    (match op with
-     | Odiv -> 32
-     | Odivu -> 32
-     | Omod -> 32
-     | Omodu -> 32
-     | _ -> 0)
+     (match op with
+      | Odiv -> 32
+      | Odivu -> 32
+      | Omod -> 32
+      | Omodu -> 32
+      | _ -> 0)
   | _ -> 0
 
 (** Add a dependency if it uses a register that was written to previously. *)
@@ -439,7 +469,7 @@ let accumulate_RAW_mem_deps instrs dfg curri =
   | RBload (_, _, _, _, _) -> (
       match next_store 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+      | Some d -> DFG.add_edge_e dfg ((gen_vertex instrs (i - d - 1)), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i)) )
   | _ -> dfg
 
 let accumulate_WAR_mem_deps instrs dfg curri =
@@ -448,7 +478,7 @@ let accumulate_WAR_mem_deps instrs dfg curri =
   | RBstore (_, _, _, _, _) -> (
       match next_load 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+      | Some d -> DFG.add_edge_e dfg ((gen_vertex instrs (i - d - 1)), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i)) )
   | _ -> dfg
 
 let accumulate_WAW_mem_deps instrs dfg curri =
@@ -457,7 +487,7 @@ let accumulate_WAW_mem_deps instrs dfg curri =
   | RBstore (_, _, _, _, _) -> (
       match next_store 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i))
+      | Some d -> DFG.add_edge_e dfg ((gen_vertex instrs (i - d - 1)), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i)))
   | _ -> dfg
 
 (** Predicate dependencies. *)
@@ -509,7 +539,7 @@ let accumulate_RAW_pred_deps instrs dfg curri =
   | Some p -> (
       match next_setpred p 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+      | Some d -> DFG.add_edge_e dfg ((gen_vertex instrs (i - d - 1)), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i)) )
   | _ -> dfg
 
 let accumulate_WAR_pred_deps instrs dfg curri =
@@ -518,7 +548,7 @@ let accumulate_WAR_pred_deps instrs dfg curri =
   | RBsetpred (_, _, _, p) -> (
       match next_preduse p 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+      | Some d -> DFG.add_edge_e dfg ((gen_vertex instrs (i - d - 1)), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i)) )
   | _ -> dfg
 
 let accumulate_WAW_pred_deps instrs dfg curri =
@@ -527,7 +557,7 @@ let accumulate_WAW_pred_deps instrs dfg curri =
   | RBsetpred (_, _, _, p) -> (
       match next_setpred (Plit (true, p)) 0 (take i instrs |> List.rev) with
       | None -> dfg
-      | Some d -> DFG.add_edge dfg (gen_vertex instrs (i - d - 1)) (gen_vertex instrs i) )
+      | Some d -> DFG.add_edge_e dfg ((gen_vertex instrs (i - d - 1)), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i)) )
   | _ -> dfg
 
 (** This function calculates the WAW dependencies, which happen when two writes are ordered one
@@ -537,7 +567,7 @@ let accumulate_WAW_deps instrs dfg curri =
   let i, curr = curri in
   let dst_dep dst =
     match find_next_dst_write i dst (i + 1) (drop (i + 1) instrs) with
-    | Some (a, b) -> DFG.add_edge dfg (gen_vertex instrs a) (gen_vertex instrs b)
+    | Some (a, b) -> DFG.add_edge_e dfg ((gen_vertex instrs a), comb_delay (snd (gen_vertex instrs b)), (gen_vertex instrs b))
     | _ -> dfg
   in
   match curr with
@@ -546,7 +576,7 @@ let accumulate_WAW_deps instrs dfg curri =
   | RBstore (_, _, _, _, _) -> (
       match next_store (i + 1) (drop (i + 1) instrs) with
       | None -> dfg
-      | Some i' -> DFG.add_edge dfg (gen_vertex instrs i) (gen_vertex instrs i') )
+      | Some i' -> DFG.add_edge_e dfg ((gen_vertex instrs i), comb_delay (snd (gen_vertex instrs i')), (gen_vertex instrs i')) )
   | _ -> dfg
 
 let accumulate_pre_exit_deps instrs dfg curri =
@@ -555,7 +585,7 @@ let accumulate_pre_exit_deps instrs dfg curri =
   | RBexit (_, _) ->
     List.fold_left (fun ndfg -> function (i', instr') ->
         if i' < i
-        then DFG.add_edge ndfg (gen_vertex instrs i') (gen_vertex instrs i)
+        then DFG.add_edge_e ndfg ((gen_vertex instrs i'), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i))
         else ndfg
       ) dfg (List.mapi (fun i x -> (i, x)) instrs)
   | _ -> dfg
@@ -566,7 +596,7 @@ let accumulate_post_exit_deps instrs dfg curri =
   | RBexit (_, _) ->
     List.fold_left (fun ndfg -> function (i', instr') ->
         if i' > i
-        then DFG.add_edge ndfg (gen_vertex instrs i) (gen_vertex instrs i')
+        then DFG.add_edge_e ndfg ((gen_vertex instrs i), comb_delay (snd (gen_vertex instrs i')), (gen_vertex instrs i'))
         else ndfg
       ) dfg (List.mapi (fun i x -> (i, x)) instrs)
   | _ -> dfg
@@ -581,7 +611,7 @@ let accumulate_pre_mem_deps instrs dfg curri =
   | RBload _ ->
     List.fold_left (fun ndfg -> function (i', instr') ->
         if i' < i
-        then DFG.add_edge ndfg (gen_vertex instrs i') (gen_vertex instrs i)
+        then DFG.add_edge_e ndfg ((gen_vertex instrs i'), comb_delay (snd (gen_vertex instrs i)), (gen_vertex instrs i))
         else ndfg
       ) dfg (List.mapi (fun i x -> (i, x)) instrs)
   | _ -> dfg
@@ -593,7 +623,7 @@ let accumulate_post_mem_deps instrs dfg curri =
   | RBload _ ->
     List.fold_left (fun ndfg -> function (i', instr') ->
         if i' > i
-        then DFG.add_edge ndfg (gen_vertex instrs i) (gen_vertex instrs i')
+        then DFG.add_edge_e ndfg ((gen_vertex instrs i), comb_delay (snd (gen_vertex instrs i')), (gen_vertex instrs i'))
         else ndfg
       ) dfg (List.mapi (fun i x -> (i, x)) instrs)
   | _ -> dfg
@@ -605,7 +635,7 @@ let accumulate_WAR_deps instrs dfg curri =
         |> List.map (function (d, d') -> (i - d' - 1, d))
     in
     List.fold_left (fun g ->
-        function (d, d') -> DFG.add_edge g (gen_vertex instrs d) (gen_vertex instrs d')) dfg dep_list
+        function (d, d') -> DFG.add_edge_e g ((gen_vertex instrs d), comb_delay (snd (gen_vertex instrs d')), (gen_vertex instrs d'))) dfg dep_list
   in
   match curr with
   | RBop (_, _, _, dst) -> dst_dep dst
@@ -653,6 +683,30 @@ let remove_unnecessary_deps graph =
   in
   DFG.fold_edges is_dependent graph graph
 
+let gather_multiply_destinations =
+  List.iter (fun a -> 
+    match a with
+    | RBop (_, Omul, _, d)
+    | RBop (_, Omulimm _, _, d)
+    | RBop (_, Omulhs, _, d)
+    | RBop (_, Omulhu, _, d) -> 
+       multiply_dest := SS.add d !multiply_dest
+    | _ -> ()
+    )
+  
+  (* DFG.fold_edges_e (function (a, el, c) -> fun dfg -> *)
+  (*     match get_predicate (snd c), assigned_vars [] (snd c) with *)
+  (*     | Some _, [d] ->  *)
+  (*        (if SS.mem d multiply_regs && el <= 64 then *)
+  (*           DFG.add_edge_e (DFG.remove_edge_e dfg (a, el, c)) (a, 64, c) *)
+  (*         else dfg) *)
+  (*     | None, [d] ->  *)
+  (*        (if SS.mem d multiply_regs && el <= 48 then *)
+  (*           DFG.add_edge_e (DFG.remove_edge_e dfg (a, el, c)) (a, 48, c) *)
+  (*         else dfg) *)
+  (*     | _ -> dfg *)
+  (*   ) dfg dfg *)
+
 (** All the nodes in the DFG have to come after the source of the basic block, and should terminate
    before the sink of the basic block.  After that, there should be constraints for data
    dependencies between nodes. *)
@@ -680,6 +734,7 @@ let gather_bb_constraints debug bb =
       ]
   in
   let dfg''' = remove_unnecessary_deps dfg'' in
+  (* let dfg'''' = update_mult_edges bb dfg''' in *)
   (List.length bb, dfg''', GibleSeq.all_successors bb)
 
 let encode_var bbn n i = { sv_type = VarType (bbn, n); sv_num = i }
@@ -743,8 +798,8 @@ let add_cycle_constr maxf n dfg constr =
       else g) dfg 0 in
   let longest_path v = BFDFG.all_shortest_paths negated_dfg v
                        |> BFDFG.H.to_seq |> List.of_seq
-                       |> List.map (function (x, y) -> (x, y - (comb_delay (snd v)) (* - max_initial_del *))) in
-  let constrained_paths = List.filter (function (_, m) -> - m + 1 > maxf) in
+                       |> List.map (function (x, y) -> (x, y - comb_delay (snd v) (* - max_initial_del *))) in
+  let constrained_paths = List.filter (function (_, m) -> - m > maxf) in
   (* Printf.printf "########## %d ##########\n" n; *)
   (* let graph = open_out (sprintf "constr_graph_%d.dot" n) in *)
   (* fprintf graph "%a\n" print_dfg dfg; *)
@@ -755,7 +810,7 @@ let add_cycle_constr maxf n dfg constr =
                       encode_var n (fst v') 0)
     ) constr (DFG.fold_vertex (fun v l ->
       List.append l (longest_path v |> (* (function l -> printf "path::\n"; List.iter (function (a, x) -> *)
-          (* printf "%s -(%d)-> %s\n" (print_instr (snd v)) (-x) (print_instr (snd a))) l; l) |> *) constrained_paths |>
+          (* printf "%s -(%d)-> %s\n" (print_instr (snd v)) (-x) (print_instr (snd a))) l; l) |>  *)constrained_paths |>
                      List.map (function (v', w) -> (v, v', - w)))
     ) dfg [])
 
@@ -859,8 +914,8 @@ let parse_soln (tree, bbtree) s =
      else (tree, bbtree))
 
 let solve_constraints constr =
-  (* let (fn, oc) = Filename.open_temp_file "vericert_" "_lp_solve" in *)
-  let (fn, oc) = ("vericert_lp_solve.txt", open_out "vericert_lp_solve.txt") in
+  let (fn, oc) = Filename.open_temp_file "vericert_" "_lp_solve" in
+  (* let (fn, oc) = ("vericert_lp_solve.txt", open_out "vericert_lp_solve.txt") in *)
   fprintf oc "%s\n" (print_lp constr);
   close_out oc;
 
@@ -924,6 +979,7 @@ let separate_mem_operations l =
       List.fold_left (fun new_l seq_list ->
           match List.concat_map remove_nop seq_list with
           | [RBload _] | [RBstore _] -> (added := true; new_l @ [[seq_list]])
+          (* | [3] -> (added := true; new_l @ [[seq_list]]) *)
           | [] -> new_l
           | seq_list' ->
              ((if !added then (added := false; new_l @ [[seq_list']])
@@ -934,10 +990,15 @@ let separate_mem_operations l =
         ) [] par_list
     ) l
 
-(* let print_nested = print_list (print_list (print_list (fun a b -> fprintf a "%d" b))) *)
+let print_list_curly f out_chan a =
+  fprintf out_chan "{ ";
+  List.iter (fprintf out_chan "%a " f) a;
+  fprintf out_chan "}"
+
+let print_nested = print_list (print_list_curly (print_list (fun a b -> fprintf a "%d" b)))
 
 (* let _ = *)
-(*   printf "%a\n" print_nested (separate_mem_operations [[[1]; [3]; [3]; [2]; [3]; [2]]]) *)
+(*   printf "%a\n" print_nested (separate_mem_operations [[[1]; [1; 3]; [3]; [2]; [3]; [2]]]) *)
 
 (** Should generate the [RTLPar] code based on the input [RTLBlock] description. *)
 let transf_rtlpar c c' schedule =
@@ -982,15 +1043,17 @@ let transf_rtlpar c c' schedule =
 let schedule entry (c : GibleSeq.code) =
   let debug = true in
   let transf_graph (_, dfg, _) = dfg in
+  let _ = PTree.map1 gather_multiply_destinations c in
+  (* SS.iter (fun a -> Printf.printf "%s\n" (reg a)) !multiply_dest; *)
   let c' = PTree.map1 (fun x -> gather_bb_constraints false x |> transf_graph) c in
   (*let _ = if debug then PTree.map (fun r o -> printf "##### %d #####\n%a\n\n" (P.to_int r) print_dfg o) c' else PTree.empty in*)
   let cgraph = PTree.elements c'
                |> List.map (function (x, y) -> (P.to_int x, y))
                |> List.fold_left (gather_cfg_constraints c) G.empty
   in
-  let graph = open_out "constr_graph.dot" in
-  fprintf graph "%a\n" GDot.output_graph cgraph;
-  close_out graph;
+  (* let graph = open_out "constr_graph.dot" in *)
+  (* fprintf graph "%a\n" GDot.output_graph cgraph; *)
+  (* close_out graph; *)
   let schedule' = solve_constraints cgraph in
   (**IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
   (**printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)

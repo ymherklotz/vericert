@@ -45,7 +45,7 @@ proc dump_statistics {  } {
     set design_req 0
   } else {
     set design_slack [get_property SLACK $Timing_Paths]
-    set design_req [get_property REQUIREMENT  $Timing_Paths]
+    set design_req 10
   }
   if { [expr {$design_slack == ""}] } {
     set design_slack 0
