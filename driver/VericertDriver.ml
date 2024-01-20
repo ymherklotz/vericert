@@ -68,7 +68,6 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintGibleSeq.destination option_dgblseq ".gblseq";
   set_dest Vericert.PrintGiblePar.destination option_dgblpar ".gblpar";
   set_dest Vericert.PrintGibleSubPar.destination option_dgblsubpar ".gblsubpar";
-  set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
   set_dest Vericert.PrintDHTL.destination option_ddhtl ".dhtl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
@@ -97,7 +96,7 @@ let compile_c_file sourcename ifile ofile =
     let verilog =
       let translation = if !option_hls_schedule
                         then Vericert.Compiler0.transf_hls
-                        else Vericert.Compiler0.transf_hls_temp
+                        else Vericert.Compiler0.transf_hls
       in
       (* let _ = Vericert.Smtpredicate.check_smt (Vericert.Predicate0.Pimp ((Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)),(Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)))) in *)
       match translation csyntax with

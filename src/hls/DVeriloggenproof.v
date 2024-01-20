@@ -17,7 +17,7 @@
  *)
 
 From compcert Require Import Smallstep Linking Integers Globalenvs.
-From vericert Require HTL.
+From vericert Require DHTL.
 From vericert Require Import Vericertlib DVeriloggen Verilog ValueInt AssocMap.
 Require Import Lia.
 

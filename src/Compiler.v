@@ -78,9 +78,6 @@ Require Debugvarproof.
 Require Stackingproof.
 Require Asmgenproof.
 Require vericert.hls.Verilog.
-Require vericert.hls.Veriloggen.
-Require vericert.hls.Veriloggenproof.
-Require vericert.hls.HTLgen.
 Require vericert.hls.GibleSeq.
 Require vericert.hls.GibleSeqgen.
 Require vericert.hls.GibleSeqgenproof.
@@ -100,7 +97,6 @@ Require vericert.hls.DeadBlocks.
 Require vericert.hls.DeadBlocksproof.
 (*Require vericert.hls.PipelineOp.*)
 Require vericert.HLSOpts.
-Require vericert.hls.Memorygen.
 Require vericert.hls.DMemorygen.
 Require vericert.hls.ClockRegisters.
 Require vericert.hls.ClockMemory.
@@ -120,7 +116,6 @@ intermediate steps in the compilation, such as ``print_RTL``, ``print_HTL`` and
 |*)
 
 Parameter print_RTL: Z -> RTL.program -> unit.
-Parameter print_HTL: Z -> HTL.program -> unit.
 Parameter print_DHTL: Z -> DHTL.program -> unit.
 Parameter print_GibleSeq: Z -> GibleSeq.GibleSeq.program -> unit.
 Parameter print_GiblePar: Z -> GiblePar.GiblePar.program -> unit.
@@ -250,52 +245,6 @@ An optimised transformation function from ``RTL`` to ``Verilog`` can then be
 defined, which applies the front end compiler optimisations of CompCert to the
 RTL that is generated and then performs the two Vericert passes from RTL to HTL
 and then from HTL to Verilog.
-|*)
-
-Definition transf_backend (r : RTL.program) : res Verilog.program :=
-  OK r
-  @@@ Inlining.transf_program
-   @@ print (print_RTL 1)
-   @@ Renumber.transf_program
-   @@ print (print_RTL 2)
-   @@ total_if Compopts.optim_constprop
-      (time "Constant propagation" Constprop.transf_program)
-   @@ print (print_RTL 3)
-   @@ total_if Compopts.optim_constprop
-      (time "Renumbering" Renumber.transf_program)
-   @@ print (print_RTL 4)
-  @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
-   @@ print (print_RTL 5)
-  @@@ partial_if Compopts.optim_redundancy
-      (time "Redundancy elimination" Deadcode.transf_program)
-   @@ print (print_RTL 6)
-  @@@ time "Unused globals" Unusedglob.transform_program
-   @@ print (print_RTL 7)
-  @@@ HTLgen.transl_program
-   @@ print (print_HTL 0)
-  @@ total_if HLSOpts.optim_ram Memorygen.transf_program
-   @@ print (print_HTL 1)
-   @@ Veriloggen.transl_program.
-
-(*|
-The transformation functions from RTL to Verilog are then added to the backend
-of the CompCert transformations from Clight to RTL.
-|*)
-
-Definition transf_hls_temp (p : Csyntax.program) : res Verilog.program :=
-  OK p
-  @@@ SimplExpr.transl_program
-  @@@ SimplLocals.transf_program
-  @@@ Cshmgen.transl_program
-  @@@ Cminorgen.transl_program
-  @@@ Selection.sel_program
-  @@@ RTLgen.transl_program
-   @@ print (print_RTL 0)
-  @@@ transf_backend.
-
-(*|
-This is an unverified version of transf_hls with some experimental additions
-such as scheduling that aren't completed yet.
 |*)
 
 Definition transf_hls3 p :=

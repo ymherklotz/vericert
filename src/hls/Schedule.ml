@@ -31,11 +31,8 @@ open GibleSeq
 open GibleSeq
 open GiblePar
 open GiblePar
-open HTL
+open DHTL
 open Verilog
-open HTLgen
-open HTLMonad
-open HTLMonadExtra
 
 module SS = Set.Make(P)
 

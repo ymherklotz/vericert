@@ -23,7 +23,6 @@ From vericert Require
      GibleSeq
      GiblePar
      Gible
-     HTLgen
      (*Pipeline*)
      HLSOpts
      Predicate
@@ -152,7 +151,6 @@ Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_GibleSeq => "PrintGibleSeq.print_if".
 Extract Constant Compiler.print_GiblePar => "PrintGiblePar.print_if".
 Extract Constant Compiler.print_GibleSubPar => "PrintGibleSubPar.print_if".
-Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
 Extract Constant Compiler.print_DHTL => "PrintDHTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
@@ -203,9 +201,7 @@ Set Extraction AccessOpaque.
 Cd "src/extraction".
 Separate Extraction
          Verilog.module vericert.Compiler.transf_hls
-         vericert.Compiler.transf_hls_temp
          GibleSeqgen.transl_program Gible.successors_instr
-         HTLgen.tbl_to_case_expr
          Predicate.sat_pred_simple
          Verilog.stmnt_to_list
          Bourdoncle.bourdoncle
