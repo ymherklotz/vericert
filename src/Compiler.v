@@ -184,18 +184,6 @@ Proof.
 - red; intros. subst tp1 tp2. exists p; auto.
 Qed.
 
-(* Global Instance TransfIfLink {A: Type} {LA: Linker A} *)
-(*                       (transf: A -> A -> Prop) (TL: TransfLink transf) *)
-(*                       : TransfLink (match_rep transf). *)
-(* Admitted. *)
-
-(* Lemma total_rep_match: *)
-(*   forall (A B: Type) (n: list B) (f: A -> B -> A) *)
-(*          (rel: A -> A -> Prop) (prog: A), *)
-(*     (forall b p, rel p (f p b)) -> *)
-(*   match_rep rel prog (fold_left f n prog). *)
-(* Proof. Admitted. *)
-
 Lemma total_if_match:
   forall (A: Type) (flag: unit -> bool) (f: A -> A)
          (rel: A -> A -> Prop) (prog: A),

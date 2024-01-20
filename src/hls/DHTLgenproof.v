@@ -2364,49 +2364,6 @@ Proof.
   eapply PTree.elements_correct; eauto.
 Qed.
 
-  (* Lemma lt_max_resources_in_block : *)
-  (*   forall bb a pc x x0, *)
-  (*     In x (concat bb) -> *)
-  (*     In x0 (pred_uses x) -> *)
-  (*     Ple x0 (max_pred_block a pc bb). *)
-  (* Proof.  *)
-  (*   induction bb. *)
-  (*   - intros. cbn in *. inv H. *)
-  (*   - intros. cbn in *. *)
-
-  (* Lemma lt_max_resources_lt_a : *)
-  (*   forall bb x x0 a k v, *)
-  (*     In x (concat bb) -> *)
-  (*     In x0 (pred_uses x) -> *)
-  (*     Ple x0 a -> *)
-  (*     Ple x0 (max_pred_block a k v). *)
-  (* Proof. Admitted. *)
-
-  (* Definition inductive_p final fld := *)
-  (*   forall pc bb,  *)
-  (*     final ! pc = Some bb -> *)
-  (*     Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 fld) (pred_uses i0)) (concat bb). *)
-
-  (* Lemma lt_max_resource_predicate_Forall : *)
-  (*   forall f pc bb, *)
-  (*   f.(GibleSubPar.fn_code) ! pc = Some bb -> *)
-  (*   Forall (fun i0 : instr => Forall (fun x2 : positive => Ple x2 (max_pred_function f)) (pred_uses i0)) (concat bb). *)
-  (* Proof. *)
-  (*   unfold max_pred_function. *)
-  (*   intro f.  *)
-  (*   match goal with |- ?g => replace g with (inductive_p (fn_code f) (PTree.fold max_pred_block (fn_code f) 1%positive)) by auto end. *)
-  (*   eapply PTree_Properties.fold_rec; unfold inductive_p; intros; cbn in *. *)
-  (*   - eapply H0. erewrite H. eauto. *)
-  (*   - now rewrite PTree.gempty in H. *)
-  (*   - destruct (peq k pc); subst. *)
-  (*     + rewrite PTree.gss in H2. inv H2. *)
-  (*       eapply Forall_forall; intros. eapply Forall_forall; intros. eauto using lt_max_resources_in_block. *)
-  (*     + rewrite PTree.gso in H2 by auto. *)
-  (*       eapply H1 in H2. eapply Forall_forall; intros. eapply Forall_forall; intros. *)
-  (*       eapply Forall_forall in H2; eauto. eapply Forall_forall in H2; eauto. *)
-  (*       eauto using lt_max_resources_lt_a. *)
-  (* Qed. *)
-
   Lemma lt_max_resource_predicate_Forall :
     forall f pc bb,
     f.(GibleSubPar.fn_code) ! pc = Some bb ->
