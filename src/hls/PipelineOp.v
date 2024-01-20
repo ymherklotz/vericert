@@ -34,7 +34,7 @@ Require Import vericert.hls.FunctionalUnits.
 Require Import vericert.common.Monad.
 
 Module OptionExtra := MonadExtra(Option).
-Import OptionExtra.MonadNotation.
+(*Import OptionExtra.MonadNotation.*)
 
 Local Open Scope positive.
 

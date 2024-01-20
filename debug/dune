@@ -1,0 +1,6 @@
+(include_subdirs no)
+
+(executable
+ (name VericertTest)
+ (libraries vericert)
+ (flags (:standard -warn-error -A -w -8-9-16-20-26-27-32..36-39-41-44..45-50-60-67)))

@@ -441,7 +441,14 @@ Inductive expr_runp : fext -> assocmap -> assocmap_arr -> expr -> value -> Prop 
       expr_runp fext reg stack c vc ->
       expr_runp fext reg stack fs vf ->
       valueToBool vc = false ->
-      expr_runp fext reg stack (Vternary c ts fs) vf.
+      expr_runp fext reg stack (Vternary c ts fs) vf
+  | erun_Vrange :
+      forall fext reg stack r e1 e2 v vc vres b,
+      expr_runp fext reg stack e1 vc ->
+      reg#r = v ->
+      Int.testbit v (Int.unsigned vc) = b ->
+      vres = boolToValue b ->
+      expr_runp fext reg stack (Vrange r e1 e2) vres.
 #[export] Hint Constructors expr_runp : verilog.
 
 Definition handle_opt {A : Type} (err : errmsg) (val : option A)
@@ -681,6 +688,15 @@ Fixpoint stmnt_to_list st :=
   | Stmntnil => nil
   end.
 
+  Lemma int_inj :
+    forall x y,
+      Int.unsigned x = Int.unsigned y ->
+      x = y.
+  Proof.
+    intros. rewrite <- Int.repr_unsigned at 1. rewrite <- Int.repr_unsigned.
+    rewrite <- H. trivial.
+  Qed.
+
 Lemma expr_runp_determinate :
   forall f e asr asa v,
   expr_runp f asr asa e v ->
@@ -691,14 +707,14 @@ Proof.
   induction e; intros;
 
   repeat (try match goal with
-              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => invert H
-              | [ H : expr_runp _ _ _ (Vrange _ _ _) _ |- _ ] => invert H
+              | [ H : expr_runp _ _ _ (Vlit _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vvar _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vvari _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vinputvar _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vbinop _ _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vunop _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vternary _ _ _) _ |- _ ] => inv H
+              | [ H : expr_runp _ _ _ (Vrange _ _ _) _ |- _ ] => inv H
 
               | [ H1 : forall asr asa v, expr_runp _ asr asa ?e v -> _,
                   H2 : expr_runp _ _ _ ?e _ |- _ ] =>
@@ -720,7 +736,7 @@ Proof.
   induction 1; intros;
 
   repeat (try match goal with
-              | [ H : location_is _ _ _ _ _ |- _ ] => invert H
+              | [ H : location_is _ _ _ _ _ |- _ ] => inv H
               | [ H1 : expr_runp _ ?asr ?asa ?e _,
                   H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
                 learn (expr_runp_determinate H1 H2)
@@ -736,13 +752,13 @@ Lemma stmnt_runp_determinate :
   induction 1; intros;
 
   repeat (try match goal with
-             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ |- _ ] => invert H
-             | [ H : stmnt_runp _ _ _ (Vcase _ Stmntnil  _) _ _ |- _ ] => invert H
+             | [ H : stmnt_runp _ _ _ (Vseq _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vnonblock _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vblock _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ Vskip _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vcond _ _ _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vcase _ (Stmntcons _ _ _) _) _ _ |- _ ] => inv H
+             | [ H : stmnt_runp _ _ _ (Vcase _ Stmntnil  _) _ _ |- _ ] => inv H
 
              | [ H1 : expr_runp _ ?asr ?asa ?e _,
                  H2 : expr_runp _ ?asr ?asa ?e _ |- _ ] =>
@@ -766,7 +782,7 @@ Lemma mi_stepp_determinate :
   mi_stepp f asr0 asa0 m asr1' asa1' ->
   asr1' = asr1 /\ asa1' = asa1.
 Proof.
-  intros. destruct m; invert H; invert H0;
+  intros. destruct m; inv H; inv H0;
 
   repeat (try match goal with
               | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
@@ -782,7 +798,7 @@ Lemma mi_stepp_negedge_determinate :
   mi_stepp_negedge f asr0 asa0 m asr1' asa1' ->
   asr1' = asr1 /\ asa1' = asa1.
 Proof.
-  intros. destruct m; invert H; invert H0;
+  intros. destruct m; inv H; inv H0;
 
   repeat (try match goal with
               | [ H1 : stmnt_runp _ ?asr0 ?asa0 ?s _ _,
@@ -801,8 +817,8 @@ Proof.
   induction 1; intros;
 
   repeat (try match goal with
-              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] => invert H
-              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+              | [ H : mis_stepp _ _ _ [] _ _ |- _ ] => inv H
+              | [ H : mis_stepp _ _ _ ( _ :: _ ) _ _ |- _ ] => inv H
 
               | [ H1 : mi_stepp _ ?asr0 ?asa0 ?s _ _,
                   H2 : mi_stepp _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
@@ -824,8 +840,8 @@ Proof.
   induction 1; intros;
 
   repeat (try match goal with
-              | [ H : mis_stepp_negedge _ _ _ [] _ _ |- _ ] => invert H
-              | [ H : mis_stepp_negedge _ _ _ ( _ :: _ ) _ _ |- _ ] => invert H
+              | [ H : mis_stepp_negedge _ _ _ [] _ _ |- _ ] => inv H
+              | [ H : mis_stepp_negedge _ _ _ ( _ :: _ ) _ _ |- _ ] => inv H
 
               | [ H1 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _,
                   H2 : mi_stepp_negedge _ ?asr0 ?asa0 ?s _ _ |- _ ] =>
@@ -841,15 +857,15 @@ Lemma semantics_determinate :
   forall (p: program), Smallstep.determinate (semantics p).
 Proof.
   intros. constructor; set (ge := Globalenvs.Genv.globalenv p); simplify.
-  - invert H; invert H0; constructor. (* Traces are always empty *)
-  - invert H; invert H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
+  - inv H; inv H0; constructor. (* Traces are always empty *)
+  - inv H; inv H0; crush. assert (f = f0) by (destruct f; destruct f0; auto); subst.
     pose proof (mis_stepp_determinate H5 H15). simplify. inv H0. inv H4.
     pose proof (mis_stepp_negedge_determinate H6 H17).
     crush.
-  - constructor. invert H; crush.
-  - invert H; invert H0; unfold ge0, ge1 in *; crush.
-  - red; simplify; intro; invert H0; invert H; crush.
-  - invert H; invert H0; crush.
+  - constructor. inv H; crush.
+  - inv H; inv H0; unfold ge0, ge1 in *; crush.
+  - red; simplify; intro; inv H0; inv H; crush.
+  - inv H; inv H0; crush.
 Qed.
 
 Local Open Scope positive.
@@ -888,3 +904,72 @@ with max_reg_stmnt_expr_list (stl: stmnt_expr_list) :=
             (Pos.max (max_reg_stmnt s)
                      (max_reg_stmnt_expr_list stl'))
   end.
+
+Definition combine_reg (r1 r2 : option unit) := 
+  match r1, r2 with
+  | Some _, _ => Some tt
+  | _, Some _ => Some tt
+  | _, _ => None
+  end.
+
+Import Maps.
+
+Fixpoint all_reg_expr (e: expr): PTree.t unit :=
+  match e with
+  | Vlit _ => PTree.empty _
+  | Vvar r => PTree.set r tt (PTree.empty _)
+  | Vvari r e => all_reg_expr e
+  | Vrange r e1 e2 => PTree.set r tt (PTree.empty _)
+  | Vinputvar r => PTree.empty _
+  | Vbinop _ e1 e2 => PTree.combine combine_reg (all_reg_expr e1) (all_reg_expr e2)
+  | Vunop _ e => all_reg_expr e
+  | Vternary e1 e2 e3 => 
+    PTree.combine combine_reg (all_reg_expr e1) (PTree.combine combine_reg (all_reg_expr e2) (all_reg_expr e3))
+  end.
+
+Fixpoint all_reg_stmnt (st: stmnt): PTree.t unit :=
+  match st with
+  | Vskip => PTree.empty _
+  | Vseq s1 s2 => PTree.combine combine_reg (all_reg_stmnt s1) (all_reg_stmnt s2)
+  | Vcond e s1 s2 =>
+    PTree.combine combine_reg (all_reg_expr e) (PTree.combine combine_reg (all_reg_stmnt s1) (all_reg_stmnt s2))
+  | Vcase e stl None => PTree.combine combine_reg (all_reg_expr e) (all_reg_stmnt_expr_list stl)
+  | Vcase e stl (Some s) =>
+    PTree.combine combine_reg (all_reg_stmnt s)
+            (PTree.combine combine_reg (all_reg_expr e) (all_reg_stmnt_expr_list stl))
+  | Vblock e1 e2 => PTree.combine combine_reg (all_reg_expr e1) (all_reg_expr e2)
+  | Vnonblock e1 e2 => PTree.combine combine_reg (all_reg_expr e1) (all_reg_expr e2)
+  end
+with all_reg_stmnt_expr_list (stl: stmnt_expr_list) :=
+  match stl with
+  | Stmntnil => PTree.empty _
+  | Stmntcons e s stl' =>
+    PTree.combine combine_reg (all_reg_expr e)
+            (PTree.combine combine_reg (all_reg_stmnt s)
+                     (all_reg_stmnt_expr_list stl'))
+  end.
+
+Fixpoint all_reg_edge (e: edge): PTree.t unit :=
+  match e with
+  | Vposedge r => PTree.set r tt (PTree.empty _)
+  | Vnegedge r => PTree.set r tt (PTree.empty _)
+  | Valledge => PTree.empty _
+  | Voredge e1 e2 => PTree.combine combine_reg (all_reg_edge e1) (all_reg_edge e2)
+  end.
+
+Definition all_reg_module_item (m: module_item): PTree.t unit :=
+  match m with
+  | Vdeclaration d => PTree.empty _
+  | Valways e s
+  | Valways_ff e s
+  | Valways_comb e s => PTree.combine combine_reg (all_reg_edge e) (all_reg_stmnt s)
+  end.
+
+Definition all_reg_module_item_l (ml: list module_item): PTree.t unit :=
+  List.fold_left (fun a b => PTree.combine combine_reg a (all_reg_module_item b)) ml (PTree.empty _).
+
+Definition all_reg_to_declaration (tree: PTree.t unit): list declaration :=
+  PTree.fold (fun ml p _ => Vdecl None p 32 :: ml) tree nil.
+
+Definition all_reg_declarations (rem: list positive) (ml: list module_item): list declaration :=
+  all_reg_to_declaration (List.fold_left (fun a b => PTree.remove b a) rem (all_reg_module_item_l ml)).

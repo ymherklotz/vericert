@@ -35,10 +35,9 @@ Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.Predicate.
 Require Import vericert.bourdoncle.Bourdoncle.
 
-Definition if_conv_t : Type := PTree.t (list (node * node)).
+Definition if_conv_t : Type := list (node * node).
 
 Parameter build_bourdoncle : function -> (bourdoncle * PMap.t N).
-Parameter get_if_conv_t : program -> list if_conv_t.
 
 #[local] Open Scope positive.
 
@@ -99,13 +98,36 @@ Definition no_predicated_store bb :=
   | _ => false
   end.
 
-Definition decide_if_convert b_next :=
-  (length b_next <=? 50)%nat && no_predicated_store b_next.
+Definition gather_set_predicate (l: list positive) (i: instr): list positive :=
+  match i with
+  | RBsetpred _ _ _ p => p::l
+  | _ => l
+  end.
+
+Definition gather_all_set_predicate i :=
+  fold_left gather_set_predicate i nil.
+
+Definition gather_rbgoto (l: list positive) (i: instr): list positive :=
+  match i with
+  | RBexit _ (RBgoto p) => p::l
+  | _ => l
+  end.
+
+Definition gather_all_rbgoto i :=
+  fold_left gather_rbgoto i nil.
+
+Definition distinct_lists (l1 l2: list positive): bool :=
+  forallb (fun x => negb (existsb (Pos.eqb x) l2)) l1.
+
+Definition decide_if_convert b_main b_next :=
+  (length b_next <=? 50)%nat (* && no_predicated_store b_next *)
+  && distinct_lists (gather_all_set_predicate b_main) (gather_all_set_predicate b_next)
+  && distinct_lists (gather_all_rbgoto b_main) (gather_all_rbgoto b_next).
 
 Definition if_convert (orig_c c: code) (main next: node) :=
   match orig_c ! main, orig_c ! next with
   | Some b_main, Some b_next =>
-      if decide_if_convert b_next then
+      if decide_if_convert b_main b_next then
         PTree.set main (snd (replace_section (wrap_unit (if_convert_block next b_next)) tt b_main)) c
       else c
   | _, _ => c
@@ -225,7 +247,7 @@ Definition ifconv_list (headers: list node) (c: code) :=
 Definition if_convert_code (c: code) iflist :=
   fold_left (fun s n => if_convert c s (fst n) (snd n)) iflist c.
 
-Definition transf_function (l: if_conv_t) (i: ident) (f: function) : function :=
+Definition transf_function (f: function) : function :=
   let (b, _) := build_bourdoncle f in
   let b' := get_loops b in
   let iflist := ifconv_list b' f.(fn_code) in
@@ -235,28 +257,25 @@ Definition transf_function (l: if_conv_t) (i: ident) (f: function) : function :=
 
 Section TRANSF_PROGRAM.
 
-  Context {A B V: Type}.
-  Variable transf: ident -> A -> B.
+  Context {A B V DATA: Type}.
+  Variable transf: option DATA -> A -> B.
 
-  Definition transform_program_globdef' (idg: ident * globdef A V) : ident * globdef B V :=
+  Definition transform_program_globdef' (data: PTree.t DATA) (idg: ident * globdef A V) : ident * globdef B V :=
     match idg with
-    | (id, Gfun f) => (id, Gfun (transf id f))
+    | (id, Gfun f) => (id, Gfun (transf (data!id) f))
     | (id, Gvar v) => (id, Gvar v)
     end.
 
-  Definition transform_program' (p: AST.program A V) : AST.program B V :=
+  Definition transform_program_data (data: PTree.t DATA) (p: AST.program A V) : AST.program B V :=
     mkprogram
-      (List.map transform_program_globdef' p.(prog_defs))
+      (List.map (transform_program_globdef' data) p.(prog_defs))
       p.(prog_public)
           p.(prog_main).
 
 End TRANSF_PROGRAM.
 
-Definition transf_fundef (l: if_conv_t) (i: ident) (fd: fundef) : fundef :=
-  transf_fundef (transf_function l i) fd.
-
-Definition transf_program_rec (p: program) (l: if_conv_t) : program :=
-  transform_program' (transf_fundef l) p.
+Definition transf_fundef (fd: fundef) : fundef :=
+  transf_fundef transf_function fd.
 
 Definition transf_program (p: program) : program :=
-  fold_left transf_program_rec (get_if_conv_t p) p.
+  transform_program transf_fundef p.

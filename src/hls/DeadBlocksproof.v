@@ -3,30 +3,32 @@ both that the transformation ensures that generated functions are
 satisfying the predicate [wf_dfs_function] and that the transformation
 preserves the semantics. *)
 
-Require Recdef.
-Require Import FSets.
-Require Import Coqlib.
-Require Import Ordered.
-Require Import Errors.
-Require Import Maps.
-Require Import AST.
-Require Import Integers.
-Require Import Values.
-Require Import Globalenvs.
-Require Import Op.
-Require Import Registers.
-Require Import Smallstep.
-Require Import DeadBlocks.
-Require Import Kildall.
-Require Import Conventions.
-Require Import Integers.
-Require Import Floats.
-Require Import Utils.
-Require Import Events.
-Require Import Gible.
-Require Import GibleSeq.
-Require Import Relation_Operators.
-Require Import Vericertlib.
+From Coq Require funind.Recdef.
+From Coq Require Import FSets.FSets.
+From Coq Require Import Program.Utils.
+From Coq Require Import Relation_Operators.
+
+From compcert Require Import Errors.
+From compcert Require Import Maps.
+From compcert Require Import AST.
+From compcert Require Import Integers.
+From compcert Require Import Values.
+From compcert Require Import Globalenvs.
+From compcert Require Import Op.
+From compcert Require Import Registers.
+From compcert Require Import Smallstep.
+From compcert Require Import Kildall.
+From compcert Require Import Conventions.
+From compcert Require Import Integers.
+From compcert Require Import Floats.
+From compcert Require Import Events.
+From compcert Require Import Ordered.
+From compcert Require Import Coqlib.
+
+From vericert Require Import DeadBlocks.
+From vericert Require Import Gible.
+From vericert Require Import GibleSeq.
+From vericert Require Import Vericertlib.
 
 Unset Allow StrictProp.
 
@@ -368,7 +370,7 @@ Proof.
   destruct stack; inv HH9.
   assert (forall j : node, (cfg code **) entry j -> In j seen); intros.
   elim (iter_hh7 seen nil HH7 entry j); auto.
-  destruct 1; intuition.
+  destruct 1; intuition auto with *.
   split; auto.
   intros.
   rewrite PTree.gcombine; auto.
@@ -391,7 +393,7 @@ Proof.
   destruct stack; inv HH9.
   assert (forall j : node, (cfg code **) entry j -> In j seen); intros.
   elim (iter_hh7 seen nil HH7 entry j); auto.
-  destruct 1; intuition.
+  destruct 1; intuition auto with *.
   split; auto.
   intros.
   rewrite PTree.gcombine; auto.
@@ -544,7 +546,7 @@ Proof.
   elim H.
 
   intros.
-  elim not_seen_sons_prop6 with (1:=TT) (i0:=i); auto with datatypes.
+  eelim not_seen_sons_prop6 with (1:=TT) (i:=i); auto with datatypes.
   rewrite PTree.gsspec; destruct peq; subst; intros; auto with datatypes.
   rewrite PTree.gempty in H0; congruence.
 
@@ -925,14 +927,16 @@ Proof.
 
   eexists ; split ; eauto. constructor; eauto with valagree.
   constructor; eauto. constructor; eauto. try_succ f pc pc'; eauto.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   exploit spec_ros_id_find_function ; eauto.
   intros. destruct H5 as [tf' [Hfind OKtf']].
 
   eexists ; split ; eauto. constructor; eauto with valagree.
   constructor; eauto. constructor; eauto. try_succ f pc pc'; eauto.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (*itailcall*)
   destruct ros.
@@ -960,7 +964,8 @@ Proof.
   eapply external_call_symbols_preserved; eauto with valagree.
 
   constructor; auto. try_succ f pc pc'.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (* ifso *)
   destruct b.
@@ -968,14 +973,16 @@ Proof.
   eapply exec_RBcond ; eauto.
   constructor; auto.
   try_succ f pc ifso.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (*ifnot*)
   exists (State stk' tf sp ifnot rs pr m); split ; eauto.
   eapply exec_RBcond ; eauto.
   constructor; auto.
   try_succ f pc ifnot.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 
   (* ijump *)
   exists (State stk' tf sp pc' rs pr m); split ; eauto.
@@ -995,7 +1002,8 @@ Proof.
   eapply exec_RBgoto; eauto.
   constructor; auto.
   try_succ f pc pc'.
-  eapply in_cf_all_successors; eauto; cbn [successors_instr]; intuition.
+  eapply in_cf_all_successors; eauto; cbn [successors_instr];
+  intuition auto with *.
 Qed.
 
 Lemma transl_step_correct:

@@ -49,7 +49,7 @@ let nolink () =
 
 let object_filename sourcename suff =
   if nolink () then
-    output_filename ~final: !option_c sourcename suff ".o"
+    output_filename ~final: !option_c sourcename ~suffix:suff
   else
     tmp_file ".o"
 
@@ -58,7 +58,7 @@ let object_filename sourcename suff =
 let compile_c_file sourcename ifile ofile =
   (* Prepare to dump Clight, RTL, etc, if requested *)
   let set_dest dst opt ext =
-    dst := if !opt then Some (output_filename sourcename ".c" ext)
+    dst := if !opt then Some (output_filename sourcename ~suffix:ext)
       else None in
   set_dest Vericert.Cprint.destination option_dparse ".parsed.c";
   set_dest Vericert.PrintCsyntax.destination option_dcmedium ".compcert.c";
@@ -67,7 +67,9 @@ let compile_c_file sourcename ifile ofile =
   set_dest Vericert.PrintRTL.destination option_drtl ".rtl";
   set_dest Vericert.PrintGibleSeq.destination option_dgblseq ".gblseq";
   set_dest Vericert.PrintGiblePar.destination option_dgblpar ".gblpar";
+  set_dest Vericert.PrintGibleSubPar.destination option_dgblsubpar ".gblsubpar";
   set_dest Vericert.PrintHTL.destination option_dhtl ".htl";
+  set_dest Vericert.PrintDHTL.destination option_ddhtl ".dhtl";
   set_dest Vericert.Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
   set_dest Vericert.PrintLTL.destination option_dltl ".ltl";
   set_dest Vericert.PrintMach.destination option_dmach ".mach";
@@ -94,13 +96,15 @@ let compile_c_file sourcename ifile ofile =
   end else begin
     let verilog =
       let translation = if !option_hls_schedule
-                        then Vericert.Compiler0.transf_hls_temp
-                        else Vericert.Compiler0.transf_hls
+                        then Vericert.Compiler0.transf_hls
+                        else Vericert.Compiler0.transf_hls_temp
       in
+      (* let _ = Vericert.Smtpredicate.check_smt (Vericert.Predicate0.Pimp ((Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)),(Vericert.Predicate0.Pbase (Vericert.Camlcoq.P.of_int 2)))) in *)
       match translation csyntax with
       | Vericert.Errors.OK v ->
-        v
+        if !Vericert.Cohpred.cohpred_counter > 0 then Printf.fprintf stderr "OK\n"; v
       | Vericert.Errors.Error msg ->
+        if !Vericert.Cohpred.cohpred_counter > 0 then Printf.fprintf stderr "OK\n";
         let loc = file_loc sourcename in
         fatal_error loc "%a"  print_error msg in
     let oc = open_out ofile in
@@ -118,12 +122,12 @@ let compile_i_file sourcename preproname =
         ""
   end else if !option_hls then begin
     compile_c_file sourcename preproname
-      (output_filename ~final:true sourcename ".c" ".v");
+      (output_filename ~final:true sourcename ~suffix:".v");
     ""
   end else begin
     let asmname =
       if !option_dasm
-      then output_filename sourcename ".c" ".s"
+      then output_filename sourcename ~suffix:".s"
       else tmp_file ".s" in
     compile_c_file sourcename preproname asmname;
     let objname = object_filename sourcename ".c" in
@@ -140,7 +144,7 @@ let process_c_file sourcename =
     ""
   end else begin
     let preproname = if !option_dprepro then
-      output_filename sourcename ".c" ".i"
+      output_filename sourcename ~suffix:".i"
     else
       tmp_file ".i" in
     preprocess sourcename preproname;
@@ -267,6 +271,7 @@ HLS Optimisations:
   -drtl          Save RTL at various optimization points in <file>.rtl.<n>
   -dgblseq       Save GibleSeq <file>.gblseq
   -dgblpar       Save GiblePar <file>.gblpar
+  -dgblsubpar    Save GibleSubPar <file>.gblsubpar
   -dhtl          Save HTL before Verilog generation <file>.htl
   -dltl          Save LTL after register allocation in <file>.ltl
   -dmach         Save generated Mach code in <file>.mach
@@ -395,6 +400,7 @@ let cmdline_actions =
   Exact "-dgblseq", Set option_dgblseq;
   Exact "-dgblpar", Set option_dgblpar;
   Exact "-dhtl", Set option_dhtl;
+  Exact "-ddhtl", Set option_ddhtl;
   Exact "-dltl", Set option_dltl;
   Exact "-dalloctrace", Set option_dalloctrace;
   Exact "-dmach", Set option_dmach;
@@ -408,7 +414,9 @@ let cmdline_actions =
     option_drtl := true;
     option_dgblseq := true;
     option_dgblpar := true;
+    option_dgblsubpar := true;
     option_dhtl := true;
+    option_ddhtl := true;
     option_dltl := true;
     option_dalloctrace := true;
     option_dmach := true;

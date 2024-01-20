@@ -1,6 +1,6 @@
 (*
  * Vericert: Verified high-level synthesis.
- * Copyright (C) 2020-2022 Yann Herklotz <yann@yannherklotz.com>
+ * Copyright (C) 2020-2023 Yann Herklotz <git@yannherklotz.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,795 +29,189 @@ Require Import vericert.common.Vericertlib.
 Require Import vericert.hls.GibleSeq.
 Require Import vericert.hls.GiblePar.
 Require Import vericert.hls.Gible.
+Require Import vericert.hls.GiblePargenproofEquiv.
 Require Import vericert.hls.GiblePargen.
 Require Import vericert.hls.Predicate.
 Require Import vericert.hls.Abstr.
 Require Import vericert.common.Monad.
+Require Import vericert.hls.GiblePargenproofForward.
+Require Import vericert.hls.GiblePargenproofBackward.
 
-Module OptionExtra := MonadExtra(Option).
-Import OptionExtra.
+Module Import OptionExtra := MonadExtra(Option).
 
 #[local] Open Scope positive.
 #[local] Open Scope forest.
 #[local] Open Scope pred_op.
 
-(*|
-==============
-RTLPargenproof
-==============
+#[local] Opaque simplify.
+#[local] Opaque deep_simplify.
 
-RTLBlock to abstract translation
-================================
+Ltac destr := destruct_match; try discriminate; [].
 
-Correctness of translation from RTLBlock to the abstract interpretation language.
-|*)
-
-Definition is_regs i := match i with mk_instr_state rs _ _ => rs end.
-Definition is_mem i := match i with mk_instr_state _ _ m => m end.
-Definition is_ps i := match i with mk_instr_state _ p _ => p end.
-
-Inductive state_lessdef : instr_state -> instr_state -> Prop :=
-  state_lessdef_intro :
-    forall rs1 rs2 ps1 ps2 m1,
-      (forall x, rs1 !! x = rs2 !! x) ->
-      (forall x, ps1 !! x = ps2 !! x) ->
-      state_lessdef (mk_instr_state rs1 ps1 m1) (mk_instr_state rs2 ps2 m1).
-
-Lemma state_lessdef_refl x : state_lessdef x x.
-Proof. destruct x; constructor; auto. Qed.
-
-Lemma state_lessdef_symm x y : state_lessdef x y -> state_lessdef y x.
-Proof. destruct x; destruct y; inversion 1; subst; simplify; constructor; auto. Qed.
-
-Lemma state_lessdef_trans :
-  forall a b c,
-    state_lessdef a b ->
-    state_lessdef b c ->
-    state_lessdef a c.
+Lemma equiv_update_top:
+  forall i p f l lm p' f' l' lm',
+    update_top (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update (p, f) i = Some (p', f').
 Proof.
-  inversion 1; inversion 1; subst; simplify.
-  constructor; eauto; intros. rewrite H0. auto.
+  intros. unfold update_top, Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. now inv H.
 Qed.
 
-#[global] Instance Equivalence_state_lessdef : Equivalence state_lessdef :=
-  { Equivalence_Reflexive := state_lessdef_refl;
-    Equivalence_Symmetric := state_lessdef_symm;
-    Equivalence_Transitive := state_lessdef_trans;
-  }.
-
-Definition check_dest i r' :=
-  match i with
-  | RBop p op rl r => (r =? r')%positive
-  | RBload p chunk addr rl r => (r =? r')%positive
-  | _ => false
-  end.
-
-Lemma check_dest_dec i r : {check_dest i r = true} + {check_dest i r = false}.
-Proof. destruct (check_dest i r); tauto. Qed.
-
-Fixpoint check_dest_l l r :=
-  match l with
-  | nil => false
-  | a :: b => check_dest a r || check_dest_l b r
-  end.
-
-Lemma check_dest_l_forall :
-  forall l r,
-  check_dest_l l r = false ->
-  Forall (fun x => check_dest x r = false) l.
-Proof. induction l; crush. Qed.
-
-Lemma check_dest_l_dec i r : {check_dest_l i r = true} + {check_dest_l i r = false}.
-Proof. destruct (check_dest_l i r); tauto. Qed.
-
-(* Lemma check_dest_update : *)
-(*   forall f f' i r, *)
-(*   check_dest i r = false -> *)
-(*   update (Some f) i = Some f' -> *)
-(*   (snd f') # (Reg r) = (snd f) # (Reg r). *)
-(* Proof. *)
-(*   destruct i; crush; try apply Pos.eqb_neq in H; unfold update; destruct_match; crush. *)
-(*   inv Heqp. *)
-(*   Admitted. *)
-
-(* Lemma check_dest_l_forall2 : *)
-(*   forall l r, *)
-(*   Forall (fun x => check_dest x r = false) l -> *)
-(*   check_dest_l l r = false. *)
-(* Proof. *)
-(*   induction l; crush. *)
-(*   inv H. apply orb_false_intro; crush. *)
-(* Qed. *)
-
-(* Lemma check_dest_l_ex2 : *)
-(*   forall l r, *)
-(*   (exists a, In a l /\ check_dest a r = true) -> *)
-(*   check_dest_l l r = true. *)
-(* Proof. *)
-(*   induction l; crush. *)
-(*   specialize (IHl r). inv H. *)
-(*   apply orb_true_intro; crush. *)
-(*   apply orb_true_intro; crush. *)
-(*   right. apply IHl. exists x. auto. *)
-(* Qed. *)
-
-(* Lemma check_list_l_false : *)
-(*   forall l x r, *)
-(*   check_dest_l (l ++ x :: nil) r = false -> *)
-(*   check_dest_l l r = false /\ check_dest x r = false. *)
-(* Proof. *)
-(*   simplify. *)
-(*   apply check_dest_l_forall in H. apply Forall_app in H. *)
-(*   simplify. apply check_dest_l_forall2; auto. *)
-(*   apply check_dest_l_forall in H. apply Forall_app in H. *)
-(*   simplify. inv H1. auto. *)
-(* Qed. *)
-
-(* Lemma check_dest_l_ex : *)
-(*   forall l r, *)
-(*   check_dest_l l r = true -> *)
-(*   exists a, In a l /\ check_dest a r = true. *)
-(* Proof. *)
-(*   induction l; crush. *)
-(*   destruct (check_dest a r) eqn:?; try solve [econstructor; crush]. *)
-(*   simplify. *)
-(*   exploit IHl. apply H. simplify. econstructor. simplify. right. eassumption. *)
-(*   auto. *)
-(* Qed. *)
-
-(* Lemma check_list_l_true : *)
-(*   forall l x r, *)
-(*   check_dest_l (l ++ x :: nil) r = true -> *)
-(*   check_dest_l l r = true \/ check_dest x r = true. *)
-(* Proof. *)
-(*   simplify. *)
-(*   apply check_dest_l_ex in H; simplify. *)
-(*   apply in_app_or in H. inv H. left. *)
-(*   apply check_dest_l_ex2. exists x0. auto. *)
-(*   inv H0; auto. *)
-(* Qed. *)
-
-(* Lemma check_dest_l_dec2 l r : *)
-(*   {Forall (fun x => check_dest x r = false) l} *)
-(*   + {exists a, In a l /\ check_dest a r = true}. *)
-(* Proof. *)
-(*   destruct (check_dest_l_dec l r); [right | left]; *)
-(*   auto using check_dest_l_ex, check_dest_l_forall. *)
-(* Qed. *)
-
-(* Lemma abstr_comp : *)
-(*   forall l i f x x0, *)
-(*   fold_left update (l ++ i :: nil) f = x -> *)
-(*   fold_left update l f = x0 -> *)
-(*   x = update x0 i. *)
-(* Proof. induction l; intros; crush; eapply IHl; eauto. Qed. *)
-
-(*
-
-Lemma gen_list_base:
-  forall FF ge sp l rs exps st1,
-  (forall x, @sem_value FF ge sp st1 (exps # (Reg x)) (rs !! x)) ->
-  sem_val_list ge sp st1 (list_translation l exps) rs ## l.
+Lemma equiv_update_top_inc:
+  forall i p f l lm p' f' l' lm',
+    update_top_inc (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update (p, f) i = Some (p', f').
 Proof.
-  induction l.
-  intros. simpl. constructor.
-  intros. simpl. eapply Scons; eauto.
+  intros. unfold update_top_inc, Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. now inv H.
 Qed.
 
-Lemma check_dest_update2 :
-  forall f r rl op p,
-  (update f (RBop p op rl r)) # (Reg r) = Eop op (list_translation rl f) (f # Mem).
-Proof. crush; rewrite map2; auto. Qed.
-
-Lemma check_dest_update3 :
-  forall f r rl p addr chunk,
-  (update f (RBload p chunk addr rl r)) # (Reg r) = Eload chunk addr (list_translation rl f) (f # Mem).
-Proof. crush; rewrite map2; auto. Qed.
-
-Lemma abstract_seq_correct_aux:
-  forall FF ge sp i st1 st2 st3 f,
-    @step_instr FF ge sp st3 i st2 ->
-    sem ge sp st1 f st3 ->
-    sem ge sp st1 (update f i) st2.
+Lemma remember_expr_eq :
+  forall l i f,
+    remember_expr f (map snd l) i = map snd (GiblePargen.remember_expr f l i).
 Proof.
-  intros; inv H; simplify.
-  { simplify; eauto. } (*apply match_states_refl. }*)
-  { inv H0. inv H6. destruct st1. econstructor. simplify.
-    constructor. intros.
-    destruct (resource_eq (Reg res) (Reg x)). inv e.
-    rewrite map2. econstructor. eassumption. apply gen_list_base; eauto.
-    rewrite Regmap.gss. eauto.
-    assert (res <> x). { unfold not in *. intros. apply n. rewrite H0. auto. }
-    rewrite Regmap.gso by auto.
-    rewrite genmap1 by auto. auto.
-
-    rewrite genmap1; crush. }
-  { inv H0. inv H7. constructor. constructor. intros.
-    destruct (Pos.eq_dec dst x); subst.
-    rewrite map2. econstructor; eauto.
-    apply gen_list_base. auto. rewrite Regmap.gss. auto.
-    rewrite genmap1. rewrite Regmap.gso by auto. auto.
-    unfold not in *; intros. inv H0. auto.
-    rewrite genmap1; crush.
-  }
-  { inv H0. inv H7. constructor. constructor; intros.
-    rewrite genmap1; crush.
-    rewrite map2. econstructor; eauto.
-    apply gen_list_base; auto.
-  }
+  induction l; destruct i; auto.
 Qed.
 
-Lemma regmap_list_equiv :
-  forall A (rs1: Regmap.t A) rs2,
-    (forall x, rs1 !! x = rs2 !! x) ->
-    forall rl, rs1##rl = rs2##rl.
-Proof. induction rl; crush. Qed.
-
-Lemma sem_update_Op :
-  forall A ge sp st f st' r l o0 o m rs v,
-  @sem A ge sp st f st' ->
-  Op.eval_operation ge sp o0 rs ## l m = Some v ->
-  match_states st' (mk_instr_state rs m) ->
-  exists tst,
-  sem ge sp st (update f (RBop o o0 l r)) tst /\ match_states (mk_instr_state (Regmap.set r v rs) m) tst.
+Lemma remember_expr_eq_inc :
+  forall l i f,
+    remember_expr_inc f (map snd l) i = map snd (GiblePargen.remember_expr_inc f l i).
 Proof.
-  intros. inv H1. simplify.
-  destruct st.
-  econstructor. simplify.
-  { constructor.
-    { constructor. intros. destruct (Pos.eq_dec x r); subst.
-      { pose proof (H5 r). rewrite map2. pose proof H. inv H. econstructor; eauto.
-        { inv H9. eapply gen_list_base; eauto. }
-        { instantiate (1 := (Regmap.set r v rs0)). rewrite Regmap.gss. erewrite regmap_list_equiv; eauto. } }
-      { rewrite Regmap.gso by auto. rewrite genmap1; crush. inv H. inv H7; eauto. } }
-    { inv H. rewrite genmap1; crush. eauto. } }
-  { constructor; eauto. intros.
-    destruct (Pos.eq_dec r x);
-    subst; [repeat rewrite Regmap.gss | repeat rewrite Regmap.gso]; auto. }
+  unfold remember_expr_inc, GiblePargen.remember_expr_inc.
+  induction l; destruct i; cbn; intros; repeat destruct_match; auto.
 Qed.
 
-Lemma sem_update_load :
-  forall A ge sp st f st' r o m a l m0 rs v a0,
-  @sem A ge sp st f st' ->
-  Op.eval_addressing ge sp a rs ## l = Some a0 ->
-  Mem.loadv m m0 a0 = Some v ->
-  match_states st' (mk_instr_state rs m0) ->
-  exists tst : instr_state,
-    sem ge sp st (update f (RBload o m a l r)) tst
-    /\ match_states (mk_instr_state (Regmap.set r v rs) m0) tst.
+Lemma equiv_update'_top:
+  forall i p f l lm p' f' l' lm',
+    update_top (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update' (p, f, map snd l, lm) i = Some (p', f', map snd l', lm').
 Proof.
-  intros. inv H2. pose proof H. inv H. inv H9.
-  destruct st.
-  econstructor; simplify.
-  { constructor.
-    { constructor. intros.
-      destruct (Pos.eq_dec x r); subst.
-      { rewrite map2. econstructor; eauto. eapply gen_list_base. intros.
-        rewrite <- H6. eauto.
-        instantiate (1 := (Regmap.set r v rs0)). rewrite Regmap.gss. auto. }
-      { rewrite Regmap.gso by auto. rewrite genmap1; crush. } }
-    { rewrite genmap1; crush. eauto. } }
-  { constructor; auto; intros. destruct (Pos.eq_dec r x);
-    subst; [repeat rewrite Regmap.gss | repeat rewrite Regmap.gso]; auto. }
+  intros. unfold update', update_top, Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. inv H. repeat f_equal. apply remember_expr_eq.
 Qed.
 
-Lemma sem_update_store :
-  forall A ge sp a0 m a l r o f st m' rs m0 st',
-  @sem A ge sp st f st' ->
-  Op.eval_addressing ge sp a rs ## l = Some a0 ->
-  Mem.storev m m0 a0 rs !! r = Some m' ->
-  match_states st' (mk_instr_state rs m0) ->
-  exists tst, sem ge sp st (update f (RBstore o m a l r)) tst
-              /\ match_states (mk_instr_state rs m') tst.
+Lemma equiv_update'_top_inc:
+  forall i p f l lm p' f' l' lm',
+    update_top_inc (p, f, l, lm) i = Some (p', f', l', lm') ->
+    update'_inc (p, f, map snd l, lm) i = Some (p', f', map snd l', lm').
 Proof.
-  intros. inv H2. pose proof H. inv H. inv H9.
-  destruct st.
-  econstructor; simplify.
-  { econstructor.
-    { econstructor; intros. rewrite genmap1; crush. }
-    { rewrite map2. econstructor; eauto. eapply gen_list_base. intros. rewrite <- H6.
-      eauto. specialize (H6 r). rewrite H6. eauto. } }
-  { econstructor; eauto. }
+  intros. unfold update'_inc, update_top_inc, Option.bind2, Option.ret in *. repeat destr.
+  inv Heqp1. inv H. repeat f_equal. apply remember_expr_eq_inc.
 Qed.
 
-Lemma sem_update :
-  forall A ge sp st x st' st'' st''' f,
-  sem ge sp st f st' ->
-  match_states st' st''' ->
-  @step_instr A ge sp st''' x st'' ->
-  exists tst, sem ge sp st (update f x) tst /\ match_states st'' tst.
+Lemma equiv_fold_update'_top:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update_top i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update' i (Some (p, f, map snd l, lm)) = Some (p', f', map snd l', lm').
 Proof.
-  intros. destruct x; inv H1.
-  { econstructor. split.
-    apply sem_update_RBnop. eassumption.
-    apply match_states_commut. auto. }
-  { eapply sem_update_Op; eauto. }
-  { eapply sem_update_load; eauto. }
-  { eapply sem_update_store; eauto. }
+  induction i; cbn -[update_top update'] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    exploit equiv_update'_top; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
 Qed.
 
-Lemma sem_update2_Op :
-  forall A ge sp st f r l o0 o m rs v,
-  @sem A ge sp st f (mk_instr_state rs m) ->
-  Op.eval_operation ge sp o0 rs ## l m = Some v ->
-  sem ge sp st (update f (RBop o o0 l r)) (mk_instr_state (Regmap.set r v rs) m).
+Lemma equiv_fold_update'_top_inc:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update_top_inc i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update'_inc i (Some (p, f, map snd l, lm)) = Some (p', f', map snd l', lm').
 Proof.
-  intros. destruct st. constructor.
-  inv H. inv H6.
-  { constructor; intros. simplify.
-    destruct (Pos.eq_dec r x); subst.
-    { rewrite map2. econstructor. eauto.
-      apply gen_list_base. eauto.
-      rewrite Regmap.gss. auto. }
-    { rewrite genmap1; crush. rewrite Regmap.gso; auto.  } }
-  { simplify. rewrite genmap1; crush. inv H. eauto. }
+  induction i; cbn -[update_top_inc update'_inc] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    exploit equiv_update'_top_inc; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
 Qed.
 
-Lemma sem_update2_load :
-  forall A ge sp st f r o m a l m0 rs v a0,
-    @sem A ge sp st f (mk_instr_state rs m0) ->
-    Op.eval_addressing ge sp a rs ## l = Some a0 ->
-    Mem.loadv m m0 a0 = Some v ->
-    sem ge sp st (update f (RBload o m a l r)) (mk_instr_state (Regmap.set r v rs) m0).
+Lemma equiv_fold_update_top:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update_top i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update i (Some (p, f)) = Some (p', f').
 Proof.
-  intros. simplify. inv H. inv H7. constructor.
-  { constructor; intros. destruct (Pos.eq_dec r x); subst.
-    { rewrite map2. rewrite Regmap.gss. econstructor; eauto.
-      apply gen_list_base; eauto. }
-    { rewrite genmap1; crush. rewrite Regmap.gso; eauto. }
-  }
-  { simplify. rewrite genmap1; crush. }
+  induction i; cbn -[update_top update] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    exploit equiv_update_top; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
 Qed.
 
-Lemma sem_update2_store :
-  forall A ge sp a0 m a l r o f st m' rs m0,
-    @sem A ge sp st f (mk_instr_state rs m0) ->
-    Op.eval_addressing ge sp a rs ## l = Some a0 ->
-    Mem.storev m m0 a0 rs !! r = Some m' ->
-    sem ge sp st (update f (RBstore o m a l r)) (mk_instr_state rs m').
+Lemma equiv_fold_update_top_inc:
+  forall i p f l lm p' f' l' lm',
+    mfold_left update_top_inc i (Some (p, f, l, lm)) = Some (p', f', l', lm') ->
+    mfold_left update i (Some (p, f)) = Some (p', f').
 Proof.
-  intros. simplify. inv H. inv H7. constructor; simplify.
-  { econstructor; intros. rewrite genmap1; crush. }
-  { rewrite map2. econstructor; eauto. apply gen_list_base; eauto. }
+  induction i; cbn -[update_top_inc update] in *; intros.
+  - inv H; auto.
+  - exploit OptionExtra.mfold_left_Some; eauto;
+      intros [[[[p_mid f_mid] l_mid] lm_mid] HB].
+    exploit equiv_update_top_inc; try eassumption.
+    intros. rewrite H0. eapply IHi. rewrite HB in H. eauto.
 Qed.
 
-Lemma sem_update2 :
-  forall A ge sp st x st' st'' f,
-  sem ge sp st f st' ->
-  @step_instr A ge sp st' x st'' ->
-  sem ge sp st (update f x) st''.
+Lemma top_implies_abstract_sequence :
+  forall y f l1 l2,
+    abstract_sequence_top y = Some (f, l1, l2) ->
+    abstract_sequence y = Some f.
 Proof.
-  intros.
-  destruct x; inv H0;
-  eauto using sem_update_RBnop, sem_update2_Op, sem_update2_load, sem_update2_store.
+  unfold abstract_sequence, abstract_sequence_top; intros.
+  unfold Option.bind in *. repeat destr.
+  inv H.
+  unfold Option.map in *|-. repeat destr. subst. inv Heqo.
+  erewrite equiv_fold_update_top by eauto. auto.
 Qed.
 
-Lemma abstr_sem_val_mem :
-  forall A B ge tge st tst sp a,
-    ge_preserved ge tge ->
-    forall v m,
-    (@sem_mem A ge sp st a m /\ match_states st tst -> @sem_mem B tge sp tst a m) /\
-    (@sem_value A ge sp st a v /\ match_states st tst -> @sem_value B tge sp tst a v).
+Lemma top_implies_abstract_sequence_inc :
+  forall y f l1 l2,
+    abstract_sequence_top_inc y = Some (f, l1, l2) ->
+    abstract_sequence y = Some f.
 Proof.
-  intros * H.
-  apply expression_ind2 with
-
-    (P := fun (e1: expression) =>
-    forall v m,
-    (@sem_mem A ge sp st e1 m /\ match_states st tst -> @sem_mem B tge sp tst e1 m) /\
-    (@sem_value A ge sp st e1 v /\ match_states st tst -> @sem_value B tge sp tst e1 v))
-
-    (P0 := fun (e1: expression_list) =>
-    forall lv, @sem_val_list A ge sp st e1 lv /\ match_states st tst -> @sem_val_list B tge sp tst e1 lv);
-  simplify; intros; simplify.
-  { inv H1. inv H2. constructor. }
-  { inv H2. inv H1. rewrite H0. constructor. }
-  { inv H3. }
-  { inv H3. inv H4. econstructor. apply H1; auto. simplify. eauto. constructor. auto. auto.
-    apply H0; simplify; eauto. constructor; eauto.
-    unfold ge_preserved in *. simplify. rewrite <- H2. auto.
-  }
-  { inv H3. }
-  { inv H3. inv H4. econstructor. apply H1; eauto; simplify; eauto. constructor; eauto.
-    apply H0; simplify; eauto. constructor; eauto.
-    inv H. rewrite <- H4. eauto.
-    auto.
-  }
-  { inv H4. inv H5. econstructor. apply H0; eauto. simplify; eauto. constructor; eauto.
-    apply H2; eauto. simplify; eauto. constructor; eauto.
-    apply H1; eauto. simplify; eauto. constructor; eauto.
-    inv H. rewrite <- H5. eauto. auto.
-  }
-  { inv H4. }
-  { inv H1. constructor. }
-  { inv H3. constructor; auto. apply H0; eauto. apply Mem.empty. }
+  unfold abstract_sequence, abstract_sequence_top_inc; intros.
+  unfold Option.bind in *. repeat destr.
+  inv H.
+  unfold Option.map in *|-. repeat destr. subst. inv Heqo.
+  erewrite equiv_fold_update_top_inc by eauto. auto.
 Qed.
 
-Lemma abstr_sem_value :
-  forall a A B ge tge sp st tst v,
-    @sem_value A ge sp st a v ->
-    ge_preserved ge tge ->
-    match_states st tst ->
-    @sem_value B tge sp tst a v.
-Proof. intros; eapply abstr_sem_val_mem; eauto; apply Mem.empty. Qed.
-
-Lemma abstr_sem_mem :
-  forall a A B ge tge sp st tst v,
-    @sem_mem A ge sp st a v ->
-    ge_preserved ge tge ->
-    match_states st tst ->
-    @sem_mem B tge sp tst a v.
-Proof. intros; eapply abstr_sem_val_mem; eauto. Qed.
-
-Lemma abstr_sem_regset :
-  forall a a' A B ge tge sp st tst rs,
-    @sem_regset A ge sp st a rs ->
-    ge_preserved ge tge ->
-    (forall x, a # x = a' # x) ->
-    match_states st tst ->
-    exists rs', @sem_regset B tge sp tst a' rs' /\ (forall x, rs !! x = rs' !! x).
+Lemma top_implies_abstract_sequence' :
+  forall y f l1 l2,
+    abstract_sequence_top y = Some (f, l1, l2) ->
+    abstract_sequence' y = Some (f, map snd l1, l2).
 Proof.
-  inversion 1; intros.
-  inv H7.
-  econstructor. simplify. econstructor. intros.
-  eapply abstr_sem_value; eauto. rewrite <- H6.
-  eapply H0. constructor; eauto.
-  auto.
+  unfold abstract_sequence', abstract_sequence_top; intros.
+  unfold Option.bind in *|-. repeat destr.
+  inv H.
+  unfold Option.map in *|-. repeat destr. subst. inv Heqo.
+  exploit equiv_fold_update'_top; eauto; intros.
+  setoid_rewrite H. cbn. setoid_rewrite Heqm. auto.
 Qed.
 
-Lemma abstr_sem :
-  forall a a' A B ge tge sp st tst st',
-    @sem A ge sp st a st' ->
-    ge_preserved ge tge ->
-    (forall x, a # x = a' # x) ->
-    match_states st tst ->
-    exists tst', @sem B tge sp tst a' tst' /\ match_states st' tst'.
+Lemma top_implies_abstract_sequence'_inc :
+  forall y f l1 l2,
+    abstract_sequence_top_inc y = Some (f, l1, l2) ->
+    abstract_sequence'_inc y = Some (f, map snd l1, l2).
 Proof.
-  inversion 1; subst; intros.
-  inversion H4; subst.
-  exploit abstr_sem_regset; eauto; inv_simp.
-  do 3 econstructor; eauto.
-  rewrite <- H3.
-  eapply abstr_sem_mem; eauto.
+  unfold abstract_sequence'_inc, abstract_sequence_top_inc; intros.
+  unfold Option.bind in *|-. repeat destr.
+  inv H.
+  unfold Option.map in *|-. repeat destr. subst. inv Heqo.
+  exploit equiv_fold_update'_top_inc; eauto; intros.
+  setoid_rewrite H. cbn. setoid_rewrite Heqm. auto.
 Qed.
 
-Lemma abstract_execution_correct':
-  forall A B ge tge sp st' a a' st tst,
-  @sem A ge sp st a st' ->
-  ge_preserved ge tge ->
-  check a a' = true ->
-  match_states st tst ->
-  exists tst', @sem B tge sp tst a' tst' /\ match_states st' tst'.
-Proof.
-  intros;
-  pose proof (check_correct a a' H1);
-  eapply abstr_sem; eauto.
-Qed.
-
-Lemma states_match :
-  forall st1 st2 st3 st4,
-  match_states st1 st2 ->
-  match_states st2 st3 ->
-  match_states st3 st4 ->
-  match_states st1 st4.
-Proof.
-  intros * H1 H2 H3; destruct st1; destruct st2; destruct st3; destruct st4.
-  inv H1. inv H2. inv H3; constructor.
-  unfold regs_lessdef in *. intros.
-  repeat match goal with
-         | H: forall _, _, r : positive |- _ => specialize (H r)
-         end.
-  congruence.
-  auto.
-Qed.
-
-Lemma step_instr_block_same :
-  forall ge sp st st',
-  step_instr_block ge sp st nil st' ->
-  st = st'.
-Proof. inversion 1; auto. Qed.
-
-Lemma step_instr_seq_same :
-  forall ge sp st st',
-  step_instr_seq ge sp st nil st' ->
-  st = st'.
-Proof. inversion 1; auto. Qed.
-
-Lemma sem_update' :
-  forall A ge sp st a x st',
-  sem ge sp st (update (abstract_sequence empty a) x) st' ->
-  exists st'',
-  @step_instr A ge sp st'' x st' /\
-  sem ge sp st (abstract_sequence empty a) st''.
-Proof.
-  Admitted.
-
-Lemma rtlpar_trans_correct :
-  forall bb ge sp sem_st' sem_st st,
-  sem ge sp sem_st (abstract_sequence empty (concat (concat bb))) sem_st' ->
-  match_states sem_st st ->
-  exists st', RTLPar.step_instr_block ge sp st bb st'
-              /\ match_states sem_st' st'.
-Proof.
-  induction bb using rev_ind.
-  { repeat econstructor. eapply abstract_interp_empty3 in H.
-    inv H. inv H0. constructor; congruence. }
-  { simplify. inv H0. repeat rewrite concat_app in H. simplify.
-    rewrite app_nil_r in H.
-    exploit sem_separate; eauto; inv_simp.
-    repeat econstructor. admit. admit.
-  }
-Admitted.
-
-(*Lemma abstract_execution_correct_ld:
-  forall bb bb' cfi ge tge sp st st' tst,
-    RTLBlock.step_instr_list ge sp st bb st' ->
-    ge_preserved ge tge ->
-    schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi) = true ->
-    match_states_ld st tst ->
-    exists tst', RTLPar.step_instr_block tge sp tst bb' tst'
-                 /\ match_states st' tst'.
-Proof.
-  intros.*)
-*)
-
-Lemma match_states_list :
-  forall A (rs: Regmap.t A) rs',
-  (forall r, rs !! r = rs' !! r) ->
-  forall l, rs ## l = rs' ## l.
-Proof. induction l; crush. Qed.
-
-Lemma PTree_matches :
-  forall A (v: A) res rs rs',
-  (forall r, rs !! r = rs' !! r) ->
-  forall x, (Regmap.set res v rs) !! x = (Regmap.set res v rs') !! x.
-Proof.
-  intros; destruct (Pos.eq_dec x res); subst;
-  [ repeat rewrite Regmap.gss by auto
-  | repeat rewrite Regmap.gso by auto ]; auto.
-Qed.
-
-(*Lemma abstract_interp_empty3 :
-  forall A ctx st',
-    @sem A ctx empty st' -> match_states (ctx_is ctx) st'.
-Proof.
-  inversion 1; subst; simplify. destruct ctx.
-  destruct ctx_is.
-  constructor; intros.
-  - inv H0. specialize (H3 x). inv H3. inv H8. reflexivity.
-  - inv H1. specialize (H3 x). inv H3. inv H8. reflexivity.
-  - inv H2. inv H8. reflexivity.
-Qed.
-
-Lemma step_instr_matches :
-  forall A a ge sp st st',
-    @step_instr A ge sp st a st' ->
-    forall tst,
-      match_states st tst ->
-      exists tst', step_instr ge sp tst a tst'
-                   /\ match_states st' tst'.
-Proof.
-  induction 1; simplify;
-  match goal with H: match_states _ _ |- _ => inv H end;
-  try solve [repeat econstructor; try erewrite match_states_list;
-  try apply PTree_matches; eauto;
-  match goal with
-    H: forall _, _ |- context[Mem.storev] => erewrite <- H; eauto
-  end].
-  - destruct p. match goal with H: eval_pred _ _ _ _ |- _ => inv H end.
-    repeat econstructor; try erewrite match_states_list; eauto.
-    erewrite <- eval_predf_pr_equiv; eassumption.
-    apply PTree_matches; assumption.
-    repeat (econstructor; try apply eval_pred_false); eauto. try erewrite match_states_list; eauto.
-    erewrite <- eval_predf_pr_equiv; eassumption.
-    econstructor; auto.
-    match goal with H: eval_pred _ _ _ _ |- _ => inv H end.
-    repeat econstructor; try erewrite match_states_list; eauto.
-  (*- destruct p. match goal with H: eval_pred _ _ _ _ |- _ => inv H end.
-    repeat econstructor; try erewrite match_states_list; eauto.
-    erewrite <- eval_predf_pr_equiv; eassumption.
-    apply PTree_matches; assumption.
-    repeat (econstructor; try apply eval_pred_false); eauto. try erewrite match_states_list; eauto.
-    erewrite <- eval_predf_pr_equiv; eassumption.
-    econstructor; auto.
-    match goal with H: eval_pred _ _ _ _ |- _ => inv H end.
-    repeat econstructor; try erewrite match_states_list; eauto.
-  - destruct p. match goal with H: eval_pred _ _ _ _ |- _ => inv H end.
-    repeat econstructor; try erewrite match_states_list; eauto.
-    match goal with
-    H: forall _, _ |- context[Mem.storev] => erewrite <- H; eauto
-    end.
-    erewrite <- eval_predf_pr_equiv; eassumption.
-    repeat (econstructor; try apply eval_pred_false); eauto. try erewrite match_states_list; eauto.
-    match goal with
-    H: forall _, _ |- context[Mem.storev] => erewrite <- H; eauto
-    end.
-    erewrite <- eval_predf_pr_equiv; eassumption.
-    match goal with H: eval_pred _ _ _ _ |- _ => inv H end.
-    repeat econstructor; try erewrite match_states_list; eauto.
-    match goal with
-    H: forall _, _ |- context[Mem.storev] => erewrite <- H; eauto
-    end.
-  - admit.*) Admitted.
-
-Lemma step_instr_list_matches :
-  forall a ge sp st st',
-  step_instr_list ge sp st a st' ->
-  forall tst, match_states st tst ->
-              exists tst', step_instr_list ge sp tst a tst'
-                           /\ match_states st' tst'.
-Proof.
-  induction a; intros; inv H;
-  try (exploit step_instr_matches; eauto; []; simplify;
-       exploit IHa; eauto; []; simplify); repeat econstructor; eauto.
-Qed.
-
-Lemma step_instr_seq_matches :
-  forall a ge sp st st',
-   step_instr_seq ge sp st a st' ->
-  forall tst, match_states st tst ->
-              exists tst', step_instr_seq ge sp tst a tst'
-                           /\ match_states st' tst'.
-Proof.
-  induction a; intros; inv H;
-  try (exploit step_instr_list_matches; eauto; []; simplify;
-       exploit IHa; eauto; []; simplify); repeat econstructor; eauto.
-Qed.
-
-Lemma step_instr_block_matches :
-  forall bb ge sp st st',
-  step_instr_block ge sp st bb st' ->
-  forall tst, match_states st tst ->
-              exists tst', step_instr_block ge sp tst bb tst'
-                           /\ match_states st' tst'.
-Proof.
-  induction bb; intros; inv H;
-  try (exploit step_instr_seq_matches; eauto; []; simplify;
-       exploit IHbb; eauto; []; simplify); repeat econstructor; eauto.
-Qed.
-
-Lemma rtlblock_trans_correct' :
-  forall bb ge sp st x st'',
-  RTLBlock.step_instr_list ge sp st (bb ++ x :: nil) st'' ->
-  exists st', RTLBlock.step_instr_list ge sp st bb st'
-              /\ step_instr ge sp st' x st''.
-Proof.
-  induction bb.
-  crush. exists st.
-  split. constructor. inv H. inv H6. auto.
-  crush. inv H. exploit IHbb. eassumption. simplify.
-  econstructor. split.
-  econstructor; eauto. eauto.
-Qed.
-
-Lemma abstract_interp_empty A st : @sem A st empty (ctx_is st).
-Proof. destruct st, ctx_is. simpl. repeat econstructor. Qed.
-
-Lemma abstract_seq :
-  forall l f i,
-    abstract_sequence f (l ++ i :: nil) = update (abstract_sequence f l) i.
-Proof. induction l; crush. Qed.
-
-Lemma abstract_sequence_update :
-  forall l r f,
-  check_dest_l l r = false ->
-  (abstract_sequence f l) # (Reg r) = f # (Reg r).
-Proof.
-  induction l using rev_ind; crush.
-  rewrite abstract_seq. rewrite check_dest_update. apply IHl.
-  apply check_list_l_false in H. tauto.
-  apply check_list_l_false in H. tauto.
-Qed.
-
-(*Lemma sem_separate :
-  forall A ctx b a st',
-    sem ctx (abstract_sequence empty (a ++ b)) st' ->
-    exists st'',
-         @sem A ctx (abstract_sequence empty a) st''
-      /\ @sem A (mk_ctx st'' (ctx_sp ctx) (ctx_ge ctx)) (abstract_sequence empty b) st'.
-Proof.
-  induction b using rev_ind; simplify.
-  { econstructor. simplify. rewrite app_nil_r in H. eauto. apply abstract_interp_empty. }
-  { simplify. rewrite app_assoc in H. rewrite abstract_seq in H.
-    exploit sem_update'; eauto; simplify.
-    exploit IHb; eauto; inv_simp.
-    econstructor; split; eauto.
-    rewrite abstract_seq.
-    eapply sem_update2; eauto.
-  }
-Qed.*)
-
-Lemma sem_update_RBnop :
-  forall A ctx f st',
-  @sem A ctx f st' -> sem ctx (update f RBnop) st'.
-Proof. auto. Qed.
-
-Lemma sem_update_Op :
-  forall A ge sp ist f st' r l o0 o m rs v ps,
-  @sem A (mk_ctx ist sp ge) f st' ->
-  eval_predf ps o = true ->
-  Op.eval_operation ge sp o0 (rs ## l) m = Some v ->
-  match_states st' (mk_instr_state rs ps m) ->
-  exists tst,
-  sem (mk_ctx ist sp ge) (update f (RBop (Some o) o0 l r)) tst
-  /\ match_states (mk_instr_state (Regmap.set r v rs) ps m) tst.
-Proof.
-  intros. inv H1. inv H. inv H1. inv H3. simplify.
-  econstructor. simplify.
-  { constructor; try constructor; intros; try solve [rewrite genmap1; now eauto].
-    destruct (Pos.eq_dec x r); subst.
-    { rewrite map2. specialize (H1 r). inv H1.
-(*}
-  }
-  destruct st.
-  econstructor. simplify.
-  { constructor.
-    { constructor. intros. destruct (Pos.eq_dec x r); subst.
-      { pose proof (H5 r). rewrite map2. pose proof H. inv H. econstructor; eauto.
-        { inv H9. eapply gen_list_base; eauto. }
-        { instantiate (1 := (Regmap.set r v rs0)). rewrite Regmap.gss. erewrite regmap_list_equiv; eauto. } }
-      { rewrite Regmap.gso by auto. rewrite genmap1; crush. inv H. inv H7; eauto. } }
-    { inv H. rewrite genmap1; crush. eauto. } }
-  { constructor; eauto. intros.
-    destruct (Pos.eq_dec r x);
-    subst; [repeat rewrite Regmap.gss | repeat rewrite Regmap.gso]; auto. }
-Qed.*) Admitted.
-
-Lemma sem_update :
-  forall A ge sp st x st' st'' st''' f,
-  sem (mk_ctx st sp ge) f st' ->
-  match_states st' st''' ->
-  @step_instr A ge sp st''' x st'' ->
-  exists tst, sem (mk_ctx st sp ge) (update f x) tst /\ match_states st'' tst.
-Proof.
-  intros. destruct x.
-  - inv H1. econstructor. simplify. eauto. symmetry; auto.
-  - inv H1. inv H0. econstructor.
-    Admitted.
-
-Lemma rtlblock_trans_correct :
-  forall bb ge sp st st',
-    RTLBlock.step_instr_list ge sp st bb st' ->
-    forall tst,
-      match_states st tst ->
-      exists tst', sem (mk_ctx tst sp ge) (abstract_sequence empty bb) tst'
-                   /\ match_states st' tst'.
-Proof.
-  induction bb using rev_ind; simplify.
-  { econstructor. simplify. apply abstract_interp_empty.
-    inv H. auto. }
-  { apply rtlblock_trans_correct' in H. simplify.
-    rewrite abstract_seq.
-    exploit IHbb; try eassumption; []; simplify.
-    exploit sem_update. apply H1. symmetry; eassumption.
-    eauto. simplify. econstructor. split. apply H3.
-    auto. }
-Qed.
-
-Lemma abstract_execution_correct:
-  forall bb bb' cfi cfi' ge tge sp st st' tst,
-    RTLBlock.step_instr_list ge sp st bb st' ->
-    ge_preserved ge tge ->
-    schedule_oracle (mk_bblock bb cfi) (mk_bblock bb' cfi') = true ->
-    match_states st tst ->
-    exists tst', RTLPar.step_instr_block tge sp tst bb' tst'
-                 /\ match_states st' tst'.
-Proof.
-  intros.
-  unfold schedule_oracle in *. simplify. unfold empty_trees in H4.
-  exploit rtlblock_trans_correct; try eassumption; []; simplify.
-(*)  exploit abstract_execution_correct';
-  try solve [eassumption | apply state_lessdef_match_sem; eassumption].
-  apply match_states_commut. eauto. inv_simp.
-  exploit rtlpar_trans_correct; try eassumption; []; inv_simp.
-  exploit step_instr_block_matches; eauto. apply match_states_commut; eauto. inv_simp.
-  repeat match goal with | H: match_states _ _ |- _ => inv H end.
-  do 2 econstructor; eauto.
-  econstructor; congruence.
-Qed.*)Admitted.*)
+Definition state_lessdef := GiblePargenproofEquiv.match_states.
 
 Definition match_prog (prog : GibleSeq.program) (tprog : GiblePar.program) :=
-  match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq prog tprog.
+  match_program (fun cu f tf => transl_fundef f = OK tf) eq prog tprog.
+
+Lemma transf_program_match:
+  forall p tp, transl_program p = OK tp -> match_prog p tp.
+Proof.
+  intros. unfold transl_program, match_prog.
+  eapply Linking.match_transform_partial_program; auto.
+Qed.
 
 (* TODO: Fix the `bb` and add matches for them. *)
 Inductive match_stackframes: GibleSeq.stackframe -> GiblePar.stackframe -> Prop :=
@@ -867,7 +261,7 @@ Section CORRECTNESS.
     forall (b: Values.block) (f: GibleSeq.fundef),
       Genv.find_funct_ptr ge b = Some f ->
       exists tf,
-        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
+        Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = OK tf.
   Proof using TRANSL.
     intros. exploit (Genv.find_funct_ptr_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
@@ -877,7 +271,7 @@ Section CORRECTNESS.
     forall (v: Values.val) (f: GibleSeq.fundef),
       Genv.find_funct ge v = Some f ->
       exists tf,
-        Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
+        Genv.find_funct tge v = Some tf /\ transl_fundef f = OK tf.
   Proof using TRANSL.
     intros. exploit (Genv.find_funct_match TRANSL); eauto.
     intros (cu & tf & P & Q & R); exists tf; auto.
@@ -936,9 +330,10 @@ Section CORRECTNESS.
   Lemma schedule_oracle_nil2:
       schedule_oracle nil nil = true.
   Proof using .
-    unfold schedule_oracle, check_control_flow_instr.
+    unfold schedule_oracle, check_control_flow_instr, check.
     simplify; repeat destruct_match; crush.
-  Admitted.
+    (* now rewrite ! check_mutexcl_singleton. *)
+  Qed.
 
   Lemma eval_op_eq:
     forall (sp0 : Values.val) (op : Op.operation) (vl : list Values.val) m,
@@ -963,13 +358,52 @@ Section CORRECTNESS.
   Qed.
   Hint Resolve eval_addressing_eq : rtlgp.
 
-  Lemma ge_preserved_lem:
+(*|
+==============
+RTLPargenproof
+==============
+
+RTLBlock to abstract translation
+================================
+
+Correctness of translation from RTLBlock to the abstract interpretation
+language.
+
+This is the top-level lemma which uses the following proofs to complete the
+square:
+
+- ``abstr_sequence_correct``: This is the lemma that states the forward
+  translation form ``GibleSeq`` to ``Abstr`` was correct.
+- ``abstr_check_correct``: This is the lemma that states that if a check between
+  two ``Abstr`` programs succeeds, that they will also behave the same.  This
+  depends on the SAT solver correctness, as the predicates might be
+  syntactically different to each other.
+- ``abstr_seq_reverse_correct``: This is the lemma that shows that the backwards
+  simulation between the abstract translation and the concrete execution also
+  holds.  We only have a translation from the concrete into the abstract, but
+  then prove that if we have an execution in the abstract, we can observe that
+  same execution in the concrete.
+- ``seqbb_step_parbb_step``: Finally, this lemma states that the parallel
+  execution of the basic block is equivalent to the sequential execution of the
+  concatenation of that parallel block.  This is because even in the translation
+  to HTL, the Verilog semantics are sequential within a clock cycle, but will
+  then be parallelised by the synthesis tool.  The argument for why this is
+  still useful is because we are identifying and scheduling instructions into
+  clock cycles.
+|*)
+
+  Definition local_abstr_check_correct :=
+    @abstr_check_correct GibleSeq.fundef GiblePar.fundef.
+
+  Definition local_abstr_check_correct2 :=
+    @abstr_check_correct GibleSeq.fundef GibleSeq.fundef.
+
+  Lemma ge_preserved_local :
     ge_preserved ge tge.
-  Proof using TRANSL.
-    unfold ge_preserved.
-    eauto with rtlgp.
+  Proof.
+    unfold ge_preserved; 
+    eauto using eval_op_eq, eval_addressing_eq.
   Qed.
-  Hint Resolve ge_preserved_lem : rtlgp.
 
   Lemma lessdef_regmap_optget:
     forall or rs rs',
@@ -1141,281 +575,685 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
     eapply IHx; eauto.
   Qed.
 
-  Lemma eval_predf_negate :
-    forall ps p,
-      eval_predf ps (negate p) = negb (eval_predf ps p).
+(*|
+Proof sketch: This should follow directly from the correctness property, because
+it states that we can execute the forest.
+|*)
+
+  Lemma eval_forest_gather_predicates :
+    forall G A B a_sem i0 sp ge x p f p' f' pe pe_val preds preds',
+      update (p, f) x = Some (p', f') ->
+      gather_predicates preds x = Some preds' ->
+      @sem_pred_expr G A B f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+      NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+      sem_pred_expr f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
   Proof.
-    unfold eval_predf; intros. rewrite negate_correct. auto.
+    intros.
+    eapply abstr_seq_revers_correct_fold_sem_pexpr_eval_sem; eauto.
+    apply NE.Forall_forall. intros [pe_op a] YIN pred_tmp YPREDIN.
+    apply NE.Forall_forall with (x:=(pe_op, a)) in H2; auto.
+    specialize (H2 pred_tmp YPREDIN).
+    cbn [fst snd] in *.
+    eapply abstr_seq_revers_correct_fold_sem_pexpr_sem2; eauto.
   Qed.
 
-  Lemma is_truthy_negate :
-    forall ps p pred,
-      truthy ps p ->
-      falsy ps (combine_pred (Some (negate (Option.default T p))) pred).
+  Lemma eval_forest_gather_predicates_fold :
+    forall G A B a_sem i0 sp ge x p f p' f' pe pe_val preds preds' l l_m l' l_m',
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      OptionExtra.mfold_left gather_predicates x (Some preds) = Some preds' ->
+      @sem_pred_expr G A B f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+      NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+      sem_pred_expr f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
   Proof.
-    inversion 1; subst; simplify.
-    - destruct pred; constructor; auto.
-    - destruct pred; constructor.
-      rewrite eval_predf_Pand. rewrite eval_predf_negate. rewrite H0. auto.
-      rewrite eval_predf_negate. rewrite H0. auto.
+    induction x.
+    - intros * HF; cbn in *. now inv HF.
+    - intros * HFOLD1 HFOLD2 HSEM HFRL.
+      cbn -[update] in *.
+      exploit OptionExtra.mfold_left_Some. eapply HFOLD1.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HSTATE].
+      rewrite HSTATE in HFOLD1.
+      exploit OptionExtra.mfold_left_Some. eapply HFOLD2.
+      intros [preds_mid HPRED]. rewrite HPRED in HFOLD2.
+      unfold Option.bind2, Option.ret in HSTATE; repeat destr; subst. inv HSTATE.
+      eapply IHx; eauto using eval_forest_gather_predicates.
+      eapply NE.Forall_forall; intros.
+      eapply gather_predicates_in; eauto.
+      eapply NE.Forall_forall in HFRL; eauto.
   Qed.
 
-  Lemma sem_update_instr :
-    forall f i' i'' a sp p i p' f',
-      sem (mk_ctx i sp ge) f (i', None) ->
-      step_instr ge sp (Iexec i') a (Iexec i'') ->
-      update (p, f) a = Some (p', f') ->
-      sem (mk_ctx i sp ge) f' (i'', None).
-  Proof. Admitted.
-
-
-  Lemma sem_update_instr_term :
-    forall f i' i'' a sp i cf p p' p'' f',
-      sem (mk_ctx i sp ge) f (i', None) ->
-      step_instr ge sp (Iexec i') (RBexit p cf) (Iterm i'' cf) ->
-      update (p', f) a = Some (p'', f') ->
-      sem (mk_ctx i sp ge) f' (i'', Some cf)
-           /\ eval_predf (is_ps i) p'' = false.
+  Lemma eval_forest_gather_predicates_fold_inc :
+    forall G A B a_sem i0 sp ge x p f p' f' pe pe_val preds preds' l l_m l' l_m',
+      OptionExtra.mfold_left update_top_inc x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      OptionExtra.mfold_left gather_predicates x (Some preds) = Some preds' ->
+      @sem_pred_expr G A B f.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val ->
+      NE.Forall (fun x => forall pred, PredIn pred (fst x) -> preds ! pred = Some tt) pe ->
+      sem_pred_expr f'.(forest_preds) a_sem (mk_ctx i0 sp ge) pe pe_val.
   Proof.
-    Admitted.
-
-  (* Lemma step_instr_lessdef : *)
-  (*   forall sp a i i' ti, *)
-  (*     step_instr ge sp (Iexec i) a (Iexec i') -> *)
-  (*     state_lessdef i ti -> *)
-  (*     exists ti', step_instr ge sp (Iexec ti) a (Iexec ti') /\ state_lessdef i' ti'. *)
-  (* Proof. Admitted. *)
-
-  Lemma step_instr_lessdef_term :
-    forall sp a i i' ti cf,
-      step_instr ge sp (Iexec i) a (Iterm i' cf) ->
-      state_lessdef i ti ->
-      exists ti', step_instr ge sp (Iexec ti) a (Iterm ti' cf) /\ state_lessdef i' ti'.
-  Proof. Admitted.
-
-(*  Lemma app_predicated_semregset :
-    forall A ctx o f res r y,
-      @sem_regset A ctx f res ->
-      falsy (ctx_ps ctx) o ->
-      @sem_regset A ctx f # r <- (app_predicated o f#r y) res.
-  Proof.
-    inversion 1; subst; crush.
-    constructor; intros.
-    destruct (resource_eq r (Reg x)); subst.
-    + rewrite map2; eauto. unfold app_predicated. inv H1. admit.
-    + rewrite genmap1; auto.
-  Admitted.
-
-  Lemma app_predicated_sempredset :
-    forall A ctx o f rs r y ps,
-      @sem_predset A ctx f rs ->
-      falsy ps o ->
-      @sem_predset A ctx f # r <- (app_predicated o f#r y) rs.
-  Proof. Admitted.
-
-  Lemma app_predicated_sem :
-    forall A ctx o f i cf r y,
-      @sem A ctx f (i, cf) ->
-      falsy (is_ps i) o ->
-      @sem A ctx f # r <- (app_predicated o f#r y) (i, cf).
-  Proof.
-    inversion 1; subst; crush.
-    constructor.
-  Admitted.*)
-
-  Lemma combined_falsy :
-    forall i o1 o,
-      falsy i o1 ->
-      falsy i (combine_pred o o1).
-  Proof.
-    inversion 1; subst; crush. destruct o; simplify.
-    constructor. rewrite eval_predf_Pand. rewrite H0. crush.
-    constructor. auto.
+    induction x.
+    - intros * HF; cbn in *. now inv HF.
+    - intros * HFOLD1 HFOLD2 HSEM HFRL.
+      cbn -[update] in *.
+      exploit OptionExtra.mfold_left_Some. eapply HFOLD1.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HSTATE].
+      rewrite HSTATE in HFOLD1.
+      exploit OptionExtra.mfold_left_Some. eapply HFOLD2.
+      intros [preds_mid HPRED]. rewrite HPRED in HFOLD2.
+      unfold Option.bind2, Option.ret in HSTATE; repeat destr; subst. inv HSTATE.
+      eapply IHx; eauto using eval_forest_gather_predicates.
+      eapply NE.Forall_forall; intros.
+      eapply gather_predicates_in; eauto.
+      eapply NE.Forall_forall in HFRL; eauto.
   Qed.
 
-  (* Inductive is_predicate_expr: expression -> Prop := *)
-  (* | is_predicate_expr_Epredset : *)
-  (*   forall c a, is_predicate_expr (Esetpred c a) *)
-  (* | is_predicate_expr_Ebase : *)
-  (*   forall p, is_predicate_expr (Ebase (Pred p)). *)
-
-  (* Inductive apred_wf: apred_op -> Prop := *)
-  (* | apred_wf_Plit: forall b p, *)
-  (*     is_predicate_expr p -> *)
-  (*     apred_wf (Plit (b, p)) *)
-  (* | apred_wf_Ptrue: apred_wf Ptrue *)
-  (* | apred_wf_Pfalse: apred_wf Pfalse *)
-  (* | apred_wf_Pand: forall a b, *)
-  (*   apred_wf a -> apred_wf b -> apred_wf (a ∧ b) *)
-  (* | apred_wf_Por: forall a b, *)
-  (*   apred_wf a -> apred_wf b -> apred_wf (a ∨ b). *)
-
-  (* Lemma apred_and_false1 : *)
-  (*   forall A ctx a b c, *)
-  (*     @eval_apred A ctx a false -> *)
-  (*     @eval_apred A ctx b c -> *)
-  (*     eval_apred ctx (a ∧ b) false. *)
-  (* Proof. *)
-  (*   intros. *)
-  (*   replace false with (false && c) by auto. *)
-  (*   constructor; auto. *)
-  (* Qed. *)
-
-  (* Lemma apred_and_false2 : *)
-  (*   forall A ctx a b c, *)
-  (*     @eval_apred A ctx a c -> *)
-  (*     eval_apred ctx b false -> *)
-  (*     eval_apred ctx (a ∧ b) false. *)
-  (* Proof. *)
-  (*   intros. *)
-  (*   replace false with (c && false) by eauto with bool. *)
-  (*   constructor; auto. *)
-  (* Qed. *)
-
-  (* #[local] Opaque simplify. *)
-
-  (* Lemma apred_simplify: *)
-  (*   forall A ctx a b, *)
-  (*     @eval_apred A ctx a b -> *)
-  (*     @eval_apred A ctx (simplify a) b. *)
-  (* Proof. Admitted. *)
-
-  (* Lemma exists_get_pred_eval : *)
-  (*   forall A ctx f p, *)
-  (*   exists c, @eval_apred A ctx (get_pred' f p) c. *)
-  (* Proof. *)
-  (*   induction p; crush; try solve [econstructor; constructor; eauto]. *)
-  (*   destruct_match. inv Heqp0. econstructor. *)
-  (*   unfold apredicated_to_apred_op. *)
-  (*   Admitted. (*probably not provable.*) *)
-
-  (* Lemma falsy_update : *)
-  (*   forall A f a ctx p f', *)
-  (*     @eval_apred A ctx (fst f) false -> *)
-  (*     update (Some f) a = Some (p, f') -> *)
-  (*     eval_apred ctx p false. *)
-  (* Proof. *)
-  (*   destruct f; destruct a; inversion 1; subst; crush; *)
-  (*   destruct_match; simplify; auto; *)
-  (*   unfold Option.bind, Option.bind2 in *; *)
-  (*   repeat (destruct_match; try discriminate; []); simplify; auto. *)
-  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
-  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
-  (*   constructor; auto. *)
-  (*   constructor; auto. *)
-  (*   constructor; auto. *)
-  (*   constructor; auto. *)
-  (*   constructor; auto. *)
-  (*   rewrite H2. *)
-  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
-  (*   apply apred_simplify. eapply apred_and_false2; eauto. admit. *)
-  (*   Unshelve. all: exact true. *)
-  (* Admitted. *)
-
-  (* Lemma abstr_fold_falsy : *)
-  (*   forall x i0 sp cf i f p p' f', *)
-  (*   sem (mk_ctx i0 sp ge) f (i, cf) -> *)
-  (*   eval_apred (mk_ctx i0 sp ge) p false -> *)
-  (*   fold_left update x (Some (p, f)) =  Some (p', f') -> *)
-  (*   sem (mk_ctx i0 sp ge) f' (i, cf). *)
-  (* Proof. *)
-  (*   induction x; crush. *)
-  (*   eapply IHx. *)
-  (*   destruct a; destruct f; crush; *)
-  (*     try solve [eapply app_predicated_sem; eauto; apply combined_falsy; auto]. *)
-  (*   (* now apply falsy_update. *) *)
-  (* (* Qed. *) Admitted. *)
-
-  Lemma state_lessdef_sem :
-    forall i sp f i' ti cf,
-      sem (mk_ctx i sp ge) f (i', cf) ->
-      state_lessdef i ti ->
-      exists ti', sem (mk_ctx ti sp ge) f (ti', cf) /\ state_lessdef i' ti'.
-  Proof. Admitted.
-
-  (* #[local] Opaque update. *)
-
-  Lemma abstr_fold_correct :
-    forall sp x i i' i'' cf f p f',
-      SeqBB.step ge sp (Iexec i') x (Iterm i'' cf) ->
-      sem (mk_ctx i sp ge) (snd f) (i', None) ->
-      mfold_left update x (Some f) = Some (p, f') ->
-      forall ti,
-        state_lessdef i ti ->
-        exists ti', sem (mk_ctx ti sp ge) f' (ti', Some cf)
-               /\ state_lessdef i'' ti'.
+  Lemma abstract_sequence_evaluable_fold2 :
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      sem (mk_ctx i0 sp ge) f (i, Some cf) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = false ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
   Proof.
-    induction x; simplify; inv H.
-    - destruct f. (*  exploit update_Some; eauto; intros. simplify. *)
-    (*   rewrite H3 in H1. destruct x0. *)
-    (*   exploit IHx; eauto. eapply sem_update_instr; eauto. *)
-    (* - destruct f. *)
-    (*   exploit state_lessdef_sem; eauto; intros. simplify. *)
-    (*   exploit step_instr_lessdef_term; eauto; intros. simplify. *)
-    (*   inv H6. exploit update_Some; eauto; simplify. destruct x2. *)
-      (* exploit sem_update_instr_term; eauto; simplify. *)
-      (* eexists; split. *)
-      (* eapply abstr_fold_falsy; eauto. *)
-      (* rewrite H6 in H1. eauto. auto. *)
-  (* Qed. *) Admitted.
-
-  Lemma sem_regset_empty :
-    forall A ctx, @sem_regset A ctx empty (ctx_rs ctx).
-  Proof using.
-    intros; constructor; intros.
-    constructor; auto. constructor.
-    constructor.
+    induction x; cbn -[update]; intros * HSEM HSEM2 HPRED HGATHER HALL HPIN **.
+    - inv H. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      unfold evaluable_pred_list in *; intros.
+      eapply IHx. 7: { eauto. }
+      + eapply abstr_fold_falsy. eapply HSEM. instantiate (3 := (a :: nil)).
+        cbn -[update]. eauto. auto.
+      + eauto.
+      + destruct i. eapply sem_update_falsy_input; eauto.
+      + eauto.
+      + eapply gather_predicates_in_forest; eauto.
+      + eapply gather_predicates_update_constant; eauto.
+      + intros.
+        { destruct a; cbn -[gather_predicates update] in *; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
+        }
+      + eauto.
   Qed.
 
-  Lemma sem_predset_empty :
-    forall A ctx, @sem_predset A ctx empty (ctx_ps ctx).
-  Proof using.
-    intros; constructor; intros.
-    constructor; auto. constructor.
-  Qed.
-
-  Lemma sem_empty :
-    forall A ctx, @sem A ctx empty (ctx_is ctx, None).
-  Proof using.
-    intros. destruct ctx. destruct ctx_is.
-    constructor; try solve [constructor; constructor; crush].
-    eapply sem_regset_empty.
-    eapply sem_predset_empty.
-  Qed.
-
-  Lemma abstr_sequence_correct :
-    forall sp x i i'' cf x',
-      SeqBB.step ge sp (Iexec i) x (Iterm i'' cf) ->
-      abstract_sequence x = Some x' ->
-      forall ti,
-        state_lessdef i ti ->
-        exists ti', sem (mk_ctx ti sp ge) x' (ti', Some cf)
-               /\ state_lessdef i'' ti'.
+  Lemma abstract_sequence_evaluable_fold :
+    forall x sp i i' ti' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem (mk_ctx i0 sp ge) f (i, None) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = true ->
+      GiblePargenproofCommon.valid_mem (is_mem i0) (is_mem i) ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
   Proof.
-    unfold abstract_sequence. intros. unfold Option.map in H0.
-    destruct_match; try easy.
-    destruct p; simplify.
-    eapply abstr_fold_correct; eauto.
-    simplify. eapply sem_empty.
+    induction x; cbn -[update]; intros * ? HLESSDEF HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
+    - inv H0. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      inv H.
+      + unfold evaluable_pred_list; intros. exploit IHx.
+        eauto. eauto. eapply sem_update_instr; eauto.
+        eauto. eapply eval_predf_update_true; eauto.
+        transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
+        eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
+        eauto. unfold evaluable_pred_list in *; intros.
+        { destruct a; cbn -[gather_predicates update] in *; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
+          - inv H2; eauto.
+            inv HSEM. inv H4.
+            unfold evaluable_pred_expr. exists (rs' !! r).
+            eapply eval_forest_gather_predicates_fold; eauto.
+            eapply eval_forest_gather_predicates; eauto.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HALL; eauto.
+            specialize (HALL _ H4).
+            eapply gather_predicates_in; eauto.
+        }
+        eauto. auto.
+      + unfold evaluable_pred_list in *; intros.
+        inversion H5; subst.
+        exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
+        eapply abstract_sequence_evaluable_fold2; eauto using
+          gather_predicates_in_forest, gather_predicates_update_constant.
   Qed.
 
-  Lemma abstr_check_correct :
-    forall sp i i' a b cf ti,
-      check a b = true ->
-      sem (mk_ctx i sp ge) a (i', cf) ->
-      state_lessdef i ti ->
-      exists ti', sem (mk_ctx ti sp ge) b (ti', cf)
-             /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  Opaque app_predicated.
 
-  Lemma abstr_seq_reverse_correct :
-    forall sp x i i' ti cf x',
-      abstract_sequence x = Some x' ->
-      sem (mk_ctx i sp ge) x' (i', (Some cf)) ->
-      state_lessdef i ti ->
-      exists ti', SeqBB.step ge sp (Iexec ti) x (Iterm ti' cf)
-             /\ state_lessdef i' ti'.
-  Proof. Admitted.
+  Lemma abstract_sequence_evaluable_fold2_inc :
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      sem (mk_ctx i0 sp ge) f (i, Some cf) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = false ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top_inc x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
+  Proof.
+    induction x; intros * HSEM HSEM2 HPRED HGATHER HALL HPIN **.
+    - inv H. auto.
+    - exploit abstr_fold_falsy. apply HSEM.
+            eapply equiv_fold_update_top_inc; eauto. eauto. intros HSEM3. cbn -[update] in *. exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      unfold evaluable_pred_list in *; intros.
+      eapply IHx. 7: { eauto. }
+      + eapply abstr_fold_falsy. eapply HSEM. instantiate (3 := (a :: nil)).
+        cbn -[update]. eauto. auto.
+      + eauto.
+      + destruct i. eapply sem_update_falsy_input; eauto.
+      + eauto.
+      + eapply gather_predicates_in_forest; eauto.
+      + eapply gather_predicates_update_constant; eauto.
+      + intros.
+        { destruct a; cbn -[gather_predicates update seq_app remember_expr_inc remember_expr_m_inc] in *; eauto.
+          - inv H2; eauto. exists (is_rs i0)!!1. inv HSEM3. inv H5.
+            eapply AbstrSemIdent.sem_pred_expr_app_predicated_false. repeat constructor. eauto.
+            rewrite eval_predf_Pand. cbn in *. rewrite HPRED. auto with bool.
+            - inv H2; eauto. exists (is_rs i0)!!1. inv HSEM3. inv H5.
+            eapply AbstrSemIdent.sem_pred_expr_app_predicated_false. repeat constructor. eauto.
+            rewrite eval_predf_Pand. cbn in *. rewrite HPRED. auto with bool.
+        }
+      + eauto.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_fold_inc :
+    forall x sp i i' ti' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem (mk_ctx i0 sp ge) f (i, None) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = true ->
+      GiblePargenproofCommon.valid_mem (is_mem i0) (is_mem i) ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top_inc x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l) ->
+      evaluable_pred_list (mk_ctx i0 sp ge) f'.(forest_preds) (map snd l').
+  Proof.
+    induction x; cbn -[update seq_app remember_expr_inc remember_expr_m_inc]; intros * ? HLESSDEF HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
+    - inv H0. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      inv H.
+      + unfold evaluable_pred_list; intros. exploit IHx.
+        eauto. eauto. eapply sem_update_instr; eauto.
+        eauto. eapply eval_predf_update_true; eauto.
+        transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
+        eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
+        eauto. unfold evaluable_pred_list in *; intros.
+        { destruct a; cbn -[gather_predicates update seq_app remember_expr_inc remember_expr_m_inc] in *; eauto.
+          - inv H2; eauto.
+            exploit sem_update_instr; eauto. intros. inv H2. inv H5. specialize (H2 r).
+            inv HSEM. inv H8.
+            exploit gather_predicates_in_forest; eauto. instantiate (1:=Reg r). intros HPRED_IN.
+            unfold update, Option.bind in Heqo. destruct_match; try discriminate. inv Heqo.
+            rewrite forest_reg_gss in H2.
+            exploit eval_forest_gather_predicates_fold_inc. eauto. eauto. apply H2.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HPRED_IN; eauto.
+            rewrite forest_reg_gss. auto. intros HSEMEXEC.
+            inv HSEM2. inv H13. exploit AbstrSemIdent.sem_pred_expr_prune_predicated2. eauto.
+            apply HSEMEXEC. eassumption.
+            intros HSEM_APP.
+            case_eq (eval_predf pr'1 (dfltp o ∧ p_mid)); intros.
+            + exists rs'!!r. eapply AbstrSemIdent.sem_pred_expr_app_predicated; eauto.
+              eapply AbstrSemIdent.sem_pred_expr_app_predicated2; eauto.
+            + exists (is_rs i0)!!1. eapply AbstrSemIdent.sem_pred_expr_app_predicated_false; eauto.
+              repeat constructor.
+          - inv H2; eauto.
+            exploit sem_update_instr; eauto. intros. inv H2. inv H5. specialize (H2 r).
+            inv HSEM. inv H8.
+            exploit gather_predicates_in_forest; eauto. instantiate (1:=Reg r). intros HPRED_IN.
+            unfold update, Option.bind in Heqo. destruct_match; try discriminate. inv Heqo.
+            rewrite forest_reg_gss in H2.
+            exploit eval_forest_gather_predicates_fold_inc. eauto. eauto. apply H2.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HPRED_IN; eauto.
+            rewrite forest_reg_gss. auto. intros HSEMEXEC.
+            inv HSEM2. inv H13. exploit AbstrSemIdent.sem_pred_expr_prune_predicated2. eauto.
+            apply HSEMEXEC. eassumption.
+            intros HSEM_APP.
+            case_eq (eval_predf pr'1 (dfltp o ∧ p_mid)); intros.
+            + exists rs'!!r. eapply AbstrSemIdent.sem_pred_expr_app_predicated; eauto.
+              eapply AbstrSemIdent.sem_pred_expr_app_predicated2; eauto.
+            + exists (is_rs i0)!!1. eapply AbstrSemIdent.sem_pred_expr_app_predicated_false; eauto.
+              repeat constructor.
+        }
+        eauto. auto.
+      + unfold evaluable_pred_list in *; intros.
+        inversion H5; subst.
+        exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
+        eapply abstract_sequence_evaluable_fold2_inc; eauto using
+          gather_predicates_in_forest, gather_predicates_update_constant.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_fold2_m :
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      sem (mk_ctx i0 sp ge) f (i, Some cf) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = false ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m'.
+  Proof.
+    induction x; cbn -[update]; intros * HSEM HSEM2 HPRED HGATHER HALL HPIN **.
+    - inv H. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      unfold evaluable_pred_list_m in *; intros.
+      eapply IHx. 7: { eauto. }
+      + eapply abstr_fold_falsy. eapply HSEM. instantiate (3 := (a :: nil)).
+        cbn -[update]. eauto. auto.
+      + eauto.
+      + destruct i. eapply sem_update_falsy_input; eauto.
+      + eauto.
+      + eapply gather_predicates_in_forest; eauto.
+      + eapply gather_predicates_update_constant; eauto.
+      + intros.
+        { destruct a; cbn -[gather_predicates update] in *; eauto.
+          inv H2; eauto.
+          inv HSEM.
+          unfold evaluable_pred_expr_m. exists m'.
+          eapply eval_forest_gather_predicates_fold; eauto.
+          eapply eval_forest_gather_predicates; eauto.
+          eapply NE.Forall_forall; intros.
+          eapply NE.Forall_forall in HALL; eauto.
+          specialize (HALL _ H3).
+          eapply gather_predicates_in; eauto.
+        }
+      + eauto.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_fold_m :
+    forall x sp i i' ti' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem (mk_ctx i0 sp ge) f (i, None) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = true ->
+      GiblePargenproofCommon.valid_mem (is_mem i0) (is_mem i) ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m'.
+  Proof.
+    induction x; cbn -[update]; intros * ? HLESSDEF HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
+    - inv H0. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      inv H.
+      + unfold evaluable_pred_list_m; intros. exploit IHx.
+        eauto. eauto. eapply sem_update_instr; eauto.
+        eauto. eapply eval_predf_update_true; eauto.
+        transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
+        eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
+        eauto. unfold evaluable_pred_list_m in *; intros.
+        { destruct a; cbn -[gather_predicates update] in *; eauto.
+          inv H2; eauto.
+          inv HSEM.
+          unfold evaluable_pred_expr_m. exists m'.
+          eapply eval_forest_gather_predicates_fold; eauto.
+          eapply eval_forest_gather_predicates; eauto.
+          eapply NE.Forall_forall; intros.
+          eapply NE.Forall_forall in HALL; eauto.
+          specialize (HALL _ H3).
+          eapply gather_predicates_in; eauto.
+        }
+        eauto. auto.
+      + unfold evaluable_pred_list_m in *; intros.
+        inversion H5; subst.
+        exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
+        eapply abstract_sequence_evaluable_fold2_m; eauto using
+          gather_predicates_in_forest, gather_predicates_update_constant.
+Qed.
+
+  Lemma abstract_sequence_evaluable_fold2_m_inc :
+    forall x sp i i' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      sem (mk_ctx i0 sp ge) f (i, Some cf) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = false ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top_inc x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m'.
+  Proof.
+    induction x; intros * HSEM HSEM2 HPRED HGATHER HALL HPIN **.
+    - inv H. auto.
+    - exploit abstr_fold_falsy. apply HSEM.
+            eapply equiv_fold_update_top_inc; eauto. eauto. intros HSEM3. cbn -[update] in *. exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      unfold evaluable_pred_list_m in *; intros.
+      eapply IHx. 7: { eauto. }
+      + eapply abstr_fold_falsy. eapply HSEM. instantiate (3 := (a :: nil)).
+        cbn -[update]. eauto. auto.
+      + eauto.
+      + destruct i. eapply sem_update_falsy_input; eauto.
+      + eauto.
+      + eapply gather_predicates_in_forest; eauto.
+      + eapply gather_predicates_update_constant; eauto.
+      + intros.
+        { destruct a; cbn -[gather_predicates update seq_app remember_expr_inc remember_expr_m_inc] in *; eauto.
+          - inv H2; eauto. exists (is_mem i0). inv HSEM3. inv H5.
+            eapply AbstrSemIdent.sem_pred_expr_app_predicated_false. repeat constructor. eauto.
+            rewrite eval_predf_Pand. cbn in *. rewrite HPRED. auto with bool.
+        }
+      + eauto.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_fold_m_inc :
+    forall x sp i i' ti' i0 cf p f l l_m p' f' l' l_m' preds preds',
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem (mk_ctx i0 sp ge) f (i, None) ->
+      sem (mk_ctx i0 sp ge) f' (i', Some cf) ->
+      eval_predf (is_ps i) p = true ->
+      GiblePargenproofCommon.valid_mem (is_mem i0) (is_mem i) ->
+      mfold_left gather_predicates x (Some preds) = Some preds' ->
+      all_preds_in f preds ->
+      (forall in_pred : Predicate.predicate, PredIn in_pred p -> preds ! in_pred = Some tt) ->
+      OptionExtra.mfold_left update_top_inc x (Some (p, f, l, l_m)) = Some (p', f', l', l_m') ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m ->
+      evaluable_pred_list_m (mk_ctx i0 sp ge) f'.(forest_preds) l_m'.
+  Proof.
+    induction x; cbn -[update seq_app remember_expr_inc remember_expr_m_inc]; intros * ? HLESSDEF HSEM HSEM2 HPRED HVALID_MEM HGATHER HALL HPREDALL **.
+    - inv H0. auto.
+    - exploit OptionExtra.mfold_left_Some. eassumption.
+      intros [[[[p_mid f_mid] l_mid] l_m_mid] HBIND].
+      rewrite HBIND in H0. unfold Option.bind2, Option.ret in HBIND; repeat destr; subst.
+      inv HBIND.
+      exploit OptionExtra.mfold_left_Some. eapply HGATHER.
+      intros [preds_mid HGATHER0]. rewrite HGATHER0 in HGATHER.
+      inv H.
+      + unfold evaluable_pred_list_m; intros. exploit IHx.
+        eauto. eauto. eapply sem_update_instr; eauto.
+        eauto. eapply eval_predf_update_true; eauto.
+        transitivity (is_mem i); auto. eapply sem_update_valid_mem; eauto.
+        eauto. eapply gather_predicates_in_forest; eauto. eapply gather_predicates_update_constant; eauto.
+        eauto. unfold evaluable_pred_list_m in *; intros.
+        { destruct a; cbn -[gather_predicates update seq_app remember_expr_inc remember_expr_m_inc] in *; eauto.
+          - inv H2; eauto.
+            exploit sem_update_instr; eauto. intros. inv H2. inv H5. specialize (H2 r).
+            inv HSEM. inv H8.
+            exploit gather_predicates_in_forest; eauto. instantiate (1:=Mem). intros HPRED_IN.
+            unfold update, Option.bind in Heqo. destruct_match; try discriminate. inv Heqo.
+            rewrite forest_reg_gss in H11.
+            exploit eval_forest_gather_predicates_fold_inc. eauto. eauto. apply H11.
+            eapply NE.Forall_forall; intros.
+            eapply NE.Forall_forall in HPRED_IN; eauto.
+            rewrite forest_reg_gss. auto. intros HSEMEXEC.
+            inv HSEM2. inv H13. exploit AbstrSemIdent.sem_pred_expr_prune_predicated2. eauto.
+            apply HSEMEXEC. eassumption.
+            intros HSEM_APP.
+            case_eq (eval_predf pr'1 (dfltp o ∧ p_mid)); intros.
+            + exists m'. eapply AbstrSemIdent.sem_pred_expr_app_predicated; eauto.
+              eapply AbstrSemIdent.sem_pred_expr_app_predicated2; eauto.
+            + exists (is_mem i0). eapply AbstrSemIdent.sem_pred_expr_app_predicated_false; eauto.
+              repeat constructor.
+        }
+        eauto. auto.
+      + unfold evaluable_pred_list in *; intros.
+        inversion H5; subst.
+        exploit sem_update_instr_term; eauto; intros [HSEM3 HEVAL_PRED].
+        eapply abstract_sequence_evaluable_fold2_m_inc; eauto using
+          gather_predicates_in_forest, gather_predicates_update_constant.
+  Qed.
+
+(*|
+Proof sketch: If I can execute the list of instructions, then every single
+forest element that is added to the forest will be evaluable too.  This then
+means that if we gather these in a list, that everything in the list should also
+have been evaluable.
+|*)
+
+  Lemma abstract_sequence_evaluable :
+    forall sp x i i' ti' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
+      abstract_sequence_top x = Some (f, l0, l) ->
+      evaluable_pred_list (mk_ctx i sp ge) f.(forest_preds) (map snd l0).
+  Proof.
+    intros * ? HLESSDEF **. unfold abstract_sequence_top in *.
+    unfold Option.bind, Option.map in H1; repeat destr.
+    inv H1. inv Heqo.
+    eapply abstract_sequence_evaluable_fold; eauto; auto.
+    - apply sem_empty.
+    - reflexivity.
+    - apply all_preds_in_empty.
+    - inversion 1.
+    - cbn; unfold evaluable_pred_list; inversion 1.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_inc :
+    forall sp x i i' ti' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
+      abstract_sequence_top_inc x = Some (f, l0, l) ->
+      evaluable_pred_list (mk_ctx i sp ge) f.(forest_preds) (map snd l0).
+  Proof.
+    intros * ? HLESSDEF **. unfold abstract_sequence_top_inc in *.
+    unfold Option.bind, Option.map in H1; repeat destr.
+    inv H1. inv Heqo.
+    eapply abstract_sequence_evaluable_fold_inc; eauto; auto.
+    - apply sem_empty.
+    - reflexivity.
+    - apply all_preds_in_empty.
+    - inversion 1.
+    - cbn; unfold evaluable_pred_list; inversion 1.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_m :
+    forall sp x i i' ti' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
+      abstract_sequence_top x = Some (f, l0, l) ->
+      evaluable_pred_list_m (mk_ctx i sp ge) f.(forest_preds) l.
+  Proof.
+    intros * ? HLESSDEF **. unfold abstract_sequence_top in *.
+    unfold Option.bind, Option.map in H1; repeat destr.
+    inv H1. inv Heqo.
+    eapply abstract_sequence_evaluable_fold_m; eauto; auto.
+    - apply sem_empty.
+    - reflexivity.
+    - apply all_preds_in_empty.
+    - inversion 1.
+    - cbn; unfold evaluable_pred_list; inversion 1.
+  Qed.
+
+  Lemma abstract_sequence_evaluable_m_inc :
+    forall sp x i i' ti' cf f l0 l,
+      SeqBB.step ge sp (Iexec i) x (Iterm ti' cf) ->
+      state_lessdef i' ti' ->
+      sem {| ctx_is := i; ctx_sp := sp; ctx_ge := ge |} f (i', Some cf) ->
+      abstract_sequence_top_inc x = Some (f, l0, l) ->
+      evaluable_pred_list_m (mk_ctx i sp ge) f.(forest_preds) l.
+  Proof.
+    intros * ? HLESSDEF **. unfold abstract_sequence_top_inc in *.
+    unfold Option.bind, Option.map in H1; repeat destr.
+    inv H1. inv Heqo.
+    eapply abstract_sequence_evaluable_fold_m_inc; eauto; auto.
+    - apply sem_empty.
+    - reflexivity.
+    - apply all_preds_in_empty.
+    - inversion 1.
+    - cbn; unfold evaluable_pred_list; inversion 1.
+  Qed.
+
+  Lemma check_evaluability1_evaluable :
+    forall G (ctx: @Abstr.ctx G) l1 l2 f ps,
+      (forall x : positive, sem_pexpr ctx (get_forest_p' x f) ps !! x) ->
+      check_evaluability1 l1 l2 = true ->
+      evaluable_pred_list ctx f (map snd l1) ->
+      evaluable_pred_list ctx f (map snd l2).
+  Proof.
+    unfold check_evaluability1; intros * HPREDS H H0.
+    unfold evaluable_pred_list, evaluable_pred_expr in *; intros p H1.
+    exploit list_in_map_inv; eauto.
+    intros [[res expr] [HTEMP HIN]]; subst; cbn in *.
+    eapply forallb_forall in H; eauto.
+    apply existsb_exists in H.
+    inversion_clear H as [[res' expr'] [HIN' HRES']].
+    simplify.
+    pose proof H2 as HCHECKEXPR.
+    pose proof H4 as HCHECKEXPR'.
+    pose proof H as HRESEQ.
+    pose proof H5 as HBEQ.
+    clear H2 H4 H H5.
+    destruct (resource_eq res' res); subst; [|discriminate].
+    assert (XX: In expr' (map snd l1)).
+    { replace expr' with (snd (res, expr')) by auto. now apply in_map. }
+    apply H0 in XX.
+    inversion_clear XX as [v HSEM].
+    exists v. eapply HN.beq_pred_expr_correct_top;
+    eauto using check_mutexcl_correct.
+    auto.
+  Qed.
+
+  Lemma check_evaluability2_evaluable :
+    forall G (ctx: @Abstr.ctx G) l1 l2 f ps,
+      (forall x : positive, sem_pexpr ctx (get_forest_p' x f) ps !! x) ->
+      check_evaluability2 l1 l2 = true ->
+      evaluable_pred_list_m ctx f l1 ->
+      evaluable_pred_list_m ctx f l2.
+  Proof.
+    unfold check_evaluability1; intros * HPREDS H H0.
+    unfold evaluable_pred_list_m, evaluable_pred_expr_m in *; intros p H1.
+    eapply forallb_forall in H; eauto.
+    apply existsb_exists in H.
+    inversion_clear H as [expr' [HIN' HRES']].
+    simplify.
+    pose proof H2 as HCHECKEXPR.
+    pose proof H4 as HCHECKEXPR'.
+    pose proof H3 as HBEQ.
+    clear H2 H4 H3.
+    apply H0 in HIN'.
+    inversion_clear HIN' as [v HSEM].
+    exists v. eapply HN.beq_pred_expr_correct_top;
+    eauto using check_mutexcl_correct.
+    auto.
+  Qed.
+
+  Lemma evaluable_same_preds :
+    forall G (ctx: @Abstr.ctx G) f f' l1,
+      PTree.beq beq_pred_pexpr f f' = true ->
+      evaluable_pred_list ctx f l1 ->
+      evaluable_pred_list ctx f' l1.
+  Proof.
+    unfold evaluable_pred_list, evaluable_pred_expr in *; intros.
+    apply H0 in H1; simplify. exists x.
+    eapply sem_pred_exec_beq_correct; eauto.
+  Qed.
+
+  Lemma evaluable_same_state :
+    forall G i i' sp (ge: Genv.t G unit) f l1,
+      state_lessdef i i' ->
+      evaluable_pred_list (mk_ctx i sp ge) f l1 ->
+      evaluable_pred_list (mk_ctx i' sp ge) f l1.
+  Proof.
+    unfold evaluable_pred_list, evaluable_pred_expr in *; intros.
+    apply H0 in H1. simplify. exists x.
+    eapply sem_pred_expr_corr. 3: { eauto. }
+    constructor; auto. unfold ge_preserved; auto.
+    apply sem_value_corr.
+    constructor; auto. unfold ge_preserved; auto.
+  Qed.
+
+  Lemma evaluable_same_preds_m :
+    forall G (ctx: @Abstr.ctx G) f f' l1,
+      PTree.beq beq_pred_pexpr f f' = true ->
+      evaluable_pred_list_m ctx f l1 ->
+      evaluable_pred_list_m ctx f' l1.
+  Proof.
+    unfold evaluable_pred_list_m, evaluable_pred_expr_m in *; intros.
+    apply H0 in H1; simplify. exists x.
+    eapply sem_pred_exec_beq_correct; eauto.
+  Qed.
+
+  Lemma evaluable_same_state_m :
+    forall G i i' sp (ge: Genv.t G unit) f l1,
+      state_lessdef i i' ->
+      evaluable_pred_list_m (mk_ctx i sp ge) f l1 ->
+      evaluable_pred_list_m (mk_ctx i' sp ge) f l1.
+  Proof.
+    unfold evaluable_pred_list_m, evaluable_pred_expr_m in *; intros.
+    apply H0 in H1. simplify. exists x.
+    eapply sem_pred_expr_corr. 3: { eauto. }
+    constructor; auto. unfold ge_preserved; auto.
+    apply sem_mem_corr.
+    constructor; auto. unfold ge_preserved; auto.
+  Qed.
+
+(* abstract_sequence_top x = Some (f, l0, l) -> *)
 
   Lemma schedule_oracle_correct :
     forall x y sp i i' ti cf,
@@ -1426,9 +1264,79 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
              /\ state_lessdef i' ti'.
   Proof.
     unfold schedule_oracle; intros. repeat (destruct_match; try discriminate). simplify.
+    exploit top_implies_abstract_sequence; [eapply Heqo|]; intros.
+    exploit top_implies_abstract_sequence'; eauto; intros.
     exploit abstr_sequence_correct; eauto; simplify.
-    exploit abstr_check_correct; eauto. apply state_lessdef_refl. simplify.
-    exploit abstr_seq_reverse_correct; eauto. apply state_lessdef_refl. simplify.
+    exploit local_abstr_check_correct2; eauto.
+    { constructor. eapply ge_preserved_refl. reflexivity. }
+(*    { inv H. inv H8. exists pr'. intros x0. specialize (H x0). auto. } *)
+    simplify.
+    exploit abstr_seq_reverse_correct; eauto.
+    { inv H8. inv H14.
+      eapply check_evaluability1_evaluable.
+      eauto. eauto.
+      eapply evaluable_same_preds. unfold check in *. simplify. eauto.
+      eapply evaluable_same_state; eauto.
+      eapply abstract_sequence_evaluable. eauto. symmetry; eauto.
+      eapply sem_correct; eauto.
+      { constructor. constructor; auto. symmetry; auto. }
+      eauto.
+    }
+    { inv H8. inv H14.
+      eapply check_evaluability2_evaluable.
+      eauto. eauto.
+      eapply evaluable_same_preds_m. unfold check in *. simplify. eauto.
+      eapply evaluable_same_state_m; eauto.
+      eapply abstract_sequence_evaluable_m. eauto. symmetry; eauto.
+      eapply sem_correct; eauto.
+      { constructor. constructor; auto. symmetry; auto. }
+      eauto.
+    }
+    reflexivity. simplify.
+    exploit seqbb_step_parbb_step; eauto; intros.
+    econstructor; split; eauto.
+    etransitivity; eauto.
+    etransitivity; eauto.
+  Qed.
+
+  Lemma schedule_oracle_correct_inc:
+    forall x y sp i i' ti cf,
+      schedule_oracle_inc x y = true ->
+      SeqBB.step ge sp (Iexec i) x (Iterm i' cf) ->
+      state_lessdef i ti ->
+      exists ti', ParBB.step tge sp (Iexec ti) y (Iterm ti' cf)
+             /\ state_lessdef i' ti'.
+  Proof.
+    unfold schedule_oracle_inc; intros. repeat (destruct_match; try discriminate). simplify.
+    exploit top_implies_abstract_sequence_inc; [eapply Heqo|]; intros.
+    exploit top_implies_abstract_sequence'_inc; eauto; intros.
+    exploit abstr_sequence_correct; eauto; simplify.
+    exploit local_abstr_check_correct2; eauto.
+    { constructor. eapply ge_preserved_refl. reflexivity. }
+(*    { inv H. inv H8. exists pr'. intros x0. specialize (H x0). auto. } *)
+    simplify.
+    exploit abstr_seq_reverse_correct_inc; eauto.
+    { inv H8. inv H14.
+      eapply check_evaluability1_evaluable.
+      eauto. eauto.
+      eapply evaluable_same_preds. unfold check in *. simplify. eauto.
+      eapply evaluable_same_state; eauto.
+      eapply abstract_sequence_evaluable_inc. eauto. symmetry; eauto.
+      eapply sem_correct; eauto.
+      { constructor. constructor; auto. symmetry; auto. }
+      eauto.
+    }
+    { inv H8. inv H14.
+      eapply check_evaluability2_evaluable.
+      eauto. eauto.
+      eapply evaluable_same_preds_m. unfold check in *. simplify. eauto.
+      eapply evaluable_same_state_m; eauto.
+      eapply abstract_sequence_evaluable_m_inc. eauto. symmetry; eauto.
+      eapply sem_correct; eauto.
+      { constructor. constructor; auto. symmetry; auto. }
+      eauto.
+    }
+    reflexivity. simplify.
     exploit seqbb_step_parbb_step; eauto; intros.
     econstructor; split; eauto.
     etransitivity; eauto.
@@ -1441,7 +1349,55 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
       match_states s ts ->
       exists ts', step_cf_instr tge ts cf t ts'
              /\ match_states s' ts'.
-  Proof. Admitted.
+  Proof.
+(*|
+Proof Sketch:  Trivial because of structural equality.
+|*)
+    inversion 1; subst; clear H; inversion 1; subst; clear H.
+    - exploit find_function_translated; eauto; simplify.
+      econstructor; split.
+      + constructor; eauto using sig_transl_function.
+      + replace (rs' ## args) with (rs ## args).
+        now (repeat (constructor; auto)).
+        erewrite map_ext; auto.
+    - exploit find_function_translated; eauto; simplify.
+      econstructor; split.
+      + constructor; eauto using sig_transl_function.
+        unfold transl_function in TRANSL0. destruct_match; try discriminate.
+        inv TRANSL0. eauto.
+      + replace (rs' ## args) with (rs ## args).
+        now (repeat (constructor; auto)).
+        erewrite map_ext; auto.
+    - econstructor; split.
+      + econstructor; eauto using sig_transl_function.
+        eapply Events.eval_builtin_args_preserved; eauto.
+        eapply eval_builtin_args_eq; eauto.
+        auto.
+      + constructor; auto.
+        unfold regmap_setres; intros. destruct_match; auto.
+        subst. destruct (peq x0 x); subst.
+        * now rewrite ! PMap.gss.
+        * now rewrite ! PMap.gso by auto.
+    - econstructor; split.
+      + econstructor; eauto. eapply Op.eval_condition_lessdef; eauto.
+        replace (rs' ## args) with (rs ## args).
+        apply regs_lessdef_regs.
+        unfold regs_lessdef; auto.
+        erewrite map_ext; auto.
+        apply Mem.extends_refl.
+      + constructor; auto.
+    - econstructor; split.
+      + econstructor; eauto. now rewrite <- REG.
+      + constructor; auto.
+    - econstructor; split.
+      + econstructor; eauto. unfold transl_function in TRANSL0.
+        destruct_match; try discriminate. inv TRANSL0. eauto.
+      + replace (regmap_optget or Vundef rs') with (regmap_optget or Vundef rs).
+        constructor; auto. unfold regmap_optget. destruct_match; auto.
+    - econstructor; split.
+      + econstructor; eauto.
+      + constructor; auto.
+  Qed.
 
   Lemma match_states_stepBB :
     forall s f sp pc rs pr m sf' f' trs tps tm rs' pr' m' trs' tpr' tm',
@@ -1461,8 +1417,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
         exists R2, Smallstep.plus GiblePar.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1; repeat semantics_simpl.
-    {
-      exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
+    { exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
       destruct x0.
       pose proof H2 as X. eapply match_states_stepBB in X; eauto.
       exploit step_cf_correct; eauto. simplify.
@@ -1500,9 +1455,7 @@ Proof. induction 2; try rewrite H; eauto with barg. Qed.
   Lemma transl_final_states:
     forall S R r,
       match_states S R -> GibleSeq.final_state S r -> GiblePar.final_state R r.
-  Proof.
-    intros. inv H0. inv H. inv STACKS. constructor.
-  Qed.
+  Proof. intros. inv H0. inv H. inv STACKS. constructor. Qed.
 
   Theorem transf_program_correct:
     Smallstep.forward_simulation (GibleSeq.semantics prog) (GiblePar.semantics tprog).

@@ -28,7 +28,7 @@ open Clflags
 open Printf
 
 open VericertClflags
-open FunctionalUnits
+(* open FunctionalUnits *)
 
 module PMap = Map.Make (struct
   type t = P.t
@@ -111,7 +111,7 @@ let rec pprint_stmnt i =
                                     indent (i + 1); "end\n"
                                   ]
   in function
-  | Vskip -> concat [indent i; ";\n"]
+  | Vskip -> ""
   | Vseq (s1, s2) -> concat [ pprint_stmnt i s1; pprint_stmnt i s2]
   | Vcond (e, st, sf) -> concat [ indent i; "if ("; pprint_expr e; ") begin\n";
                                   pprint_stmnt (i + 1) st; indent i; "end else begin\n";
@@ -147,7 +147,7 @@ let declare (t, i) =
 
 let declarearr (t, _) =
   function (r, sz, ln) ->
-    concat [ t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
+    concat [t; " ["; sprintf "%d" (Nat.to_int sz - 1); ":0] ";
              register r;
              " ["; sprintf "%d" (Nat.to_int ln - 1); ":0];\n" ]
 
@@ -159,19 +159,20 @@ let print_io = function
 
 let decl i = function
   | Vdecl (io, r, sz) -> concat [indent i; declare (print_io io) (r, sz)]
-  | Vdeclarr (io, r, sz, ln) -> concat [indent i; declarearr (print_io io) (r, sz, ln)]
+  | Vdeclarr (io, r, sz, ln) -> concat [indent i; "(* ram_style = \"block\" *)\n"; 
+                                        indent i; declarearr (print_io io) (r, sz, ln)]
 
 (* TODO Fix always blocks, as they currently always print the same. *)
 let pprint_module_item i = function
   | Vdeclaration d -> decl i d
   | Valways (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
+    concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
   | Valways_ff (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
+    concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
   | Valways_comb (e, s) ->
-    concat [indent i; "always "; pprint_edge_top i e; " begin\n";
+    concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
 
 let rec intersperse c = function
@@ -197,7 +198,8 @@ let make_io i io r = concat [indent i; io; " "; register r; ";\n"]
 
 let compose f g x = g x |> f
 
-let testbench = "module testbench;
+let testbench = "`ifndef SYNTHESIS
+module testbench;
    reg start, reset, clk;
    wire finish;
    wire [31:0] return_val;
@@ -225,6 +227,7 @@ let testbench = "module testbench;
       cycles <= cycles + 1;
    end
 endmodule
+`endif
 "
 
 let debug_always_verbose i clk state = concat [

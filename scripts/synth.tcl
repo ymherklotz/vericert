@@ -45,7 +45,7 @@ proc dump_statistics {  } {
     set design_req 0
   } else {
     set design_slack [get_property SLACK $Timing_Paths]
-    set design_req [get_property REQUIREMENT  $Timing_Paths]
+    set design_req 10
   }
   if { [expr {$design_slack == ""}] } {
     set design_slack 0
@@ -76,7 +76,7 @@ proc dump_statistics {  } {
 }; #END PROC
 set outputDir .
 create_project -in_memory -part xc7z020clg484-1 -force
-read_verilog -sv main.v
+read_verilog -sv main.sv
 synth_design -mode out_of_context -no_iobuf -top main -part xc7z020clg484-1
 write_checkpoint -force $outputDir/post_synth.dcp
 report_timing_summary -file $outputDir/post_synth_timing_summary.rpt

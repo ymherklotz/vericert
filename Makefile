@@ -14,7 +14,10 @@ COMPCERTRECDIRS := lib common verilog backend cfrontend driver cparser
 COQINCLUDES := -R src vericert \
                $(foreach d, $(COMPCERTRECDIRS), -R lib/CompCert/$(d) compcert.$(d)) \
                -R lib/CompCert/flocq Flocq \
-               -R lib/CompCert/MenhirLib MenhirLib
+               -R lib/CompCert/MenhirLib MenhirLib \
+               -R lib/cohpred/theory cohpred_theory \
+               -R lib/cohpred/smtcoq/src SMTCoq
+
 
 COQEXEC := $(COQBIN)coqtop $(COQINCLUDES) -batch -load-vernac-source
 COQMAKE := $(COQBIN)coq_makefile
@@ -29,7 +32,7 @@ PREFIX ?= .
 
 .PHONY: all install proof clean extraction test force
 
-all: lib/COMPCERTSTAMP
+all: lib/COMPCERTSTAMP lib/COHPREDSTAMP
 	$(MAKE) proof
 	$(MAKE) compile
 
@@ -40,13 +43,23 @@ lib/COMPCERTSTAMP: lib/CompCert/Makefile.config
 	$(MAKE) HAS_RUNTIME_LIB=false CLIGHTGEN=false INSTALL_COQDEV=false -C lib/CompCert
 	touch $@
 
-install: # doc/vericert.1
+lib/COHPREDSTAMP:
+	$(MAKE) -C lib/cohpred
+	touch lib/COHPREDSTAMP
+
+install: doc/vericert.1
 	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
 	install -d $(PREFIX)/bin
 	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin
 	install -C _build/default/driver/VericertDriver.exe $(PREFIX)/bin/vericert
 	install -d $(PREFIX)/share/man/man1
 	install -C -m 644 $< $(PREFIX)/share/man/man1
+
+install-test: # doc/vericert.1
+	sed -i'' -e 's/arch=verilog/arch=x86/' _build/default/driver/compcert.ini
+	install -d $(PREFIX)/bin
+	install -C -m 644 _build/default/driver/compcert.ini $(PREFIX)/bin
+	install -C _build/default/debug/VericertTest.exe $(PREFIX)/bin/vericert-test
 
 proof: Makefile.coq
 	$(MAKE) -f Makefile.coq
@@ -88,8 +101,8 @@ Makefile.coq _CoqProject: force
 
 force:
 
-docs/vericert.1:
-	$(MAKE) -C docs vericert.1
+doc/vericert.1:
+	$(MAKE) -C doc -f Makefile.extr vericert.1
 
 detangle-all:
 	emacs --batch --eval "(progn(require 'org)(require 'ob-tangle)\

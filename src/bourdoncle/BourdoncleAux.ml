@@ -20,7 +20,7 @@ let positive_of_int n = P.of_int (n+1)
 
 (* Functions copied from SliceToString to avoid mutual inclusion *)
 let nodeToString (p : P.t) : string =
-  Int.to_string (P.to_int p)
+  string_of_int (P.to_int p)
 let rec cleanListToString' (aToString: 'a -> string) (l : 'a list) =
   match l with
   | [] -> ""

@@ -55,9 +55,13 @@ From compcert Require
     Parser
     Initializers.
 
+From cohpred_theory Require
+    Smtpredicate.
+
 (* Standard lib *)
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlString.
+Require Import ExtrOCamlInt63.
 
 (* Coqlib *)
 Extract Inlined Constant Coqlib.proj_sumbool => "(fun x -> x)".
@@ -147,7 +151,9 @@ Extract Constant driver.Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
 Extract Constant Compiler.print_GibleSeq => "PrintGibleSeq.print_if".
 Extract Constant Compiler.print_GiblePar => "PrintGiblePar.print_if".
+Extract Constant Compiler.print_GibleSubPar => "PrintGibleSubPar.print_if".
 Extract Constant Compiler.print_HTL => "PrintHTL.print_if".
+Extract Constant Compiler.print_DHTL => "PrintDHTL.print_if".
 Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
 Extract Constant Compiler.print_Mach => "PrintMach.print_if".
 Extract Constant Compiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
@@ -172,22 +178,24 @@ Extract Constant Cabs.char_code => "int64".
 Load extractionMachdep.
 
 (* Avoid name clashes *)
-Extraction Blacklist List String Int.
+Extraction Blacklist List String Int Uint63.
 
 (* Cutting the dependency to R. *)
 Extract Inlined Constant Defs.F2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.FF2R => "fun _ -> assert false".
 Extract Inlined Constant Binary.B2R => "fun _ -> assert false".
-Extract Inlined Constant Binary.round_mode => "fun _ -> assert false".
 Extract Inlined Constant Bracket.inbetween_loc => "fun _ -> assert false".
 
 (*Extract Constant Pipeline.pipeline => "pipelining.pipeline".*)
 Extract Constant GibleSeqgen.partition => "Partition.partition".
 Extract Constant GiblePargen.schedule => "Schedule.schedule_fn".
+Extract Constant Abstr.print_forest => "(PrintAbstr.print_forest stdout)".
+
+Extract Constant Smtpredicate.pred_verit_unsat => "Cohpred.smt_certificate".
 
 (* Loop normalization *)
 Extract Constant IfConversion.build_bourdoncle => "BourdoncleAux.build_bourdoncle".
-Extract Constant IfConversion.get_if_conv_t => "(fun _ -> [Maps.PTree.empty; Maps.PTree.empty; Maps.PTree.empty])".
+(*Extract Constant IfConversion.get_if_conv_t => "(fun _ -> [Maps.PTree.empty; Maps.PTree.empty; Maps.PTree.empty])".*)
 
 (* Needed in Coq 8.4 to avoid problems with Function definitions. *)
 Set Extraction AccessOpaque.
@@ -202,9 +210,13 @@ Separate Extraction
          Verilog.stmnt_to_list
          Bourdoncle.bourdoncle
 
+   Smtpredicate.check_smt_total
+   GiblePargen.abstract_sequence_top_inc
+
    Compiler.transf_c_program Compiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
-   Ctypes.merge_attributes Ctypes.remove_attributes Ctypes.build_composite_env
+   Ctypes.merge_attributes Ctypes.remove_attributes 
+   Ctypes.build_composite_env Ctypes.layout_struct
    Initializers.transl_init Initializers.constval
    Csyntax.Eindex Csyntax.Epreincr Csyntax.Eselection
    Ctyping.typecheck_program
@@ -216,6 +228,7 @@ Separate Extraction
    Conventions1.int_caller_save_regs Conventions1.float_caller_save_regs
    Conventions1.int_callee_save_regs Conventions1.float_callee_save_regs
    Conventions1.dummy_int_reg Conventions1.dummy_float_reg
+   Conventions1.allocatable_registers
    RTL.instr_defs RTL.instr_uses
    Machregs.mregs_for_operation Machregs.mregs_for_builtin
    Machregs.two_address_op Machregs.is_stack_reg

@@ -45,7 +45,6 @@ _build
 
 /docs/html
 .DS_Store
-debug/*
 
 # CompCert
 *.rtl.*
@@ -93,3 +92,5 @@ creduce_bug_*/
 /results*
 
 _CoqProject
+
+lib/COHPREDSTAMP

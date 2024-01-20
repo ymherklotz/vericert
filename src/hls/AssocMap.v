@@ -243,6 +243,7 @@ Ltac unfold_merge :=
   rewrite AssocMapExt.merge_base_1.
 
 Declare Scope assocmap.
+
 Notation "a ! b" := (AssocMap.get b a) (at level 1) : assocmap.
 Notation "a # ( b , c )" := (find_assocmap c b a) (at level 1) : assocmap.
 Notation "a # b" := (find_assocmap 32 b a) (at level 1) : assocmap.
@@ -251,7 +252,92 @@ Notation "a # b '<-' c" := (AssocMap.set b c a) (at level 1, b at next level) : 
 
 Local Open Scope assocmap.
 Lemma find_get_assocmap :
-  forall assoc r v,
+  forall n assoc r v,
   assoc ! r = Some v ->
-  assoc # r = v.
+  find_assocmap n r assoc = v.
 Proof. intros. unfold find_assocmap, AssocMapExt.get_default. rewrite H. trivial. Qed.
+
+Lemma merge_get_default :
+  forall n ars ars' r x,
+    ars ! r = Some x ->
+    find_assocmap n r (AssocMapExt.merge _ ars ars') = x.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_get_default2 :
+  forall n ars ars' r,
+    ars ! r = None ->
+    find_assocmap n r (AssocMapExt.merge _ ars ars') = find_assocmap n r ars'.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_get_default3 :
+  forall A ars ars' r,
+    ars ! r = None ->
+    (AssocMapExt.merge A ars ars') ! r = ars' ! r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_get_default4 :
+  forall A ars ars' r x,
+    ars ! r = Some x ->
+    (AssocMapExt.merge A ars ars') ! r = Some x.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  unfold "#", AssocMapExt.get_default.
+  rewrite AssocMap.gcombine by auto.
+  unfold AssocMapExt.merge_atom.
+  now rewrite !H.
+Qed.
+
+Lemma merge_left_gso :
+  forall A ars ars' d (v: A) r,
+    d <> r ->
+    (AssocMapExt.merge _ (ars # d <- v) ars') ! r = (AssocMapExt.merge _ ars ars') ! r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  rewrite ! AssocMap.gcombine by auto.
+  now rewrite AssocMap.gso by auto.
+Qed.
+
+Lemma merge_right_gso :
+  forall A ars ars' d (v: A) r,
+    d <> r ->
+    (AssocMapExt.merge _ ars (ars' # d <- v)) ! r = (AssocMapExt.merge _ ars ars') ! r.
+Proof.
+  unfold AssocMapExt.merge; intros.
+  rewrite ! AssocMap.gcombine by auto.
+  now rewrite AssocMap.gso by auto.
+Qed.
+
+Lemma assocmap_gso :
+  forall n a a' c b,
+    a <> a' ->
+    find_assocmap n a (AssocMap.set a' c b) = find_assocmap n a b.
+Proof.
+  intros. unfold find_assocmap, AssocMapExt.get_default.
+  now rewrite AssocMap.gso by auto.
+Qed.
+
+Lemma assocmap_gss :
+  forall n a c b,
+    find_assocmap n a (AssocMap.set a c b) = c.
+Proof.
+  intros. unfold find_assocmap, AssocMapExt.get_default.
+  now rewrite AssocMap.gss by auto.
+Qed.

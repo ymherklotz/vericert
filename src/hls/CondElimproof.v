@@ -60,7 +60,7 @@ Proof.
   induction p; crush.
   - repeat destruct_match. inv H1.
     unfold eval_predf; simpl.
-    inv H0. rewrite H. eauto. rewrite Pos2Nat.id; auto.
+    inv H0. rewrite H; eauto.
   - apply Forall_app in H1; inv H1.
     rewrite ! eval_predf_Pand.
     erewrite IHp1; eauto.
@@ -176,7 +176,7 @@ Lemma eval_predf_match_ps :
 Proof.
   induction p0; crush.
   - unfold eval_predf. simplify. destruct p0.
-    rewrite Pos2Nat.id. inv H. inv H0. rewrite H1; auto.
+    inv H. inv H0. rewrite H1; auto.
   - eapply Forall_app in H0. inv H0.
     rewrite ! eval_predf_Pand.
     erewrite IHp0_1; eauto.
@@ -249,12 +249,12 @@ Lemma eval_predf_set_gt:
     wf_predicate v p -> match_ps v ps tps -> eval_predf tps # p <- b p1 = true.
 Proof.
   induction p1; crush.
-  - unfold eval_predf. simplify. destruct p. rewrite Pos2Nat.id.
+  - unfold eval_predf. simplify. destruct p.
     assert (p <> p0).
     { inv H0. unfold wf_predicate in H1. lia. }
     rewrite ! PMap.gso by auto. inv H2.
     inv H0. rewrite <- H4 by auto. unfold eval_predf in H.
-    simplify. rewrite Pos2Nat.id in H. auto.
+    simplify. auto.
   - rewrite eval_predf_Pand. apply Forall_app in H0.
     rewrite eval_predf_Pand in H. apply andb_true_iff in H.
     apply andb_true_iff; simplify.
@@ -275,7 +275,7 @@ Lemma eval_predf_in_ps :
 Proof.
   intros.
   rewrite eval_predf_Pand. apply andb_true_iff. split.
-  unfold eval_predf. simplify. rewrite Pos2Nat.id.
+  unfold eval_predf. simplify.
   rewrite PMap.gss. destruct b; auto.
   eapply eval_predf_set_gt; eauto.
 Qed.
@@ -292,7 +292,7 @@ Proof.
   intros.
   rewrite eval_predf_Pand. apply andb_false_iff.
   unfold eval_predf. simplify. left.
-  rewrite Pos2Nat.id. rewrite PMap.gss.
+  rewrite PMap.gss.
   now destruct b, b'.
 Qed.
 
@@ -309,6 +309,13 @@ Qed.
 
 Definition match_prog (p: program) (tp: program) :=
   Linking.match_program (fun cu f tf => tf = transf_fundef f) eq p tp.
+
+Lemma transf_program_match:
+  forall p, match_prog p (transf_program p).
+Proof.
+  intros. unfold transf_program, match_prog.
+  apply Linking.match_transform_program.
+Qed.
 
 Section CORRECTNESS.
 
@@ -510,7 +517,7 @@ Section CORRECTNESS.
       constructor.
       econstructor. simplify. destruct p1.
       constructor. inv H4. eapply eval_predf_in_ps; eauto.
-      constructor. unfold eval_predf; simplify. rewrite Pos2Nat.id.
+      constructor. unfold eval_predf; simplify.
       apply PMap.gss.
       apply match_ps_set_gt; auto.
       constructor; auto.
@@ -521,9 +528,9 @@ Section CORRECTNESS.
       eapply truthy_match_ps; eauto; intros; match goal with H: _ = Some _ |- _ => inv H end; auto.
       econstructor. eapply exec_RB_falsy. simplify. destruct p1.
       constructor. inv H4. eapply eval_predf_in_ps2; eauto.
-      constructor. unfold eval_predf; simplify. rewrite Pos2Nat.id. apply PMap.gss.
+      constructor. unfold eval_predf; simplify. apply PMap.gss.
       constructor. econstructor. inv H4. constructor. unfold eval_predf; simplify.
-      rewrite Pos2Nat.id. rewrite PMap.gss. auto.
+      rewrite PMap.gss. auto.
       constructor. eapply eval_predf_in_ps; eauto.
       apply match_ps_set_gt; auto.
       constructor; auto.

@@ -253,6 +253,13 @@ whole execution (in one big step) of the basic block.
   Definition match_prog (p: RTL.program) (tp: GibleSeq.program) :=
     Linking.match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
 
+  Lemma transf_program_match:
+    forall p tp, transl_program p = OK tp -> match_prog p tp.
+  Proof.
+    intros. unfold transl_program, match_prog.
+    eapply Linking.match_transform_partial_program; auto.
+  Qed.
+
   Context (TRANSL : match_prog prog tprog).
 
   Lemma symbols_preserved:

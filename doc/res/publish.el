@@ -5,7 +5,6 @@
 (require 'org-transclusion)
 (require 'ox)
 (require 'ox-html)
-(require 'htmlize)
 (require 'ox-texinfo)
 (require 'ox-man)
 

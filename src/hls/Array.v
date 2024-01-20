@@ -76,7 +76,7 @@ Lemma array_set_wf {A : Type} :
 Proof.
   induction l; intros; destruct i; auto.
 
-  invert H; crush.
+  inv H; crush.
 Qed.
 
 Definition array_set {A : Type} (i : nat) (x : A) (a : Array A) :=
@@ -272,10 +272,10 @@ Proof.
 
   (* This is actually a degenerate case, not an unprovable goal. *)
   pose proof (in_app_or (list_repeat' [] a n) ([a])).
-  apply H0 in H. invert H.
+  apply H0 in H. inv H.
 
   - eapply IHn in X; eassumption.
-  - invert H1; contradiction.
+  - inv H1; contradiction.
 Qed.
 
 Lemma list_repeat_head_tail {A : Type} : forall n (a : A),
@@ -358,3 +358,10 @@ Ltac array :=
       | |- context[nth_error (list_repeat ?x _) _ = Some ?x] =>
         apply list_repeat_lookup
       end.
+
+Lemma array_contents_ext :
+  forall A a b, @arr_contents A a = arr_contents b -> a = b.
+Proof.
+  destruct a, b; intros. cbn in *. subst. f_equal.
+Qed.
+

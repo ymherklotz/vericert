@@ -39,8 +39,8 @@ Require Import compcert.common.Smallstep.
 Require Import compcert.lib.Maps.
 Require Import compcert.verilog.Op.
 
-Require Import Predicate.
-Require Import Vericertlib.
+Require Import vericert.hls.Predicate.
+Require Import vericert.common.Vericertlib.
 
 Definition node := positive.
 Definition predicate := positive.
@@ -148,6 +148,7 @@ Definition max_pred_instr (m: positive) (i: instr) :=
   | RBload (Some p) chunk addr args dst => Pos.max m (max_predicate p)
   | RBstore (Some p) chunk addr args src => Pos.max m (max_predicate p)
   | RBsetpred (Some p') c args p => Pos.max m (Pos.max p (max_predicate p'))
+  | RBsetpred None c args p => Pos.max m p
   | RBexit (Some p) c => Pos.max m (max_predicate p)
   | _ => m
   end.
@@ -156,7 +157,21 @@ Definition regset := Regmap.t val.
 Definition predset := PMap.t bool.
 
 Definition eval_predf (pr: predset) (p: pred_op) :=
-  sat_predicate p (fun x => pr !! (Pos.of_nat x)).
+  sat_predicate p (fun x => pr !! x).
+
+Lemma sat_pred_agree0 :
+  forall a b p,
+    (forall x, a x = b x) ->
+    sat_predicate p a = sat_predicate p b.
+Proof.
+  induction p; auto; intros.
+  - destruct p. cbn.
+    now rewrite H.
+  - specialize (IHp1 H). specialize (IHp2 H).
+    cbn. rewrite IHp1. rewrite IHp2. auto.
+  - specialize (IHp1 H). specialize (IHp2 H).
+    cbn. rewrite IHp1. rewrite IHp2. auto.
+Qed.
 
 #[global]
  Instance eval_predf_Proper : Proper (eq ==> equiv ==> eq) eval_predf.
@@ -178,6 +193,16 @@ Lemma eval_predf_Por :
     eval_predf ps (p ∨ p') = eval_predf ps p || eval_predf ps p'.
 Proof. unfold eval_predf; split; simplify; auto with bool. Qed.
 
+Lemma eval_predf_simplify :
+  forall ps p,
+    eval_predf ps (simplify p) = eval_predf ps p.
+Proof. unfold eval_predf; intros. now rewrite simplify_correct. Qed.
+
+Lemma eval_predf_deep_simplify :
+  forall peq ps p,
+    eval_predf ps (deep_simplify peq p) = eval_predf ps p.
+Proof. unfold eval_predf; intros. now rewrite deep_simplify_correct. Qed.
+
 Lemma eval_predf_pr_equiv :
   forall p ps ps',
     (forall x, ps !! x = ps' !! x) ->
@@ -188,6 +213,26 @@ Proof.
          repeat (destruct_match; []); inv Heqp0; rewrite <- H; auto);
     [repeat rewrite eval_predf_Pand|repeat rewrite eval_predf_Por];
     erewrite IHp1; try eassumption; erewrite IHp2; eauto.
+Qed.
+
+Lemma eval_predf_not_PredIn :
+  forall ps p b op,
+    ~ PredIn p op ->
+    eval_predf (ps # p <- b) op = eval_predf ps op.
+Proof.
+  induction op; auto.
+  - intros. destruct p0. cbn.
+    destruct (peq p p0); subst.
+      { exfalso; apply H; constructor. }
+    rewrite Regmap.gso; auto.
+  - intros. cbn. unfold eval_predf in *. rewrite IHop1.
+    rewrite IHop2. auto.
+    unfold not; intros; apply H; constructor; tauto.
+    unfold not; intros; apply H; constructor; tauto.
+  - intros. cbn. unfold eval_predf in *. rewrite IHop1.
+    rewrite IHop2. auto.
+    unfold not; intros; apply H; constructor; tauto.
+    unfold not; intros; apply H; constructor; tauto.
 Qed.
 
 Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
@@ -231,18 +276,6 @@ Inductive eval_pred:
 | eval_pred_none:
   forall i i', eval_pred None i i' i'.
 
-Section RELABSTR.
-
-  Context {A B : Type} (ge : Genv.t A B).
-
-(*|
-.. index::
-   triple: semantics; RTLBlockInstr; instruction
-
-Step Instruction
-=============================
-|*)
-
 Definition truthyb (ps: predset) (p: option pred_op) :=
   match p with
   | None => true
@@ -278,6 +311,77 @@ Variant instr_falsy (ps: predset): instr -> Prop :=
       eval_predf ps p = false ->
       instr_falsy ps (RBexit (Some p) cf)
   .
+
+Inductive state_equiv : instr_state -> instr_state -> Prop :=
+| match_states_intro:
+  forall ps ps' rs rs' m m',
+    (forall x, rs !! x = rs' !! x) ->
+    (forall x, ps !! x = ps' !! x) ->
+    m = m' ->
+    state_equiv (mk_instr_state rs ps  m) (mk_instr_state rs' ps' m').
+
+Lemma state_equiv_refl x : state_equiv x x.
+Proof. destruct x; constructor; crush. Qed.
+
+Lemma state_equiv_commut x y : state_equiv x y -> state_equiv y x.
+Proof. inversion 1; constructor; crush. Qed.
+
+Lemma state_equiv_trans x y z :
+  state_equiv x y -> state_equiv y z -> state_equiv x z.
+Proof. repeat inversion 1; constructor; crush. Qed.
+
+#[global] Instance state_equiv_Equivalence : Equivalence state_equiv :=
+  { Equivalence_Reflexive := state_equiv_refl ;
+    Equivalence_Symmetric := state_equiv_commut ;
+    Equivalence_Transitive := state_equiv_trans ; }.
+
+Lemma match_states_list :
+  forall A (rs: Regmap.t A) rs',
+  (forall r, rs !! r = rs' !! r) ->
+  forall l, rs ## l = rs' ## l.
+Proof. induction l; crush. Qed.
+
+Lemma truthy_match_state :
+  forall ps ps' p,
+    (forall x, ps !! x = ps' !! x) ->
+    truthy ps p ->
+    truthy ps' p.
+Proof.
+  intros; destruct p; inv H0; constructor; auto.
+  erewrite eval_predf_pr_equiv; eauto.
+Qed.
+
+Lemma falsy_match_state :
+  forall ps ps' p,
+    (forall x, ps !! x = ps' !! x) ->
+    falsy ps p ->
+    falsy ps' p.
+Proof.
+  intros; destruct p; inv H0; constructor; auto.
+  erewrite eval_predf_pr_equiv; eauto.
+Qed.
+
+Lemma PTree_matches :
+  forall A (v: A) res rs rs',
+  (forall r, rs !! r = rs' !! r) ->
+  forall x, (Regmap.set res v rs) !! x = (Regmap.set res v rs') !! x.
+Proof.
+  intros; destruct (Pos.eq_dec x res); subst;
+  [ repeat rewrite Regmap.gss by auto
+  | repeat rewrite Regmap.gso by auto ]; auto.
+Qed.
+
+Section RELABSTR.
+
+  Context {A B : Type} (ge : Genv.t A B).
+
+(*|
+.. index::
+   triple: semantics; RTLBlockInstr; instruction
+
+Step Instruction
+=============================
+|*)
 
 Variant step_instr: val -> istate -> instr -> istate -> Prop :=
   | exec_RBnop:
@@ -319,6 +423,45 @@ Variant step_instr: val -> istate -> instr -> istate -> Prop :=
       step_instr sp (Iexec st) i (Iexec st)
 .
 
+Lemma step_exists:
+  forall sp i instr i' ti,
+    step_instr sp (Iexec i) instr (Iexec i') ->
+    state_equiv i ti ->
+    exists ti',
+      step_instr sp (Iexec ti) instr (Iexec ti')
+      /\ state_equiv i' ti'.
+Proof.
+  inversion_clear 1; subst; intros.
+  - econstructor; split; eauto. constructor.
+  - destruct ti; cbn in *. inv H. econstructor. split.
+    econstructor. erewrite match_states_list; eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+    eapply PTree_matches; auto.
+  - inv H; cbn in *. eexists; split. econstructor.
+    erewrite match_states_list; eauto. eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+    eapply PTree_matches; auto.
+  - inv H; cbn in *. eexists; split. econstructor.
+    erewrite match_states_list; eauto. rewrite <- H6. eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+  - inv H. econstructor. split. econstructor. erewrite match_states_list; eauto.
+    eapply truthy_match_state; eauto. constructor; auto.
+    eapply PTree_matches; auto.
+  - inv H0; exists ti; split; auto;
+      repeat constructor; inv H; erewrite eval_predf_pr_equiv; eauto.
+Qed.
+
+Lemma step_exists_Iterm:
+  forall sp i instr ti cf,
+    step_instr sp (Iexec i) instr (Iterm i cf) ->
+    state_equiv i ti ->
+    step_instr sp (Iexec ti) instr (Iterm ti cf).
+Proof.
+  inversion_clear 1; subst; intros.
+  econstructor.
+  inv H. eapply truthy_match_state; eauto.
+Qed.
+
 End RELABSTR.
 
 (*|
@@ -338,6 +481,90 @@ Inductive step_list {A} (step_i: val -> istate -> A -> istate -> Prop):
   forall state sp i state' cf instrs,
     step_i sp (Iexec state) i (Iterm state' cf) ->
     step_list step_i sp (Iexec state) (i :: instrs) (Iterm state' cf).
+
+Inductive step_list_nth {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> nat -> istate -> list A -> nat -> istate -> Prop :=
+| exec_RBnth_refl :
+  forall out n instrs sp,
+    step_list_nth step_i sp n out instrs n out
+| exec_RBnth_star :
+  forall state i n out instrs sp m out',
+    nth_error instrs n = Some i ->
+    step_i sp state i out ->
+    step_list_nth step_i sp (S n) out instrs m out' ->
+    (n < m)%nat ->
+    step_list_nth step_i sp n state instrs m out'.
+
+Lemma list_drop_nil :
+  forall A n, @list_drop A n nil = nil.
+Proof. intros. destruct n; auto. Qed.
+
+Lemma list_drop_length :
+  forall A n (l: list A), (length l <= n)%nat -> @list_drop A n l = nil.
+Proof. 
+  induction n; intros.
+  - destruct l; cbn in *; auto. lia.
+  - destruct l; cbn; auto.
+    rewrite IHn; eauto. cbn in *. lia.
+Qed.
+
+Lemma step_list_equiv_nth:
+  forall A (step_i: val -> istate -> A -> istate -> Prop) sp l n m st1 st2,
+    step_list_nth step_i sp n st1 l m st2 ->
+    forall offs l',
+    (forall x e, (n <= x < m)%nat -> nth_error l x = Some e -> nth_error l' (x+offs) = Some e) ->
+    step_list_nth step_i sp (n+offs) st1 l' (m+offs) st2.
+Proof.
+  induction 1. intros. constructor.
+  intros. econstructor; eauto; [|lia].
+  eapply IHstep_list_nth; eauto.
+  intros. eapply H3; auto; lia.
+Qed.
+
+Lemma step_list_nth_cons':
+  forall A (step_i: val -> istate -> A -> istate -> Prop) sp 
+      n m (l: list A) a st1 st2,
+    step_list_nth step_i sp n st1 l m st2 ->
+    step_list_nth step_i sp (S n) st1 (a :: l) (S m) st2.
+Proof.
+  intros * Hstep.
+  assert (Hequiv: forall x e, (n <= x < m)%nat -> nth_error l x = Some e -> nth_error (a :: l) (x+1) = Some e).
+  { intros. replace (a :: l) with ((a :: nil) ++ l) by auto.
+    rewrite nth_error_app2 by (cbn; lia).
+    cbn. now replace ((x + 1 - 1)%nat) with x by lia.
+  }
+  replace (S n) with (n + 1)%nat by lia.
+  replace (S m) with (m + 1)%nat by lia.
+  eapply step_list_equiv_nth; eauto.
+Qed.
+
+Lemma step_list_nth_cons :
+  forall A (step_i: val -> istate -> A -> istate -> Prop) sp 
+      (instrs: list A) (a: A) l st1 st2 st3,
+    step_i sp st1 a st2 ->
+    step_list_nth step_i sp 0 st2 instrs l st3 ->
+    step_list_nth step_i sp 0 st1 (a :: instrs) (S l) st3.
+Proof.
+  intros. econstructor; cbn; eauto; [|lia].
+  replace 1%nat with (0 + 1)%nat at 1 by lia. 
+  now apply step_list_nth_cons'.
+Qed.
+
+Lemma step_list_equiv :
+  forall A step_i sp (instrs: list A) st1 st2,
+    step_list step_i sp st1 instrs st2 ->
+    exists l, step_list_nth step_i sp 0 st1 instrs l st2 
+      /\ (l <= length instrs)%nat.
+Proof.
+  induction instrs.
+  - cbn; intros. inv H.
+  - cbn; intros. inv H.
+    + exploit IHinstrs. eauto. simplify.
+      exists (S x). split; [|lia].
+      eapply step_list_nth_cons; eauto.
+    + exists 1%nat. split; [|lia].
+      econstructor; cbn; eauto. constructor.
+Qed.
 
 Inductive step_list2 {A} (step_i: val -> istate -> A -> istate -> Prop):
   val -> istate -> list A -> istate -> Prop :=
@@ -361,6 +588,21 @@ Inductive step_list_inter {A} (step_i: val -> istate -> A -> istate -> Prop):
 | exec_term_RBcons_term :
   forall i cf l sp,
     step_list_inter step_i sp (Iterm i cf) l (Iterm i cf).
+
+Inductive step_list_inter_strict {A} (step_i: val -> istate -> A -> istate -> Prop):
+  val -> istate -> list A -> istate -> Prop :=
+| exec_term_strict_RBcons :
+  forall i0 i1 i2 i instrs sp,
+    step_i sp (Iexec i0) i i1 ->
+    step_list_inter_strict step_i sp i1 instrs i2 ->
+    step_list_inter_strict step_i sp (Iexec i0) (i :: instrs) i2
+| exec_term_strict_RBnil :
+  forall sp i, step_list_inter_strict step_i sp i nil i
+| exec_term_strict_RBcons_term :
+  forall i cf instr instrs sp,
+    step_i sp (Iexec i) instr (Iexec i) ->
+    step_list_inter_strict step_i sp (Iexec i) instrs (Iexec i) ->
+    step_list_inter_strict step_i sp (Iterm i cf) (instr :: instrs) (Iterm i cf).
 
 (*|
 Top-Level Type Definitions
@@ -681,6 +923,7 @@ type ~genv~ which was declared earlier.
       | RBstore (Some p) _ _ _ _
       | RBexit (Some p) _ => predicate_use p
       | RBsetpred (Some p) _ _ p' => p' :: predicate_use p
+      | RBsetpred None _ _ p' => p' :: nil
       | _ => nil
       end.
 

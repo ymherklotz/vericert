@@ -25,7 +25,6 @@ Require Import vericert.hls.AssocMap.
 Require Import vericert.hls.HTL.
 Require Import vericert.hls.ValueInt.
 Require Import vericert.hls.Verilog.
-Require Import vericert.hls.FunctionalUnits.
 
 Definition transl_list_fun (a : node * Verilog.stmnt) :=
   let (n, stmnt) := a in
@@ -57,13 +56,13 @@ Definition inst_ram clk ram :=
 Definition transl_module (m : HTL.module) : Verilog.module :=
   let case_el_ctrl := list_to_stmnt (transl_list (PTree.elements m.(mod_controllogic))) in
   let case_el_data := list_to_stmnt (transl_list (PTree.elements m.(mod_datapath))) in
-  let ram := m.(HTL.mod_ram) in
-  let body :=
-        Valways (Vposedge m.(HTL.mod_clk))
-                (Vseq (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
-                      (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
-                             (Vblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
-                             (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip))))
+  match m.(HTL.mod_ram) with
+  | Some ram =>
+    let body :=
+        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
+                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
+                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
+                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
                 :: inst_ram m.(HTL.mod_clk) ram
                 :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
                                                           ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
@@ -73,11 +72,31 @@ Definition transl_module (m : HTL.module) : Verilog.module :=
                      m.(HTL.mod_finish)
                      m.(HTL.mod_return)
                      m.(HTL.mod_st)
-                     m.(HTL.mod_ram).(ram_mem)
-                     m.(HTL.mod_ram).(ram_size)
+                     m.(HTL.mod_stk)
+                     m.(HTL.mod_stk_len)
                      m.(HTL.mod_params)
                      body
-                     m.(HTL.mod_entrypoint).
+                     m.(HTL.mod_entrypoint)
+  | None =>
+    let body :=
+        Valways (Vposedge m.(HTL.mod_clk)) (Vcond (Vbinop Veq (Vvar m.(HTL.mod_reset)) (Vlit (ZToValue 1)))
+                                                  (Vnonblock (Vvar m.(HTL.mod_st)) (Vlit (posToValue m.(HTL.mod_entrypoint))))
+                                                  (Vcase (Vvar m.(HTL.mod_st)) case_el_ctrl (Some Vskip)))
+                :: Valways (Vposedge m.(HTL.mod_clk)) (Vcase (Vvar m.(HTL.mod_st)) case_el_data (Some Vskip))
+                :: List.map Vdeclaration (arr_to_Vdeclarr (AssocMap.elements m.(mod_arrdecls))
+                                                          ++ scl_to_Vdecl (AssocMap.elements m.(mod_scldecls))) in
+    Verilog.mkmodule m.(HTL.mod_start)
+                     m.(HTL.mod_reset)
+                     m.(HTL.mod_clk)
+                     m.(HTL.mod_finish)
+                     m.(HTL.mod_return)
+                     m.(HTL.mod_st)
+                     m.(HTL.mod_stk)
+                     m.(HTL.mod_stk_len)
+                     m.(HTL.mod_params)
+                     body
+                     m.(HTL.mod_entrypoint)
+  end.
 
 Definition transl_fundef := transf_fundef transl_module.
 
