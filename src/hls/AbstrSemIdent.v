@@ -140,9 +140,12 @@ Proof.
   - cbn in *; intros * HPREDSEM **. destruct_match; repeat destr.
     2: { clear Heqb. inv H; cbn in *.
          eapply sem_pexpr_eval_inv in H4; [|eassumption].
-         rewrite <- 2 eval_predf_deep_simplify with (peq:=peq) in H4.
-         setoid_rewrite Heqp in H4. now cbn in H4.
-         eauto. }
+         rewrite <- eval_predf_deep_simplify with (peq:=peq) in H4.
+         unfold sat_pred_simple in Heqo. 
+         destruct (sat_pred_tseytin (deep_simplify peq pr)). 
+         destruct s. discriminate.
+         unfold eval_predf in H4. 
+         rewrite e0 in H4. discriminate. auto. }
     destruct_match.
     + inv H0. inv H.
       * constructor; auto. eapply sem_pexpr_eval; [eassumption|].
@@ -163,8 +166,9 @@ Proof.
         cbn in *. eapply NE.Forall_forall in H; [|eassumption].
         destr. clear H. cbn in *.
         eapply sem_pexpr_eval_inv in HSEMP; [|eassumption].
-        rewrite <- 2 eval_predf_deep_simplify with (peq:=peq) in HSEMP.
-        setoid_rewrite Heqp in HSEMP. now cbn in HSEMP.
+        rewrite <- eval_predf_deep_simplify with (peq:=peq) in HSEMP.
+        unfold sat_pred_simple in Heqo0. destruct_match. destruct s; discriminate.
+        unfold eval_predf in HSEMP. now rewrite e0 in HSEMP.
 Qed.
 
 Lemma sem_pred_expr_prune_predicated2 :
@@ -183,7 +187,9 @@ Proof.
   - cbn in *. destruct_match.
     2: { destr. destruct a. eapply sem_pred_expr_cons_false; eauto.
          eapply sem_pexpr_eval; eauto.
-         rewrite <- 2 eval_predf_deep_simplify with (peq:=peq). now setoid_rewrite Heqp.
+         rewrite <- eval_predf_deep_simplify with (peq:=peq).
+         unfold sat_pred_simple in Heqo. destruct_match. destruct s; discriminate.
+         eauto.
     }
     destruct_match.
     + inv PRUNE. destruct a; inv SEM; [constructor|eapply sem_pred_expr_cons_false]; eauto;

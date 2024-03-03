@@ -158,7 +158,7 @@ Definition app_predicated {A: Type} (p': pred_op) (a b: predicated A) :=
         (NE.map (fun x => (p' ∧ fst x, snd x)) b).
 
 Definition prune_predicated {A: Type} (a: predicated A) :=
-  NE.filter (fun x => match deep_simplify peq (fst x) with ⟂ => false | _ => true end)
+  NE.filter (fun x => match sat_pred_simple (fst x) with None => false | _ => true end)
             (NE.map (fun x => (deep_simplify peq (fst x), snd x)) a).
 
 Definition pred_ret {A: Type} (a: A) : predicated A :=
