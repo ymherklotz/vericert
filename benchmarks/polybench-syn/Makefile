@@ -5,7 +5,7 @@ IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
 VERILATOR ?= verilator
-VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe $(HOME)/vericert/scripts/verilator_main.cpp
+VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe $(HOME)/vericert-pldi2024/scripts/verilator_main.cpp
 
 TARGETS := $(foreach t,adi fdtd-2d heat-3d jacobi-1d jacobi-2d seidel-2d,stencils/$(t)) \
            $(foreach t,floyd-warshall nussinov,medley/$(t)) \
