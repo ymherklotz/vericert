@@ -41,7 +41,7 @@ all-time-sv: $(foreach t,$(TARGETS),$(t).time.sv)
 %.verilator: %.sv
 	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $@ --cc $<
 	@echo -e $(MAKE) -C $@ -f Vmain.mk
-	@make -C $@ -f Vmain.mk &>/dev/null
+	@$(MAKE) -C $@ -f Vmain.mk &>/dev/null
 
 %: %.iver %.gcc %.verilator
 	cp $< $@
