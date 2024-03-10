@@ -1,11 +1,11 @@
-VERICERT ?= /Users/ymherklotz/projects/vericert/bin/vericert
+VERICERT ?= /home/pldi/vericert-pldi2024/bin/vericert
 VERICERT_OPTS ?= -DSYNTHESIS -fschedule
 
 IVERILOG ?= iverilog
 IVERILOG_OPTS ?=
 
 VERILATOR ?= verilator
-VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe $(HOME)/projects/vericert/scripts/verilator_main.cpp
+VERILATOR_OPTS ?= -Wno-fatal -Wno-lint -Wno-style -Wno-WIDTH --top main --exe $(HOME)/vericert/scripts/verilator_main.cpp
 
 TARGETS := $(foreach t,adi fdtd-2d heat-3d jacobi-1d jacobi-2d seidel-2d,stencils/$(t)) \
            $(foreach t,floyd-warshall nussinov,medley/$(t)) \
@@ -41,7 +41,7 @@ all-time-sv: $(foreach t,$(TARGETS),$(t).time.sv)
 %.verilator: %.sv
 	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $@ --cc $<
 	@echo -e $(MAKE) -C $@ -f Vmain.mk
-	@$(MAKE) -C $@ -f Vmain.mk &>/dev/null
+	@make -C $@ -f Vmain.mk &>/dev/null
 
 %: %.iver %.gcc %.verilator
 	cp $< $@

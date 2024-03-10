@@ -118,3 +118,9 @@ clean:: Makefile.coq
 clean::
 	rm -f */*.v.d */*.glob */*.vo */*~ *~
 	rm -f src/extraction/*.ml src/extraction/*.mli
+
+clean-all:
+	(cd lib/CompCert; git clean -dfx)
+	(cd lib/cohpred/smtcoq; git clean -dfx)
+	(cd lib/cohpred; git clean -dfx)
+	git clean -dfx

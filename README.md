@@ -6,13 +6,82 @@ date: "10.03.2024"
 # Artefact: Hyperblock Scheduling for Verified High-Level Synthesis
 
 This artefact supports the paper titled "Hyperblock Scheduling for Verified
-High-Level Synthesis".  The main points that this artefact will support are the
-following:
+High-Level Synthesis".  The main points that this artefact directly supports are
+the following:
 
+- Description of the Coq formalisation and how it relates to the paper.
+- Reproduction of cycle counts between the various different versions of
+  Vericert and Bambu for the results.
+
+The following claim is only supported if [Xilinx Vivado
+2023.2](https://www.xilinx.com/support/download.html) has been installed
+separately.  This is a synthesis tool for Xilinx FPGAs, which is our target for
+the evaluation section.  This tool is needed to get accurate timing and area
+information for the results to get the final plots in the evaluation.
+
+- Reproduction of final timing and area plots of the evaluation.
 
 ## Getting started guide
 
-- Try running and simulating Vericert on the benchmarks.
+This artefact is distributed as a Docker image, but this is only a thin wrapper
+around [nix](https://nixos.org/download).  If you already have the nix package
+manager installed and would prefer to use that directly, then this will
+facilitate interacting with the repository and inspecting the files.  Otherwise,
+the Docker image already contains the whole environment, including Bambu HLS.
+
+### Docker setup
+
+To setup the Docker environment, download the Docker image from the artefact
+website and load it:
+
+```
+docker load < vericert-docker.tgz
+```
+
+Next, to run the docker image, one can use the following command:
+
+```
+docker run --name vericert-container -itd --rm vericert/pldi2024:latest
+```
+
+This will spawn a container that can be connected to using:
+
+```
+docker exec -it vericert-container nix develop
+```
+
+To stop the container (which will remove any changes that were made to the
+container and reset the state to the base image):
+
+```
+docker stop vericert-container
+```
+
+### Building Vericert
+
+Vericert is already pre-built in the docker image under the `/vericert`
+directory, which is also the default directory of the docker image.  The
+following step could therefore be skipped.  It should take around 15 mins to
+rebuild Vericert.
+
+To rebuild Vericert from scratch, one can clean the git repository completely
+and restart the build:
+
+```
+# Remove any temporary build files
+make clean-all
+# Build cohpred (3-valued logic solver)
+# NOTE: It cannot be built with the -j flag
+make lib/COHPREDSTAMP
+# Build CompCert and Vericert
+make -j
+# Install vericert in the ./bin directory
+make install
+```
+
+### Running experiments
+
+
 
 ## Step-by-step instructions
 
@@ -98,7 +167,7 @@ The docker image that was downloaded can be simply rebuilt from this `git`
 repository.  To do so, use the following command
 
 ```sh
-docker build --tag vericert/pldi2024 --file ./artifact/Dockerfile .
+docker build --tag vericert/pldi2024 --file ./artefact/Dockerfile .
 ```
 
 This can take around 30 mins because it will setup a fresh nix environment with
@@ -116,3 +185,26 @@ automatically:
 
 - [Bambu 2023.1 AppImage](https://release.bambuhls.eu/bambu-2023.1.AppImage)
 - Optional: [Xilinx Vivado 2023.2](https://www.xilinx.com/support/download.html)
+
+### Nix
+
+Alternatively, if you are familiar with nix, it may be easier to build the
+project using nix.  First, ensure that you have the following dependencies
+installed either through your native package manager or through nix:
+
+```
+nix-env -i yosys git vim gcc iverilog verilator gnumake
+```
+
+Then, ensure that you have flakes enabled in nix:
+
+```
+echo "experimental-features = nix-command flakes repl-flake" >> /etc/nix/nix.conf
+```
+
+Finally, the rest of the development environment can be setup by going into the
+root of the git repository and running:
+
+```
+nix develop
+```
