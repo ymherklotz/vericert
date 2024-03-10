@@ -1,0 +1,161 @@
+.TH "vericert" "1" 
+
+.SH "NAME"
+.PP
+vericert - A formally verified high-level synthesis tool.
+
+.SH "SYNOPSYS"
+.PP
+\fBvericert\fP [ \fBOPTION\fP ]... [ \fBFILE\fP ]...
+
+.SH "DESCRIPTION"
+.SS "HLS Options:"
+.TP
+\fB--no-hls\fP
+Do not use HLS and generate standard flow
+.TP
+\fB--simulate\fP
+Simulate the result with the Verilog semantics
+.TP
+\fB--debug-hls\fP
+Add debug logic to the Verilog
+.TP
+\fB--initialise-stack\fP
+initialise the stack to all 0s
+
+.SS "HLS Optimisations:"
+.TP
+\fB-fschedule\fP
+Schedule the resulting hardware [off]
+.TP
+\fB-fif-conversion\fP
+If-conversion optimisation [off]
+
+.SS "General options:"
+.TP
+\fB-stdlib <dir>\fP
+Set the path of the Compcert run-time library
+.TP
+\fB-v\fP
+Print external commands before invoking them
+.TP
+\fB-timings\fP
+Show the time spent in various compiler passes
+.TP
+\fB-version\fP
+Print the version string and exit
+.TP
+\fB-target <value>\fP
+Generate code for the given target
+.TP
+\fB-conf <file>\fP
+Read configuration from file
+.TP
+\fB@<file>\fP
+Read command line options from <file>
+
+.SS "Tracing Options:"
+.TP
+\fB-dprepro\fP
+Save C file after preprocessing in <file>.i
+.TP
+\fB-dparse\fP
+Save C file after parsing and elaboration in <file>.parsed.c
+.TP
+\fB-dc\fP
+Save generated C in <file>.compcert.c
+.TP
+\fB-dclight\fP
+Save generated Clight in <file>.light.c
+.TP
+\fB-dcminor\fP
+Save generated Cminor in <file>.cm
+.TP
+\fB-drtl\fP
+Save RTL at various optimization points in <file>.rtl.<n>
+.TP
+\fB-drtlblock\fP
+Save RTLBlock <file>.rtlblock
+.TP
+\fB-dhtl\fP
+Save HTL before Verilog generation <file>.htl
+.TP
+\fB-dltl\fP
+Save LTL after register allocation in <file>.ltl
+.TP
+\fB-dmach\fP
+Save generated Mach code in <file>.mach
+.TP
+\fB-dasm\fP
+Save generated assembly in <file>.s
+.TP
+\fB-dall\fP
+Save all generated intermediate files in <file>.<ext>
+.TP
+\fB-sdump\fP
+Save info for post-linking validation in <file>.json
+.TP
+\fB-o <file>\fP
+Generate output in <file>
+
+.SS "Diagnostic options:"
+.TP
+\fB-Wall\fP
+Enable all warnings
+.TP
+\fB-W<warning>\fP
+Enable the specific <warning>
+.TP
+\fB-Wno-<warning>\fP
+Disable the specific <warning>
+.TP
+\fB-Werror\fP
+Make all warnings into errors
+.TP
+\fB-Werror=<warning>\fP
+Turn <warning> into an error
+.TP
+\fB-Wno-error=<warning>\fP
+Turn <warning> into a warning even if -Werror is specified
+.TP
+\fB-Wfatal-errors\fP
+Turn all errors into fatal errors aborting the compilation
+.TP
+\fB-fdiagnostics-color\fP
+Turn on colored diagnostics
+.TP
+\fB-fno-diagnostics-color\fP
+Turn of colored diagnostics
+.TP
+\fB-fmax-errors=<n>\fP
+Maximum number of errors to report
+.TP
+\fB-fdiagnostics-show-option\fP
+Print the option name with mappable diagnostics
+.TP
+\fB-fno-diagnostics-show-option\fP
+Turn of printing of options with mappable diagnostics
+
+.SH "AUTHOR"
+.PP
+Written by Yann Herklotz, Michalis Pardalos, James Pollard, Nadesh Ramanathan and John Wickerson.
+
+.SH "COPYRIGHT"
+.PP
+Copyright (C) 2019-2022 Yann Herklotz <yann@yannherklotz.com>
+
+.PP
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+.PP
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+.PP
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see \fIhttps://www.gnu.org/licenses/\fP.
