@@ -38,12 +38,11 @@ all-time-sv: $(foreach t,$(TARGETS),$(t).time.sv)
 %.gcc: %.c
 	$(CC) $(CFLAGS) $< -o $@
 
-%.verilator: %.sv
-	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $@ --cc $<
-	@echo -e $(MAKE) -C $@ -f Vmain.mk
-	@$(MAKE) -C $@ -f Vmain.mk &>/dev/null
+%.verilator/Vmain: %.sv
+	$(VERILATOR) $(VERILATOR_OPTS) --Mdir $(dir $@) --cc $<
+	$(MAKE) -C $(dir $@) -f Vmain.mk
 
-%: %.iver %.gcc %.verilator
+%: %.iver %.gcc %.verilator/Vmain
 	cp $< $@
 
 stencils/adi.sv: VERICERT_OPTS += -O0 -finline

@@ -3,7 +3,7 @@
 echo "##################################################"
 echo "# Compiling benchmark: vericert-hyperblock"
 echo "##################################################"
-VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule -fif-conv" make
+VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule -fif-conv" make -j
 
 echo "##################################################"
 echo "# Running benchmark: vericert-hyperblock"
@@ -15,7 +15,7 @@ git clean -dfx -e '*.csv'
 echo "##################################################"
 echo "# Compiling benchmark: vericert-list-scheduling"
 echo "##################################################"
-VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule" make
+VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule" make -j
 
 echo "##################################################"
 echo "# Running benchmark: vericert-list-scheduling"
@@ -27,7 +27,7 @@ git clean -dfx -e '*.csv'
 echo "##################################################"
 echo "# Compiling benchmark: vericert-original"
 echo "##################################################"
-VERICERT=vericert-original VERICERT_OPTS="-DSYNTHESIS" make
+VERICERT=vericert-original VERICERT_OPTS="-DSYNTHESIS" make -j
 
 echo "##################################################"
 echo "# Compiling benchmark: vericert-original"
