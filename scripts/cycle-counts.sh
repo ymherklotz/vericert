@@ -10,7 +10,7 @@ echo "# Running benchmark: vericert-hyperblock"
 echo "##################################################"
 run-vericert.sh
 mv exec.csv vericert-hyperblock-cycles.csv
-make clean
+git clean -dfx -e '*.csv'
 
 echo "##################################################"
 echo "# Compiling benchmark: vericert-list-scheduling"
@@ -22,7 +22,7 @@ echo "# Running benchmark: vericert-list-scheduling"
 echo "##################################################"
 run-vericert.sh
 mv exec.csv vericert-list-scheduling-cycles.csv
-make clean
+git clean -dfx -e '*.csv'
 
 echo "##################################################"
 echo "# Compiling benchmark: vericert-original"
@@ -34,4 +34,4 @@ echo "# Compiling benchmark: vericert-original"
 echo "##################################################"
 run-vericert.sh
 mv exec.csv vericert-original-cycles.csv
-make clean
+git clean -dfx -e '*.csv'
