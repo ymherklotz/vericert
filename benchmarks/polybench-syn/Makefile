@@ -64,6 +64,6 @@ clean:
 	rm -f *.txt
 	rm -rf *.verilator
 
-.PRECIOUS: %.sv %.gcc %.iver %.verilator
+.PRECIOUS: %.sv %.gcc %.iver %.verilator %.verilator/Vmain
 .PHONY: all clean
 .SUFFIXES:
