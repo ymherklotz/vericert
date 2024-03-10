@@ -3,7 +3,7 @@
 echo "##################################################"
 echo "# Compiling benchmark: vericert-hyperblock"
 echo "##################################################"
-VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule -fif-conv" make -j
+VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule -fif-conv" make
 
 echo "##################################################"
 echo "# Running benchmark: vericert-hyperblock"
@@ -15,7 +15,7 @@ make clean
 echo "##################################################"
 echo "# Compiling benchmark: vericert-list-scheduling"
 echo "##################################################"
-VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule" make -j
+VERICERT=vericert VERICERT_OPTS="-DSYNTHESIS -fschedule" make
 
 echo "##################################################"
 echo "# Running benchmark: vericert-list-scheduling"
@@ -27,7 +27,7 @@ make clean
 echo "##################################################"
 echo "# Compiling benchmark: vericert-original"
 echo "##################################################"
-VERICERT=vericert-original VERICERT_OPTS="-DSYNTHESIS" make -j
+VERICERT=vericert-original VERICERT_OPTS="-DSYNTHESIS" make
 
 echo "##################################################"
 echo "# Compiling benchmark: vericert-original"
