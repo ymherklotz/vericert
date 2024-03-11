@@ -44,14 +44,17 @@ let () =
          goto None 10;
        ]
        [ [ [
-         add None 2 1 4;
-         seteq (Some (plit true 1)) 3 4 2;
-         add (Some (plit true 1)) 1 2 4;
-         mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
-         mul (Some (plit true 2)) 3 1 4;
-         goto (Some (plit true 2)) 10;
-         mul (Some (plit false 2)) 3 3 3;
-         goto None 10;
-       ] ] ]
+             mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
+           ];
+           [
+             add None 2 1 4;
+             add (Some (plit true 1)) 1 2 4;
+             seteq (Some (plit true 1)) 3 4 2; 
+           ] ];
+           [ [
+             mul (Some (plit false 2)) 3 3 3;
+             mul (Some (plit true 2)) 3 1 4;
+             goto None 10;
+           ] ] ]
   then Printf.printf "Passed\n"
      else Printf.printf "Failed\n")
