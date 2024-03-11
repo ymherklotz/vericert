@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 opt=$1
 bench=$2
 base=$(pwd)
