@@ -17,7 +17,9 @@ The following claim is only supported if [Xilinx Vivado
 2023.2](https://www.xilinx.com/support/download.html) has been installed
 separately.  This is a synthesis tool for Xilinx FPGAs, which is our target for
 the evaluation section.  This tool is needed to get accurate timing and area
-information for the results to get the final plots in the evaluation.
+information for the results to get the final plots in the evaluation.  Even
+then, this flow is not automated and therefore only contains instructions on how
+to synthesis individual benchmarks so that the numbers can be compared against
 
 - Reproduction of final timing and area plots of the evaluation.
 
