@@ -1,6 +1,6 @@
 ---
 title: "Artefact: Hyperblock Scheduling for Verified High-Level Synthesis"
-date: "10.03.2024"
+date: "11.03.2024"
 ...
 
 # Artefact: Hyperblock Scheduling for Verified High-Level Synthesis
@@ -21,13 +21,17 @@ information for the results to get the final plots in the evaluation.
 
 - Reproduction of final timing and area plots of the evaluation.
 
+Instead, the raw results from the synthesis tool are provided to compare the
+results against.
+
 ## Getting started guide
 
-This artefact is distributed as a Docker image, but this is only a thin wrapper
-around [nix](https://nixos.org/download).  If you already have the nix package
-manager installed and would prefer to use that directly, then this will
-facilitate interacting with the repository and inspecting the files.  Otherwise,
-the Docker image already contains the whole environment, including Bambu HLS.
+This artefact is distributed as a VM image (`.ova` file).  This is mainly so
+that Bambu, original Vericert and the current Vericert could be bundled into a
+single image.  Vericert itself includes a `flake.nix` file for the
+[nix](https://nixos.org/download) which describes all necessary dependencies to
+build the project.  The build process for that is described at the end of the
+document.
 
 ### Docker setup
 
