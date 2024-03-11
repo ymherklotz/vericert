@@ -373,6 +373,28 @@ Definition remember_expr_m_inc (fop : pred_op * forest) (lst: list pred_expr) (i
   | RBexit p c => lst
   end.
 
+Definition remember_expr_inc_pruned (fop : pred_op * forest) (lst: list (resource * pred_expr)) (i : instr): option (list (resource * pred_expr)) :=
+  let (pred, f) := fop in
+  match i with
+  | RBnop => Some lst
+  | RBop p op rl r => 
+     do pruned <-
+           prune_predicated ((app_predicated (dfltp p ∧ pred) (NE.singleton (Ptrue, Ebase (Reg 1))) (
+        (seq_app (pred_ret (Eop op)) (merge (list_translation rl f))))));
+     Some ((Reg r, pruned) :: lst)
+  | RBload p chunk addr rl r => 
+     do pruned <-
+       prune_predicated (app_predicated (dfltp p ∧ pred) (NE.singleton (Ptrue, Ebase (Reg 1))) (
+        (seq_app
+          (seq_app (pred_ret (Eload chunk addr))
+            (merge (list_translation rl f)))
+            (f #r Mem))));
+      Some ((Reg r, pruned) :: lst)
+  | RBstore p chunk addr rl r => Some lst
+  | RBsetpred p' c args p =>  Some lst
+  | RBexit p c => Some lst
+  end.
+
 Definition update_top_inc (s: pred_op * forest * list (resource * pred_expr) * list pred_expr) (i: instr): option (pred_op * forest * list (resource * pred_expr) * list pred_expr) :=
   let '(p, f, l, lm) := s in
   Option.bind2 (fun p' f' => Option.ret (p', f', remember_expr_inc (p, f) l i, remember_expr_m_inc (p, f) lm i)) (update (p, f) i).
@@ -498,6 +520,7 @@ Definition schedule_oracle_inc (bb: SeqBB.t) (bbt: ParBB.t) : bool :=
   end.
 
 Definition check_scheduled_trees := beq2 schedule_oracle.
+Definition check_scheduled_trees_inc := beq2 schedule_oracle_inc.
 
 Ltac solve_scheduled_trees_correct :=
   intros; unfold check_scheduled_trees in *;
@@ -520,6 +543,27 @@ Lemma check_scheduled_trees_correct2:
     PTree.get x f2 = None.
 Proof. solve_scheduled_trees_correct. Qed.
 
+Ltac solve_scheduled_trees_correct_inc :=
+  intros; unfold check_scheduled_trees_inc in *;
+  match goal with
+  | [ H: context[beq2 _ _ _], x: positive |- _ ] =>
+    rewrite beq2_correct in H; specialize (H x)
+  end; repeat destruct_match; crush.
+
+Lemma check_scheduled_trees_correct_inc:
+  forall f1 f2 x y1,
+    check_scheduled_trees_inc f1 f2 = true ->
+    PTree.get x f1 = Some y1 ->
+    exists y2, PTree.get x f2 = Some y2 /\ schedule_oracle_inc y1 y2 = true.
+Proof. solve_scheduled_trees_correct_inc; eexists; crush. Qed.
+
+Lemma check_scheduled_trees_correct2_inc:
+  forall f1 f2 x,
+    check_scheduled_trees_inc f1 f2 = true ->
+    PTree.get x f1 = None ->
+    PTree.get x f2 = None.
+Proof. solve_scheduled_trees_correct_inc. Qed.
+
 (*|
 Top-level Functions
 ===================
@@ -530,7 +574,8 @@ Parameter schedule : GibleSeq.function -> GiblePar.function.
 Definition transl_function (f: GibleSeq.function)
   : Err.res GiblePar.function :=
   let tfcode := fn_code (schedule f) in
-  if check_scheduled_trees f.(GibleSeq.fn_code) tfcode then
+  if check_scheduled_trees f.(GibleSeq.fn_code) tfcode
+     || check_scheduled_trees_inc f.(GibleSeq.fn_code) tfcode then
     Err.OK (mkfunction f.(GibleSeq.fn_sig)
                           f.(GibleSeq.fn_params)
                           f.(GibleSeq.fn_stacksize)

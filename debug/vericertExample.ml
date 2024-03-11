@@ -32,7 +32,7 @@ let sett p d1 r1: Gible.instr = RBsetpred (p, Ccompimm (Ceq, int 0), [reg r1], p
 let goto p n: Gible.instr = RBexit (p, (RBgoto (node n)))
 
 let () =
-    (if schedule_oracle
+    (if schedule_oracle_inc
        [
          add None 2 1 4;
          seteq (Some (plit true 1)) 3 4 2;

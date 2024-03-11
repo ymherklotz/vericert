@@ -442,6 +442,9 @@ square:
       unfold transl_function in H2;
       destruct (check_scheduled_trees
                   (GibleSeq.fn_code f)
+                  (fn_code (schedule f))
+                  || check_scheduled_trees_inc
+                  (GibleSeq.fn_code f)
                   (fn_code (schedule f))) eqn:?;
                [| discriminate ]; inv H2
     | [ H: context[check_scheduled_trees] |- _ ] =>
@@ -1417,12 +1420,23 @@ Proof Sketch:  Trivial because of structural equality.
         exists R2, Smallstep.plus GiblePar.step tge R1 t R2 /\ match_states S2 R2.
   Proof.
     induction 1; repeat semantics_simpl.
-    { exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
+    { apply orb_prop in Heqb. inv Heqb. 
+    { eapply check_scheduled_trees_correct in H3; [| solve [eauto] ].
+      inv H3.  inv H4.
+       exploit schedule_oracle_correct; eauto. constructor; eauto. simplify.
       destruct x0.
       pose proof H2 as X. eapply match_states_stepBB in X; eauto.
       exploit step_cf_correct; eauto. simplify.
       eexists; split. apply Smallstep.plus_one.
-      econstructor; eauto. auto.
+      econstructor; eauto. auto. }
+      { eapply check_scheduled_trees_correct_inc in H3; [| solve [eauto] ].
+      inv H3.  inv H4.
+       exploit schedule_oracle_correct_inc; eauto. constructor; eauto. simplify.
+      destruct x0.
+      pose proof H2 as X. eapply match_states_stepBB in X; eauto.
+      exploit step_cf_correct; eauto. simplify.
+      eexists; split. apply Smallstep.plus_one.
+      econstructor; eauto. auto. }
     }
     { unfold bind in *. inv TRANSL0. clear Learn. inv H0. destruct_match; crush.
       inv H2. unfold transl_function in Heqr. destruct_match; crush.

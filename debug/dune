@@ -3,9 +3,11 @@
 (executable
  (name VericertTest)
  (libraries vericert)
+ (modules VericertTest)
  (flags (:standard -warn-error -A -w -8-9-16-20-26-27-32..36-39-41-44..45-50-60-67)))
 
 (executable
  (name VericertExample)
  (libraries vericert)
+ (modules VericertExample)
  (flags (:standard -warn-error -A -w -8-9-16-20-26-27-32..36-39-41-44..45-50-60-67)))
