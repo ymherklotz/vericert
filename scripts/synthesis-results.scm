@@ -1,4 +1,4 @@
-#! /usr/local/bin/csi -ss
+#! env csi -ss
 ;; -*- mode: scheme -*-
 ;;
 ;; Copyright (C) 2022 Yann Herklotz <yann@yannherklotz.com>
