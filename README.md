@@ -100,7 +100,22 @@ directory:
 cd ~/vericert-pldi2024/benchmark/polybench-syn
 ```
 
+Then run one of the benchmarks through all of the five tools:
 
+- `bambu-opt`: Bambu with default optimisations.
+- `bambu-noopt`: Bambu with optimisations turned off.
+- `vericert-original`: Original Version of Vericert.
+- `vericert-list-scheduling`: Vericert with scheduling but without
+  if-conversion.
+- `vericert-hyperblock`: Vericert with full hyperblock scheduling.
+
+using the following command in the `polybench-syn`.
+
+```
+cycle-counts.sh linear-algebra/kernels/bicg
+```
+
+This should succeed for all the tools and it should produce five CSV files
 
 ## Step-by-step instructions
 

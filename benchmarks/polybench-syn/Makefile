@@ -1,4 +1,4 @@
-PROJECT_DIR ?= $(HOME)/projects/vericert-pldi2024
+PROJECT_DIR ?= $(HOME)/vericert-pldi2024
 VERICERT ?= $(PROJECT_DIR)/bin/vericert
 VERICERT_OPTS ?= -DSYNTHESIS -fschedule
 
