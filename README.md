@@ -32,42 +32,42 @@ This artefact is distributed as a VM image (`.ova` file).  This is mainly so
 that Bambu, original Vericert and the current Vericert could be bundled into a
 single image.  Vericert itself includes a `flake.nix` file for the
 [nix](https://nixos.org/download) which describes all necessary dependencies to
-build the project.  The build process for that is described at the end of the
-document.
+build the project.  This document will assume that the VM is being used, and
+will reference the following file paths in the VM:
 
-### Docker setup
+- `~/vericert-pldi2024`: This corresponds to the hyperblock scheduling Vericert
+  repository which is the main artefact of this paper.
+- `~/vericert-original`: The original version of Vericert 1.2.2.
+- `~/bambu`: Directory that contains Bambu 2023.1.
 
-To setup the Docker environment, download the Docker image from the artefact
-website and load it:
+### Launching the VM
+
+After downloading the VM, we recommend using
+[VirtualBox](https://www.virtualbox.org/).  After launching virtual box, the VM
+can be imported using `File -> Import Appliance` and then pointing it towards
+the OVA file that was downloaded.
+
+The VM can then be started by clicking on the `vericert-pldi2024` VM and
+pressing on the `Start` arrow.
+
+This should boot to the login screen for the `pldi` user.  The password is also:
+`pldi`.  The password for the `root` user is also `pldi`.
+
+### Opening Vericert directory
+
+These instructions are also present on the desktop of the VM as a PDF for easier
+copy-pasting.
+
+Launch a terminal (from the sidebar) and then go into the `vericert-pldi2024`
+directory:
 
 ```
-docker load < vericert-docker.tgz
+cd vericert-pldi2024
 ```
 
-Next, to run the docker image, one can use the following command:
-
-```
-docker run --name vericert-container -itd --rm vericert/pldi2024:latest
-```
-
-This will spawn a container that can be connected to using:
-
-```
-docker exec -it vericert-container nix develop
-```
-
-To stop the container (which will remove any changes that were made to the
-container and reset the state to the base image):
-
-```
-docker stop vericert-container
-```
-
-### Building Vericert
-
-Vericert is already pre-built in the docker image under the `/vericert`
-directory, which is also the default directory of the docker image.  The
-following step could therefore be skipped.  It should take around 15 mins to
+Vericert is already pre-built in the VM under the `~/vericert-pldi2024`
+directory.  The following step therefore *can be skipped*.  However, if one
+wants to rebuild Vericert from scratch, then it should take around 15 mins to
 rebuild Vericert.
 
 To rebuild Vericert from scratch, one can clean the git repository completely
@@ -76,14 +76,20 @@ and restart the build:
 ```
 # Remove any temporary build files
 make clean-all
+
 # Build cohpred (3-valued logic solver)
 # NOTE: It cannot be built with the -j flag
-make lib/COHPREDSTAMP
+nix develop --command make lib/COHPREDSTAMP
+
 # Build CompCert and Vericert
-make -j
+nix develop --command make -j
+
 # Install vericert in the ./bin directory
 make install
 ```
+
+This uses `nix develop` to pull in all the right dependencies for the `make`
+build to succeed.
 
 ### Running experiments
 
