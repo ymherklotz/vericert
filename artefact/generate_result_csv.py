@@ -26,7 +26,7 @@ def main():
         subprocess.run(["tar", "xvf", "synthesis-results.tar.xz"])
 
     current_dir = os.getcwd()
-    sresult_script = "/home/ymh/projects/vericert-pldi2024/scripts/synthesis-results.scm"
+    sresult_script = "synthesis-results.scm"
     results = {}
 
     for curr in [("vericert-original", "vericert"), ("vericert-list-scheduling", "list"), 
