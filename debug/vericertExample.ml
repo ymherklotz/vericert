@@ -36,7 +36,7 @@ let () =
        [
          add None 2 1 4;
          seteq (Some (plit true 1)) 3 4 2;
-         add (Some (plit true 1)) 2 4;
+         add (Some (plit true 1)) 1 2 4;
          mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
          mul (Some (plit true 2)) 3 1 4;
          goto (Some (plit true 2)) 10;
@@ -46,7 +46,7 @@ let () =
        [ [ [
          add None 2 1 4;
          seteq (Some (plit true 1)) 3 4 2;
-         add (Some (plit true 1)) 2 4;
+         add (Some (plit true 1)) 1 2 4;
          mul (Some (Pand (plit false 1, plit false 2))) 3 1 1;
          mul (Some (plit true 2)) 3 1 4;
          goto (Some (plit true 2)) 10;
