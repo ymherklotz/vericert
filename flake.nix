@@ -21,7 +21,7 @@
                 [ ncoq ncoq.ocaml ncoqPackages.serapi dune_3 gcc python3 lp_solve veriT' zchaff chicken ]
                 ++ (with ncoq.ocamlPackages; [ findlib menhir menhirLib ocamlgraph ocp-indent utop merlin ])
                 ++ (with python3Packages; [ alectryon sphinx_rtd_theme ])
-                ++ (with chickenPackages_5.chickenEggs; [matchable srfi-193 args ssax]);
+                ++ (with chickenPackages.chickenEggs; [matchable srfi-193 args ssax]);
             };
     in {
       devShell.x86_64-linux = vericertDevPackages nixpkgs.legacyPackages.x86_64-linux;

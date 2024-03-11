@@ -1,4 +1,7 @@
-#!/usr/bin/csi -ss
+#!/bin/sh
+#|
+exec csi -ss "$0" "$@"
+|#
 ;; -*- mode: scheme -*-
 ;;
 ;; Copyright (C) 2022 Yann Herklotz <yann@yannherklotz.com>
