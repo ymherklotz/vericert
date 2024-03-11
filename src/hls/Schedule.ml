@@ -343,13 +343,13 @@ let comb_delay = function
   (*          | Omodu -> 576 *)
 
   (*        | _ -> 8)) *)
-  | RBexit (Some _, _) -> 16
+  | RBexit (Some _, _) -> 4
   | RBexit _ -> 4
   (** Because of the limiations of memory generation we add a large combinational
       delay for loads and stores. *)
   | RBload _ -> 64
   | RBstore _ -> 64
-  | RBsetpred (Some _op, _, _, _) -> 16
+  | RBsetpred (Some _op, _, _, _) -> 8
   | RBsetpred (None, _, _, _) -> 8
 
 let pipeline_stages = function

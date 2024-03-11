@@ -62,7 +62,7 @@ Launch a terminal (from the sidebar) and then go into the `vericert-pldi2024`
 directory:
 
 ```
-cd vericert-pldi2024
+cd ~/vericert-pldi2024
 ```
 
 Vericert is already pre-built in the VM under the `~/vericert-pldi2024`
@@ -74,7 +74,7 @@ To rebuild Vericert from scratch, one can clean the git repository completely
 and restart the build:
 
 ```
-# Remove any temporary build files
+# Remove the current build
 make clean-all
 
 # Build cohpred (3-valued logic solver)
@@ -91,7 +91,14 @@ make install
 This uses `nix develop` to pull in all the right dependencies for the `make`
 build to succeed.
 
-### Running experiments
+### Running preliminary experiment
+
+From the `~/vericert-pldi2024` directory, move to the `benchmark/polybench-syn`
+directory:
+
+```
+cd ~/vericert-pldi2024/benchmark/polybench-syn
+```
 
 
 

@@ -23,8 +23,7 @@ def invert(dicts):
 
 def main():
     if not os.path.isdir('synthesis-results'):
-        print("error: synthesis-results directory does not exist")
-        sys.exit(1)
+        subprocess.run(["tar", "xvf", "synthesis-results.tar.xz"])
 
     current_dir = os.getcwd()
     sresult_script = "/home/ymh/projects/vericert-pldi2024/scripts/synthesis-results.scm"
@@ -47,7 +46,6 @@ def main():
         csv_reader = csv.DictReader(str_res)
         for row in csv_reader:
             results[curr[1]][row["name"]] = row
-        # print(results[curr[1]])
 
     os.chdir(current_dir)
 
