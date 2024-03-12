@@ -13,17 +13,10 @@ vericert - A formally verified high-level synthesis tool.
 
 * DESCRIPTION
 
-** HLS Options:
-
-- --no-hls :: Do not use HLS and generate standard flow
-- --simulate :: Simulate the result with the Verilog semantics
-- --debug-hls :: Add debug logic to the Verilog
-- --initialise-stack :: initialise the stack to all 0s
-
 ** HLS Optimisations:
 
 - -fschedule :: Schedule the resulting hardware [off]
-- -fif-conversion :: If-conversion optimisation [off]
+- -fif-conv :: If-conversion optimisation [off]
 
 ** General options:
 
@@ -44,6 +37,8 @@ vericert - A formally verified high-level synthesis tool.
 - -dcminor :: Save generated Cminor in <file>.cm
 - -drtl :: Save RTL at various optimization points in <file>.rtl.<n>
 - -drtlblock :: Save RTLBlock <file>.rtlblock
+- -dgblpar :: Save GiblePar before Verilog generation <file>.gblpar
+- -dgblseq :: Save GibleSeq before Verilog generation <file>.gblseq
 - -dhtl :: Save HTL before Verilog generation <file>.htl
 - -dltl :: Save LTL after register allocation in <file>.ltl
 - -dmach :: Save generated Mach code in <file>.mach
