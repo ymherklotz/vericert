@@ -8,8 +8,8 @@ scriptsdir=$(dirname "$(readlink -f "$BASH_SOURCE")")
 num=$1
 bench=$2
 output=$3
-machine=ee-beholder${num}.ee.ic.ac.uk
-user=ymh15
+machine=$VERICERT_MACHINE
+user=$VERICERT_USER
 files="$scriptsdir/synth.tcl $output/$bench.sv"
 log="$output/${bench}_synth.log"
 
