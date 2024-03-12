@@ -1,6 +1,7 @@
 ---
 title: "Artefact: Hyperblock Scheduling for Verified High-Level Synthesis"
 date: "12.03.2024"
+linkcolor: "teal"
 ...
 
 # Artefact: Hyperblock Scheduling for Verified High-Level Synthesis
@@ -56,7 +57,7 @@ This should boot to the login screen for the `pldi` user.  The password is also:
 ## Opening Vericert directory
 
 These instructions are also present on the desktop of the VM as a PDF for easier
-copy-pasting.
+copy-pasting (`~/vericert-pldi2024/README.pdf`).
 
 Launch a terminal (from the sidebar) and then go into the `vericert-pldi2024`
 directory:
@@ -67,8 +68,7 @@ cd ~/vericert-pldi2024
 
 Vericert is already pre-built in the VM under the `~/vericert-pldi2024`
 directory.  The following step therefore *can be skipped*.  However, if one
-wants to rebuild Vericert from scratch, then it should take around 15 mins to
-rebuild Vericert.
+wants to rebuild Vericert from scratch, then it should take around 15 mins.
 
 To rebuild Vericert from scratch, one can clean the git repository completely
 and restart the build:
@@ -97,7 +97,7 @@ From the `~/vericert-pldi2024` directory, move to the `benchmark/polybench-syn`
 directory:
 
 ```
-cd ~/vericert-pldi2024/benchmark/polybench-syn
+cd ~/vericert-pldi2024/benchmarks/polybench-syn
 ```
 
 Then run one of the benchmarks through all of the five tools and simulate the
@@ -139,6 +139,8 @@ cat vericert-original-cycles.csv
 
 If that is the case, then the artefact should be functional and ready for the
 step-by-step instructions.
+
+---
 
 # Step-by-step instructions
 
@@ -444,6 +446,16 @@ in `src/hls/AbstrSemIdent.v`.  Instead of having a new definition, the
 `sem_pred_expr` definition to produce **PredExprIdentity**.  It is then used to
 prove various useful properties, such as the one that is shown at the end of
 section 7.3 and can be found in the formalisation as `sem_pred_expr_seq_app`.
+
+### SAT and SMT solver
+
+Vericert uses a verified SAT solver and a validated SMT solver to reason about
+final predicates and 3-valued predicates respectively.
+
+- `src/hls/Sat.v`: Contains a complete and verified Sat solver.
+- `lib/cohpred/theory/Smtpredicate.v`: Contains a validated 3-valued logic
+  solver using a validated SMT solver through
+  [SMTCoq](https://smtcoq.github.io/).
 
 ## More detailed reproduction of evaluation
 
