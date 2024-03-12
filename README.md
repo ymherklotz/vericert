@@ -57,7 +57,8 @@ This should boot to the login screen for the `pldi` user.  The password is also:
 ## Opening Vericert directory
 
 These instructions are also present on the VM as a PDF for easier copy-pasting
-(`~/vericert-pldi2024/README.pdf` or `~/Desktop/README.pdf`).
+(`~/vericert-pldi2024/README.pdf` or `~/Desktop/README.pdf`) and can be opened
+by clicking on the Document Viewer in the side bar.
 
 Launch a terminal (from the sidebar) and then go into the `vericert-pldi2024`
 directory:
