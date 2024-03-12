@@ -2,9 +2,10 @@
 title: "Artefact: Hyperblock Scheduling for Verified High-Level Synthesis"
 date: "12.03.2024"
 linkcolor: "teal"
+numbersections: true
 ...
 
-# Artefact: Hyperblock Scheduling for Verified High-Level Synthesis
+# Introduction
 
 This artefact supports the paper titled "Hyperblock Scheduling for Verified
 High-Level Synthesis".  The main points that this artefact directly supports are
@@ -20,7 +21,7 @@ separately.  This is a synthesis tool for Xilinx FPGAs, which is our target for
 the evaluation section.  This tool is needed to get accurate timing and area
 information for the results to get the final plots in the evaluation.  Even
 then, this flow is not automated and therefore only contains instructions on how
-to synthesis individual benchmarks so that the numbers can be compared against
+to synthesise individual benchmarks so that the numbers can be compared against:
 
 - Reproduction of final timing and area plots of the evaluation.
 
@@ -31,7 +32,7 @@ results against.
 
 This artefact is distributed as a VM image (`.ova` file).  This is mainly so
 that Bambu, original Vericert and the current Vericert could be bundled into a
-single image.  Vericert itself includes a `flake.nix` file for the
+single image.  Vericert itself includes a `flake.nix` file for
 [nix](https://nixos.org/download) which describes all necessary dependencies to
 build the project.  This document will assume that the VM is being used, and
 will reference the following file paths in the VM:
@@ -44,7 +45,7 @@ will reference the following file paths in the VM:
 ## Launching the VM
 
 After downloading the VM, we recommend using
-[VirtualBox](https://www.virtualbox.org/).  After launching virtual box, the VM
+[VirtualBox](https://www.virtualbox.org/).  After launching VirtualBox, the VM
 can be imported using `File -> Import Appliance` and then pointing it towards
 the OVA file that was downloaded.
 
@@ -107,7 +108,7 @@ the tool configurations.
 
 - `bambu-opt`: Bambu with default optimisations.
 - `bambu-noopt`: Bambu with optimisations turned off.
-- `vericert-original`: Original Version of Vericert.
+- `vericert-original`: Original version of Vericert.
 - `vericert-list-scheduling`: Vericert with scheduling but without
   if-conversion.
 - `vericert-hyperblock`: Vericert with full hyperblock scheduling.
@@ -165,7 +166,7 @@ correctness proof of the compiler, stating that any behaviour of the hardware
 has to be a valid behaviour of the C program.
 
 The rest of the formalisation is mainly implemented in `src/hls`, where each
-hardware specific transformation pass is implemented.  These will be presented
+hardware-specific transformation pass is implemented.  These will be presented
 in the following sections.
 
 First, one difference that should be noted between the paper and the Coq
@@ -184,7 +185,7 @@ Vericert can be split into the following categories:
 
 2. **`RTLBlock`**: RTLBlock is an intermediate language of basic blocks, with
    support for representing hyperblocks through predicated instructions.  It is
-   named `GibleSeq` in the Coq Formalisation.  The base definition of the
+   named `GibleSeq` in the Coq formalisation.  The base definition of the
    language can be found in `src/hls/Gible.v`, which contains definitions that
    are shared among other languages.  Then, the specialised definition of
    `GibleSeq` can be found in `src/hls/GibleSeq.v`.
@@ -279,11 +280,11 @@ from the paper is defined as `step_instr` in the formalisation.
 
 ### Theorem 4.1 (Correctness of if-conversion)
 
-This correctness statement in the paper describes for if-conversion is closer to
-the final correctness theorem that is proven about the complete compiler.
-However, in the formalisation a weaker version of this theorem is used, namely a
-forward simulation, as it is easier to prove, and is sufficient to show the
-top-level correctness property.
+This correctness statement in the paper for if-conversion is closer to the final
+correctness theorem that is proven about the complete compiler.  However, in the
+formalisation a weaker version of this theorem is used, namely a forward
+simulation, as it is easier to prove, and is sufficient to show the top-level
+correctness property.
 
 The forward simulation for this translation is shown for the three separate
 steps, which are then combined at the top-level.  The forward simulations for
@@ -327,7 +328,7 @@ formalisation.
 
 - Arithmetic expressions from the paper are named `expression` in the
 formalisation.
-- Predicate expressions are name `pred_expression` in the formalisation.
+- Predicate expressions are named `pred_expression` in the formalisation.
 - Value summaries are named `predicated` in the formalisation.
 - Finally, symbolic states are named `forest` in the formalisation.  Note that
   contents of memory and registers are merged into one map.
