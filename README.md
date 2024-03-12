@@ -510,7 +510,7 @@ and displays it using firefox.
 
 ```
 cd ~/vericert-pldi2024/artefact
-python3 generate_result_csv.py
+nix develop --command python3 generate_result_csv.py
 ```
 
 (NOTE: to reset the state of this directory one can just run `git clean -dfx`).
