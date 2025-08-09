@@ -681,16 +681,16 @@ let remove_unnecessary_deps graph =
   DFG.fold_edges is_dependent graph graph
 
 let gather_multiply_destinations =
-  List.iter (fun a -> 
+  List.iter (fun a ->
     match a with
     | RBop (_, Omul, _, d)
     | RBop (_, Omulimm _, _, d)
     | RBop (_, Omulhs, _, d)
-    | RBop (_, Omulhu, _, d) -> 
+    | RBop (_, Omulhu, _, d) ->
        multiply_dest := SS.add d !multiply_dest
     | _ -> ()
     )
-  
+
   (* DFG.fold_edges_e (function (a, el, c) -> fun dfg -> *)
   (*     match get_predicate (snd c), assigned_vars [] (snd c) with *)
   (*     | Some _, [d] ->  *)
@@ -916,11 +916,14 @@ let solve_constraints constr =
   fprintf oc "%s\n" (print_lp constr);
   close_out oc;
 
-  let res = Str.split (Str.regexp_string "\n") (read_process ("lp_solve " ^ fn))
-            |> drop 3
-            |> List.fold_left parse_soln (IMap.empty, IMap.empty)
-  in
-  (*Sys.remove fn;*) res
+  let proc = read_process ("lp_solve " ^ fn) in
+  if proc = "This problem is infeasible\n" then None
+  else
+    let res = Str.split (Str.regexp_string "\n") (read_process ("lp_solve " ^ fn))
+              |> drop 3
+              |> List.fold_left parse_soln (IMap.empty, IMap.empty)
+    in
+    (*Sys.remove fn;*) Some res
 
 let subgraph dfg l =
   let dfg' = List.fold_left (fun g v -> DFG.add_vertex g v) DFG.empty l in
@@ -1011,9 +1014,6 @@ let transf_rtlpar c c' schedule =
       let i_sched_tree =
         List.fold_left combine_bb_schedule IMap.empty i_sched
       in
-      let body = IMap.to_seq i_sched_tree |> List.of_seq |> List.map snd
-                 |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
-      in
       let body2 = List.fold_left (fun x b ->
           match IMap.find_opt b i_sched_tree with
           | Some i -> i :: x
@@ -1022,7 +1022,6 @@ let transf_rtlpar c c' schedule =
         |> List.map (List.map (fun x -> (x, List.nth bb_body' x)))
         |> List.rev
       in
-      (*let final_body = List.map (fun x -> subgraph dfg x |> order_instr) body in*)
       let final_body2 = List.map (fun x -> subgraph dfg x
                                            |> (fun x ->
                                                all_dfs x
@@ -1033,7 +1032,8 @@ let transf_rtlpar c c' schedule =
                                            (*|> (fun x -> TopoDFG.fold (fun i l -> snd i :: l) x [])
                                            |> List.rev) body2*)
       in
-      (separate_mem_operations final_body2)
+      (* let final_body3 = (separate_mem_operations final_body2) in *)
+      final_body2
   in
   PTree.map f c
 
@@ -1051,10 +1051,12 @@ let schedule entry (c : GibleSeq.code) =
   (* let graph = open_out "constr_graph.dot" in *)
   (* fprintf graph "%a\n" GDot.output_graph cgraph; *)
   (* close_out graph; *)
-  let schedule' = solve_constraints cgraph in
-  (**IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
-  (**printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
-  transf_rtlpar c c' schedule'
+  match solve_constraints cgraph with
+    | Some schedule' -> transf_rtlpar c c' schedule'
+    (**IMap.iter (fun a b -> printf "##### %d #####\n%a\n\n" a (print_list print_tuple) b) schedule';*)
+    (**printf "Schedule: %a\n" (fun a x -> IMap.iter (fun d -> fprintf a "%d: %a\n" d (print_list print_tuple)) x) schedule';*)
+    | None ->
+       eprintf "Error: scheduling problem infeasible\n"; exit 1
 
 (* let rec find_reachable_states c e = *)
 (*   match PTree.get e c with *)
