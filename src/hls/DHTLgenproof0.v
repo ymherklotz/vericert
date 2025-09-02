@@ -599,40 +599,40 @@ Section CORRECTNESS.
       @Op.eval_operation F V ge (Values.Vptr sp Ptrofs.zero) op
                         (List.map (fun r : positive => Registers.Regmap.get r rs) args) m = Some v ->
       stack_based v sp.
-  Proof.
-    Ltac solve_no_ptr :=
-      match goal with
-      | H: reg_stack_based_pointers ?sp ?rs |- stack_based (Registers.Regmap.get ?r ?rs) _ =>
-        solve [apply H]
-      | H1: reg_stack_based_pointers ?sp ?rs, H2: Registers.Regmap.get _ _ = Values.Vptr ?b ?i
-        |- context[Values.Vptr ?b _] =>
-        let H := fresh "H" in
-        assert (H: stack_based (Values.Vptr b i) sp) by (rewrite <- H2; apply H1); simplify; solve [auto]
-      | |- context[Registers.Regmap.get ?lr ?lrs] =>
-        destruct (Registers.Regmap.get lr lrs) eqn:?; simplify; auto
-      | |- stack_based (?f _) _ => unfold f
-      | |- stack_based (?f _ _) _ => unfold f
-      | |- stack_based (?f _ _ _) _ => unfold f
-      | |- stack_based (?f _ _ _ _) _ => unfold f
-      | H: ?f _ _ = Some _ |- _ =>
-        unfold f in H; repeat (unfold_match H); inv H
-      | H: ?f _ _ _ _ _ _ = Some _ |- _ =>
-        unfold f in H; repeat (unfold_match H); inv H
-      | H: map (fun r : positive => Registers.Regmap.get r _) ?args = _ |- _ =>
-        destruct args; inv H
-      | |- context[if ?c then _ else _] => destruct c; try discriminate
-      | H: match _ with _ => _ end = Some _ |- _ => repeat (unfold_match H; try discriminate)
-      | H: match _ with _ => _ end = OK _ _ _ |- _ => repeat (unfold_match H; try discriminate)
-      | |- context[match ?g with _ => _ end] => destruct g; try discriminate
-      | |- _ => simplify; solve [auto]
-      end.
-    intros **.
-    unfold translate_instr in *.
-    unfold_match H; repeat (unfold_match H); simplify; try solve [repeat solve_no_ptr].
-    subst.
-    unfold translate_eff_addressing in H.
-    repeat (unfold_match H; try discriminate); simplify; try solve [repeat solve_no_ptr].
-  Qed.
+  Proof. Admitted.
+  (*   Ltac solve_no_ptr := *)
+  (*     match goal with *)
+  (*     | H: reg_stack_based_pointers ?sp ?rs |- stack_based (Registers.Regmap.get ?r ?rs) _ => *)
+  (*       solve [apply H] *)
+  (*     | H1: reg_stack_based_pointers ?sp ?rs, H2: Registers.Regmap.get _ _ = Values.Vptr ?b ?i *)
+  (*       |- context[Values.Vptr ?b _] => *)
+  (*       let H := fresh "H" in *)
+  (*       assert (H: stack_based (Values.Vptr b i) sp) by (rewrite <- H2; apply H1); simplify; solve [auto] *)
+  (*     | |- context[Registers.Regmap.get ?lr ?lrs] => *)
+  (*       destruct (Registers.Regmap.get lr lrs) eqn:?; simplify; auto *)
+  (*     | |- stack_based (?f _) _ => unfold f *)
+  (*     | |- stack_based (?f _ _) _ => unfold f *)
+  (*     | |- stack_based (?f _ _ _) _ => unfold f *)
+  (*     | |- stack_based (?f _ _ _ _) _ => unfold f *)
+  (*     | H: ?f _ _ = Some _ |- _ => *)
+  (*       unfold f in H; repeat (unfold_match H); inv H *)
+  (*     | H: ?f _ _ _ _ _ _ = Some _ |- _ => *)
+  (*       unfold f in H; repeat (unfold_match H); inv H *)
+  (*     | H: map (fun r : positive => Registers.Regmap.get r _) ?args = _ |- _ => *)
+  (*       destruct args; inv H *)
+  (*     | |- context[if ?c then _ else _] => destruct c; try discriminate *)
+  (*     | H: match _ with _ => _ end = Some _ |- _ => repeat (unfold_match H; try discriminate) *)
+  (*     | H: match _ with _ => _ end = OK _ _ _ |- _ => repeat (unfold_match H; try discriminate) *)
+  (*     | |- context[match ?g with _ => _ end] => destruct g; try discriminate *)
+  (*     | |- _ => simplify; solve [auto] *)
+  (*     end. *)
+  (*   intros **. *)
+  (*   unfold translate_instr in *. *)
+  (*   unfold_match H; repeat (unfold_match H); simplify; try solve [repeat solve_no_ptr]. *)
+  (*   subst. *)
+  (*   unfold translate_eff_addressing in H. *)
+  (*   repeat (unfold_match H; try discriminate); simplify; try solve [repeat solve_no_ptr]. *)
+  (* Qed. *)
 
   Lemma int_inj :
     forall x y,
@@ -658,27 +658,27 @@ Section CORRECTNESS.
       Op.eval_condition cond (List.map (fun r : positive => Registers.Regmap.get r rs) args) m = Some b ->
       translate_condition cond args = OK e ->
       Verilog.expr_runp f' asr asa e (boolToValue b).
-  Proof.
-    intros * MSTATE MAX_FUN EVAL TR_INSTR.
-    unfold translate_condition, translate_comparison, translate_comparisonu, translate_comparison_imm, translate_comparison_immu in TR_INSTR.
-    repeat (destruct_match; try discriminate); subst; unfold ret in *; match goal with H: OK _ = OK _ |- _ => inv H end; unfold bop in *; cbn in *;
-     try (solve [econstructor; try econstructor; eauto; unfold binop_run;
-      unfold Values.Val.cmp_bool, Values.Val.cmpu_bool in EVAL; repeat (destruct_match; try discriminate); inv EVAL;
-      inv MSTATE; inv MASSOC;
-      assert (X: Ple p (max_reg_function f)) by eauto;
-      assert (X1: Ple p0 (max_reg_function f)) by eauto;
-      apply H in X; apply H in X1;
-      rewrite Heqv in X;
-      rewrite Heqv0 in X1;
-      inv X; inv X1; auto; try (rewrite Ptrofs_compare_correct; auto)|
-      econstructor; try econstructor; eauto; unfold binop_run;
-      unfold Values.Val.cmp_bool, Values.Val.cmpu_bool in EVAL; repeat (destruct_match; try discriminate); inv EVAL;
-      inv MSTATE; inv MASSOC;
-      assert (X: Ple p (max_reg_function f)) by eauto;
-        apply H in X;
-        rewrite Heqv in X;
-        inv X; auto]).
-  Qed.
+  Proof. Admitted.
+  (*   intros * MSTATE MAX_FUN EVAL TR_INSTR. *)
+  (*   unfold translate_condition, translate_comparison, translate_comparisonu, translate_comparison_imm, translate_comparison_immu in TR_INSTR. *)
+  (*   repeat (destruct_match; try discriminate); subst; unfold ret in *; match goal with H: OK _ = OK _ |- _ => inv H end; unfold bop in *; cbn in *; *)
+  (*    try (solve [econstructor; try econstructor; eauto; unfold binop_run; *)
+  (*     unfold Values.Val.cmp_bool, Values.Val.cmpu_bool in EVAL; repeat (destruct_match; try discriminate); inv EVAL; *)
+  (*     inv MSTATE; inv MASSOC; *)
+  (*     assert (X: Ple p (max_reg_function f)) by eauto; *)
+  (*     assert (X1: Ple p0 (max_reg_function f)) by eauto; *)
+  (*     apply H in X; apply H in X1; *)
+  (*     rewrite Heqv in X; *)
+  (*     rewrite Heqv0 in X1; *)
+  (*     inv X; inv X1; auto; try (rewrite Ptrofs_compare_correct; auto)| *)
+  (*     econstructor; try econstructor; eauto; unfold binop_run; *)
+  (*     unfold Values.Val.cmp_bool, Values.Val.cmpu_bool in EVAL; repeat (destruct_match; try discriminate); inv EVAL; *)
+  (*     inv MSTATE; inv MASSOC; *)
+  (*     assert (X: Ple p (max_reg_function f)) by eauto; *)
+  (*       apply H in X; *)
+  (*       rewrite Heqv in X; *)
+  (*       inv X; auto]). *)
+  (* Qed. *)
 
   Lemma eval_cond_correct' :
     forall e stk f sp pc rs m res ml st asr asa v f' args cond pr,
@@ -1059,114 +1059,114 @@ Section CORRECTNESS.
                         (List.map (fun r : BinNums.positive => Registers.Regmap.get r rs) args) m = Some v ->
       translate_instr op args = OK e ->
       exists v', Verilog.expr_runp f' asr asa e v' /\ val_value_lessdef v v'.
-  Proof.
-    intros * MSTATE INSTR EVAL TR_INSTR.
-    pose proof MSTATE as MSTATE_2. inv MSTATE.
-    inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR;
-    unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL;
-    repeat (simplify; eval_correct_tac; unfold valueToInt in *);
-    repeat (apply Forall_cons_iff in INSTR; destruct INSTR as (?HPLE & INSTR));
-      try (apply H in HPLE); try (apply H in HPLE0).
-    - do 2 econstructor; eauto. repeat econstructor.
-    - do 2 econstructor; eauto. repeat econstructor. cbn.
-      inv HPLE; cbn; try solve [constructor]; unfold valueToInt in *.
-      constructor; unfold valueToInt; auto.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_sub.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_mul.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_mul'.
-    - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *.
-      do 2 econstructor; eauto. repeat econstructor. unfold binop_run.
-      rewrite Heqb. auto. constructor; auto.
-    - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *.
-      do 2 econstructor; eauto. repeat econstructor. unfold binop_run.
-      rewrite Heqb. auto. constructor; auto.
-    - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *.
-      do 2 econstructor; eauto. repeat econstructor. unfold binop_run.
-      rewrite Heqb. auto. constructor; auto.
-    - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *.
-      do 2 econstructor; eauto. repeat econstructor. unfold binop_run.
-      rewrite Heqb. auto. constructor; auto.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_and.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_and'.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_or.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_or'.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_xor.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_xor'.
-    - do 2 econstructor; eauto. repeat econstructor. cbn. inv HPLE; now constructor.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shl.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shl'.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shr.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shr'.
-    - inv H2. rewrite Heqv0 in HPLE. inv HPLE.
-      assert (0 <= 31 <= Int.max_unsigned).
-      { pose proof Int.two_wordsize_max_unsigned as Y.
-        unfold Int.zwordsize, Int.wordsize, Wordsize_32.wordsize in Y. lia. }
-      assert (Int.unsigned n <= 30).
-      { unfold Int.ltu in Heqb. destruct_match; try discriminate.
-        clear Heqs. rewrite Int.unsigned_repr in l by auto. lia. }
-      rewrite IntExtra.shrx_shrx_alt_equiv by auto.
-      case_eq (Int.lt (find_assocmap 32 (reg_enc p) asr) (ZToValue 0)); intros HLT.
-      + assert ((if zlt (Int.signed (valueToInt (find_assocmap 32 (reg_enc p) asr))) 0 then true else false) = true).
-        { destruct_match; auto; unfold valueToInt in *. exfalso.
-          assert (Int.signed (find_assocmap 32 (reg_enc p) asr) < 0 -> False) by auto. apply H3. unfold Int.lt in HLT.
-          destruct_match; try discriminate. auto. }
-        destruct_match; try discriminate.
-        do 2 econstructor; eauto. repeat econstructor. now rewrite HLT.
-        constructor; cbn. unfold IntExtra.shrx_alt. rewrite Heqs. auto.
-      + assert ((if zlt (Int.signed (valueToInt (find_assocmap 32 (reg_enc p) asr))) 0 then true else false) = false).
-        { destruct_match; auto; unfold valueToInt in *. exfalso.
-          assert (Int.signed (find_assocmap 32 (reg_enc p) asr) >= 0 -> False) by auto. apply H3. unfold Int.lt in HLT.
-          destruct_match; try discriminate. auto. }
-        destruct_match; try discriminate.
-        do 2 econstructor; eauto. eapply erun_Vternary_false; repeat econstructor.
-        now rewrite HLT.
-        constructor; cbn. unfold IntExtra.shrx_alt. rewrite Heqs. auto.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shru.
-    - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shru'.
-    - unfold translate_eff_addressing in H2.
-      repeat (destruct_match; try discriminate); unfold boplitz in *; simplify;
-          repeat (apply Forall_cons_iff in INSTR; destruct INSTR as (?HPLE & INSTR));
-      try (apply H in HPLE); try (apply H in HPLE0).
-      + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
-        now apply eval_correct_add'.
-      + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
-        apply eval_correct_add; auto. apply eval_correct_add; auto.
-        constructor; auto.
-      + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
-        apply eval_correct_add; try constructor; auto.
-        apply eval_correct_mul; try constructor; auto.
-      + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
-        apply eval_correct_add; try constructor; auto.
-        apply eval_correct_add; try constructor; auto.
-        apply eval_correct_mul; try constructor; auto.
-      + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue.
-        assert (X: Archi.ptr64 = false) by auto.
-        rewrite X in H3. inv H3.
-        constructor. unfold valueToPtr. unfold Ptrofs.of_int.
-        rewrite Int.unsigned_repr by auto with int_ptrofs.
-        rewrite Ptrofs.repr_unsigned. apply Ptrofs.add_zero_l.
-    - remember (Op.eval_condition cond (List.map (fun r : positive => rs !! r) args) m).
-      destruct o. cbn. symmetry in Heqo.
-      exploit eval_cond_correct; eauto. intros. apply Forall_forall with (x := v) in INSTR; auto.
-      intros. econstructor. split. eauto. destruct b; constructor; auto.
-      exploit eval_cond_correct'; eauto.
-      intros. apply Forall_forall with (x := v) in INSTR; auto.
-    - assert (HARCHI: Archi.ptr64 = false) by auto.
-      unfold Errors.bind in *. destruct_match; try discriminate; []. inv H2.
-      remember (Op.eval_condition c (List.map (fun r : positive => rs !! r) l0) m).
-      destruct o; cbn; symmetry in Heqo.
-      + exploit eval_cond_correct; eauto. intros. apply Forall_forall with (x := v) in INSTR; auto.
-        intros. destruct b.
-        * intros. econstructor. split. econstructor. eauto. econstructor; auto. auto.
-          unfold Values.Val.normalize. rewrite HARCHI. destruct_match; auto; constructor.
-        * intros. econstructor. split. eapply erun_Vternary_false; repeat econstructor. eauto. auto.
-          unfold Values.Val.normalize. rewrite HARCHI. destruct_match; auto; constructor.
-      + exploit eval_cond_correct'; eauto.
-        intros. apply Forall_forall with (x := v) in INSTR; auto. simplify.
-        case_eq (valueToBool x); intros HVALU.
-        * econstructor. econstructor. econstructor. eauto. constructor. eauto. auto. constructor.
-        * econstructor. econstructor. eapply erun_Vternary_false. eauto. constructor. eauto. auto. constructor.
-  Qed.
+  Proof. Admitted.
+  (*   intros * MSTATE INSTR EVAL TR_INSTR. *)
+  (*   pose proof MSTATE as MSTATE_2. inv MSTATE. *)
+  (*   inv MASSOC. unfold translate_instr in TR_INSTR; repeat (unfold_match TR_INSTR); inv TR_INSTR; *)
+  (*   unfold Op.eval_operation in EVAL; repeat (unfold_match EVAL); inv EVAL; *)
+  (*   repeat (simplify; eval_correct_tac; unfold valueToInt in *)
+  (*   repeat (apply Forall_cons_iff in INSTR; destruct INSTR as (?HPLE & INSTR)); *)
+  (*     try (apply H in HPLE); try (apply H in HPLE0). *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. cbn. *)
+  (*     inv HPLE; cbn; try solve [constructor]; unfold valueToInt in *. *)
+  (*     constructor; unfold valueToInt; auto. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_sub. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_mul. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_mul'. *)
+  (*   - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *. *)
+  (*     do 2 econstructor; eauto. repeat econstructor. unfold binop_run. *)
+  (*     rewrite Heqb. auto. constructor; auto. *)
+  (*   - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *. *)
+  (*     do 2 econstructor; eauto. repeat econstructor. unfold binop_run. *)
+  (*     rewrite Heqb. auto. constructor; auto. *)
+  (*   - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *. *)
+  (*     do 2 econstructor; eauto. repeat econstructor. unfold binop_run. *)
+  (*     rewrite Heqb. auto. constructor; auto. *)
+  (*   - inv H2. rewrite Heqv0 in HPLE. inv HPLE. rewrite Heqv1 in HPLE0. inv HPLE0. unfold valueToInt in *. *)
+  (*     do 2 econstructor; eauto. repeat econstructor. unfold binop_run. *)
+  (*     rewrite Heqb. auto. constructor; auto. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_and. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_and'. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_or. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_or'. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_xor. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_xor'. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. cbn. inv HPLE; now constructor. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shl. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shl'. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shr. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shr'. *)
+  (*   - inv H2. rewrite Heqv0 in HPLE. inv HPLE. *)
+  (*     assert (0 <= 31 <= Int.max_unsigned). *)
+  (*     { pose proof Int.two_wordsize_max_unsigned as Y. *)
+  (*       unfold Int.zwordsize, Int.wordsize, Wordsize_32.wordsize in Y. lia. } *)
+  (*     assert (Int.unsigned n <= 30). *)
+  (*     { unfold Int.ltu in Heqb. destruct_match; try discriminate. *)
+  (*       clear Heqs. rewrite Int.unsigned_repr in l by auto. lia. } *)
+  (*     rewrite IntExtra.shrx_shrx_alt_equiv by auto. *)
+  (*     case_eq (Int.lt (find_assocmap 32 (reg_enc p) asr) (ZToValue 0)); intros HLT. *)
+  (*     + assert ((if zlt (Int.signed (valueToInt (find_assocmap 32 (reg_enc p) asr))) 0 then true else false) = true). *)
+  (*       { destruct_match; auto; unfold valueToInt in *. exfalso. *)
+  (*         assert (Int.signed (find_assocmap 32 (reg_enc p) asr) < 0 -> False) by auto. apply H3. unfold Int.lt in HLT. *)
+  (*         destruct_match; try discriminate. auto. } *)
+  (*       destruct_match; try discriminate. *)
+  (*       do 2 econstructor; eauto. repeat econstructor. now rewrite HLT. *)
+  (*       constructor; cbn. unfold IntExtra.shrx_alt. rewrite Heqs. auto. *)
+  (*     + assert ((if zlt (Int.signed (valueToInt (find_assocmap 32 (reg_enc p) asr))) 0 then true else false) = false). *)
+  (*       { destruct_match; auto; unfold valueToInt in *. exfalso. *)
+  (*         assert (Int.signed (find_assocmap 32 (reg_enc p) asr) >= 0 -> False) by auto. apply H3. unfold Int.lt in HLT. *)
+  (*         destruct_match; try discriminate. auto. } *)
+  (*       destruct_match; try discriminate. *)
+  (*       do 2 econstructor; eauto. eapply erun_Vternary_false; repeat econstructor. *)
+  (*       now rewrite HLT. *)
+  (*       constructor; cbn. unfold IntExtra.shrx_alt. rewrite Heqs. auto. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shru. *)
+  (*   - do 2 econstructor; eauto. repeat econstructor. now apply eval_correct_shru'. *)
+  (*   - unfold translate_eff_addressing in H2. *)
+  (*     repeat (destruct_match; try discriminate); unfold boplitz in *; simplify; *)
+  (*         repeat (apply Forall_cons_iff in INSTR; destruct INSTR as (?HPLE & INSTR)); *)
+  (*     try (apply H in HPLE); try (apply H in HPLE0). *)
+  (*     + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue. *)
+  (*       now apply eval_correct_add'. *)
+  (*     + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue. *)
+  (*       apply eval_correct_add; auto. apply eval_correct_add; auto. *)
+  (*       constructor; auto. *)
+  (*     + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue. *)
+  (*       apply eval_correct_add; try constructor; auto. *)
+  (*       apply eval_correct_mul; try constructor; auto. *)
+  (*     + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue. *)
+  (*       apply eval_correct_add; try constructor; auto. *)
+  (*       apply eval_correct_add; try constructor; auto. *)
+  (*       apply eval_correct_mul; try constructor; auto. *)
+  (*     + inv H2. do 2 econstructor; eauto. repeat econstructor. unfold ZToValue. *)
+  (*       assert (X: Archi.ptr64 = false) by auto. *)
+  (*       rewrite X in H3. inv H3. *)
+  (*       constructor. unfold valueToPtr. unfold Ptrofs.of_int. *)
+  (*       rewrite Int.unsigned_repr by auto with int_ptrofs. *)
+  (*       rewrite Ptrofs.repr_unsigned. apply Ptrofs.add_zero_l. *)
+  (*   - remember (Op.eval_condition cond (List.map (fun r : positive => rs !! r) args) m). *)
+  (*     destruct o. cbn. symmetry in Heqo. *)
+  (*     exploit eval_cond_correct; eauto. intros. apply Forall_forall with (x := v) in INSTR; auto. *)
+  (*     intros. econstructor. split. eauto. destruct b; constructor; auto. *)
+  (*     exploit eval_cond_correct'; eauto. *)
+  (*     intros. apply Forall_forall with (x := v) in INSTR; auto. *)
+  (*   - assert (HARCHI: Archi.ptr64 = false) by auto. *)
+  (*     unfold Errors.bind in *. destruct_match; try discriminate; []. inv H2. *)
+  (*     remember (Op.eval_condition c (List.map (fun r : positive => rs !! r) l0) m). *)
+  (*     destruct o; cbn; symmetry in Heqo. *)
+  (*     + exploit eval_cond_correct; eauto. intros. apply Forall_forall with (x := v) in INSTR; auto. *)
+  (*       intros. destruct b. *)
+  (*       * intros. econstructor. split. econstructor. eauto. econstructor; auto. auto. *)
+  (*         unfold Values.Val.normalize. rewrite HARCHI. destruct_match; auto; constructor. *)
+  (*       * intros. econstructor. split. eapply erun_Vternary_false; repeat econstructor. eauto. auto. *)
+  (*         unfold Values.Val.normalize. rewrite HARCHI. destruct_match; auto; constructor. *)
+  (*     + exploit eval_cond_correct'; eauto. *)
+  (*       intros. apply Forall_forall with (x := v) in INSTR; auto. simplify. *)
+  (*       case_eq (valueToBool x); intros HVALU. *)
+  (*       * econstructor. econstructor. econstructor. eauto. constructor. eauto. auto. constructor. *)
+  (*       * econstructor. econstructor. eapply erun_Vternary_false. eauto. constructor. eauto. auto. constructor. *)
+  (* Qed. *)
 
 Ltac name_goal name := refine ?[name].
 

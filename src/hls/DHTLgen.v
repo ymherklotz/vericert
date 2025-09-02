@@ -180,6 +180,8 @@ Definition translate_comparison_immu (c : Integers.comparison) (args : list reg)
   | Integers.Cgt, r1::nil => Errors.OK (boplit Vgtu r1 i)
   | Integers.Cle, r1::nil => Errors.OK (boplit Vleu r1 i)
   | Integers.Cge, r1::nil => Errors.OK (boplit Vgeu r1 i)
+  | Integers.Ceq, r1::nil => Errors.OK (boplit Veq r1 i)
+  | Integers.Cne, r1::nil => Errors.OK (boplit Vne r1 i)
   | _, _ => Errors.Error (Errors.msg "Htlpargen: comparison_imm instruction not implemented: other")
   end.
 
@@ -271,6 +273,10 @@ Definition translate_instr (op : Op.operation) (args : list reg) : Errors.res ex
     do tc <- translate_condition c rl;
     Errors.OK (Vternary tc (Vvar (reg_enc r1)) (Vvar (reg_enc r2)))
   | Op.Olea a, _ => translate_eff_addressing a args
+  | Op.Omulfs, r1::r2::nil => Errors.OK (bop Vfmul r1 r2)
+  | Op.Oaddfs, r1::r2::nil => Errors.OK (bop Vfadd r1 r2)
+  | Op.Osingleconst n, _ => Errors.OK (Vlit (intToValue (Floats.Float32.to_bits n)))
+  | Op.Ointofsingle, r1::nil => Errors.OK (Vvar (reg_enc r1))
   | _, _ => Errors.Error (Errors.msg "Htlpargen: Instruction not implemented: other")
   end.
 
@@ -289,6 +295,22 @@ Definition translate_arr_access (mem : AST.memory_chunk) (addr : Op.addressing)
                             (Vlit (ZToValue 4))))
     else Errors.Error (Errors.msg "HTLPargen: translate_arr_access address out of bounds")
   | Mint32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
+    let a := Integers.Ptrofs.unsigned a in
+    if (check_address_parameter_unsigned a)
+    then Errors.OK (Vvari stack (Vlit (ZToValue (a / 4))))
+    else Errors.Error (Errors.msg "HTLPargen: eff_addressing out of bounds stack offset")
+  | Mfloat32, Op.Aindexed off, r1::nil =>
+    if (check_address_parameter_signed off)
+    then Errors.OK (Vvari stack (Vbinop Vdivu (boplitz Vadd r1 off) (Vlit (ZToValue 4))))
+    else Errors.Error (Errors.msg "HTLPargen: translate_arr_access address out of bounds")
+  | Mfloat32, Op.Aindexed2scaled scale offset, r1::r2::nil => (* Typical for dynamic array addressing *)
+    if (check_address_parameter_signed scale) && (check_address_parameter_signed offset)
+    then Errors.OK (Vvari stack
+                    (Vbinop Vdivu
+                            (Vbinop Vadd (boplitz Vadd r1 offset) (boplitz Vmul r2 scale))
+                            (Vlit (ZToValue 4))))
+    else Errors.Error (Errors.msg "HTLPargen: translate_arr_access address out of bounds")
+  | Mfloat32, Op.Ainstack a, nil => (* We need to be sure that the base address is aligned *)
     let a := Integers.Ptrofs.unsigned a in
     if (check_address_parameter_unsigned a)
     then Errors.OK (Vvari stack (Vlit (ZToValue (a / 4))))

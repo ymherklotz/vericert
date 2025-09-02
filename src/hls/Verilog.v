@@ -167,8 +167,10 @@ one clock cycle.
 
 Inductive binop : Type :=
 | Vadd : binop  (** addition (binary [+]) *)
+| Vfadd : binop  (** addition (binary [+]) *)
 | Vsub : binop  (** subtraction (binary [-]) *)
 | Vmul : binop  (** multiplication (binary [*]) *)
+| Vfmul : binop  (** multiplication (binary [*]) *)
 | Vdiv : binop  (** division (binary [/]) *)
 | Vdivu : binop  (** division unsigned (binary [/]) *)
 | Vmod : binop  (** remainder ([%]) *)
@@ -369,8 +371,10 @@ Inductive state : Type :=
 Definition binop_run (op : binop) (v1 v2 : value) : option value :=
   match op with
   | Vadd => Some (Int.add v1 v2)
+  | Vfadd => Some (Int.add v1 v2)
   | Vsub => Some (Int.sub v1 v2)
   | Vmul => Some (Int.mul v1 v2)
+  | Vfmul => Some (Int.mul v1 v2)
   | Vdiv => if Int.eq v2 Int.zero
                || Int.eq v1 (Int.repr Int.min_signed) && Int.eq v2 Int.mone
             then None

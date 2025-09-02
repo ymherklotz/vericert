@@ -69,8 +69,10 @@ Definition unop_eqb (e1 e2: unop): bool :=
 Definition binop_eqb (e1 e2: binop): bool :=
   match e1, e2 with
   | Vadd, Vadd => true
+  | Vfadd, Vfadd => true
   | Vsub, Vsub => true
   | Vmul, Vmul => true
+  | Vfmul, Vfmul => true
   | Vdiv, Vdiv => true
   | Vdivu, Vdivu => true
   | Vmod, Vmod => true

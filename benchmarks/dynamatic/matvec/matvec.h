@@ -1,5 +1,5 @@
-typedef float in_int_t;
-typedef float out_int_t;
+typedef int in_int_t;
+typedef int out_int_t;
 
 #define NM 30
 

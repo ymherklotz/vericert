@@ -51,8 +51,10 @@ let pprint_binop l r =
   let signed op = sprintf "{$signed(%s) %s $signed(%s)}" l op r in
   function
   | Vadd -> unsigned "+"
+  | Vfadd -> unsigned "+"
   | Vsub -> unsigned "-"
   | Vmul -> unsigned "*"
+  | Vfmul -> unsigned "*"
   | Vdiv -> signed "/"
   | Vdivu -> unsigned "/"
   | Vmod -> signed "%"
@@ -125,7 +127,23 @@ let rec pprint_stmnt i =
                                  indent (i+1); "default:;\n";
                                  indent i; "endcase\n"
                                ]
+  | Vblock (a, Vbinop (Vfadd, e1, e2)) -> 
+    concat [ indent i; "f_add_a = "; pprint_expr e1; ";\n"
+           ; indent i; "f_add_b = "; pprint_expr e2; ";\n"
+           ; indent i; pprint_expr a; " = f_add_res;\n"]
+  | Vblock (a, Vbinop (Vfmul, e1, e2)) -> 
+    concat [ indent i; "f_mul_a = "; pprint_expr e1; ";\n"
+           ; indent i; "f_mul_b = "; pprint_expr e2; ";\n"
+           ; indent i; pprint_expr a; " = f_mul_res;\n"]
   | Vblock (a, b) -> concat [indent i; pprint_expr a; " = "; pprint_expr b; ";\n"]
+  | Vnonblock (a, Vbinop (Vfadd, e1, e2)) -> 
+    concat [ indent i; "f_add_a <= "; pprint_expr e1; ";\n"
+           ; indent i; "f_add_b <= "; pprint_expr e2; ";\n"
+           ; indent i; pprint_expr a; " <= f_add_res;\n"]
+  | Vnonblock (a, Vbinop (Vfmul, e1, e2)) -> 
+    concat [ indent i; "f_mul_a <= "; pprint_expr e1; ";\n"
+           ; indent i; "f_mul_b <= "; pprint_expr e2; ";\n"
+           ; indent i; pprint_expr a; " <= f_mul_res;\n"]
   | Vnonblock (a, b) -> concat [indent i; pprint_expr a; " <= "; pprint_expr b; ";\n"]
 
 let rec pprint_edge = function
@@ -174,6 +192,22 @@ let pprint_module_item i = function
   | Valways_comb (e, s) ->
     concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
             pprint_stmnt (i+1) s; indent i; "end\n"]
+
+let pprint_module_item_decl i = function
+  | Vdeclaration d -> decl i d
+  | _ -> ""
+
+let pprint_module_item_rest i = function
+  | Valways (e, s) ->
+    concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
+            pprint_stmnt (i+1) s; indent i; "end\n"]
+  | Valways_ff (e, s) ->
+    concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
+            pprint_stmnt (i+1) s; indent i; "end\n"]
+  | Valways_comb (e, s) ->
+    concat ["\n"; indent i; "always "; pprint_edge_top i e; " begin\n";
+            pprint_stmnt (i+1) s; indent i; "end\n"]
+  | _ -> ""
 
 let rec intersperse c = function
   | [] -> []
@@ -266,9 +300,15 @@ let pprint_module debug i n m =
           (m.mod_start, "start"); (m.mod_reset, "reset");
           (m.mod_clk, "clk"); (m.mod_st, "state"); (m.mod_stk, "stack")
         ];
-    concat [ indent i; "module "; (extern_atom n);
+    concat [ indent i; "`timescale 1ns / 1ps\n\n";
+             indent i; "module "; (extern_atom n);
              "("; concat (intersperse ", " (List.map register (inputs @ outputs))); ");\n";
-             fold_map (pprint_module_item (i+1)) (List.rev m.mod_body);
+             fold_map (pprint_module_item_decl (i+1)) (List.rev m.mod_body);
+             indent (i+1); "reg [31:0] f_add_a, f_add_b, f_mul_a, f_mul_b;\n";
+             indent (i+1); "wire [31:0] f_add_res, f_mul_res;\n";
+             indent (i+1); "array_RAM_fadd_32bkb f_add(.clk(clk), .reset(1'b0), .ce(1'b1), .din0(f_add_a), .din1(f_add_b), .dout(f_add_res));\n";
+             indent (i+1); "array_RAM_fmul_32cud f_mul(.clk(clk), .reset(1'b0), .ce(1'b1), .din0(f_mul_a), .din1(f_mul_b), .dout(f_mul_res));\n";
+             fold_map (pprint_module_item_rest (i+1)) (List.rev m.mod_body);
              if !option_initial then print_initial i (Nat.to_int m.mod_stk_len) m.mod_stk else "";
              if debug then debug_always_verbose i m.mod_clk m.mod_st else "";
              indent i; "endmodule\n\n"

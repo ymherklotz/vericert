@@ -1,7 +1,7 @@
-typedef float in_float_t;
+typedef int in_float_t;
 typedef int in_int_t;
 
-typedef float out_float_t;
+typedef int out_float_t;
 
 #define N 1000
 
