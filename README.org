@@ -68,10 +68,10 @@ git submodule update --init
 Nix is a package manager that can create an isolated environment so that the builds are
 reproducible. Once nix is installed, it can be used in the following way.
 
-To open a shell which includes all the necessary dependencies, one can use:
+To open a shell which includes all the necessary dependencies, one has to enable [[https://wiki.nixos.org/wiki/Flakes][nix flakes]] and one can then use:
 
 #+begin_src shell
-nix-shell
+nix --experimental-features 'nix-command flakes' develop
 #+end_src
 
 which will open a shell that has all the dependencies loaded.
@@ -80,7 +80,7 @@ which will open a shell that has all the dependencies loaded.
     :PROPERTIES:
     :CUSTOM_ID: makefile-build
     :END:
-If the dependencies were installed manually, or if one is in the =nix-shell=, the project can be built
+If the dependencies were installed manually, or if one is in the =nix develop=, the project can be built
 by running:
 
 #+begin_src shell
