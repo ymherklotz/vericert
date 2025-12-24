@@ -26,3 +26,10 @@ This will produce various reports.
 
 - `timing_post_pr.rpt` determines the maximum clock speed.
 - `utilization_post_pr.rpt` determines the area.
+
+To view a summarized version of the results (from the `matvec` directory), where `<cycle_count>` is replaced by the cycle count from the simulation results:
+
+```
+../../../scripts/report.sh <cycle_count>
+cat synth_p_r_summary.rpt
+```
