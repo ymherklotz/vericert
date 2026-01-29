@@ -70,14 +70,13 @@ together with the repository. To clone CompCert together with this project, and 
 correct revision, you can run:
 
 #+begin_src shell
-git clone -b v1.2.2 --recursive https://github.com/ymherklotz/vericert
+git clone --recursive https://github.com/ymherklotz/vericert
 #+end_src
 
 If the repository is already cloned, you can run the following command to make sure that CompCert is
 also downloaded and the correct branch is checked out:
 
 #+begin_src shell
-git checkout v1.2.2
 git submodule update --init
 #+end_src
 
