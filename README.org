@@ -28,11 +28,16 @@ Currently all proofs of the following features have been completed.
 - [[/driver/VericertDriver.ml][/driver/VericertDriver.ml]] :: The top-level OCaml driver for the HLS tool.
 - [[/src/Compiler.v][/src/Compiler.v]] :: Top-level soundness proofs of the HLS tool.
   In particular, [[/src/Compiler.v#L585][separate_transf_c_program_correct]] states the overall correctness theorem of the HLS tool.
-- [[/src/hls/Verilog.v][/src/hls/Verilog.v]] :: Main Verilog semantics that the HLS tool is targetting.
+- [[/src/hls/Verilog.v][/src/hls/Verilog.v]] :: Main Verilog semantics that the HLS tool is targeting.
 - [[/src/hls/DHTL.v][/src/hls/DHTL.v]] :: Semantics of the finite-state machine language, which is the intermediate hardware representation
   before being transformed into Verilog.
 - [[/src/hls/Schedule.ml][/src/hls/Schedule.ml]], [[/src/hls/GiblePargen.v][/src/hls/GiblePargen.v]] and [[/src/hls/GiblePargen.v][/src/hls/GiblePargenproof.v]] :: Implementation and proof of scheduling
   algorithm.
+- [[/src/hls/IfConversion.v][/src/hls/IfConversion.v]] and [[/src/hls/IfConversionproof.v][/src/hls/IfConversionproof.v]] :: General implementation of if-conversion with its proof of
+  correctness.
+- [[/src/hls/DMemorygen.v][/src/hls/DMemorygen.v]] :: Insertion of a proper BRAM memory block for the stack of the main function.
+- [[/src/hls/ClockRegisters.v][/src/hls/ClockRegisters.v]] and [[/src/hls/ClockRegistersproof.v][/src/hls/ClockRegistersproof.v]] :: Proof of parallelisation of assignments in a single
+  state, as the scheduler rearranges instructions but these still assign values sequentially.
 
 ** Building
    :PROPERTIES:
