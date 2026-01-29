@@ -1,6 +1,6 @@
 # -*- mode: yaml -*-
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite both the article from preferred-citation and the software itself."
 authors:
 - family-names: "Herklotz"
   given-names: "Yann"
