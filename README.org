@@ -1,6 +1,10 @@
 #+title:
 
-#+html: <img src="https://github.com/ymherklotz/vericert/refs/heads/master/doc/res/main-vericert.svg" width="100%" height="144" />
+#+html: <picture>
+#+html:   <source media="(prefers-color-scheme: dark)" srcset="/doc/res/vericert-white.svg">
+#+html:   <source media="(prefers-color-scheme: light)" srcset="/doc/res/vericert-main.svg">
+#+html:   <img src="/doc/res/vericert-main.svg" width="100%">
+#+html: </picture>
 
 A formally verified high-level synthesis (HLS) tool written in Coq, building on top of [[https://github.com/AbsInt/CompCert][CompCert]].
 This ensures the correctness of the C to Verilog translation according to our Verilog semantics and
