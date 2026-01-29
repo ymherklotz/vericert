@@ -23,6 +23,17 @@ Currently all proofs of the following features have been completed.
 - local arrays and pointers
 - control-flow structures such as if-statements, for-loops, etc...
 
+** Navigating the code-base
+
+- [[/driver/VericertDriver.ml][/driver/VericertDriver.ml]] :: The top-level OCaml driver for the HLS tool.
+- [[/src/Compiler.v][/src/Compiler.v]] :: Top-level soundness proofs of the HLS tool.
+  In particular, [[/src/Compiler.v#L585][separate_transf_c_program_correct]] states the overall correctness theorem of the HLS tool.
+- [[/src/hls/Verilog.v][/src/hls/Verilog.v]] :: Main Verilog semantics that the HLS tool is targetting.
+- [[/src/hls/DHTL.v][/src/hls/DHTL.v]] :: Semantics of the finite-state machine language, which is the intermediate hardware representation
+  before being transformed into Verilog.
+- [[/src/hls/Schedule.ml][/src/hls/Schedule.ml]], [[/src/hls/GiblePargen.v][/src/hls/GiblePargen.v]] and [[/src/hls/GiblePargen.v][/src/hls/GiblePargenproof.v]] :: Implementation and proof of scheduling
+  algorithm.
+
 ** Building
    :PROPERTIES:
    :CUSTOM_ID: building
